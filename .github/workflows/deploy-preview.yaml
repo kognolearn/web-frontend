@@ -1,0 +1,23 @@
+name: Deploy to Vercel (Preview)
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Preview
+        id: preview-deploy
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID }}
+          vercel-project-id: ${{ secrets.PROJECT_ID }}
+          vercel-args: '--regions sfo1'
+      - name: Comment Preview URL
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: 'Preview: ${{ steps.preview-deploy.outputs.preview-url }}'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
