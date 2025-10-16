@@ -1,0 +1,176 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+
+export default function AuthCallbackPage() {
+  const router = useRouter();
+  const [status, setStatus] = useState("verifying");
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const handleEmailConfirmation = async () => {
+      try {
+        // Get the hash fragment from the URL (Supabase sends tokens in the hash)
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        const type = hashParams.get("type");
+
+        // If this is an email confirmation
+        if (type === "signup" || type === "email") {
+          if (accessToken && refreshToken) {
+            // Set the session with the tokens from the URL
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            if (error) {
+              setStatus("error");
+              setError(error.message);
+              return;
+            }
+
+            if (data.user) {
+              setStatus("success");
+              // Wait a moment to show success message, then redirect
+              setTimeout(() => {
+                router.push("/dashboard");
+              }, 2000);
+            }
+          } else {
+            setStatus("error");
+            setError("Missing authentication tokens");
+          }
+        } else {
+          // If no type parameter, check if user is already authenticated
+          const { data: { user } } = await supabase.auth.getUser();
+          
+          if (user) {
+            router.push("/dashboard");
+          } else {
+            setStatus("error");
+            setError("Invalid confirmation link");
+          }
+        }
+      } catch (err) {
+        setStatus("error");
+        setError("An unexpected error occurred");
+        console.error("Callback error:", err);
+      }
+    };
+
+    handleEmailConfirmation();
+  }, [router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          {status === "verifying" && (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                <svg
+                  className="w-8 h-8 text-gray-900 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+                Verifying your email...
+              </h1>
+              <p className="text-gray-600 text-sm">
+                Please wait while we confirm your account
+              </p>
+            </div>
+          )}
+
+          {status === "success" && (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+                <svg
+                  className="w-8 h-8 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+                Email Confirmed!
+              </h1>
+              <p className="text-gray-600 text-sm">
+                Your account has been successfully verified.
+              </p>
+              <p className="text-gray-600 text-sm mt-2">
+                Redirecting you to dashboard...
+              </p>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <svg
+                  className="w-8 h-8 text-red-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+                Verification Failed
+              </h1>
+              <p className="text-gray-600 text-sm mb-4">
+                {error || "Unable to verify your email"}
+              </p>
+              <div className="space-y-2">
+                <a
+                  href="/auth/signup"
+                  className="block w-full bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200"
+                >
+                  Try signing up again
+                </a>
+                <a
+                  href="/"
+                  className="block text-gray-600 hover:text-gray-900 text-sm transition-colors"
+                >
+                  Return to home
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
