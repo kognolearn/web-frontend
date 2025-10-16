@@ -1,5 +1,6 @@
 import SignInForm from "@/components/auth/SignInForm";
 import Link from "next/link";
+import { Suspense } from "react";
 
 export const metadata = {
   title: "Sign In | EdTech Platform",
@@ -20,7 +21,9 @@ export default function SignInPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <SignInForm />
+          <Suspense fallback={<SignInFormSkeleton />}>
+            <SignInForm />
+          </Suspense>
         </div>
 
         <div className="text-center text-xs text-gray-500 mt-6">
@@ -36,6 +39,16 @@ export default function SignInPage() {
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SignInFormSkeleton() {
+  return (
+    <div className="space-y-5 animate-pulse">
+      <div className="h-10 bg-gray-200 rounded-lg"></div>
+      <div className="h-10 bg-gray-200 rounded-lg"></div>
+      <div className="h-12 bg-gray-300 rounded-lg mt-6"></div>
     </div>
   );
 }
