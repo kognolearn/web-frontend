@@ -1,4 +1,5 @@
-export default function CoursePage({ params }) {
+export default async function CoursePage({ params }) {
+  const { courseId } = await params;
   return (
     <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-4">
       <div className="text-center">
@@ -6,7 +7,7 @@ export default function CoursePage({ params }) {
           Course Details
         </h1>
         <p className="text-gray-600">
-          Course ID: {params.courseId}
+          Course ID: {courseId}
         </p>
         <p className="text-sm text-gray-500 mt-4">
           This page is under construction

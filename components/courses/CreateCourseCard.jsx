@@ -14,8 +14,11 @@ export default function CreateCourseCard() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [results, setResults] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [creatingId, setCreatingId] = useState(null);
   const [createError, setCreateError] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [genError, setGenError] = useState("");
 
   const searchConfigs = useMemo(
     () => [
@@ -40,6 +43,9 @@ export default function CreateCourseCard() {
     setCreateError("");
     setCreatingId(null);
     setSearching(false);
+    setSelectedId(null);
+    setPosting(false);
+    setGenError("");
   }, []);
 
   const handleClose = useCallback(() => {
@@ -84,51 +90,86 @@ export default function CreateCourseCard() {
     return () => clearTimeout(handler);
   }, [expanded, query, searchConfigs]);
 
-  const handleSelectCourse = useCallback(
-    async (course) => {
-      if (creatingId) return;
+  const handleSelectCourse = useCallback((course) => {
+    setCreateError("");
+    setSelectedId((prev) => (prev === course.id ? null : course.id));
+  }, []);
 
-      if (!course.code || !course.title) {
-        setCreateError("Selected course is missing catalog data.");
+  const handleSkip = useCallback(async () => {
+    setCreateError("");
+    setGenError("");
+    setPosting(true);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        setCreateError("You need to be signed in to continue.");
+        setPosting(false);
+        return;
+      }
+      // Generate a course without selection (backend spec only needs userId)
+      const resp = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: authData.user.id }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        setGenError(body?.error || "Failed to generate course.");
+        setPosting(false);
+        return;
+      }
+  // Success: close and notify dashboard to refresh list
+  handleClose();
+  try { window.dispatchEvent(new Event("courses:updated")); } catch {}
+  router.refresh();
+      setPosting(false);
+    } catch (err) {
+      setGenError("Unexpected error. Please try again.");
+      setPosting(false);
+    }
+  }, [handleClose, router]);
+
+  const handleNext = useCallback(async () => {
+    if (!selectedId) return;
+    setCreateError("");
+    setGenError("");
+    setPosting(true);
+    try {
+      const selected = results.find((r) => r.id === selectedId);
+      if (!selected) {
+        setCreateError("Please select a course.");
+        setPosting(false);
+        return;
+      }
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        setCreateError("You need to be signed in to continue.");
+        setPosting(false);
         return;
       }
 
-      setCreatingId(course.id);
-      setCreateError("");
-
-      try {
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !authData?.user) {
-          setCreateError("You need to be signed in to add a course.");
-          return;
-        }
-
-        const { error } = await supabase
-          .from("courses")
-          .insert([
-            {
-              user_id: authData.user.id,
-              course_code: course.code,
-              course_name: course.title,
-            },
-          ]);
-
-        if (error) {
-          setCreateError(error.message ?? "Could not add course. Please try again.");
-          return;
-        }
-
-        handleClose();
-        router.refresh();
-      } catch (err) {
-        setCreateError("Unexpected error while adding course. Please retry.");
-      } finally {
-        setCreatingId(null);
+      // Backend POST only requires userId per spec
+      const resp = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: authData.user.id }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        setGenError(body?.error || "Failed to generate course.");
+        setPosting(false);
+        return;
       }
-    },
-    [creatingId, handleClose, router]
-  );
+  // Success: close and notify dashboard to refresh list
+  handleClose();
+  try { window.dispatchEvent(new Event("courses:updated")); } catch {}
+  router.refresh();
+      setPosting(false);
+    } catch (err) {
+      setGenError("Unexpected error. Please try again.");
+      setPosting(false);
+    }
+  }, [results, selectedId, handleClose, router]);
 
   const containerClasses = useMemo(
     () =>
@@ -237,13 +278,16 @@ export default function CreateCourseCard() {
         ) : (
           results.map((course) => {
             const isCreating = creatingId === course.id;
+            const isSelected = selectedId === course.id;
 
             return (
               <button
                 key={course.id}
                 type="button"
                 onClick={() => handleSelectCourse(course)}
-                className="w-full text-left px-4 py-3 hover:bg-primary/10 transition-colors"
+                className={`w-full text-left px-4 py-3 transition-colors ${
+                  isSelected ? "bg-primary/10" : "hover:bg-primary/10"
+                }`}
                 disabled={isCreating}
               >
                 <div className="flex items-start justify-between gap-4">
@@ -255,6 +299,11 @@ export default function CreateCourseCard() {
                       {course.title || "Untitled Course"}
                     </p>
                   </div>
+                  {isSelected && (
+                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24">
+                      <path fill="currentColor" d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.5z" />
+                    </svg>
+                  )}
                   {isCreating && (
                     <svg className="w-5 h-5 text-primary animate-spin" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -271,6 +320,36 @@ export default function CreateCourseCard() {
           })
         )}
       </div>
+
+      {/* Actions: Next / Skip */}
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={handleSkip}
+          disabled={posting}
+          className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+        >
+          Skip for now
+        </button>
+        <button
+          type="button"
+          onClick={handleNext}
+          disabled={!selectedId || posting}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+            selectedId ? "bg-primary text-gray-900 hover:bg-primary-hover" : "bg-gray-200 text-gray-600"
+          }`}
+        >
+          {posting ? "Processing..." : "Next"}
+        </button>
+      </div>
+
+      {/* Generation errors */}
+      {genError && (
+        <div className="mt-3 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+          {genError}
+        </div>
+      )}
+
 
       <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
         <span>Powered by course catalog</span>

@@ -35,26 +35,24 @@ export default function CreateCourseModal({ onClose }) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("courses")
-        .insert([
-          {
-            user_id: user.id,
-            course_code: formData.courseCode,
-            course_name: formData.courseName,
-          },
-        ])
-        .select();
+      // Use backend API to generate/upload a course for this user
+      const resp = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
 
-      if (error) {
-        setError(error.message);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        setError(body?.error || "Failed to create course");
         setLoading(false);
         return;
       }
 
-      // Refresh the page to show the new course
-      router.refresh();
-      onClose();
+  // Notify dashboard and refresh view
+  try { window.dispatchEvent(new Event("courses:updated")); } catch {}
+  router.refresh();
+  onClose();
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
@@ -149,7 +147,7 @@ export default function CreateCourseModal({ onClose }) {
               disabled={loading}
               className="flex-1 bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Creating..." : "Create Course"}
+              {loading ? "Creating..." : "Generate Course"}
             </button>
           </div>
         </form>

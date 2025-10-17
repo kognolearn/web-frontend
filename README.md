@@ -4,7 +4,7 @@ Backend API
 Course search is served by the backend API hosted on Render:
 
 - Base URL: https://edtech-backend-api.onrender.com
-- Endpoint: GET /courses?query=<term>
+- Endpoint: GET /college-courses?query=<term>
 - Auth: None
 
 The frontend proxies requests through `app/api/catalog-search/route.js` and returns `{ results: [{ id, code, title }] }` to the UI.

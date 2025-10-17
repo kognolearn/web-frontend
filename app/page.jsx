@@ -5,7 +5,7 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
       <div className="w-full max-w-2xl text-center">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Welcome to EdTech Platform
+          Welcome to Ed Platform
         </h1>
         <p className="text-gray-600 mb-8">
           Get started by signing up for an account

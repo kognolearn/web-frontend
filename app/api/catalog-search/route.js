@@ -18,7 +18,7 @@ export async function GET(request) {
       return NextResponse.json({ results: [] }, { status: 200 });
     }
 
-    const url = new URL("/courses", COURSES_API_BASE);
+    const url = new URL("/college-courses", COURSES_API_BASE);
     url.searchParams.set("query", sanitized);
 
     // Basic retry (handles cold starts on serverless hosts) with a short timeout

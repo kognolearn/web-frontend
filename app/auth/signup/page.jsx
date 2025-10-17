@@ -2,7 +2,7 @@ import SignUpForm from "@/components/auth/SignUpForm";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Sign Up | EdTech Platform",
+  title: "Sign Up | Ed Platform",
   description: "Create your account to get started",
 };
 

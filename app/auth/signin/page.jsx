@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "Sign In | EdTech Platform",
+  title: "Sign In | Ed Platform",
   description: "Access your courses and continue learning",
 };
 
