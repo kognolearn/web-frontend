@@ -61,14 +61,14 @@ export default function CreateCourseModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+      <div className="card max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold">
             Create New Course
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
             <svg
               className="w-6 h-6"
@@ -94,10 +94,7 @@ export default function CreateCourseModal({ onClose }) {
           )}
 
           <div>
-            <label
-              htmlFor="courseCode"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
+            <label htmlFor="courseCode" className="block text-sm font-medium mb-2">
               Course Code
             </label>
             <input
@@ -109,15 +106,12 @@ export default function CreateCourseModal({ onClose }) {
               required
               disabled={loading}
               placeholder="e.g., CSE 351"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="input w-full disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="courseName"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
+            <label htmlFor="courseName" className="block text-sm font-medium mb-2">
               Course Name
             </label>
             <input
@@ -129,7 +123,7 @@ export default function CreateCourseModal({ onClose }) {
               required
               disabled={loading}
               placeholder="e.g., Hardware/Software Interface"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="input w-full disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -138,14 +132,14 @@ export default function CreateCourseModal({ onClose }) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-white hover:bg-gray-50 text-gray-900 font-medium py-3 px-4 rounded-lg border border-gray-200 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Creating..." : "Generate Course"}
             </button>

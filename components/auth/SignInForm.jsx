@@ -51,7 +51,7 @@ export default function SignInForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 text-[var(--foreground)]">
+  <form onSubmit={handleSubmit} className="space-y-5 text-[var(--foreground)]">
       {error && (
         <div className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
@@ -59,10 +59,7 @@ export default function SignInForm() {
       )}
 
       <div>
-        <label
-          htmlFor="email"
-          className="mb-2 block text-sm font-medium text-[var(--muted-foreground-strong)]"
-        >
+        <label htmlFor="email" className="mb-2 block text-sm font-medium">
           Email Address
         </label>
         <input
@@ -73,17 +70,14 @@ export default function SignInForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="input w-full disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="you@example.com"
         />
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-[var(--muted-foreground-strong)]"
-          >
+          <label htmlFor="password" className="block text-sm font-medium">
             Password
           </label>
           <Link
@@ -101,7 +95,7 @@ export default function SignInForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="input w-full disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="••••••••"
         />
       </div>
@@ -109,17 +103,14 @@ export default function SignInForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full btn btn-primary mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Signing In..." : "Sign In"}
       </button>
 
       <p className="text-center text-sm text-[var(--muted-foreground)]">
         Don&apos;t have an account?{" "}
-        <Link
-          href="/auth/signup"
-          className="font-medium text-[var(--foreground)] transition-colors hover:text-primary"
-        >
+        <Link href="/auth/signup" className="font-medium hover:opacity-90" style={{color: 'var(--primary)'}}>
           Create one
         </Link>
       </p>

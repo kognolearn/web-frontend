@@ -4,15 +4,13 @@ import Link from "next/link";
 
 export default function CreateCourseCard() {
   return (
-    <Link
-      href="/courses/create"
-      className="gradient-border rounded-2xl transition-all duration-300 ease-in-out"
-    >
-      <div className="card-shell relative rounded-2xl p-6 h-40 flex flex-col items-center justify-center cursor-pointer group overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        <div className="relative w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mb-3 shadow-inner">
+    <Link href="/courses/create" className="block rounded-2xl transition-all duration-200 ease-in-out">
+      <div className="card relative rounded-2xl p-6 h-40 flex flex-col items-center justify-center cursor-pointer group overflow-hidden">
+        <div className="relative w-14 h-14 rounded-full flex items-center justify-center mb-3"
+             style={{backgroundColor: 'color-mix(in srgb, var(--primary) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--primary) 40%, var(--border))'}}>
           <svg
-            className="w-7 h-7 text-primary"
+            className="w-7 h-7"
+            style={{color: 'var(--primary)'}}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

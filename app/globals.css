@@ -1,166 +1,227 @@
 @import "tailwindcss";
 
+/*
+  Pastel, minimalist design tokens (no gradients)
+  - Light and dark palettes
+  - Subtle shadows and borders
+  - Flat, mature colors with soft contrast
+*/
+
 :root {
-  --background: #10162a;
-  --foreground: #f4f7ff;
-  --surface-1: rgba(27, 34, 58, 0.92);
-  --surface-2: rgba(31, 42, 70, 0.86);
-  --surface-muted: rgba(23, 30, 52, 0.75);
-  --border-muted: rgba(142, 167, 255, 0.24);
-  --muted-foreground: #9ca8d9;
-  --muted-foreground-strong: #dbe2ff;
-  --primary: #78e5ce;
-  --primary-strong: #63d4bd;
-  --primary-hover: #5acbb4;
-  --primary-foreground: #062f24;
-  --accent-1: rgba(123, 128, 255, 0.35);
-  --accent-2: rgba(255, 171, 214, 0.32);
-  --accent-3: rgba(117, 209, 255, 0.28);
-  --shadow-primary: 0 22px 46px rgba(98, 209, 189, 0.38);
-  --shadow-card: 0 16px 40px rgba(8, 12, 32, 0.28);
-  --shadow-card-strong: 0 22px 55px rgba(8, 12, 32, 0.42);
+  /* spacing and radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  /* base colors default (dark as initial to match layout.js) */
+  --background: #1a1f2e;
+  --surface-1: #2d3748;
+  --surface-2: #323c51;
+  --surface-muted: #3a455c;
+  --border: #4a5568;
+  --foreground: #f7fafc;
+  --muted-foreground: #a0aec0;
+  --muted-foreground-strong: #e2e8f0;
+
+  /* accent (pastel mint) */
+  --primary: #63d4bd;
+  --primary-contrast: #0b2a22;
+  --primary-hover: #4ac5a9;
+  --primary-active: #3ab699;
+
+  /* feedback */
+  --success: #66d08e;
+  --warning: #f4c363;
+  --danger: #e57474;
+
+  /* shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 14px 28px rgba(0, 0, 0, 0.18);
 }
 
 html.theme-light {
-  --background: #f5f7ff;
-  --foreground: #1d2238;
-  --surface-1: rgba(255, 255, 255, 0.9);
-  --surface-2: rgba(244, 247, 255, 0.82);
-  --surface-muted: rgba(228, 233, 255, 0.7);
-  --border-muted: rgba(140, 158, 255, 0.22);
-  --muted-foreground: #5a6287;
-  --muted-foreground-strong: #1d2550;
-  --primary: #7fe6d0;
-  --primary-strong: #6bd7c2;
-  --primary-hover: #5cc8b4;
-  --primary-foreground: #063226;
-  --accent-1: rgba(124, 134, 255, 0.26);
-  --accent-2: rgba(255, 186, 216, 0.26);
-  --accent-3: rgba(123, 209, 255, 0.24);
-  --shadow-primary: 0 18px 40px rgba(107, 215, 194, 0.35);
-  --shadow-card: 0 16px 38px rgba(131, 146, 208, 0.18);
-  --shadow-card-strong: 0 24px 48px rgba(131, 146, 208, 0.26);
+  --background: #f8f9fa; /* off-white */
+  --surface-1: #ffffff;
+  --surface-2: #f1f3f5;
+  --surface-muted: #eef1f4;
+  --border: #e5e7eb;
+  --foreground: #2c3e50;
+  --muted-foreground: #7f8c8d;
+  --muted-foreground-strong: #34495e;
+
+  --primary: #63d4bd;
+  --primary-contrast: #0b2a22;
+  --primary-hover: #7fe5d3; /* slightly lighter on light bg */
+  --primary-active: #4ac5a9;
 }
 
 html.theme-dark {
-  --background: #10162a;
-  --foreground: #f4f7ff;
-  --surface-1: rgba(27, 34, 58, 0.92);
-  --surface-2: rgba(31, 42, 70, 0.86);
-  --surface-muted: rgba(23, 30, 52, 0.75);
-  --border-muted: rgba(142, 167, 255, 0.24);
-  --muted-foreground: #9ca8d9;
-  --muted-foreground-strong: #dbe2ff;
-  --primary: #78e5ce;
-  --primary-strong: #63d4bd;
-  --primary-hover: #5acbb4;
-  --primary-foreground: #062f24;
-  --accent-1: rgba(123, 128, 255, 0.35);
-  --accent-2: rgba(255, 171, 214, 0.32);
-  --accent-3: rgba(117, 209, 255, 0.28);
-  --shadow-primary: 0 22px 46px rgba(98, 209, 189, 0.38);
-  --shadow-card: 0 16px 40px rgba(8, 12, 32, 0.28);
-  --shadow-card-strong: 0 22px 55px rgba(8, 12, 32, 0.42);
+  --background: #1a1f2e; /* deep navy */
+  --surface-1: #2d3748;
+  --surface-2: #323c51;
+  --surface-muted: #3a455c;
+  --border: #4a5568;
+  --foreground: #f7fafc;
+  --muted-foreground: #a0aec0;
+  --muted-foreground-strong: #e2e8f0;
+
+  --primary: #63d4bd;
+  --primary-contrast: #0b2a22;
+  --primary-hover: #4ac5a9; /* slightly darker on dark bg */
+  --primary-active: #3ab699;
 }
 
+/* Base */
 body {
   min-height: 100vh;
   background-color: var(--background);
-  background-image:
-    radial-gradient(at 2% 8%, var(--accent-1) 0, transparent 52%),
-    radial-gradient(at 98% 12%, var(--accent-2) 0, transparent 55%),
-    radial-gradient(at 50% 105%, var(--accent-3) 0, transparent 60%);
-  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-nunito), system-ui, -apple-system, sans-serif;
-  transition: background 0.4s ease, color 0.4s ease;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-.card-shell {
+/* Cards */
+.card,
+.card-shell { /* keep legacy class as alias */
   background: var(--surface-1);
-  border: 1px solid var(--border-muted);
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(18px);
-  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.card:hover,
 .card-shell:hover {
-  transform: translateY(-4px);
-  border-color: color-mix(in srgb, var(--border-muted) 50%, rgba(255, 255, 255, 0.45));
-  box-shadow: var(--shadow-card-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
 }
 
-.bg-primary {
-  background-image: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%) !important;
-  color: var(--primary-foreground) !important;
-  box-shadow: var(--shadow-primary);
-  border: none !important;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
 
+.btn:active { transform: translateY(1px); }
+
+.btn-primary,
+.bg-primary { /* keep legacy class name as alias */
+  background-color: var(--primary) !important;
+  color: var(--primary-contrast) !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 65%, var(--border));
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.btn-primary:hover,
 .bg-primary:hover {
-  background-image: linear-gradient(135deg, var(--primary-strong) 0%, var(--primary-hover) 100%) !important;
-  transform: translateY(-1.5px);
-  box-shadow: var(--shadow-primary);
-  filter: brightness(1.02);
+  background-color: var(--primary-hover) !important;
 }
 
-.bg-primary:active {
-  transform: translateY(0.5px) scale(0.99);
+.btn-outline {
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 80%, var(--muted-foreground));
+  border: 1px solid var(--border);
 }
 
-.bg-primary:disabled {
-  box-shadow: none;
-  filter: saturate(0.7);
+.btn-outline:hover {
+  background-color: var(--surface-2);
 }
 
-.gradient-border {
-  position: relative;
-}
-
-.gradient-border::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(140deg, rgba(127, 134, 255, 0.45), rgba(255, 190, 220, 0.4), rgba(122, 210, 255, 0.4));
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.gradient-border:hover::before,
-.gradient-border:focus-within::before {
-  opacity: 1;
-}
-
-.pastel-chip {
-  background-image: linear-gradient(120deg, rgba(127, 134, 255, 0.18), rgba(255, 186, 216, 0.22));
-  border: 1px solid rgba(160, 175, 255, 0.25);
+/* Inputs */
+.input,
+input,
+textarea,
+select {
+  background-color: var(--surface-1);
   color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.75rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-input, textarea, select {
-  background-color: color-mix(in srgb, var(--surface-1) 88%, rgba(255, 255, 255, 0.05));
-  border-color: color-mix(in srgb, var(--border-muted) 70%, transparent);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-input:focus, textarea:focus, select:focus {
-  border-color: color-mix(in srgb, var(--primary) 55%, rgba(255, 255, 255, 0.25));
+.input:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
+/* Tags/Badges */
+.badge,
 .tag-muted {
-  background: color-mix(in srgb, var(--surface-muted) 75%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   color: var(--muted-foreground);
-  border: 1px solid color-mix(in srgb, var(--border-muted) 65%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Simple progress bar */
+.progress {
+  height: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+
+/* Utility: Pill outline (kept, adjusted) */
+.pill-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.55rem 1.05rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 85%, var(--muted-foreground));
+}
+
+/* Remove legacy gradient/glass helpers (kept as no-ops for safety) */
+.gradient-border,
+.glass-panel,
+.panel-accent-rose,
+.panel-accent-sky,
+.panel-accent-sun,
+.dashboard-veil,
+.create-veil,
+.stat-card::after {
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card-shell {
+    transition-duration: 0.01ms !important;
+  }
 }

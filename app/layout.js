@@ -15,7 +15,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="theme-dark">
+    <html lang="en" className="theme-light">
       <body className={`${nunito.variable} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

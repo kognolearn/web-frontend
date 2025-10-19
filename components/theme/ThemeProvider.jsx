@@ -7,7 +7,7 @@ const ThemeContext = createContext(undefined);
 const storageKey = "edtech-theme";
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export function ThemeProvider({ children }) {
     if (storedTheme === "light" || storedTheme === "dark") {
       setTheme(storedTheme);
     } else {
-      setTheme("dark");
+      setTheme("light");
     }
     setMounted(true);
   }, []);
