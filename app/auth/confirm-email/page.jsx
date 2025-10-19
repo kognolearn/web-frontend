@@ -51,13 +51,13 @@ function ConfirmEmailContent() {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
                 <svg
-                  className="w-8 h-8 text-green-600"
+                  className="h-8 w-8 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -70,10 +70,10 @@ function ConfirmEmailContent() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
                 Email Confirmed!
               </h1>
-              <p className="text-gray-600 text-sm">
+              <p className="text-sm text-[var(--muted-foreground)]">
                 Redirecting you to dashboard...
               </p>
             </div>
@@ -84,13 +84,13 @@ function ConfirmEmailContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
       <div className="w-full max-w-md">
         {/* Icon */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
             <svg
-              className="w-8 h-8 text-gray-900"
+              className="w-8 h-8 text-[var(--foreground)]"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -103,37 +103,37 @@ function ConfirmEmailContent() {
               />
             </svg>
           </div>
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-3xl font-semibold text-[var(--foreground)] mb-2">
             Check Your Email
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-sm text-[var(--muted-foreground)]">
             We've sent a confirmation link to
           </p>
           {email && (
-            <p className="text-gray-900 font-medium mt-1">
+            <p className="mt-1 font-medium text-[var(--foreground)]">
               {email}
             </p>
           )}
         </div>
 
         {/* Content Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <div className="space-y-4 text-sm text-gray-600">
+        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
+          <div className="space-y-4 text-sm text-[var(--muted-foreground)]">
             <p>
               Please check your email and click the confirmation link to activate your account.
             </p>
             <p>
-              After clicking the link, <strong className="text-gray-900">return to this page</strong> and we'll automatically redirect you to complete your dashboard.
+              After clicking the link, <strong className="text-[var(--foreground)]">return to this page</strong> and we'll automatically redirect you to complete your dashboard.
             </p>
-            <p className="text-xs text-gray-500 italic">
+            <p className="text-xs italic text-[var(--muted-foreground)]">
               ⏱️ Checking for confirmation automatically...
             </p>
             
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
-              <p className="text-xs text-gray-700 font-medium mb-2">
+            <div className="mt-6 rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] p-4">
+              <p className="text-xs font-medium text-[var(--muted-foreground-strong)] mb-2">
                 Didn't receive the email?
               </p>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+              <ul className="list-disc list-inside space-y-1 text-xs text-[var(--muted-foreground)]">
                 <li>Check your spam or junk folder</li>
                 <li>Make sure you entered the correct email</li>
                 <li>Wait a few minutes and check again</li>
@@ -144,7 +144,7 @@ function ConfirmEmailContent() {
             <div className="pt-4">
               <Link
                 href="/auth/signup"
-                className="text-gray-900 font-medium hover:text-primary-hover transition-colors text-sm"
+                className="text-sm font-medium text-[var(--foreground)] transition-colors hover:text-primary"
               >
                 ← Back to Sign Up
               </Link>
@@ -153,7 +153,7 @@ function ConfirmEmailContent() {
         </div>
 
         {/* Help Text */}
-        <p className="text-center text-xs text-gray-500 mt-6">
+        <p className="text-center text-xs text-[var(--muted-foreground)] mt-6">
           Need help? Contact our support team
         </p>
       </div>
@@ -164,8 +164,8 @@ function ConfirmEmailContent() {
 export default function ConfirmEmailPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)] text-[var(--muted-foreground)] transition-colors">
+        <div>Loading...</div>
       </div>
     }>
       <ConfirmEmailContent />

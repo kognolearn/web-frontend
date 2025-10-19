@@ -66,14 +66,14 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
           {status === "verifying" && (
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                 <svg
-                  className="w-8 h-8 text-gray-900 animate-spin"
+                  className="w-8 h-8 text-[var(--foreground)] animate-spin"
                   fill="none"
                   viewBox="0 0 24 24"
                 >
@@ -92,10 +92,10 @@ export default function AuthCallbackPage() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
                 Verifying your email...
               </h1>
-              <p className="text-gray-600 text-sm">
+              <p className="text-sm text-[var(--muted-foreground)]">
                 Please wait while we confirm your account
               </p>
             </div>
@@ -103,9 +103,9 @@ export default function AuthCallbackPage() {
 
           {status === "success" && (
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/20 mb-4">
                 <svg
-                  className="w-8 h-8 text-green-600"
+                  className="w-8 h-8 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -118,13 +118,13 @@ export default function AuthCallbackPage() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
                 Email Confirmed!
               </h1>
-              <p className="text-gray-600 text-sm">
+              <p className="text-sm text-[var(--muted-foreground)]">
                 Your account has been successfully verified.
               </p>
-              <p className="text-gray-600 text-sm mt-2">
+              <p className="text-sm text-[var(--muted-foreground)] mt-2">
                 Redirecting you to dashboard...
               </p>
             </div>
@@ -132,7 +132,7 @@ export default function AuthCallbackPage() {
 
           {status === "error" && (
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-400/20 mb-4">
                 <svg
                   className="w-8 h-8 text-red-600"
                   fill="none"
@@ -147,10 +147,10 @@ export default function AuthCallbackPage() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
                 Verification Failed
               </h1>
-              <p className="text-gray-600 text-sm mb-4">
+              <p className="text-sm text-[var(--muted-foreground)] mb-4">
                 {error || "Unable to verify your email"}
               </p>
               <div className="space-y-2">
@@ -162,7 +162,7 @@ export default function AuthCallbackPage() {
                 </a>
                 <a
                   href="/"
-                  className="block text-gray-600 hover:text-gray-900 text-sm transition-colors"
+                  className="block text-sm text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                 >
                   Return to home
                 </a>

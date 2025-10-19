@@ -51,9 +51,9 @@ export default function SignInForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5 text-[var(--foreground)]">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -61,7 +61,7 @@ export default function SignInForm() {
       <div>
         <label
           htmlFor="email"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="mb-2 block text-sm font-medium text-[var(--muted-foreground-strong)]"
         >
           Email Address
         </label>
@@ -73,7 +73,7 @@ export default function SignInForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="you@example.com"
         />
       </div>
@@ -82,13 +82,13 @@ export default function SignInForm() {
         <div className="flex items-center justify-between mb-2">
           <label
             htmlFor="password"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-[var(--muted-foreground-strong)]"
           >
             Password
           </label>
           <Link
             href="/auth/forgot-password"
-            className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
           >
             Forgot password?
           </Link>
@@ -101,7 +101,7 @@ export default function SignInForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="••••••••"
         />
       </div>
@@ -114,11 +114,11 @@ export default function SignInForm() {
         {loading ? "Signing In..." : "Sign In"}
       </button>
 
-      <p className="text-sm text-gray-500 text-center">
+      <p className="text-center text-sm text-[var(--muted-foreground)]">
         Don&apos;t have an account?{" "}
         <Link
           href="/auth/signup"
-          className="text-gray-900 font-medium hover:text-primary-hover transition-colors"
+          className="font-medium text-[var(--foreground)] transition-colors hover:text-primary"
         >
           Create one
         </Link>

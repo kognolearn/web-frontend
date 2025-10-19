@@ -57,19 +57,17 @@ export default function SignUpForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Error Message */}
+    <form onSubmit={handleSubmit} className="space-y-5 text-[var(--foreground)]">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
 
-      {/* Name Input */}
       <div>
         <label
           htmlFor="name"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="mb-2 block text-sm font-medium text-[var(--muted-foreground-strong)]"
         >
           Full Name
         </label>
@@ -81,16 +79,15 @@ export default function SignUpForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="Your Name"
         />
       </div>
 
-      {/* Email Input */}
       <div>
         <label
           htmlFor="email"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="mb-2 block text-sm font-medium text-[var(--muted-foreground-strong)]"
         >
           Email Address
         </label>
@@ -102,16 +99,15 @@ export default function SignUpForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="you@example.com"
         />
       </div>
 
-      {/* Password Input */}
       <div>
         <label
           htmlFor="password"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="mb-2 block text-sm font-medium text-[var(--muted-foreground-strong)]"
         >
           Password
         </label>
@@ -124,19 +120,16 @@ export default function SignUpForm() {
           required
           disabled={loading}
           minLength={6}
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="••••••••"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Minimum 6 characters
-        </p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">Minimum 6 characters</p>
       </div>
 
-      {/* Submit Button */}
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-6 w-full rounded-lg bg-primary px-4 py-3 font-medium text-gray-900 transition-colors duration-200 hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? "Creating Account..." : "Sign Up"}
       </button>

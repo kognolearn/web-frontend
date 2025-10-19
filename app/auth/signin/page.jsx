@@ -9,31 +9,31 @@ export const metadata = {
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-3xl font-semibold text-[var(--foreground)] mb-2">
             Welcome Back
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-[var(--muted-foreground)] text-sm">
             Sign in to access your dashboard
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
           <Suspense fallback={<SignInFormSkeleton />}>
             <SignInForm />
           </Suspense>
         </div>
 
-        <div className="text-center text-xs text-gray-500 mt-6">
+        <div className="text-center text-xs text-[var(--muted-foreground)] mt-6">
           By signing in, you agree to our Terms of Service and Privacy Policy
         </div>
 
         <div className="mt-6 text-center">
           <Link
             href="/"
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
             ← Back to home
           </Link>
@@ -46,9 +46,9 @@ export default function SignInPage() {
 function SignInFormSkeleton() {
   return (
     <div className="space-y-5 animate-pulse">
-      <div className="h-10 bg-gray-200 rounded-lg"></div>
-      <div className="h-10 bg-gray-200 rounded-lg"></div>
-      <div className="h-12 bg-gray-300 rounded-lg mt-6"></div>
+      <div className="h-10 rounded-lg bg-[var(--surface-2)]"></div>
+      <div className="h-10 rounded-lg bg-[var(--surface-2)]"></div>
+      <div className="h-12 rounded-lg bg-[var(--surface-muted)] mt-6"></div>
     </div>
   );
 }

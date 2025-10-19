@@ -1,5 +1,6 @@
 import { Nunito } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -14,11 +15,9 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body
-        className={`${nunito.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" className="theme-dark">
+      <body className={`${nunito.variable} antialiased`}>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

@@ -1,29 +1,92 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #05070d;
+  --foreground: #e2e8f0;
+  --surface-1: #111827;
+  --surface-2: #1f2937;
+  --surface-muted: #0f172a;
+  --border-muted: rgba(148, 163, 184, 0.25);
+  --muted-foreground: #94a3b8;
+  --muted-foreground-strong: #cbd5f5;
   --primary: #80ff91;
   --primary-hover: #50ff6a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
-  --font-sans: var(--font-nunito);
+html.theme-light {
+  --background: #f8fafc;
+  --foreground: #111827;
+  --surface-1: #fefefe;
+  --surface-2: #f1f5f9;
+  --surface-muted: #e2e8f0;
+  --border-muted: rgba(15, 23, 42, 0.08);
+  --muted-foreground: #64748b;
+  --muted-foreground-strong: #1f2937;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.theme-dark {
+  --background: #05070d;
+  --foreground: #e2e8f0;
+  --surface-1: #111827;
+  --surface-2: #1f2937;
+  --surface-muted: #0f172a;
+  --border-muted: rgba(148, 163, 184, 0.25);
+  --muted-foreground: #94a3b8;
+  --muted-foreground-strong: #cbd5f5;
 }
 
 body {
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-nunito), system-ui, -apple-system, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Dark theme overrides for legacy Tailwind utility classes */
+html.theme-dark .bg-white,
+html.theme-dark .bg-gray-50 {
+  background-color: var(--surface-1) !important;
+}
+
+html.theme-dark .bg-gray-100,
+html.theme-dark .hover\:bg-gray-100:hover,
+html.theme-dark .bg-gray-200,
+html.theme-dark .hover\:bg-gray-200:hover,
+html.theme-dark .bg-gray-300,
+html.theme-dark .hover\:bg-gray-300:hover {
+  background-color: var(--surface-2) !important;
+}
+
+html.theme-dark .text-gray-900,
+html.theme-dark .text-gray-800 {
+  color: var(--foreground) !important;
+}
+
+html.theme-dark .text-gray-700,
+html.theme-dark .text-gray-600,
+html.theme-dark .text-gray-500 {
+  color: var(--muted-foreground) !important;
+}
+
+html.theme-dark .text-gray-400,
+html.theme-dark .text-gray-300,
+html.theme-dark .text-gray-200 {
+  color: rgba(148, 163, 184, 0.7) !important;
+}
+
+html.theme-dark .border-gray-200,
+html.theme-dark .border-gray-300,
+html.theme-dark .border-gray-100 {
+  border-color: var(--border-muted) !important;
+}
+
+html.theme-dark .shadow-md,
+html.theme-dark .shadow-sm {
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35) !important;
+}
+
+/* Ensure buttons retain contrast in dark mode */
+html.theme-dark .bg-primary {
+  color: #0b2412 !important;
 }

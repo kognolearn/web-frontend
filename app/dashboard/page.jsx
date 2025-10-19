@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import CreateCourseCard from "@/components/courses/CreateCourseCard";
+import { useTheme } from "@/components/theme/ThemeProvider";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { theme, toggleTheme, mounted } = useTheme();
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -63,32 +65,64 @@ export default function DashboardPage() {
     router.push("/");
   };
 
-  if (loading) {
+  if (loading || !mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <div className="text-[var(--muted-foreground)]">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-[var(--surface-1)] border-b border-[var(--border-muted)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-xl font-semibold text-[var(--foreground)]">
                 Ed Platform
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-pressed={theme === "dark"}
+                aria-label="Toggle color mode"
+                className="relative inline-flex items-center justify-center rounded-full border border-[var(--border-muted)] bg-[var(--surface-2)] px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-primary/20 hover:text-[var(--foreground)]"
+              >
+                <span className="flex items-center gap-2">
+                  {theme === "dark" ? (
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05 4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                    </svg>
+                  )}
+                  {theme === "dark" ? "Dark" : "Light"} mode
+                </span>
+              </button>
+              <span className="text-sm text-[var(--muted-foreground)]">
                 {user?.user_metadata?.full_name || user?.email}
               </span>
               <button
                 onClick={handleSignOut}
-                className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
               >
                 Sign Out
               </button>
@@ -100,10 +134,10 @@ export default function DashboardPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          <h2 className="text-2xl font-bold text-[var(--foreground)] mb-2">
             My Courses
           </h2>
-          <p className="text-gray-600">
+          <p className="text-[var(--muted-foreground)]">
             {courses.length === 0
               ? "You haven't created any courses yet. Get started by creating your first course!"
               : `You have ${courses.length} course${courses.length !== 1 ? "s" : ""}`}
