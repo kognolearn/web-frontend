@@ -2,28 +2,23 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
+const ratingDescriptions = {
+  1: "Needs focused attention",
+  2: "Developing understanding",
+  3: "Confident mastery",
+};
+const defaultTopicRating = 2;
 
 function toDateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function formatDisplayDate(value) {
-  if (!value) return "Not set";
-  const [year, month, day] = value.split("-");
-  if (!year || !month || !day) return value;
-  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function normalizeCatalogResult(result) {
@@ -34,7 +29,17 @@ function normalizeCatalogResult(result) {
   };
 }
 
+function createTopicObject(title, rating = defaultTopicRating, source = "generated") {
+  return {
+    id: globalThis.crypto?.randomUUID?.() ?? `${source}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    rating,
+    source,
+  };
+}
+
 export default function CreateCoursePage() {
+  const router = useRouter();
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const [finishDate, setFinishDate] = useState(today);
   const syllabusInputId = useId();
@@ -55,9 +60,45 @@ export default function CreateCoursePage() {
   const [examNotes, setExamNotes] = useState("");
   const [examFiles, setExamFiles] = useState([]);
 
-  const [showSummary, setShowSummary] = useState(false);
+  const [authStatus, setAuthStatus] = useState("checking");
+  const [userId, setUserId] = useState(null);
+
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+  const [topics, setTopics] = useState([]);
+  const [deletedTopics, setDeletedTopics] = useState([]);
+  const [rawTopicsText, setRawTopicsText] = useState("");
+
+  const [newTopicTitle, setNewTopicTitle] = useState("");
+  const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
 
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadUser = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!active) return;
+        if (!user) {
+          router.replace("/auth/signin?redirectTo=/courses/create");
+          return;
+        }
+        setUserId(user.id);
+        setAuthStatus("ready");
+      } catch (error) {
+        if (!active) return;
+        setGenerationError("Unable to confirm your session. Please try again.");
+        setAuthStatus("ready");
+      }
+    };
+    loadUser();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   const handleCourseInputChange = useCallback((event) => {
     const value = event.target.value;
@@ -148,21 +189,125 @@ export default function CreateCoursePage() {
     setExamFiles((prev) => prev.filter((file) => file.name !== name));
   }, []);
 
-  const handleSubmit = useCallback((event) => {
+  const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
-    setShowSummary(true);
+    if (!userId) {
+      setGenerationError("You need to be signed in to generate topics.");
+      return;
+    }
+
+    setGenerating(true);
+    setGenerationError("");
+    setRawTopicsText("");
+
+    const payload = {
+      userId,
+      finishByDate: finishDate ? new Date(finishDate).toISOString() : undefined,
+      courseSelection: selectedCourse
+        ? { code: selectedCourse.code, title: selectedCourse.title }
+        : courseQuery.trim()
+        ? { code: "", title: courseQuery.trim() }
+        : null,
+      syllabusText: syllabusText.trim() || undefined,
+      syllabusFiles: [],
+      examFormatDetails: hasExamMaterials
+        ? [examFormat ? `Preferred exam format: ${examFormat.toUpperCase()}` : null, examNotes ? `Notes: ${examNotes}` : null]
+            .filter(Boolean)
+            .join(" | ") || undefined
+        : undefined,
+      examFiles: [],
+    };
+
+    try {
+      const res = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to generate topics. Please try again.");
+      }
+
+      const generatedTopics = Array.isArray(data?.topics) ? data.topics : [];
+      if (generatedTopics.length === 0) {
+        throw new Error("The model did not return any topics. Please try again.");
+      }
+
+      setTopics(generatedTopics.map((topic) => createTopicObject(String(topic).trim())));
+      setDeletedTopics([]);
+      setRawTopicsText(data?.rawTopicsText || "");
+    } catch (error) {
+      setGenerationError(error.message || "Unexpected error generating topics.");
+    } finally {
+      setGenerating(false);
+    }
+  }, [examFormat, examNotes, finishDate, hasExamMaterials, selectedCourse, syllabusText, userId, courseQuery]);
+
+  const handleRatingChange = useCallback((topicId, rating) => {
+    setTopics((prev) => prev.map((topic) => (topic.id === topicId ? { ...topic, rating } : topic)));
   }, []);
 
-  const displayFinishDate = useMemo(() => formatDisplayDate(finishDate), [finishDate]);
+  const handleDeleteTopic = useCallback((topicId) => {
+    let removedTopic = null;
+    setTopics((prev) => {
+      const topic = prev.find((item) => item.id === topicId);
+      if (!topic) return prev;
+      removedTopic = topic;
+      return prev.filter((item) => item.id !== topicId);
+    });
+    if (removedTopic) {
+      setDeletedTopics((removed) => [removedTopic, ...removed.filter((item) => item.id !== removedTopic.id)]);
+    }
+  }, []);
+
+  const handleRestoreTopic = useCallback((topicId) => {
+    let restoredTopic = null;
+    setDeletedTopics((prev) => {
+      const topic = prev.find((item) => item.id === topicId);
+      if (!topic) return prev;
+      restoredTopic = topic;
+      return prev.filter((item) => item.id !== topicId);
+    });
+    if (restoredTopic) {
+      setTopics((existing) => [restoredTopic, ...existing.filter((item) => item.id !== restoredTopic.id)]);
+    }
+  }, []);
+
+  const handleRestoreAll = useCallback(() => {
+    setTopics((prev) => [...deletedTopics, ...prev]);
+    setDeletedTopics([]);
+  }, [deletedTopics]);
+
+  const handleAddTopic = useCallback(
+    (event) => {
+      event.preventDefault();
+      const trimmed = newTopicTitle.trim();
+      if (!trimmed) return;
+      setTopics((prev) => [createTopicObject(trimmed, newTopicRating, "manual"), ...prev]);
+      setNewTopicTitle("");
+      setNewTopicRating(defaultTopicRating);
+    },
+    [newTopicTitle, newTopicRating]
+  );
+
+  if (authStatus === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)] text-[var(--muted-foreground)]">
+        Checking session…
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--background)] py-12 text-[var(--foreground)] transition-colors">
       <div className="mx-auto max-w-6xl px-4">
         <div className="mb-10 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold">Set Up Your Course</h1>
+            <h1 className="text-3xl font-semibold">Build Study Topics</h1>
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              Craft your course by selecting catalog details, picking a finish date, and sharing any material we should consider.
+              Provide context for the course and we&rsquo;ll suggest the key topics to focus on.
             </p>
           </div>
           <Link
@@ -174,12 +319,12 @@ export default function CreateCoursePage() {
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[3fr,2fr]">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleGenerateTopics} className="space-y-6">
             <section className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-medium">Finish date</h2>
-                  <p className="text-sm text-[var(--muted-foreground)]">Let us know when this course should wrap up.</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Let us know when you&rsquo;d like to complete the course.</p>
                 </div>
                 <span className="rounded-full bg-primary/20 px-3 py-1 text-xs font-medium text-primary">
                   Defaulted to today
@@ -207,7 +352,7 @@ export default function CreateCoursePage() {
             <section className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-6 shadow-sm" ref={dropdownRef}>
               <h2 className="text-lg font-medium">Course title</h2>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                Search our catalog or type your own working title. Selecting an item will pull in its catalog code.
+                Search our catalog or provide your own course name.
               </p>
               <div className="relative mt-5">
                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]">
@@ -259,7 +404,7 @@ export default function CreateCoursePage() {
                 <div>
                   <h2 className="text-lg font-medium">Syllabus details</h2>
                   <p className="text-sm text-[var(--muted-foreground)]">
-                    Provide an outline, list of topics, or upload supporting documents. You can do both.
+                    Provide an outline, list of topics, or upload supporting documents.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -283,12 +428,12 @@ export default function CreateCoursePage() {
                 rows={6}
                 value={syllabusText}
                 onChange={(event) => setSyllabusText(event.target.value)}
-                placeholder="Share objectives, weekly structure, assessments, or anything else the assistant should consider."
+                placeholder="Share objectives, weekly structure, assessments, or anything else that should inform the plan."
                 className="mt-5 w-full rounded-xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
               />
               {syllabusFiles.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Uploaded files</p>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Uploaded files (not yet sent)</p>
                   <ul className="flex flex-wrap gap-2">
                     {syllabusFiles.map((file) => (
                       <li key={file.name} className="flex items-center gap-2 rounded-full border border-[var(--border-muted)] bg-[var(--surface-2)] px-3 py-1 text-xs">
@@ -402,79 +547,177 @@ export default function CreateCoursePage() {
               </Link>
               <button
                 type="submit"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-primary-hover"
+                disabled={generating}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Preview course outline
+                {generating ? "Generating topics…" : "Generate study topics"}
               </button>
             </div>
+            {generationError && (
+              <div className="rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {generationError}
+              </div>
+            )}
           </form>
 
-          <aside className="space-y-4 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-6 shadow-sm">
-            <h2 className="text-lg font-medium">Summary</h2>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Review what you have entered. You can adjust any field before continuing.
-            </p>
-            <dl className="space-y-4 text-sm">
-              <div>
-                <dt className="font-medium text-[var(--muted-foreground-strong)]">Finish by</dt>
-                <dd>{displayFinishDate}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-[var(--muted-foreground-strong)]">Course title</dt>
-                <dd>
-                  {selectedCourse ? (
-                    <div className="space-y-1">
-                      <span className="text-xs uppercase tracking-wide text-primary">{selectedCourse.code}</span>
-                      <p>{selectedCourse.title}</p>
-                    </div>
-                  ) : courseQuery ? (
-                    courseQuery
-                  ) : (
-                    "Not provided"
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-[var(--muted-foreground-strong)]">Syllabus details</dt>
-                <dd className="space-y-2">
-                  <p className="whitespace-pre-wrap text-[var(--muted-foreground)]">
-                    {syllabusText || "No syllabus details yet."}
-                  </p>
-                  {syllabusFiles.length > 0 && (
-                    <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
-                      {syllabusFiles.map((file) => (
-                        <li key={file.name}>{file.name}</li>
+          <aside className="space-y-6 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-6 shadow-sm">
+            <div className="space-y-3">
+              <h2 className="text-lg font-medium">Topics &amp; confidence</h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Rate how confident you are in each topic. Adjust, remove, or add topics as needed.
+              </p>
+              <div className="grid gap-3 text-xs text-[var(--muted-foreground)] sm:grid-cols-3">
+                {Object.entries(ratingDescriptions).map(([rating, description]) => (
+                  <div key={rating} className="rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] px-3 py-2">
+                    <div className="mb-1 flex items-center gap-1 text-[var(--foreground)]">
+                      {Array.from({ length: Number(rating) }).map((_, index) => (
+                        <svg key={index} className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                        </svg>
                       ))}
-                    </ul>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-[var(--muted-foreground-strong)]">Exam materials</dt>
-                <dd>
-                  {hasExamMaterials ? (
-                    <div className="space-y-2 text-[var(--muted-foreground)]">
-                      <p>Format preference: {examFormat.toUpperCase()}</p>
-                      {examFiles.length > 0 ? (
-                        <ul className="space-y-1 text-xs">
-                          {examFiles.map((file) => (
-                            <li key={file.name}>{file.name}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No files uploaded yet.</p>
-                      )}
-                      <p>{examNotes || "No additional notes."}</p>
                     </div>
-                  ) : (
-                    "Not included"
-                  )}
-                </dd>
+                    <p>{description}</p>
+                  </div>
+                ))}
               </div>
-            </dl>
-            {showSummary && (
-              <div className="rounded-lg border border-primary bg-primary/10 p-4 text-sm text-[var(--foreground)]">
-                Inputs saved locally for now. We will wire this up to course generation soon.
+            </div>
+
+            <form onSubmit={handleAddTopic} className="rounded-xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)] p-4 space-y-3">
+              <h3 className="text-sm font-medium text-[var(--foreground)]">Add a custom topic</h3>
+              <input
+                type="text"
+                value={newTopicTitle}
+                onChange={(event) => setNewTopicTitle(event.target.value)}
+                placeholder="Topic name"
+                className="w-full rounded-lg border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+              />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {([1, 2, 3]).map((rating) => (
+                    <button
+                      type="button"
+                      key={rating}
+                      onClick={() => setNewTopicRating(rating)}
+                      className={`h-8 w-8 rounded-full border border-[var(--border-muted)] flex items-center justify-center transition ${
+                        rating <= newTopicRating ? "bg-primary/20 text-primary" : "bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-gray-900 transition hover:bg-primary-hover"
+                >
+                  Add topic
+                </button>
+              </div>
+            </form>
+
+            {generating ? (
+              <div className="space-y-4 rounded-xl border border-[var(--border-muted)] bg-[var(--surface-2)] p-6">
+                <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
+                  <svg className="h-6 w-6 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-[var(--foreground)]">Crafting your ultimate study roadmap…</p>
+                    <p>We're researching, ranking, and polishing the perfect topic list.</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="space-y-3 rounded-xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-4">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--surface-muted)]" />
+                      <div className="flex gap-2">
+                        {Array.from({ length: 3 }).map((__, starIndex) => (
+                          <div key={starIndex} className="h-9 w-9 animate-pulse rounded-full border border-[var(--border-muted)] bg-[var(--surface-muted)]" />
+                        ))}
+                      </div>
+                      <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--surface-muted)]" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : topics.length === 0 ? (
+              <div className="rounded-xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-6 text-sm text-[var(--muted-foreground)]">
+                Generated topics will appear here once you run the creator.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {topics.map((topic) => (
+                  <div key={topic.id} className="flex flex-col gap-3 rounded-xl border border-[var(--border-muted)] bg-[var(--surface-2)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--foreground)]">{topic.title}</h3>
+                        {topic.source === "manual" && (
+                          <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                            Added by you
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTopic(topic.id)}
+                        className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {([1, 2, 3]).map((rating) => (
+                        <button
+                          key={rating}
+                          type="button"
+                          onClick={() => handleRatingChange(topic.id, rating)}
+                          className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                            rating <= topic.rating
+                              ? "border-primary bg-primary/20 text-primary"
+                              : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                          }`}
+                          aria-label={`Set rating ${rating}`}
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= topic.rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {ratingDescriptions[topic.rating]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {deletedTopics.length > 0 && (
+              <div className="rounded-xl border border-[var(--border-muted)] bg-[var(--surface-2)] p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
+                  <button
+                    type="button"
+                    onClick={handleRestoreAll}
+                    className="text-xs text-primary transition hover:text-primary-hover"
+                  >
+                    Restore all
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-2 text-[var(--muted-foreground)]">
+                  {deletedTopics.map((topic) => (
+                    <li key={topic.id} className="flex items-center justify-between gap-3">
+                      <span className="truncate">{topic.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreTopic(topic.id)}
+                        className="text-xs text-primary transition hover:text-primary-hover"
+                      >
+                        Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </aside>
