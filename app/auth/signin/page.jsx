@@ -20,10 +20,12 @@ export default function SignInPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
+        <div className="gradient-border rounded-2xl">
+          <div className="card-shell rounded-2xl p-8">
           <Suspense fallback={<SignInFormSkeleton />}>
             <SignInForm />
           </Suspense>
+          </div>
         </div>
 
         <div className="text-center text-xs text-[var(--muted-foreground)] mt-6">

@@ -76,7 +76,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors">
       {/* Header */}
-      <div className="bg-[var(--surface-1)] border-b border-[var(--border-muted)]">
+      <div className="border-b border-[var(--border-muted)] bg-[var(--surface-1)]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
@@ -133,14 +133,14 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-[var(--foreground)] mb-2">
+        <div className="card-shell gradient-border rounded-2xl mb-8 px-6 py-5">
+          <h2 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
             My Courses
           </h2>
-          <p className="text-[var(--muted-foreground)]">
+          <p className="text-sm text-[var(--muted-foreground)]">
             {courses.length === 0
-              ? "You haven't created any courses yet. Get started by creating your first course!"
-              : `You have ${courses.length} course${courses.length !== 1 ? "s" : ""}`}
+              ? "You haven't created any courses yet. Start by generating a tailored plan."
+              : `You have ${courses.length} course${courses.length !== 1 ? "s" : ""} ready to explore.`}
           </p>
         </div>
 
