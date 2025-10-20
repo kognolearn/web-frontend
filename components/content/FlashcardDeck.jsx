@@ -150,7 +150,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
               <div className="text-base font-medium text-[var(--foreground)] whitespace-pre-wrap mb-3">
                 {answer}
               </div>
-              <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
+              {/* <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="14"
@@ -162,7 +162,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="mt-[2px] text-[var(--muted-foreground)] opacity-80 shrink-0"
-                >
+                > */}
                   <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />
                 </svg>
                 <span>{explanation}</span>
