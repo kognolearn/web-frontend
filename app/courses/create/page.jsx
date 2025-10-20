@@ -13,6 +13,57 @@ const ratingDescriptions = {
   3: "Confident mastery",
 };
 const defaultTopicRating = 2;
+const ratingToFamiliarity = {
+  1: "needs review",
+  2: "developing",
+  3: "confident",
+};
+
+const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_BASE?.trim() || "https://edtech-backend-api.onrender.com";
+const COURSE_STRUCTURE_ENDPOINT = `${backendBaseUrl.replace(/\/$/, "")}/course-structure`;
+
+function toIsoDate(dateString) {
+  if (!dateString) return null;
+  return `${dateString}T00:00:00.000Z`;
+}
+
+function formatExamStructure({ hasExamMaterials, examFormat, examNotes }) {
+  if (!hasExamMaterials) return undefined;
+  const segments = [];
+  if (examFormat) segments.push(`Preferred exam format: ${examFormat.toUpperCase()}`);
+  if (examNotes?.trim()) segments.push(examNotes.trim());
+  if (segments.length === 0) return undefined;
+  return segments.join("\n\n");
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        const base64 = result.split(",")[1] ?? "";
+        resolve(base64);
+      } else {
+        reject(new Error(`Unable to read ${file.name}`));
+      }
+    };
+    reader.onerror = () => reject(new Error(`Unable to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildFilePayload(files) {
+  if (!files?.length) return [];
+  const items = await Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      content: await fileToBase64(file),
+      type: file.type || "application/octet-stream",
+    }))
+  );
+  return items;
+}
 
 function toDateInputValue(date) {
   const year = date.getFullYear();
@@ -41,6 +92,7 @@ function createTopicObject(title, rating = defaultTopicRating, source = "generat
 export default function CreateCoursePage() {
   const router = useRouter();
   const today = useMemo(() => toDateInputValue(new Date()), []);
+  const [startDate, setStartDate] = useState(today);
   const [finishDate, setFinishDate] = useState(today);
   const syllabusInputId = useId();
   const examInputId = useId();
@@ -68,9 +120,14 @@ export default function CreateCoursePage() {
   const [topics, setTopics] = useState([]);
   const [deletedTopics, setDeletedTopics] = useState([]);
   const [rawTopicsText, setRawTopicsText] = useState("");
+  const [topicsApproved, setTopicsApproved] = useState(false);
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
+
+  const [courseGenerating, setCourseGenerating] = useState(false);
+  const [courseGenerationError, setCourseGenerationError] = useState("");
+  const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
 
   const dropdownRef = useRef(null);
 
@@ -199,6 +256,8 @@ export default function CreateCoursePage() {
     setGenerating(true);
     setGenerationError("");
     setRawTopicsText("");
+    setTopicsApproved(false);
+    setCourseGenerationError("");
 
     const payload = {
       userId,
@@ -238,6 +297,7 @@ export default function CreateCoursePage() {
       setTopics(generatedTopics.map((topic) => createTopicObject(String(topic).trim())));
       setDeletedTopics([]);
       setRawTopicsText(data?.rawTopicsText || "");
+      setTopicsApproved(false);
     } catch (error) {
       setGenerationError(error.message || "Unexpected error generating topics.");
     } finally {
@@ -246,11 +306,13 @@ export default function CreateCoursePage() {
   }, [examFormat, examNotes, finishDate, hasExamMaterials, selectedCourse, syllabusText, userId, courseQuery]);
 
   const handleRatingChange = useCallback((topicId, rating) => {
+    setTopicsApproved(false);
     setTopics((prev) => prev.map((topic) => (topic.id === topicId ? { ...topic, rating } : topic)));
   }, []);
 
   const handleDeleteTopic = useCallback((topicId) => {
     let removedTopic = null;
+    setTopicsApproved(false);
     setTopics((prev) => {
       const topic = prev.find((item) => item.id === topicId);
       if (!topic) return prev;
@@ -271,11 +333,13 @@ export default function CreateCoursePage() {
       return prev.filter((item) => item.id !== topicId);
     });
     if (restoredTopic) {
+      setTopicsApproved(false);
       setTopics((existing) => [restoredTopic, ...existing.filter((item) => item.id !== restoredTopic.id)]);
     }
   }, []);
 
   const handleRestoreAll = useCallback(() => {
+    setTopicsApproved(false);
     setTopics((prev) => [...deletedTopics, ...prev]);
     setDeletedTopics([]);
   }, [deletedTopics]);
@@ -285,12 +349,177 @@ export default function CreateCoursePage() {
       event.preventDefault();
       const trimmed = newTopicTitle.trim();
       if (!trimmed) return;
+      setTopicsApproved(false);
       setTopics((prev) => [createTopicObject(trimmed, newTopicRating, "manual"), ...prev]);
       setNewTopicTitle("");
       setNewTopicRating(defaultTopicRating);
     },
     [newTopicTitle, newTopicRating]
   );
+
+  const handleApproveTopics = useCallback(() => {
+    if (topics.length === 0) {
+      setCourseGenerationError("Generate or add at least one topic before approving.");
+      return;
+    }
+    setCourseGenerationError("");
+    setTopicsApproved(true);
+  }, [topics]);
+
+  const handleGenerateCourse = useCallback(async () => {
+    if (topics.length === 0) {
+      setCourseGenerationError("Generate or add at least one topic before generating the course.");
+      return;
+    }
+
+    if (!topicsApproved) {
+      setCourseGenerationError("Please approve your topic list before generating the course.");
+      return;
+    }
+
+    if (!userId) {
+      setCourseGenerationError("You need to be signed in to generate your course.");
+      return;
+    }
+
+    const className = selectedCourse
+      ? [selectedCourse.code, selectedCourse.title].filter(Boolean).join(" · ")
+      : courseQuery.trim();
+
+    if (!className) {
+      setCourseGenerationError("Provide a course title before generating the course.");
+      return;
+    }
+
+    if (!startDate || !finishDate) {
+      setCourseGenerationError("Select both a start date and an end date for your course.");
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(finishDate);
+    if (Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start > end) {
+      setCourseGenerationError("The start date must be before the end date.");
+      return;
+    }
+
+    const cleanTopics = topics
+      .map((topic) => (typeof topic.title === "string" ? topic.title.trim() : ""))
+      .filter(Boolean);
+
+    if (cleanTopics.length === 0) {
+      setCourseGenerationError("Your topic list is empty. Please add topics before generating the course.");
+      return;
+    }
+
+    const cleanTopicSet = new Set(cleanTopics);
+
+    const topicFamiliarityMap = topics.reduce((acc, topic) => {
+      const title = typeof topic.title === "string" ? topic.title.trim() : "";
+      if (!title || !cleanTopicSet.has(title)) {
+        return acc;
+      }
+      const familiarity = ratingToFamiliarity[topic.rating] || ratingToFamiliarity[defaultTopicRating];
+      acc[title] = familiarity;
+      return acc;
+    }, {});
+
+    setCourseGenerating(true);
+    setCourseGenerationError("");
+    setCourseGenerationMessage("Locking in your topic roadmap…");
+
+    try {
+      const payload = {
+        topics: cleanTopics,
+        topicFamiliarity: topicFamiliarityMap,
+        className,
+        startDate: toIsoDate(startDate),
+        endDate: toIsoDate(finishDate),
+        userId,
+      };
+
+      if (Object.keys(topicFamiliarityMap).length === 0) {
+        delete payload.topicFamiliarity;
+      }
+
+      const trimmedSyllabus = syllabusText.trim();
+      if (trimmedSyllabus) {
+        payload.syllabusText = trimmedSyllabus;
+      }
+
+      if (syllabusFiles.length > 0) {
+        setCourseGenerationMessage("Encoding syllabus materials…");
+        const syllabusPayload = await buildFilePayload(syllabusFiles);
+        if (syllabusPayload.length > 0) {
+          payload.syllabusFiles = syllabusPayload;
+        }
+      }
+
+      const examStructureText = formatExamStructure({ hasExamMaterials, examFormat, examNotes });
+      if (examStructureText) {
+        payload.examStructureText = examStructureText;
+      }
+
+      if (hasExamMaterials && examFiles.length > 0) {
+        setCourseGenerationMessage("Packaging exam references…");
+        const examPayload = await buildFilePayload(examFiles);
+        if (examPayload.length > 0) {
+          payload.examStructureFiles = examPayload;
+        }
+      }
+
+      setCourseGenerationMessage("Consulting GPT-5 for your learning journey…");
+      const response = await fetch(COURSE_STRUCTURE_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = "Failed to generate course. Please try again.";
+        if (response.status === 400) {
+          message = "The course generator needs a valid schedule, topics, and user ID.";
+        } else if (response.status === 502) {
+          message = "The model returned an invalid plan. Please regenerate your topics and try again.";
+        } else if (response.status === 500) {
+          message = "The course generator was unavailable. Please try again shortly.";
+        }
+        const errorPayload = await response.json().catch(() => ({}));
+        if (errorPayload?.error) {
+          message = errorPayload.error;
+        }
+        throw new Error(message);
+      }
+
+      const body = await response.json().catch(() => ({}));
+      const courseId = body?.courseId;
+      setCourseGenerationMessage("Finalizing and saving to your dashboard…");
+
+      try {
+        window.dispatchEvent(new Event("courses:updated"));
+      } catch {}
+
+      router.push(`/dashboard${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ""}`);
+    } catch (error) {
+      setCourseGenerationError(error.message || "Unexpected error generating course.");
+      setCourseGenerating(false);
+    }
+  }, [
+    topics,
+    topicsApproved,
+    userId,
+    selectedCourse,
+    courseQuery,
+    startDate,
+    finishDate,
+    syllabusText,
+    syllabusFiles,
+    hasExamMaterials,
+    examFormat,
+    examNotes,
+    examFiles,
+    router,
+  ]);
 
   if (authStatus === "checking") {
     return (
@@ -307,6 +536,18 @@ export default function CreateCoursePage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] py-12 text-[var(--foreground)] transition-colors">
+      {courseGenerating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/90 px-4 backdrop-blur-sm">
+          <div className="card max-w-md w-full rounded-[28px] px-8 py-10 text-center">
+            <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
+            <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Generating your course</h2>
+            <p className="mt-3 text-sm text-[var(--muted-foreground)]">{courseGenerationMessage}</p>
+            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+              We&rsquo;re orchestrating modules, formats, and learning arcs tailored to your needs. Hang tight.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="create-veil" aria-hidden="true" />
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12">
@@ -349,25 +590,55 @@ export default function CreateCoursePage() {
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-medium">Finish date</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Let us know when you&rsquo;d like to wrap this course.</p>
+                    <h2 className="text-lg font-medium">Course timeline</h2>
+                    <p className="text-sm text-[var(--muted-foreground)]">Set your starting point and when you&rsquo;d like to wrap this course.</p>
                   </div>
                 </div>
-                <div className="mt-6">
-                  <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Finish by</label>
-                  <div className="relative mt-3">
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]">
-                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </span>
-                    <input
-                      type="date"
-                      value={finishDate}
-                      onChange={(event) => setFinishDate(event.target.value)}
-                      min={today}
-                      className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 pl-11 text-[var(--foreground)] shadow-inner transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                    />
+                <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Start date</label>
+                    <div className="mt-3">
+                      <div className="group flex items-center gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 shadow-inner transition focus-within:border-primary focus-within:outline-none focus-within:ring-4 focus-within:ring-primary/20">
+                        <span className="text-[var(--muted-foreground)]">
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </span>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setStartDate(value);
+                            if (value && finishDate && new Date(value) > new Date(finishDate)) {
+                              setFinishDate(value);
+                            }
+                          }}
+                          min={today}
+                          max={finishDate || undefined}
+                          className="w-full border-0 bg-transparent p-0 text-[var(--foreground)] outline-none focus:outline-none focus:ring-0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Finish by</label>
+                    <div className="mt-3">
+                      <div className="group flex items-center gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 shadow-inner transition focus-within:border-primary focus-within:outline-none focus-within:ring-4 focus-within:ring-primary/20">
+                        <span className="text-[var(--muted-foreground)]">
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </span>
+                        <input
+                          type="date"
+                          value={finishDate}
+                          onChange={(event) => setFinishDate(event.target.value)}
+                          min={startDate || today}
+                          className="w-full border-0 bg-transparent p-0 text-[var(--foreground)] outline-none focus:outline-none focus:ring-0"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -379,9 +650,6 @@ export default function CreateCoursePage() {
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">Search the catalog or define your own title.</p>
                 <div className="relative mt-5">
                   <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]">
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M14 10a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
                   </span>
                   <input
                     type="text"
@@ -727,6 +995,57 @@ export default function CreateCoursePage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="gradient-border rounded-[28px]">
+              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
+                <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
+                <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                  Lock in your topic selection, then generate a complete course structure powered by GPT-5.
+                </p>
+
+                {topicsApproved ? (
+                  <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border-muted)] bg-green-500/10 px-4 py-3 text-xs text-[var(--success)]">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Topics approved and ready for generation.
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                    Review your topics and their confidence ratings. You can still edit them after approval—just remember to approve again if you make changes.
+                  </div>
+                )}
+
+                <div className="mt-6 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={handleApproveTopics}
+                    disabled={topics.length === 0 || courseGenerating || topicsApproved}
+                    className={`btn btn-outline w-full justify-center ${topicsApproved ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {topicsApproved ? "Topics approved" : "Approve topics"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateCourse}
+                    disabled={!topicsApproved || courseGenerating}
+                    className="btn btn-primary w-full justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {courseGenerating ? "Generating course…" : "Generate Course"}
+                  </button>
+                </div>
+
+                {courseGenerationError && (
+                  <div className="mt-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                    {courseGenerationError}
+                  </div>
+                )}
+
+                <p className="mt-4 text-[11px] text-[var(--muted-foreground)]">
+                  We&rsquo;ll send your context, attachments, and topics to the backend to craft a full course structure. You&rsquo;ll be redirected to the dashboard once it&rsquo;s ready.
+                </p>
               </div>
             </div>
 
