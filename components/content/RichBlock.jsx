@@ -1,3 +1,4 @@
+// components/RichBlock.jsx
 import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 
@@ -9,7 +10,7 @@ const mjxConfig = {
 
 // helper: render \n inside text as <br>
 function renderTextWithBreaks(text, keyPrefix) {
-  return String(text).split("\n").map((seg, i) => (
+  return String(text ?? "").split("\n").map((seg, i) => (
     <React.Fragment key={`${keyPrefix}-${i}`}>
       {i > 0 && <br />}
       {seg}
@@ -17,12 +18,18 @@ function renderTextWithBreaks(text, keyPrefix) {
   ));
 }
 
-export default function RichBlock({ block, maxWidth = 720 }) {
+/**
+ * Props:
+ * - block: { content: [ {text?:string} | {"inline-math"?:string} | {"block-math"?:string} ] }
+ * - maxWidth?: number | string (default 720)
+ * - scrollY?: string (e.g., "10rem" or "240px") => wraps inner content in a vertical scroll container
+ * - containerClassName?: string (optional)
+ */
+export default function RichBlock({ block, maxWidth = 720, containerClassName = "" }) {
   if (!block) return null;
   const items = Array.isArray(block.content) ? block.content : [];
 
-  // accumulate inline (text + inline-math) into a single paragraph,
-  // flush when we hit a block-math
+  // gather inline into a single paragraph; flush on block-math
   const out = [];
   let inlineBuf = [];
 
@@ -39,13 +46,11 @@ export default function RichBlock({ block, maxWidth = 720 }) {
 
   items.forEach((node, i) => {
     if ("text" in node) {
-      inlineBuf.push(renderTextWithBreaks(node.text, `t-${i}`));
+      inlineBuf.push(renderTextWithBreaks(node["text"], `t-${i}`));
       return;
     }
     if ("inline-math" in node) {
-      inlineBuf.push(
-        <MathJax inline dynamic key={`im-${i}`}>{` $${node["inline-math"]}$ `}</MathJax>
-      );
+      inlineBuf.push(<MathJax inline dynamic key={`im-${i}`}>{`$${node["inline-math"]}$`}</MathJax>);
       return;
     }
     if ("block-math" in node) {
@@ -59,17 +64,17 @@ export default function RichBlock({ block, maxWidth = 720 }) {
   });
   flushInline("end");
 
+  const Inner = (
+    <div className={`prose prose-invert max-w-none ${containerClassName}`}>{out}</div>
+  );
+
   return (
     <MathJaxContext version={3} config={mjxConfig}>
-      {/* scale MathJax SVG to container, no horizontal scroll */}
-      <style jsx global>{`
-        .mjx-container svg { max-width: 100%; height: auto; }
-      `}</style>
+      {/* make MathJax SVG scale with container width */}
+      <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
       <div className="mx-auto w-full" style={{ maxWidth }}>
-        <div className="prose prose-invert max-w-none">
-          {out}
-        </div>
+        {Inner}
       </div>
     </MathJaxContext>
   );

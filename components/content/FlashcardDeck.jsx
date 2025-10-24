@@ -2,6 +2,8 @@
 import React, {
   useMemo, useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle
 } from "react";
+import RichBlock from "@/components/content/RichBlock";
+import { toRichTextOnly } from "@/utils/toRichTextOnly";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
 export default function FlashcardDeck({ data = {} }) {
@@ -90,6 +92,11 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
   const [showBack, setShowBack] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // normalize to RichBlock shape (text-only is fine)
+  const questionRB    = toRichTextOnly(question);
+  const answerRB      = toRichTextOnly(answer);
+  const explanationRB = toRichTextOnly(explanation);
+
   // expose a safe flip() to the parent
   useImperativeHandle(ref, () => ({
     flip: () => {
@@ -141,32 +148,21 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
         onTransitionEnd={handleTransitionEnd}
       >
         <div
-          className="absolute inset-0 p-6 flex flex-col"
+          className="absolute inset-0 p-6 flex flex-col min-h-0"
           style={{ transform: `rotateY(${angle}deg)` }}
         >
           {showBack ? (
             <>
               <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">Answer</div>
-              <div className="text-base font-medium text-[var(--foreground)] whitespace-pre-wrap mb-3">
-                {answer}
+
+              {/* ANSWER: allow vertical scroll if long */}
+              <RichBlock block={answerRB} maxWidth={560} />
+
+              {/* EXPLANATION: usually short (no scroll) */}
+              <div className="mt-3 text-xs text-[var(--muted-foreground)]">
+                <RichBlock block={explanationRB} maxWidth={560} />
               </div>
-              <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
-                {/* <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mt-[2px] text-[var(--muted-foreground)] opacity-80 shrink-0"
-                > 
-                  <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />
-                </svg> */}
-                <span>{explanation}</span>
-              </div>
+
               <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
                 Press Space to flip back
               </div>
@@ -176,9 +172,10 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
               <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                 Question {num}
               </div>
-              <div className="text-base text-[var(--foreground)] whitespace-pre-wrap">
-                {question}
-              </div>
+
+              {/* QUESTION: no scroll by default */}
+              <RichBlock block={questionRB} maxWidth={560} />
+
               <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
                 Click or press Space to flip
               </div>

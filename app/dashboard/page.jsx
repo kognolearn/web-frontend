@@ -17,32 +17,144 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const { theme, toggleTheme, mounted } = useTheme();
   
-  const cards = {
+  // data (richblock-per-slot)
+  /* const cards = {
     "1": [
-      "Define cache hit rate and how it’s computed.",
-      "Hit rate = hits / total accesses.",
-      "Often computed over a trace; miss rate = 1 - hit rate."
+      {
+        content: [
+          { text: "State Ohm’s law." }
+        ]
+      },
+      {
+        content: [
+          { text: "Ohm’s law relates voltage, current, and resistance: " },
+          { "inline-math": "V = IR" }
+        ]
+      },
+      {
+        content: [
+          { text: "A fundamental electrical relationship where voltage (V) equals current (I) times resistance (R)." }
+        ]
+      }
     ],
-    "2": [
-      "What is virtual memory?",
-      "Illusion of contiguous address space via paging.",
-      "Enables isolation, protection; page tables + TLB."
-    ],
-    "3": [
-      "Explain TLB misses.",
-      "A miss in the translation cache requiring a page table walk.",
-      "Can trigger page faults if mapping absent."
-    ]
-  };
 
-  const sampleRichBlock = {
-    "content": [
-      { "text": "Hi blah blah blah \nHsihshdbnaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-      { "inline-math": "x+5" },
-      { "text": "Hi again!" },
-      { "block-math": "\\frac{\\partial V}{\\partial t} + \\frac{1}{2}\\sigma^2 S^2 \\frac{\\partial^2 V}{\\partial S^2} + rS \\frac{\\partial V}{\\partial S} - rV = 0" }
+    "2": [
+      {
+        content: [
+          { text: "Write the equation for Newton’s second law." }
+        ]
+      },
+      {
+        content: [
+          { text: "The net force on an object is given by: " },
+          { "inline-math": "F = ma" }
+        ]
+      },
+      {
+        content: [
+          { text: "It defines the relationship between force, mass, and acceleration — the foundation of classical mechanics." }
+        ]
+      }
+    ],
+
+    "3": [
+      {
+        content: [
+          { text: "Express the quadratic formula." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" }
+        ]
+      },
+      {
+        content: [
+          { text: "Gives the roots of a quadratic equation " },
+          { "inline-math": "ax^2 + bx + c = 0" },
+          { text: ", derived from completing the square." }
+        ]
+      }
+    ],
+
+    "4": [
+      {
+        content: [
+          { text: "What is the equation for kinetic energy?" }
+        ]
+      },
+      {
+        content: [
+          { "inline-math": "E_k = \\tfrac{1}{2}mv^2" }
+        ]
+      },
+      {
+        content: [
+          { text: "Represents the energy of motion proportional to the square of velocity." }
+        ]
+      }
+    ],
+
+    "5": [
+      {
+        content: [
+          { text: "State the ideal gas law." }
+        ]
+      },
+      {
+        content: [
+          { "inline-math": "PV = nRT" }
+        ]
+      },
+      {
+        content: [
+          { text: "Relates pressure (P), volume (V), temperature (T), and number of moles (n) through the gas constant R." }
+        ]
+      }
+    ],
+
+    "6": [
+      {
+        content: [
+          { text: "Write the differential form of Maxwell’s equation for Gauss’s law for electricity." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}" }
+        ]
+      },
+      {
+        content: [
+          { text: "The divergence of the electric field equals charge density divided by permittivity of free space." }
+        ]
+      }
+    ],
+
+    "7": [
+      {
+        content: [
+          { text: "Express the time-dependent Schrödinger equation." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "i\\hbar \\frac{\\partial}{\\partial t}\\Psi(\\mathbf{r}, t) = \\hat{H}\\Psi(\\mathbf{r}, t)" }
+        ]
+      },
+      {
+        content: [
+          { text: "Describes how a quantum state " },
+          { "inline-math": "\\Psi" },
+          { text: " evolves over time under Hamiltonian " },
+          { "inline-math": "\\hat{H}" },
+          { text: "." }
+        ]
+      }
     ]
-  };
+  }; */
+
+
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -212,17 +324,9 @@ export default function DashboardPage() {
         </main>
       </div>
 
-       {/* <div className="p-6">
+      {/* <div className="p-6">
         <FlashcardDeck data={cards} />
-        <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-          Shortcuts: ←/h/k = Prev • →/l/j = Next • Space/Enter = Flip • Home/End = Jump ends
-        </p>
       </div> */} 
-
-      <div className="p-6">
-        <RichBlock block={sampleRichBlock} />
-      </div>
-
 
     </div>
   );
