@@ -156,7 +156,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
               <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">Answer</div>
 
               {/* ANSWER: allow vertical scroll if long */}
-              <RichBlock block={answerRB} maxWidth={560} />
+              <RichBlock block={answerRB} maxWidth={560} scrollY="8.5rem" />
 
               {/* EXPLANATION: usually short (no scroll) */}
               <div className="mt-3 text-xs text-[var(--muted-foreground)]">

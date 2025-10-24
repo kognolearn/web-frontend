@@ -151,8 +151,45 @@ export default function DashboardPage() {
           { text: "." }
         ]
       }
+    ],
+
+    "8": [
+      // Question
+      {
+        content: [
+          { text: "Derive the Black–Scholes PDE from a delta-hedged portfolio." }
+        ]
+      },
+      // Answer (intentionally long)
+      {
+        content: [
+          { text: "Start with a portfolio Π = V - ΔS. Apply Itô to " },
+          { "inline-math": "V(S,t)" },
+          { text: " and choose " },
+          { "inline-math": "Δ = \\frac{\\partial V}{\\partial S}" },
+          { text: " to cancel the dW term.\n" },
+          { text: "No-arbitrage implies the drift of Π must be " },
+          { "inline-math": "rΠ" },
+          { text: ", leading to the PDE below.\n\n" }, // extra newline to extend height
+          { text: "Assume constant volatility " },
+          { "inline-math": "\\sigma" },
+          { text: " and risk-free rate r; for a non-dividend-paying stock:" },
+          { "block-math": "\\frac{\\partial V}{\\partial t} + \\frac{1}{2}\\sigma^2 S^2 \\frac{\\partial^2 V}{\\partial S^2} + rS\\frac{\\partial V}{\\partial S} - rV = 0" },
+          { text: "\nBoundary conditions depend on the payoff; for a European call with strike K and maturity T:\n" },
+          { "inline-math": "V(S,T) = \\max(S - K, 0)" },
+          { text: ".\n\n" }, // more lines to force overflow
+          { text: "Notes:\n• Hedging removes diffusion risk.\n• Drift becomes r under risk-neutral measure.\n• PDE solved via transformation to heat equation or closed-form with d1/d2.\n• Real markets: discrete hedging, jumps, and stochastic vol break assumptions." }
+        ]
+      },
+      // Explanation (also a bit long)
+      {
+        content: [
+          { text: "Key mechanism: pick Δ so that stochastic term vanishes; remaining drift must equal risk-free growth or else arbitrage exists. The resulting condition yields the PDE. Practical deviations (transaction costs, stochastic vol) introduce model risk." }
+        ]
+      }
     ]
   }; */
+
 
 
 

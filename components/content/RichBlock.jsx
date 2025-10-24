@@ -25,7 +25,7 @@ function renderTextWithBreaks(text, keyPrefix) {
  * - scrollY?: string (e.g., "10rem" or "240px") => wraps inner content in a vertical scroll container
  * - containerClassName?: string (optional)
  */
-export default function RichBlock({ block, maxWidth = 720, containerClassName = "" }) {
+export default function RichBlock({ block, maxWidth = 720, scrollY, containerClassName = "" }) {
   if (!block) return null;
   const items = Array.isArray(block.content) ? block.content : [];
 
@@ -74,7 +74,13 @@ export default function RichBlock({ block, maxWidth = 720, containerClassName = 
       <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
       <div className="mx-auto w-full" style={{ maxWidth }}>
-        {Inner}
+        {scrollY ? (
+          <div className="overflow-y-auto" style={{ maxHeight: scrollY }}>
+            {Inner}
+          </div>
+        ) : (
+          Inner
+        )}
       </div>
     </MathJaxContext>
   );
