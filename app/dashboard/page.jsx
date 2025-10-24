@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import CreateCourseCard from "@/components/courses/CreateCourseCard";
+import FlashcardDeck from "@/components/content/FlashcardDeck";
+import RichBlock from "@/components/content/RichBlock";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 export default function DashboardPage() {
@@ -14,6 +16,33 @@ export default function DashboardPage() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const { theme, toggleTheme, mounted } = useTheme();
+  
+  const cards = {
+    "1": [
+      "Define cache hit rate and how it’s computed.",
+      "Hit rate = hits / total accesses.",
+      "Often computed over a trace; miss rate = 1 - hit rate."
+    ],
+    "2": [
+      "What is virtual memory?",
+      "Illusion of contiguous address space via paging.",
+      "Enables isolation, protection; page tables + TLB."
+    ],
+    "3": [
+      "Explain TLB misses.",
+      "A miss in the translation cache requiring a page table walk.",
+      "Can trigger page faults if mapping absent."
+    ]
+  };
+
+  const sampleRichBlock = {
+    "content": [
+      { "text": "Hi blah blah blah \nHsihshdbnaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      { "inline-math": "x+5" },
+      { "text": "Hi again!" },
+      { "block-math": "\\frac{\\partial V}{\\partial t} + \\frac{1}{2}\\sigma^2 S^2 \\frac{\\partial^2 V}{\\partial S^2} + rS \\frac{\\partial V}{\\partial S} - rV = 0" }
+    ]
+  };
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -182,6 +211,19 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+
+       {/* <div className="p-6">
+        <FlashcardDeck data={cards} />
+        <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+          Shortcuts: ←/h/k = Prev • →/l/j = Next • Space/Enter = Flip • Home/End = Jump ends
+        </p>
+      </div> */} 
+
+      <div className="p-6">
+        <RichBlock block={sampleRichBlock} />
+      </div>
+
+
     </div>
   );
 }
