@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 export default function CoursePage() {
   const { courseId } = useParams();
+  const router = useRouter();
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [courseData, setCourseData] = useState(null);
   const [open, setOpen] = useState({});
+  const [selectedTopic, setSelectedTopic] = useState(null);
   const [contentCache, setContentCache] = useState({}); // key: format:id -> { status, data, error }
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const sidebarRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -58,7 +64,16 @@ export default function CoursePage() {
         const json = await res.json();
         console.log("[CoursePage] course_data OK: keys=", Object.keys(json || {}));
         if (aborted) return;
-        setCourseData(json?.course_data || null);
+        const data = json?.course_data || null;
+        setCourseData(data);
+        
+        // Set the first topic as selected by default
+        if (data && typeof data === "object") {
+          const firstTopic = Object.keys(data)[0];
+          if (firstTopic) {
+            setSelectedTopic(firstTopic);
+          }
+        }
       } catch (e) {
         if (aborted) return;
         console.error("[CoursePage] course_data error:", e);
@@ -72,12 +87,62 @@ export default function CoursePage() {
     };
   }, [userId, courseId]);
 
+  // Handle sidebar resizing
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX;
+      if (newWidth >= 200 && newWidth <= 500) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   const entries = useMemo(() => {
     if (!courseData || typeof courseData !== "object") return [];
     return Object.entries(courseData);
   }, [courseData]);
 
-  const toggle = (key) => setOpen((s) => ({ ...s, [key]: !s[key] }));
+  // Group topics by their header (prefix before " - ")
+  const groupedTopics = useMemo(() => {
+    const groups = {};
+    entries.forEach(([topic, items]) => {
+      const separatorIndex = topic.indexOf(" - ");
+      if (separatorIndex > 0) {
+        const header = topic.substring(0, separatorIndex);
+        const title = topic.substring(separatorIndex + 3);
+        if (!groups[header]) {
+          groups[header] = [];
+        }
+        groups[header].push({ fullTopic: topic, title, items });
+      } else {
+        // If no separator, use the whole topic as both header and title
+        if (!groups[topic]) {
+          groups[topic] = [];
+        }
+        groups[topic].push({ fullTopic: topic, title: topic, items });
+      }
+    });
+    return Object.entries(groups);
+  }, [entries]);
 
   const normalizeFormat = (fmt) => {
     if (!fmt) return "";
@@ -165,75 +230,155 @@ export default function CoursePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 sm:p-8">
-      <div className="mx-auto w-full max-w-5xl">
-        <h1 className="text-2xl font-semibold mb-2">Course Content</h1>
-        <p className="text-sm text-[var(--muted-foreground)] mb-6">Course ID: {String(courseId)}</p>
+    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
+      {/* Left Sidebar - Course Structure (resizable) */}
+      {isSidebarOpen && (
+        <aside
+          ref={sidebarRef}
+          style={{ width: `${sidebarWidth}px` }}
+          className="relative border-r border-[var(--border)] overflow-y-auto flex-shrink-0 bg-[var(--surface-1)]"
+        >
+          <div className="p-6">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors mb-6 font-medium"
+            >
+              <svg
+                className="w-4 h-4 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
+              </svg>
+              <span className="break-words">Back to Dashboard</span>
+            </button>
+            
+            {loading && (
+              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                Loading...
+              </div>
+            )}
 
-        {loading && (
-          <div className="card rounded-2xl p-6 text-sm text-[var(--muted-foreground)]">
-            Loading course data…
+            {!loading && error && (
+              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--danger)] border-[var(--danger)]">
+                {error}
+              </div>
+            )}
+
+            {!loading && !error && !entries.length && (
+              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                No content available.
+              </div>
+            )}
+
+            {!loading && !error && entries.length > 0 && (
+              <nav className="space-y-6">
+                {groupedTopics.map(([header, topics]) => (
+                  <div key={header} className="space-y-1.5">
+                    <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
+                      {header}
+                    </h3>
+                    {topics.map(({ fullTopic, title }) => (
+                      <button
+                        key={fullTopic}
+                        type="button"
+                        onClick={() => setSelectedTopic(fullTopic)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                          selectedTopic === fullTopic
+                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
+                            : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
+                        }`}
+                        title={title}
+                      >
+                        <span className="block break-words">{title}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </nav>
+            )}
           </div>
-        )}
 
-        {!loading && error && (
-          <div className="card rounded-2xl p-6 text-sm text-red-600">
-            {error}
+          {/* Resize handle */}
+          <div
+            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
+          />
+        </aside>
+      )}
+
+      {/* Right Content Area - Topic Display */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+          {/* Toggle sidebar button */}
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+              title={isSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+              >
+                {isSidebarOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                  />
+                )}
+              </svg>
+              {isSidebarOpen ? "Hide" : "Show"} sidebar
+            </button>
           </div>
-        )}
 
-        {!loading && !error && !entries.length && (
-          <div className="card rounded-2xl p-6 text-sm text-[var(--muted-foreground)]">
-            No course structure available.
-          </div>
-        )}
+          {selectedTopic && (
+            <>
+              <header className="card rounded-[32px] px-8 py-8 sm:px-10">
+                <h1 className="text-3xl font-semibold leading-tight sm:text-4xl text-[var(--foreground)]">
+                  {selectedTopic}
+                </h1>
+                <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
+                  Dive into the content below
+                </p>
+              </header>
 
-        {!loading && !error && entries.length > 0 && (
-          <div className="space-y-3">
-            {entries.map(([topic, items]) => {
-              const isOpen = !!open[topic];
-              const safeItems = Array.isArray(items) ? items : [];
-              return (
-                <div key={topic} className="card rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => toggle(topic)}
-                    className="w-full flex items-center justify-between px-5 py-4 text-left"
-                  >
-                    <span className="font-medium">{topic}</span>
-                    <svg
-                      className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`}
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                  {isOpen && (
-                    <div className="border-t border-[var(--border)] px-5 py-4 space-y-4">
-                      {safeItems.map((item, idx) => (
-                        <div key={idx} className="space-y-2">
-                          <div className="text-sm font-medium text-[var(--muted-foreground-strong)]">
-                            Format: {normalizeFormat(item?.Format || item?.format || "unknown")} · ID: {item?.id || "n/a"}
-                          </div>
-                          <ItemContent fmt={item?.Format || item?.format} id={item?.id} />
-                        </div>
-                      ))}
-                      {!safeItems.length && (
-                        <div className="text-sm text-[var(--muted-foreground)]">No items in this topic.</div>
-                      )}
-                    </div>
-                  )}
+              <section className="space-y-6">
+                {/* Topic content will be implemented here */}
+                <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                  Topic content for &ldquo;{selectedTopic}&rdquo; will be displayed here.
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </section>
+            </>
+          )}
+
+          {!selectedTopic && !loading && (
+            <div className="card rounded-[28px] px-8 py-10 text-center">
+              <p className="text-[var(--muted-foreground)]">
+                Select a topic from the left sidebar to view its content.
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
