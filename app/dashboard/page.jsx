@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { theme, toggleTheme, mounted } = useTheme();
+  const { mounted } = useTheme();
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -71,9 +71,28 @@ export default function DashboardPage() {
 
   if (loading || !mounted) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
-        <div className="card rounded-[24px] px-10 py-8 text-center text-sm">
-          Calibrating your workspace…
+      <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-8">
+          {/* Header skeleton */}
+          <div className="card relative rounded-[32px] px-8 py-10 sm:px-10 animate-pulse">
+            <div className="h-7 w-2/5 rounded bg-[var(--surface-muted)]" />
+            <div className="mt-4 h-4 w-3/5 rounded bg-[var(--surface-muted)]" />
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="h-9 w-32 rounded-full bg-[var(--surface-muted)]" />
+            </div>
+          </div>
+
+          {/* Grid skeleton */}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="card rounded-2xl p-5 animate-pulse">
+                <div className="h-4 w-24 rounded bg-[var(--surface-muted)]" />
+                <div className="mt-3 h-5 w-4/5 rounded bg-[var(--surface-muted)]" />
+                <div className="mt-2 h-4 w-2/3 rounded bg-[var(--surface-muted)]" />
+                <div className="mt-5 h-8 w-full rounded-xl bg-[var(--surface-muted)]" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -83,38 +102,6 @@ export default function DashboardPage() {
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors">
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-8">
         <div className="flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-pressed={theme === "dark"}
-            aria-label="Toggle color mode"
-            className="pill-outline text-[10px]"
-          >
-            <span className="flex items-center gap-2 text-[var(--muted-foreground-strong)]">
-              {theme === "dark" ? (
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-                </svg>
-              ) : (
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05 4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
-                </svg>
-              )}
-              {theme === "dark" ? "Dark" : "Light"} mode
-            </span>
-          </button>
           <button
             onClick={handleSignOut}
             className="pill-outline text-[10px] text-[var(--muted-foreground-strong)] hover:text-[var(--foreground)]"
