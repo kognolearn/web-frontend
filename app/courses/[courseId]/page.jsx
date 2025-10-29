@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import ChatBot from "@/components/chat/ChatBot";
 
 export default function CoursePage() {
   const { courseId } = useParams();
@@ -17,6 +18,7 @@ export default function CoursePage() {
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [isResizing, setIsResizing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [chatBotWidth, setChatBotWidth] = useState(0);
   const sidebarRef = useRef(null);
 
   useEffect(() => {
@@ -315,7 +317,10 @@ export default function CoursePage() {
       )}
 
       {/* Right Content Area - Topic Display */}
-      <main className="flex-1 overflow-y-auto">
+      <main 
+        className="flex-1 overflow-y-auto transition-all duration-200"
+        style={{ marginRight: `${chatBotWidth}px` }}
+      >
         <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
           {/* Toggle sidebar button */}
           <div className="flex items-center">
@@ -379,6 +384,16 @@ export default function CoursePage() {
           )}
         </div>
       </main>
+
+      {/* ChatBot Component */}
+      <ChatBot 
+        pageContext={{
+          courseId,
+          selectedTopic,
+          courseData,
+        }}
+        onWidthChange={setChatBotWidth}
+      />
     </div>
   );
 }
