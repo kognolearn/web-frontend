@@ -225,3 +225,11 @@ select:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Placeholder support for contentEditable inputs (used by ChatBot) */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  pointer-events: none;
+}
