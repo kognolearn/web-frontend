@@ -504,35 +504,46 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     // contentEditable text will be synced by the effect above
 
     try {
-      // Call the API route with the updated chat history
+      // Prepare attachments for API (images inline as base64; others metadata only)
+      const attachments = await Promise.all(
+        attachedFiles.map(async (f) => fileToAttachment(f))
+      );
+
+      // Assemble context payload for the API
+      const ctx = {
+        chatHistory: buildSanitizedHistory(updatedMessagesForApi),
+        selectedText: sanitizeText(selectedText || null, MAX_SELECTED_TEXT_CHARS),
+        pageContext: minifyPageContext(pageContext || null),
+      };
+
+      // Call the API route with the standardized schema
       const response = await fetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Explicit system role to steer responses
-          systemPrompt: SYSTEM_PROMPT,
-
-          // Current user input
-          message: sanitizeText(messageContent),
-
-          // Compact chat history for context (last N messages, minimal fields)
-          chatHistory: buildSanitizedHistory(updatedMessagesForApi),
-
-          // Per-send contextual extras (trimmed)
-          selectedText: sanitizeText(selectedText || null, MAX_SELECTED_TEXT_CHARS),
-          pageContext: minifyPageContext(pageContext || null),
-
-          // File metadata only (no bytes)
-          files: attachedFiles.map(f => ({ name: f.name, size: f.size, type: f.type }))
+          system: SYSTEM_PROMPT,
+          user: sanitizeText(messageContent),
+          userId: getOrCreateUserId(),
+          context: ctx,
+          useWebSearch: false,
+          responseFormat: 'text',
+          temperature: Number(process.env.NEXT_PUBLIC_CHAT_TEMPERATURE || 0.5),
+          maxTokens: Number(process.env.NEXT_PUBLIC_CHAT_MAX_TOKENS || 600),
+          attachments,
         })
       });
 
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Chat API error (${response.status}): ${errText}`);
+      }
+
       const data = await response.json();
-      
+
       const assistantMessage = {
         id: Date.now() + 1,
         role: "assistant",
-        content: data.message || "hi",
+        content: data?.content || "",
         timestamp: new Date().toISOString()
       };
 
@@ -595,6 +606,118 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     navigator.clipboard.writeText(text).then(() => {
       // Could add a toast notification here
     });
+  };
+
+  const retryMessage = async (messageId) => {
+    // Find the assistant message and the user message that came before it
+    const messageIndex = currentChat?.messages.findIndex(m => m.id === messageId);
+    if (messageIndex === undefined || messageIndex <= 0) return;
+
+    const previousUserMessageIndex = messageIndex - 1;
+    const previousUserMessage = currentChat.messages[previousUserMessageIndex];
+    
+    if (!previousUserMessage || previousUserMessage.role !== 'user') return;
+
+    // Remove the assistant message we're retrying
+    setChats(prev => prev.map(chat => {
+      if (chat.id === currentChatId) {
+        return {
+          ...chat,
+          messages: chat.messages.slice(0, messageIndex)
+        };
+      }
+      return chat;
+    }));
+
+    // Resend the previous user message
+    const versionIndex = messageVersions[previousUserMessage.id] ?? (previousUserMessage.versions?.length - 1 ?? 0);
+    const messageVersion = previousUserMessage.versions?.[versionIndex] ?? previousUserMessage;
+    
+    // Temporarily set the context for this retry
+    const originalSelectedText = selectedText;
+    const originalAttachedFiles = attachedFiles;
+    
+    if (messageVersion.selectedText) {
+      setSelectedText(messageVersion.selectedText);
+    }
+    if (messageVersion.files && messageVersion.files.length > 0) {
+      setAttachedFiles(messageVersion.files);
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Prepare attachments for API
+      const attachments = await Promise.all(
+        (messageVersion.files || []).map(async (f) => fileToAttachment(f))
+      );
+
+      // Get the chat history up to the user message
+      const historyForApi = currentChat.messages.slice(0, messageIndex);
+
+      // Assemble context payload for the API
+      const ctx = {
+        chatHistory: buildSanitizedHistory(historyForApi),
+        selectedText: sanitizeText(messageVersion.selectedText || null, MAX_SELECTED_TEXT_CHARS),
+        pageContext: minifyPageContext(messageVersion.pageContext || null),
+      };
+
+      // Call the API route
+      const response = await fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: SYSTEM_PROMPT,
+          user: sanitizeText(messageVersion.content),
+          userId: getOrCreateUserId(),
+          context: ctx,
+          useWebSearch: false,
+          responseFormat: 'text',
+          temperature: Number(process.env.NEXT_PUBLIC_CHAT_TEMPERATURE || 0.5),
+          maxTokens: Number(process.env.NEXT_PUBLIC_CHAT_MAX_TOKENS || 600),
+          attachments,
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Chat API error (${response.status}): ${errText}`);
+      }
+
+      const data = await response.json();
+
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: "assistant",
+        content: data?.content || "",
+        timestamp: new Date().toISOString()
+      };
+
+      setChats(prev => sortChatsByRecency(prev.map(chat => 
+        chat.id === currentChatId
+          ? { ...chat, messages: [...chat.messages, assistantMessage] }
+          : chat
+      )));
+    } catch (error) {
+      console.error("Error retrying message:", error);
+      const errorMessage = {
+        id: Date.now() + 1,
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date().toISOString(),
+        isError: true
+      };
+      setChats(prev => sortChatsByRecency(prev.map(chat => 
+        chat.id === currentChatId
+          ? { ...chat, messages: [...chat.messages, errorMessage] }
+          : chat
+      )));
+    } finally {
+      setIsLoading(false);
+      // Restore original context
+      setSelectedText(originalSelectedText);
+      setAttachedFiles(originalAttachedFiles);
+    }
   };
 
   const switchMessageVersion = (messageId, direction) => {
@@ -819,9 +942,9 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
                   </div>
-                  <p className="text-sm text-[var(--muted-foreground)]">Start a conversation</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    I have context of the current page and can help with your questions
+                  <p className="text-xl text-[var(--muted-foreground)]">Start a conversation</p>
+                  <p className="text-xs text-[var(--muted-foreground)] font-medium">
+                    Chat history will not be saved
                   </p>
                 </div>
               </div>
@@ -908,6 +1031,18 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
                           >
                             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        )}
+                        {message.role === 'assistant' && (
+                          <button
+                            onClick={() => retryMessage(message.id)}
+                            type="button"
+                            className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                            title="Retry response"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                           </button>
                         )}
@@ -1188,4 +1323,62 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
       />
     </div>
   );
+}
+
+// ---- Client utilities for API payloads ----
+
+function getOrCreateUserId() {
+  try {
+    const key = 'chat_user_id';
+    let id = localStorage.getItem(key);
+    if (id && isUuid(id)) return id;
+    id = cryptoRandomUUID();
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    // Fallback non-persistent UUID if storage fails
+    return cryptoRandomUUID();
+  }
+}
+
+function cryptoRandomUUID() {
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  // Polyfill: RFC4122 v4
+  const bytes = new Uint8Array(16);
+  if (typeof crypto?.getRandomValues === 'function') crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const toHex = (n) => n.toString(16).padStart(2, '0');
+  const b = Array.from(bytes, toHex).join('');
+  return `${b.slice(0,8)}-${b.slice(8,12)}-${b.slice(12,16)}-${b.slice(16,20)}-${b.slice(20)}`;
+}
+
+function isUuid(v) {
+  if (typeof v !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(v);
+}
+
+async function fileToAttachment(f) {
+  const { file, name, type } = f;
+  const mimeType = type || file?.type || '';
+  if (file && mimeType.startsWith('image/')) {
+    const base64 = await fileToBase64(file);
+    return { type: 'image', mimeType, data: base64, name };
+  }
+  // non-image: only metadata
+  return { type: 'file', mimeType, name };
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = typeof result === 'string' ? result.split(',')[1] : '';
+      resolve(base64 || '');
+    };
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(file);
+  });
 }
