@@ -52,7 +52,7 @@ export default function RichBlock({
 
   items.forEach((node, i) => {
     if ("text" in node) {
-      inlineBuf.push(renderTextWithBreaks(node.text, `t-${i}`));
+      inlineBuf.push(renderTextWithBreaks(node["text"], `t-${i}`));
       return;
     }
     if ("inline-math" in node) {

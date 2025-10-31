@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import CreateCourseCard from "@/components/courses/CreateCourseCard";
+import FlashcardDeck from "@/components/content/FlashcardDeck";
+import RichBlock from "@/components/content/RichBlock";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 export default function DashboardPage() {
@@ -14,6 +16,181 @@ export default function DashboardPage() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const { mounted } = useTheme();
+
+  // data (richblock-per-slot)
+  const cards = {
+    "1": [
+      {
+        content: [
+          { "text": "State Ohm’s law." }
+        ]
+      },
+      {
+        content: [
+          { "text": "Ohm’s law relates voltage, current, and resistance: " },
+          { "inline-math": "V = IR" }
+        ]
+      },
+      {
+        content: [
+          { "text": "A fundamental electrical relationship where voltage (V) equals current (I) times resistance (R)." }
+        ]
+      }
+    ],
+
+    "2": [
+      {
+        content: [
+          { "text": "Write the equation for Newton’s second law." }
+        ]
+      },
+      {
+        content: [
+          { text: "The net force on an object is given by: " },
+          { "inline-math": "F = ma" }
+        ]
+      },
+      {
+        content: [
+          { "text": "It defines the relationship between force, mass, and acceleration — the foundation of classical mechanics." }
+        ]
+      }
+    ],
+
+    "3": [
+      {
+        content: [
+          { "text": "Express the quadratic formula." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" }
+        ]
+      },
+      {
+        content: [
+          { "text": "Gives the roots of a quadratic equation " },
+          { "inline-math": "ax^2 + bx + c = 0" },
+          { "text": ", derived from completing the square." }
+        ]
+      }
+    ],
+
+    "4": [
+      {
+        content: [
+          { "text": "What is the equation for kinetic energy?" }
+        ]
+      },
+      {
+        content: [
+          { "inline-math": "E_k = \\tfrac{1}{2}mv^2" }
+        ]
+      },
+      {
+        content: [
+          { "text": "Represents the energy of motion proportional to the square of velocity." }
+        ]
+      }
+    ],
+
+    "5": [
+      {
+        content: [
+          { "text": "State the ideal gas law." }
+        ]
+      },
+      {
+        content: [
+          { "inline-math": "PV = nRT" }
+        ]
+      },
+      {
+        content: [
+          { text: "Relates pressure (P), volume (V), temperature (T), and number of moles (n) through the gas constant R." }
+        ]
+      }
+    ],
+
+    "6": [
+      {
+        content: [
+          { "text": "Write the differential form of Maxwell’s equation for Gauss’s law for electricity." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}" }
+        ]
+      },
+      {
+        content: [
+          { "text": "The divergence of the electric field equals charge density divided by permittivity of free space." }
+        ]
+      }
+    ],
+
+    "7": [
+      {
+        content: [
+          { "text": "Express the time-dependent Schrödinger equation." }
+        ]
+      },
+      {
+        content: [
+          { "block-math": "i\\hbar \\frac{\\partial}{\\partial t}\\Psi(\\mathbf{r}, t) = \\hat{H}\\Psi(\\mathbf{r}, t)" }
+        ]
+      },
+      {
+        content: [
+          { "text": "Describes how a quantum state " },
+          { "inline-math": "\\Psi" },
+          { "text": " evolves over time under Hamiltonian " },
+          { "inline-math": "\\hat{H}" },
+          { "text": "." }
+        ]
+      }
+    ],
+
+    "8": [
+      // Question
+      {
+        content: [
+          { "text": "Derive the Black–Scholes PDE from a delta-hedged portfolio." }
+        ]
+      },
+      // Answer (intentionally long)
+      {
+        content: [
+          { "text": "Start with a portfolio Π = V - ΔS. Apply Itô to " },
+          { "inline-math": "V(S,t)" },
+          { "text": " and choose " },
+          { "inline-math": "Δ = \\frac{\\partial V}{\\partial S}" },
+          { "text": " to cancel the dW term.\n" },
+          { "text": "No-arbitrage implies the drift of Π must be " },
+          { "inline-math": "rΠ" },
+          { "text": ", leading to the PDE below.\n\n" }, // extra newline to extend height
+          { "text": "Assume constant volatility " },
+          { "inline-math": "\\sigma" },
+          { "text": " and risk-free rate r; for a non-dividend-paying stock:" },
+          { "block-math": "\\frac{\\partial V}{\\partial t} + \\frac{1}{2}\\sigma^2 S^2 \\frac{\\partial^2 V}{\\partial S^2} + rS\\frac{\\partial V}{\\partial S} - rV = 0" },
+          { "text": "\nBoundary conditions depend on the payoff; for a European call with strike K and maturity T:\n" },
+          { "inline-math": "V(S,T) = \\max(S - K, 0)" },
+          { "text": ".\n\n" }, // more lines to force overflow
+          { "text": "Notes:\n• Hedging removes diffusion risk.\n• Drift becomes r under risk-neutral measure.\n• PDE solved via transformation to heat equation or closed-form with d1/d2.\n• Real markets: discrete hedging, jumps, and stochastic vol break assumptions." }
+        ]
+      },
+      // Explanation (also a bit long)
+      {
+        content: [
+          { "text": "Key mechanism: pick Δ so that stochastic term vanishes; remaining drift must equal risk-free growth or else arbitrage exists. The resulting condition yields the PDE. Practical deviations (transaction costs, stochastic vol) introduce model risk." }
+        ]
+      }
+    ]
+  };
+
+
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -168,6 +345,10 @@ export default function DashboardPage() {
             </div>
           )}
         </main>
+      </div>
+
+      <div className="p-6">
+        <FlashcardDeck data={cards} />
       </div>
     </div>
   );
