@@ -74,7 +74,7 @@ function toDateInputValue(date) {
 
 function normalizeCatalogResult(result) {
   return {
-    id: result.id,
+    id: result.id || `${String(result.code || "").trim()}-${String(result.title || "").trim()}`,
     code: result.code || result.course_code || "Unknown code",
     title: result.title || result.course_title || "Untitled course",
   };
@@ -98,6 +98,7 @@ export default function CreateCoursePage() {
   const examInputId = useId();
 
   const [courseQuery, setCourseQuery] = useState("");
+  const [collegeName, setCollegeName] = useState("");
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -176,8 +177,9 @@ export default function CreateCoursePage() {
   }, []);
 
   useEffect(() => {
-    const trimmed = courseQuery.trim();
-    if (trimmed.length < 2) {
+    const trimmedCourse = courseQuery.trim();
+    const trimmedCollege = collegeName.trim();
+    if (trimmedCourse.length < 2 || trimmedCollege.length < 2) {
       setSearchResults([]);
       setSearching(false);
       setSearchError("");
@@ -190,7 +192,7 @@ export default function CreateCoursePage() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/catalog-search?q=${encodeURIComponent(trimmed)}`, {
+        const res = await fetch(`/api/college-courses?college=${encodeURIComponent(trimmedCollege)}&course=${encodeURIComponent(trimmedCourse)}`, {
           signal: controller.signal,
         });
         if (!res.ok) {
@@ -198,8 +200,8 @@ export default function CreateCoursePage() {
           setSearchError("Unable to search catalog right now.");
         } else {
           const payload = await res.json();
-          const normalized = Array.isArray(payload?.results)
-            ? payload.results.map(normalizeCatalogResult)
+          const normalized = Array.isArray(payload?.items)
+            ? payload.items.map(normalizeCatalogResult)
             : [];
           setSearchResults(normalized);
         }
@@ -216,7 +218,7 @@ export default function CreateCoursePage() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [courseQuery]);
+  }, [courseQuery, collegeName]);
 
   const handleSelectCourse = useCallback((course) => {
     setSelectedCourse(course);
@@ -262,10 +264,12 @@ export default function CreateCoursePage() {
     const payload = {
       userId,
       finishByDate: finishDate ? new Date(finishDate).toISOString() : undefined,
+      // Backend requires non-empty code and title when courseSelection is provided.
+      // If user typed a custom title, send a synthetic code label.
       courseSelection: selectedCourse
-        ? { code: selectedCourse.code, title: selectedCourse.title }
+        ? { code: String(selectedCourse.code || "CUSTOM"), title: String(selectedCourse.title || courseQuery.trim()) }
         : courseQuery.trim()
-        ? { code: "", title: courseQuery.trim() }
+        ? { code: "CUSTOM", title: courseQuery.trim() }
         : null,
       syllabusText: syllabusText.trim() || undefined,
       syllabusFiles: [],
@@ -648,45 +652,60 @@ export default function CreateCoursePage() {
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
                 <h2 className="text-lg font-medium">Course title</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">Search the catalog or define your own title.</p>
-                <div className="relative mt-5">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]">
-                  </span>
-                  <input
-                    type="text"
-                    placeholder={"Try \"CSE 351\" or \"Hardware Systems\""}
-                    value={courseQuery}
-                    onChange={handleCourseInputChange}
-                    onFocus={() => setCourseDropdownOpen(true)}
-                    className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 pl-11 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                  />
-                  {courseDropdownOpen && (
-                    <div className="absolute z-20 mt-3 w-full overflow-hidden rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] shadow-2xl">
-                      {searching ? (
-                        <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">Searching catalog…</div>
-                      ) : searchError ? (
-                        <div className="px-5 py-4 text-sm text-red-400">{searchError}</div>
-                      ) : courseQuery.trim().length < 2 ? (
-                        <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">Type at least two characters to search the catalog.</div>
-                      ) : searchResults.length === 0 ? (
-                        <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">No matches found. Continue with your custom title.</div>
-                      ) : (
-                        <ul className="max-h-56 overflow-y-auto">
-                          {searchResults.map((course) => (
-                            <li key={course.id}>
-                              <button
-                                type="button"
-                                onClick={() => handleSelectCourse(course)}
-                                className="flex w-full flex-col items-start gap-1 px-5 py-3 text-left text-sm transition hover:bg-primary/10"
-                              >
-                                <span className="text-xs uppercase tracking-wide text-primary">{course.code}</span>
-                                <span className="text-[var(--foreground)]">{course.title}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">College/University</label>
+                    <div className="mt-3">
+                      <input
+                        type="text"
+                        placeholder={'e.g., "University of Washington" or "MIT"'}
+                        value={collegeName}
+                        onChange={(e) => setCollegeName(e.target.value)}
+                        className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                      />
                     </div>
-                  )}
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"></span>
+                    <input
+                      type="text"
+                      placeholder={"Try \"CSE 351\" or \"Hardware Systems\""}
+                      value={courseQuery}
+                      onChange={handleCourseInputChange}
+                      onFocus={() => setCourseDropdownOpen(true)}
+                      className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 pl-11 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                    />
+                    {courseDropdownOpen && (
+                      <div className="absolute z-20 mt-3 w-full overflow-hidden rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] shadow-2xl">
+                        {searching ? (
+                          <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">Searching catalog…</div>
+                        ) : searchError ? (
+                          <div className="px-5 py-4 text-sm text-red-400">{searchError}</div>
+                        ) : collegeName.trim().length < 2 ? (
+                          <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">Enter a college name to search.</div>
+                        ) : courseQuery.trim().length < 2 ? (
+                          <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">Type at least two characters to search the catalog.</div>
+                        ) : searchResults.length === 0 ? (
+                          <div className="px-5 py-4 text-sm text-[var(--muted-foreground)]">No matches found. Continue with your custom title.</div>
+                        ) : (
+                          <ul className="max-h-56 overflow-y-auto">
+                            {searchResults.map((course) => (
+                              <li key={course.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectCourse(course)}
+                                  className="flex w-full flex-col items-start gap-1 px-5 py-3 text-left text-sm transition hover:bg-primary/10"
+                                >
+                                  <span className="text-xs uppercase tracking-wide text-primary">{course.code}</span>
+                                  <span className="text-[var(--foreground)]">{course.title}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>

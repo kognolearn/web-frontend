@@ -35,11 +35,18 @@ export default function CreateCourseModal({ onClose }) {
         return;
       }
 
-      // Use backend API to generate/upload a course for this user
+      // Use backend API to generate topics for this user (align payload with backend spec)
       const resp = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({
+          userId: user.id,
+          // Provide courseSelection with non-empty code/title to satisfy backend validation
+          courseSelection: {
+            code: formData.courseCode?.trim() || "CUSTOM",
+            title: formData.courseName?.trim() || "Untitled",
+          },
+        }),
       });
 
       if (!resp.ok) {
