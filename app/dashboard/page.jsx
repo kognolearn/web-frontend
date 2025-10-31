@@ -8,6 +8,8 @@ import CourseCard from "@/components/courses/CourseCard";
 import CreateCourseCard from "@/components/courses/CreateCourseCard";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import RichBlock from "@/components/content/RichBlock";
+import VideoBlock from "@/components/content/VideoBlock";
+import Quiz from "@/components/content/Quiz";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 export default function DashboardPage() {
@@ -21,18 +23,18 @@ export default function DashboardPage() {
   const cards = {
     "1": [
       {
-        content: [
+        "content": [
           { "text": "State Ohm’s law." }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "Ohm’s law relates voltage, current, and resistance: " },
           { "inline-math": "V = IR" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "A fundamental electrical relationship where voltage (V) equals current (I) times resistance (R)." }
         ]
       }
@@ -40,18 +42,18 @@ export default function DashboardPage() {
 
     "2": [
       {
-        content: [
+        "content": [
           { "text": "Write the equation for Newton’s second law." }
         ]
       },
       {
-        content: [
-          { text: "The net force on an object is given by: " },
+        "content": [
+          { "text": "The net force on an object is given by: " },
           { "inline-math": "F = ma" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "It defines the relationship between force, mass, and acceleration — the foundation of classical mechanics." }
         ]
       }
@@ -59,17 +61,17 @@ export default function DashboardPage() {
 
     "3": [
       {
-        content: [
+        "content": [
           { "text": "Express the quadratic formula." }
         ]
       },
       {
-        content: [
+        "content": [
           { "block-math": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "Gives the roots of a quadratic equation " },
           { "inline-math": "ax^2 + bx + c = 0" },
           { "text": ", derived from completing the square." }
@@ -79,17 +81,17 @@ export default function DashboardPage() {
 
     "4": [
       {
-        content: [
+        "content": [
           { "text": "What is the equation for kinetic energy?" }
         ]
       },
       {
-        content: [
+        "content": [
           { "inline-math": "E_k = \\tfrac{1}{2}mv^2" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "Represents the energy of motion proportional to the square of velocity." }
         ]
       }
@@ -97,35 +99,35 @@ export default function DashboardPage() {
 
     "5": [
       {
-        content: [
+        "content": [
           { "text": "State the ideal gas law." }
         ]
       },
       {
-        content: [
+        "content": [
           { "inline-math": "PV = nRT" }
         ]
       },
       {
-        content: [
-          { text: "Relates pressure (P), volume (V), temperature (T), and number of moles (n) through the gas constant R." }
+        "content": [
+          { "text": "Relates pressure (P), volume (V), temperature (T), and number of moles (n) through the gas constant R." }
         ]
       }
     ],
 
     "6": [
       {
-        content: [
+        "content": [
           { "text": "Write the differential form of Maxwell’s equation for Gauss’s law for electricity." }
         ]
       },
       {
-        content: [
+        "content": [
           { "block-math": "\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "The divergence of the electric field equals charge density divided by permittivity of free space." }
         ]
       }
@@ -133,17 +135,17 @@ export default function DashboardPage() {
 
     "7": [
       {
-        content: [
+        "content": [
           { "text": "Express the time-dependent Schrödinger equation." }
         ]
       },
       {
-        content: [
+        "content": [
           { "block-math": "i\\hbar \\frac{\\partial}{\\partial t}\\Psi(\\mathbf{r}, t) = \\hat{H}\\Psi(\\mathbf{r}, t)" }
         ]
       },
       {
-        content: [
+        "content": [
           { "text": "Describes how a quantum state " },
           { "inline-math": "\\Psi" },
           { "text": " evolves over time under Hamiltonian " },
@@ -156,13 +158,13 @@ export default function DashboardPage() {
     "8": [
       // Question
       {
-        content: [
+        "content": [
           { "text": "Derive the Black–Scholes PDE from a delta-hedged portfolio." }
         ]
       },
       // Answer (intentionally long)
       {
-        content: [
+        "content": [
           { "text": "Start with a portfolio Π = V - ΔS. Apply Itô to " },
           { "inline-math": "V(S,t)" },
           { "text": " and choose " },
@@ -183,11 +185,94 @@ export default function DashboardPage() {
       },
       // Explanation (also a bit long)
       {
-        content: [
+        "content": [
           { "text": "Key mechanism: pick Δ so that stochastic term vanishes; remaining drift must equal risk-free growth or else arbitrage exists. The resulting condition yields the PDE. Practical deviations (transaction costs, stochastic vol) introduce model risk." }
         ]
       }
     ]
+  };
+
+  const block = {
+      "content": [
+      {
+        "text": "# Photosynthesis: Turning Sunlight into Energy\nPlants convert light into chemical energy using chlorophyll-rich organelles called chloroplasts."
+      },
+      {
+        "text": "## Key Stages\n1. Light-dependent reactions capture solar energy.\n2. The Calvin cycle fixes carbon dioxide into sugars."
+      },
+      {
+        "text": "### Chemical Overview"
+      },
+      {
+        "text": "The overall reaction is often summarized as:"
+      },
+      {
+        "block-math": "6\\,CO_2 + 6\\,H_2O + \\text{light} \\rightarrow C_6H_{12}O_6 + 6\\,O_2"
+      },
+      {
+        "text": "Each glucose molecule stores about 686 kcal of potential energy, enabling downstream processes like cellular respiration."
+      },
+      {
+        "text": "### Vocabulary\n- **Chlorophyll**: Pigment that absorbs light.\n- **Stroma**: Fluid-filled interior of the chloroplast.\n- **Thylakoid**: Membrane sacs hosting the light reactions."
+      },
+      {
+        "text": "What molecule acts as the final electron acceptor in the light reactions?"
+      },
+      {
+        "inline-math": "NADP^+"
+      },
+      {
+        "text": ", which becomes NADPH after accepting electrons."
+      },
+      {
+        "text": "_Photosynthesis not only fuels plant growth but also drives the oxygenation of Earth’s atmosphere, sustaining aerobic life._"
+      }
+    ]
+  }
+
+  const videoUrl = "https://youtu.be/qw4fDU18RcU?si=CT8Uwlv82WG7OleC";
+
+  const quiz = {
+    "1": {
+      "blocks": [
+        {
+          "text": "### During the light-dependent reactions, which molecule acts as the final electron acceptor?"
+        },
+        {
+          "text": "Water (H₂O)"
+        },
+        {
+          "inline-math": "NADP^+"
+        },
+        {
+          "text": "Molecular oxygen (O₂)"
+        },
+        {
+          "text": "NADP⁺ accepts energized electrons at the end of the light reactions, forming NADPH that shuttles reducing power into the Calvin cycle."
+        }
+      ],
+      "correctOption": 2
+    },
+    "2": {
+      "blocks": [
+        {
+          "text": "### What is the primary product of the Calvin cycle that can be used to form glucose?"
+        },
+        {
+          "text": "ATP"
+        },
+        {
+          "text": "Glyceraldehyde-3-phosphate (G3P)"
+        },
+        {
+          "text": "Carbon dioxide (CO₂)"
+        },
+        {
+          "text": "G3P molecules are exported from the Calvin cycle and combined to build glucose, whereas ATP provides energy and CO₂ enters as a reactant."
+        }
+      ],
+      "correctOption": 2
+    }
   };
 
 
@@ -349,6 +434,15 @@ export default function DashboardPage() {
 
       <div className="p-6">
         <FlashcardDeck data={cards} />
+      </div>
+      <div className="p-7">
+        <RichBlock block={block} />
+      </div>
+      <div className="p-8">
+        <VideoBlock url={videoUrl}/>
+      </div>
+      <div className="p-9">
+        <Quiz questions={quiz}/>
       </div>
     </div>
   );
