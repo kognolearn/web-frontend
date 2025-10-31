@@ -51,9 +51,17 @@ function consumeInlineDollar(text, start) {
   return null;
 }
 
+function normalizePlainText(input) {
+  if (!input) return "";
+  return String(input)
+    .replace(/\r\n?/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t");
+}
+
 export function parsePlainTextToNodes(input) {
   if (input === null || input === undefined) return [];
-  const text = String(input);
+  const text = normalizePlainText(String(input));
   if (!text) return [];
 
   const nodes = [];
