@@ -10,6 +10,9 @@ import VideoBlock from "@/components/content/VideoBlock";
 import Quiz from "@/components/content/Quiz";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 
+const USE_MOCK_COURSE = process.env.NEXT_PUBLIC_USE_MOCK_COURSE === "true";
+const MOCK_SELECTED_TOPIC = process.env.NEXT_PUBLIC_MOCK_TOPIC?.trim() || "";
+
 const FORMAT_METADATA = {
   reading: { label: "Reading" },
   notes: { label: "Reading" },
@@ -325,6 +328,12 @@ export default function CoursePage() {
   const sidebarRef = useRef(null);
 
   useEffect(() => {
+    if (USE_MOCK_COURSE) {
+      setUserId("mock-user");
+      setError("");
+      return () => {};
+    }
+
     let mounted = true;
     (async () => {
       try {
@@ -350,7 +359,45 @@ export default function CoursePage() {
   }, []);
 
   useEffect(() => {
-    if (!userId || !courseId) return;
+    if (!courseId) return;
+
+    if (USE_MOCK_COURSE) {
+      let cancelled = false;
+      setLoading(true);
+      setError("");
+      (async () => {
+        try {
+          const module = await import("@/mock/course-topics-demo.json");
+          if (cancelled) return;
+          const payload = module?.default ?? module;
+          const data = payload?.course_data ?? payload?.courseData ?? null;
+          if (!data || typeof data !== "object") {
+            throw new Error("Mock course data is missing a course_data object.");
+          }
+          setCourseData(data);
+          const topicKeys = Object.keys(data);
+          const preferredTopic = topicKeys.find((topic) => topic === MOCK_SELECTED_TOPIC);
+          const defaultTopic = preferredTopic || topicKeys[0] || null;
+          if (defaultTopic) {
+            setSelectedTopic(defaultTopic);
+          }
+        } catch (e) {
+          if (cancelled) return;
+          console.error("[CoursePage] mock course_data error:", e);
+          setError(e?.message || "Failed to load mock course data.");
+          setCourseData(null);
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!userId) return;
     let aborted = false;
     setLoading(true);
     setError("");
@@ -371,12 +418,14 @@ export default function CoursePage() {
         if (aborted) return;
         const data = json?.course_data || null;
         setCourseData(data);
-        
+
         // Set the first topic as selected by default
         if (data && typeof data === "object") {
-          const firstTopic = Object.keys(data)[0];
-          if (firstTopic) {
-            setSelectedTopic(firstTopic);
+          const topicKeys = Object.keys(data);
+          const preferredTopic = topicKeys.find((topic) => topic === MOCK_SELECTED_TOPIC);
+          const defaultTopic = preferredTopic || topicKeys[0];
+          if (defaultTopic) {
+            setSelectedTopic(defaultTopic);
           }
         }
       } catch (e) {

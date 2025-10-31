@@ -27,6 +27,8 @@ Provide the client-side Supabase env vars in `.env.local` for the web app:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_KEY`
 
+See `docs/testing-course-topics.md` for instructions on booting the course view with mock data when you want to try the topic renderer without connecting to Supabase or the backend API.
+
 Notes
 -----
 

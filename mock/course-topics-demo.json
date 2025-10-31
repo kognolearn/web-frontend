@@ -1,0 +1,153 @@
+{
+  "course_data": {
+    "Module 1 - Learn Topics/Heaps": {
+      "summary": "## What you'll learn\n- Understand the heap data structure\n- Practice insertions and deletions\n- Recognize when a heap is the right tool\n\nHeaps shine when you need a running notion of the *best* item.",
+      "items": [
+        {
+          "id": "reading-heap-basics",
+          "format": "reading",
+          "title": "Heap Basics",
+          "data": {
+            "title": "Heap Basics",
+            "body": "### Why heaps matter\nA heap keeps the extremal value handy so operations like priority queue scheduling are efficient.\\n\\n### Heap property\nFor a max-heap we require $A[parent(i)] \\geq A[i]$ for every index $i$.\n\n### Array layout\nWe can model the tree inside an array. The left child index is given by $$2i + 1$$ and the right child is $$2i + 2$$ when the root sits at index 0.\\n\\nTry writing a proof that the height of a heap with $n$ nodes is $\\Theta(\\log n)$."
+          }
+        },
+        {
+          "id": "video-heapify",
+          "format": "video",
+          "title": "Visualizing Heapify",
+          "data": {
+            "title": "Visualizing Heapify",
+            "url": "https://www.youtube.com/watch?v=HtSuA80QTyo",
+            "summary": "Walk through the *heapify* routine step by step. Notice how swaps restore the invariant from the bottom up."
+          }
+        },
+        {
+          "id": "flashcards-heap-operations",
+          "format": "flashcards",
+          "title": "Heap Operations",
+          "data": {
+            "cards": [
+              [
+                "What does \"heapify\" accomplish?",
+                "It fixes the heap property on the path rooted at a node by pushing violations downward.",
+                "Heapify ensures subtrees become heaps again after a key decreases in a max-heap."
+              ],
+              [
+                "Which heap operation runs in $O(\\log n)$ time?",
+                "Both insert and extract-max take logarithmic time in the number of nodes.",
+                "Restoring the heap involves traversing the height of the tree."
+              ],
+              [
+                "When is the heap property violated after insertion?",
+                "Only along the path from the new leaf to the root.",
+                "Bubble the new key up until it is no longer larger than its parent."
+              ]
+            ]
+          }
+        },
+        {
+          "id": "quiz-heap-practice",
+          "format": "quiz",
+          "title": "Check your understanding",
+          "data": {
+            "questions": [
+              {
+                "question": "In a max-heap, which statement is always true about a node and its parent?",
+                "options": [
+                  {
+                    "label": "A",
+                    "content": [
+                      { "text": "The parent's key is greater than or equal to each child's key." }
+                    ],
+                    "correct": true,
+                    "feedback": {
+                      "content": [
+                        { "text": "That's exactly the heap property." }
+                      ]
+                    }
+                  },
+                  {
+                    "label": "B",
+                    "content": [
+                      { "text": "The parent's key is strictly less than the average of the children's keys." }
+                    ]
+                  },
+                  {
+                    "label": "C",
+                    "content": [
+                      { "text": "The parent must be the overall minimum key in the structure." }
+                    ]
+                  }
+                ]
+              },
+              {
+                "question": "After inserting a new element into a max-heap stored in array form, where might the heap property fail?",
+                "options": [
+                  {
+                    "content": [
+                      { "text": "On the new element's path toward the root." }
+                    ],
+                    "correct": true
+                  },
+                  {
+                    "content": [
+                      { "text": "Only within the left subtree of the root." }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "Across every node simultaneously." }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "It can never fail after insertion." }
+                    ]
+                  }
+                ]
+              },
+              {
+                "sequence": [
+                  {
+                    "content": [
+                      { "text": "How many swaps does \"heapify\" perform on the node containing value 4 in the array" },
+                      { "inline-math": "[9, 7, 6, 4, 5, 2, 1]" },
+                      { "text": "?" }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "0" }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "1" }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "2" }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "3" }
+                    ]
+                  },
+                  {
+                    "content": [
+                      { "text": "Swapping with 4's children once restores the heap." }
+                    ]
+                  }
+                ],
+                "correctOption": 2
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
