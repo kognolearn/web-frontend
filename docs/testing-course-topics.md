@@ -33,3 +33,21 @@ Navigate to [http://localhost:3000/courses/demo-course](http://localhost:3000/co
 
 ## 4. Return to live data
 Remove or comment out `NEXT_PUBLIC_USE_MOCK_COURSE` in `.env.local` when you are ready to reconnect to the backend APIs. The course view will switch back to Supabase-authenticated fetches and proxy all content requests through `/api/courses/data` and `/api/content`.
+
+## Live data contract
+
+When mock mode is disabled the page expects `/api/courses/data` to respond with a JSON payload that includes a `course_data` object. Each key inside `course_data` should be the human-readable topic title (for example `"Module 1 - Introduction"`). The value for a topic can be either:
+
+- An array of content item objects, or
+- An object that contains an `items`/`content`/`sections` array plus optional metadata such as `summary` or `description` that will be rendered above the items.
+
+Every content item should follow these rules so `TopicRenderer` knows how to display it:
+
+1. Provide a `format` (or `type`/`content_type`) using one of the supported aliases: `reading`, `video`, `flashcards`, `quiz`, `mini_quiz`, `practice_quiz`, `practice_exam`, or `assessment`.
+2. Include an identifier (`id`, `content_id`, `resource_id`, etc.) when the frontend needs to fetch the full payload through `/api/content?format=…&id=…`. If you inline the data on the item, place it under a `data`, `payload`, `resource`, or `contentData` property instead.
+3. Textual fields such as `summary`, `description`, `body`, and topic-level `overview` should be plain strings. Markdown and LaTeX are supported; the rich-text parser will convert them into blocks automatically.
+4. Video entries should expose a playable URL via `url`, `video_url`, or `link`.
+5. Flashcard sets can be arrays or objects; each entry is normalized into `[question, answer, explanation]` before rendering.
+6. Quiz-like formats should supply a `questions`/`items` array (objects are passed directly to the quiz component).
+
+Finally, make sure the dynamic route parameter (`[courseId]`) is a UUID when hitting the live endpoints. Non-UUID slugs are reserved for the mock workflow and will trigger a helpful validation error in the UI.
