@@ -2,52 +2,11 @@
 
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import RichBlock from "@/components/content/RichBlock";
-
-function normalizeNode(node) {
-  if (!node) return null;
-
-  if (typeof node === "string") {
-    return { text: node };
-  }
-
-  if (typeof node === "object") {
-    if ("text" in node) return { text: node.text ?? "" };
-    if ("block-math" in node) return { "block-math": node["block-math"] ?? "" };
-    if ("inline-math" in node) return { "inline-math": node["inline-math"] ?? "" };
-  }
-
-  return null;
-}
+import { hasRichContent, toRichBlock } from "@/utils/richText";
 
 function normalizeRichBlock(value) {
-  if (!value) {
-    return { content: [] };
-  }
-
-  if (typeof value === "string") {
-    return { content: [{ text: value }] };
-  }
-
-  if (typeof value === "object") {
-    const possibleNode = normalizeNode(value);
-    if (possibleNode) {
-      return { content: [possibleNode] };
-    }
-  }
-
-  if (Array.isArray(value)) {
-    return {
-      content: value.map(normalizeNode).filter(Boolean),
-    };
-  }
-
-  if (typeof value === "object" && Array.isArray(value.content)) {
-    return {
-      content: value.content.map(normalizeNode).filter(Boolean),
-    };
-  }
-
-  return { content: [] };
+  const block = toRichBlock(value);
+  return hasRichContent(block) ? block : { content: [] };
 }
 
 function getOptionLabel(option, index) {
@@ -56,14 +15,15 @@ function getOptionLabel(option, index) {
 }
 
 function normalizeOption(option, index) {
+  const blockSource =
+    option?.block ?? (option?.content ? { content: option.content } : option);
+  const feedbackBlock = option?.feedback ? normalizeRichBlock(option.feedback) : null;
   return {
     id: option?.id ?? String(index),
     label: getOptionLabel(option, index),
-    block: normalizeRichBlock(
-      option?.block ?? (option?.content ? { content: option.content } : option)
-    ),
+    block: normalizeRichBlock(blockSource),
     correct: Boolean(option?.correct),
-    feedback: option?.feedback ? normalizeRichBlock(option.feedback) : null,
+    feedback: feedbackBlock && hasRichContent(feedbackBlock) ? feedbackBlock : null,
   };
 }
 
@@ -106,9 +66,8 @@ function extractSequenceFromValue(value) {
 }
 
 function normalizeSequenceQuestion(value, index, keyOverride) {
-  const sequence = extractSequenceFromValue(value).map(normalizeNode).filter(Boolean);
-
-  if (sequence.length < 3) {
+  const rawSequence = extractSequenceFromValue(value);
+  if (rawSequence.length < 3) {
     return null;
   }
 
@@ -129,14 +88,18 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
       : undefined);
   const zeroBasedCorrect = toZeroBasedCorrectIndex(rawCorrect);
 
-  const questionNode = sequence[0];
-  const explanationNode = sequence[sequence.length - 1];
-  const optionNodes = sequence.slice(1, -1);
+  const questionBlock = normalizeRichBlock(rawSequence[0]);
+  if (!hasRichContent(questionBlock)) {
+    return null;
+  }
 
-  const options = optionNodes.map((node, optionIndex) => ({
+  const explanationBlock = normalizeRichBlock(rawSequence[rawSequence.length - 1]);
+  const optionBlocks = rawSequence.slice(1, -1).map(normalizeRichBlock);
+
+  const options = optionBlocks.map((block, optionIndex) => ({
     id: `${baseId}-option-${optionIndex}`,
     label: getOptionLabel({}, optionIndex),
-    block: normalizeRichBlock([node]),
+    block,
     correct: zeroBasedCorrect === optionIndex,
     feedback: null,
   }));
@@ -149,9 +112,9 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
 
   return {
     id: baseId,
-    block: normalizeRichBlock([questionNode]),
+    block: questionBlock,
     options,
-    explanation: normalizeRichBlock([explanationNode]),
+    explanation: explanationBlock,
   };
 }
 
@@ -193,7 +156,11 @@ export default function Quiz({ questions, question, options = [], onAnswer }) {
 
       return questions
         .map((item, index) => normalizeQuestion(item, index))
-        .filter((item) => item.block.content.length > 0 || item.options.length > 0);
+        .filter(
+          (item) =>
+            hasRichContent(item.block) ||
+            item.options.some((opt) => opt && hasRichContent(opt.block))
+        );
     }
 
     if (question || options.length > 0) {

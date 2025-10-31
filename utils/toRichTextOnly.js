@@ -1,7 +1,6 @@
 // utils/toRichTextOnly.js
+import { toRichBlock } from "./richText";
+
 export function toRichTextOnly(blockOrString) {
-  if (blockOrString && typeof blockOrString === "object" && Array.isArray(blockOrString.content)) {
-    return blockOrString;
-  }
-  return { content: [ { text: String(blockOrString ?? "") } ] };
+  return toRichBlock(blockOrString);
 }
