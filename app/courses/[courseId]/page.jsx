@@ -20,6 +20,7 @@ export default function CoursePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [chatBotWidth, setChatBotWidth] = useState(0);
   const sidebarRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -45,6 +46,20 @@ export default function CoursePage() {
       mounted = false;
     };
   }, []);
+
+  // Track viewport for responsive adjustments
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // On mobile, hide the sidebar by default
+  useEffect(() => {
+    if (isMobile) setIsSidebarOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!userId || !courseId) return;
@@ -289,7 +304,7 @@ export default function CoursePage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
       {/* Left Sidebar - Course Structure (resizable) */}
-      {isSidebarOpen && (
+      {!isMobile && isSidebarOpen && (
         <aside
           ref={sidebarRef}
           style={{ width: `${sidebarWidth}px` }}
@@ -363,7 +378,7 @@ export default function CoursePage() {
             )}
           </div>
 
-          {/* Resize handle */}
+          {/* Resize handle (desktop only) */}
           <div
             className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
             onMouseDown={() => setIsResizing(true)}
@@ -371,10 +386,73 @@ export default function CoursePage() {
         </aside>
       )}
 
+      {/* Mobile drawer for topics */}
+      {isMobile && isSidebarOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/40"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed left-0 top-0 bottom-0 z-[60] w-[85vw] max-w-sm bg-[var(--surface-1)] border-r border-[var(--border)] overflow-y-auto shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-[var(--foreground)]">Topics</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+                  aria-label="Close topics"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {loading && (
+                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">Loading...</div>
+              )}
+              {!loading && error && (
+                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--danger)] border-[var(--danger)]">{error}</div>
+              )}
+              {!loading && !error && !entries.length && (
+                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">No content available.</div>
+              )}
+              {!loading && !error && entries.length > 0 && (
+                <nav className="space-y-6">
+                  {groupedTopics.map(([header, topics]) => (
+                    <div key={header} className="space-y-1.5">
+                      <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
+                        {smartTitleCase(header)}
+                      </h3>
+                      {topics.map(({ fullTopic, title }) => (
+                        <button
+                          key={fullTopic}
+                          type="button"
+                          onClick={() => { setSelectedTopic(fullTopic); setIsSidebarOpen(false); }}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                            selectedTopic === fullTopic
+                              ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
+                              : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
+                          }`}
+                          title={smartTitleCase(title)}
+                        >
+                          <span className="block break-words">{smartTitleCase(title)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </nav>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Right Content Area - Topic Display */}
       <main 
         className="flex-1 overflow-y-auto transition-all duration-200"
-        style={{ marginRight: `${chatBotWidth}px` }}
+        style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
       >
         <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
           {/* Toggle sidebar button */}
@@ -383,7 +461,7 @@ export default function CoursePage() {
               type="button"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-              title={isSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+              title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
             >
               <svg
                 className="w-4 h-4"
@@ -406,7 +484,7 @@ export default function CoursePage() {
                   />
                 )}
               </svg>
-              {isSidebarOpen ? "Hide" : "Show"} sidebar
+              {isSidebarOpen ? "Hide" : "Show"} {isMobile ? "topics" : "sidebar"}
             </button>
           </div>
 
@@ -471,6 +549,22 @@ export default function CoursePage() {
         }}
         onWidthChange={setChatBotWidth}
       />
+
+      {/* Mobile floating Topics button: accessible anywhere on the page */}
+      {isMobile && !isSidebarOpen && (
+        <button
+          type="button"
+          onClick={() => setIsSidebarOpen(true)}
+          aria-label="Show topics"
+          title="Show topics"
+          className="fixed bottom-20 left-4 z-50 flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--primary-contrast)] shadow-lg hover:opacity-90 transition-opacity"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          Topics
+        </button>
+      )}
     </div>
   );
 }

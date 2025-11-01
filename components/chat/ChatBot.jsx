@@ -58,6 +58,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
   const [resizeDirection, setResizeDirection] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isMobile, setIsMobile] = useState(false);
   
   // Chat state
   const [chats, setChats] = useState([{ id: 1, name: "New Chat", messages: [] }]);
@@ -95,13 +96,22 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     return [...list].sort((a, b) => getChatSortTime(b) - getChatSortTime(a));
   };
 
+  // Track viewport for responsive behavior
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
   // Notify parent of width changes
   useEffect(() => {
     if (onWidthChange) {
-      // When docked and open, pass the width; otherwise pass 0
-      onWidthChange(isOpen && !isPopped ? width : 0);
+      // On mobile or when not docked-open, don't reserve width
+      onWidthChange(isOpen && !isPopped && !isMobile ? width : 0);
     }
-  }, [isOpen, isPopped, width, onWidthChange]);
+  }, [isOpen, isPopped, width, isMobile, onWidthChange]);
 
   // Determine whether to use contentEditable input to defeat autofill prompts
   const useContentEditable =
@@ -202,7 +212,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
 
   // Resizing for docked mode (width only)
   useEffect(() => {
-    if (!isResizing || isPopped) return;
+    if (!isResizing || isPopped || isMobile) return;
 
     const handleMouseMove = (e) => {
       const newWidth = window.innerWidth - e.clientX;
@@ -1309,6 +1319,24 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     );
   }
 
+  // Docked mode: desktop right sidebar, mobile bottom sheet overlay
+  if (isMobile) {
+    return (
+      <>
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={() => setIsOpen(false)}
+          aria-hidden="true"
+        />
+        <div
+          className="fixed left-0 right-0 bottom-0 z-50 h-[70vh] shadow-2xl border-t border-[var(--border)] rounded-t-xl overflow-hidden"
+        >
+          {chatContent}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div
       className="fixed right-0 top-0 z-40 h-screen shadow-2xl border-l border-[var(--border)]"
@@ -1316,7 +1344,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     >
       {chatContent}
       
-      {/* Resize handle for docked mode */}
+      {/* Resize handle for docked mode (desktop only) */}
       <div
         className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
         onMouseDown={() => setIsResizing(true)}
