@@ -549,22 +549,6 @@ export default function CoursePage() {
         }}
         onWidthChange={setChatBotWidth}
       />
-
-      {/* Mobile floating Topics button: accessible anywhere on the page */}
-      {isMobile && !isSidebarOpen && (
-        <button
-          type="button"
-          onClick={() => setIsSidebarOpen(true)}
-          aria-label="Show topics"
-          title="Show topics"
-          className="fixed bottom-20 left-4 z-50 flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--primary-contrast)] shadow-lg hover:opacity-90 transition-opacity"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          Topics
-        </button>
-      )}
     </div>
   );
 }
