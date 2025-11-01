@@ -123,24 +123,22 @@ export default function CoursePage() {
     return Object.entries(courseData);
   }, [courseData]);
 
-  // Group topics by their header (prefix before " - ")
+  // Group topics by their header using "/" as the hierarchy separator
+  // Example key: "category/subtopic" => header: "category", title: "subtopic"
   const groupedTopics = useMemo(() => {
     const groups = {};
     entries.forEach(([topic, items]) => {
-      const separatorIndex = topic.indexOf(" - ");
-      if (separatorIndex > 0) {
-        const header = topic.substring(0, separatorIndex);
-        const title = topic.substring(separatorIndex + 3);
-        if (!groups[header]) {
-          groups[header] = [];
-        }
+      const parts = String(topic).split("/").map((s) => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        const header = parts[0];
+        const title = parts.slice(1).join(" / "); // support deeper nesting gracefully
+        if (!groups[header]) groups[header] = [];
         groups[header].push({ fullTopic: topic, title, items });
       } else {
         // If no separator, use the whole topic as both header and title
-        if (!groups[topic]) {
-          groups[topic] = [];
-        }
-        groups[topic].push({ fullTopic: topic, title: topic, items });
+        const header = parts[0] || topic;
+        if (!groups[header]) groups[header] = [];
+        groups[header].push({ fullTopic: topic, title: header, items });
       }
     });
     return Object.entries(groups);
@@ -156,9 +154,63 @@ export default function CoursePage() {
     return f;
   };
 
+  const prettyFormat = (fmt) => {
+    const base = String(fmt || "").toLowerCase().replace(/[_-]+/g, " ");
+    return base.replace(/\b\w/g, (m) => m.toUpperCase());
+  };
+
+  // Smart title casing for headers and titles
+  const SMALL_WORDS = new Set([
+    "a","an","the","and","but","or","nor","for","so","yet",
+    "as","at","by","in","of","on","to","via","vs","vs.","per","with","from","into","over","under"
+  ]);
+  const ACRONYMS = new Set([
+    "API","CPU","GPU","SQL","HTML","CSS","JS","HTTP","HTTPS","URL","ID","OOP","BST","DFS","BFS","UI","UX"
+  ]);
+  const capWord = (w, isFirst, isLast) => {
+    if (!w) return w;
+    const clean = w; // preserve punctuation minimalistically
+    const upper = clean.toUpperCase();
+    if (ACRONYMS.has(upper)) return upper;
+    // hyphenated words: title-case each part
+    if (clean.includes("-")) {
+      return clean
+        .split("-")
+        .map((part, idx) => capWord(part, isFirst && idx === 0, isLast && idx === clean.split("-").length - 1))
+        .join("-");
+    }
+    const lower = clean.toLowerCase();
+    // keep small words lower unless at boundaries
+    if (!isFirst && !isLast && SMALL_WORDS.has(lower)) return lower;
+    // default: capitalize first letter
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  };
+  const smartTitleCase = (str) => {
+    if (!str) return "";
+    // Support slash-delimited subsegments
+    return String(str)
+      .split("/")
+      .map((seg) => {
+        const words = seg.trim().split(/\s+/);
+        return words
+          .map((w, i) => capWord(w, i === 0, i === words.length - 1))
+          .join(" ");
+      })
+      .join(" / ");
+  };
+
+  const displaySelectedTopic = useMemo(() => {
+    if (!selectedTopic) return "";
+    const parts = String(selectedTopic).split("/").map((s) => s.trim()).filter(Boolean);
+    if (!parts.length) return "";
+    const header = smartTitleCase(parts[0]);
+    const tail = parts.slice(1).map(smartTitleCase).join(" / ");
+    return tail ? `${header} / ${tail}` : header;
+  }, [selectedTopic]);
+
   function ItemContent({ fmt, id }) {
     const normFmt = normalizeFormat(fmt);
-    const key = `${normFmt}:${id}`;
+    const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
     const cached = contentCache[key];
     const fetchInitiatedRef = useRef(new Set());
 
@@ -185,7 +237,10 @@ export default function CoursePage() {
       
       (async () => {
         try {
-          const url = `/api/content?format=${encodeURIComponent(normFmt)}&id=${encodeURIComponent(id)}`;
+          const params = new URLSearchParams({ format: normFmt, id: String(id) });
+          if (userId) params.set("userId", String(userId));
+          if (courseId) params.set("courseId", String(courseId));
+          const url = `/api/content?${params.toString()}`;
           console.log("[ItemContent] Fetching content:", { url, normFmt, id });
           const res = await fetch(url, { signal: ac.signal });
           let data;
@@ -285,7 +340,7 @@ export default function CoursePage() {
                 {groupedTopics.map(([header, topics]) => (
                   <div key={header} className="space-y-1.5">
                     <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
-                      {header}
+                      {smartTitleCase(header)}
                     </h3>
                     {topics.map(({ fullTopic, title }) => (
                       <button
@@ -297,9 +352,9 @@ export default function CoursePage() {
                             ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
                             : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
                         }`}
-                        title={title}
+                        title={smartTitleCase(title)}
                       >
-                        <span className="block break-words">{title}</span>
+                        <span className="block break-words">{smartTitleCase(title)}</span>
                       </button>
                     ))}
                   </div>
@@ -359,7 +414,7 @@ export default function CoursePage() {
             <>
               <header className="card rounded-[32px] px-8 py-8 sm:px-10">
                 <h1 className="text-3xl font-semibold leading-tight sm:text-4xl text-[var(--foreground)]">
-                  {selectedTopic}
+                  {displaySelectedTopic}
                 </h1>
                 <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
                   Dive into the content below
@@ -367,10 +422,32 @@ export default function CoursePage() {
               </header>
 
               <section className="space-y-6">
-                {/* Topic content will be implemented here */}
-                <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-                  Topic content for &ldquo;{selectedTopic}&rdquo; will be displayed here.
-                </div>
+                {Array.isArray(courseData?.[selectedTopic]) && courseData[selectedTopic].length > 0 ? (
+                  courseData[selectedTopic].map((item) => (
+                    <article key={item.id} className="card rounded-[28px] px-6 py-6 sm:px-8 sm:py-8">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                          {prettyFormat(item?.Format)}
+                        </h2>
+                        <span className="pill-outline text-[10px]">
+                          ID: {item?.id}
+                        </span>
+                      </div>
+                      {item?.content && (
+                        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                          {item.content}
+                        </p>
+                      )}
+                      <div className="mt-4">
+                        <ItemContent fmt={item?.Format} id={item?.id} />
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                    No items available for “{selectedTopic}”.
+                  </div>
+                )}
               </section>
             </>
           )}

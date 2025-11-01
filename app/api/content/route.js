@@ -7,10 +7,14 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const format = searchParams.get("format") || "";
     const id = searchParams.get("id") || "";
+    const userId = searchParams.get("userId") || "";
+    const courseId = searchParams.get("courseId") || "";
 
     const url = new URL("/content", BASE_URL);
     if (format) url.searchParams.set("format", format);
     if (id) url.searchParams.set("id", id);
+    if (userId) url.searchParams.set("userId", userId);
+    if (courseId) url.searchParams.set("courseId", courseId);
 
     console.log("[/api/content] proxy →", url.toString());
     const controller = new AbortController();
