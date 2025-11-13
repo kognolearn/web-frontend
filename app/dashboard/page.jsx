@@ -32,6 +32,11 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const handleDeleteCourse = useCallback((courseId) => {
+    setCourses((prev) => prev.filter((course) => course.id !== courseId));
+    window.dispatchEvent(new Event("courses:updated"));
+  }, []);
+
   useEffect(() => {
     const loadUserAndCourses = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -133,29 +138,21 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold sm:text-xl">Your courses</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {courses.map((course) => {
-              const created = course.created_at ? new Date(course.created_at) : null;
-              const when = created
-                ? new Intl.DateTimeFormat(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                  }).format(created)
-                : "Unknown";
               const courseTitle =
                 course?.title ||
                 course?.course_title ||
                 course?.name ||
                 course?.courseName ||
-                "Generated course";
-              const courseCodeLabel = course?.code || course?.course_code || courseTitle;
-              const description = `${courseTitle}${courseTitle ? " · " : ""}Created ${when}`;
+                "Untitled Course";
               return (
                 <CourseCard
                   key={course.id}
-                  courseCode={courseCodeLabel}
-                  courseName={description}
+                  courseCode={courseTitle}
+                  courseName=""
                   courseId={course.id}
+                  endDate={course.end_date || course.endDate}
+                  userId={user?.id}
+                  onDelete={handleDeleteCourse}
                 />
               );
             })}

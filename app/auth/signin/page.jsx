@@ -1,5 +1,4 @@
 import SignInForm from "@/components/auth/SignInForm";
-import Link from "next/link";
 import { Suspense } from "react";
 
 export const metadata = {
@@ -16,7 +15,7 @@ export default function SignInPage() {
             Welcome Back
           </h1>
           <p className="text-[var(--muted-foreground)] text-sm">
-            Sign in to access your dashboard
+            Keep learning with personalized AI study tools.
           </p>
         </div>
 
@@ -30,15 +29,6 @@ export default function SignInPage() {
 
         <div className="text-center text-xs text-[var(--muted-foreground)] mt-6">
           By signing in, you agree to our Terms of Service and Privacy Policy
-        </div>
-
-        <div className="mt-6 text-center">
-          <Link
-            href="/"
-            className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          >
-            ← Back to home
-          </Link>
         </div>
       </div>
     </div>

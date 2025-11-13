@@ -205,18 +205,31 @@ select:focus {
   color: color-mix(in srgb, var(--foreground) 85%, var(--muted-foreground));
 }
 
-/* Remove legacy gradient/glass helpers (kept as no-ops for safety) */
-.gradient-border,
+/* Remove remaining legacy glass helpers (kept as no-ops for safety) */
 .glass-panel,
-.panel-accent-rose,
-.panel-accent-sky,
-.panel-accent-sun,
 .dashboard-veil,
 .create-veil,
 .stat-card::after {
   background: none !important;
   box-shadow: none !important;
   filter: none !important;
+}
+
+.panel-accent-rose {
+  background-color: #fce8e8;
+}
+
+.panel-accent-sky {
+  background-color: #e8f4fd;
+}
+
+.panel-accent-sun {
+  background-color: #fdf4e4;
+}
+
+.gradient-border {
+  border: 2px solid transparent;
+  border-image: linear-gradient(45deg, #f9cada, #cde7f5, #f9ecc2) 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

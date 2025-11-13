@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
+import { marked } from "marked";
 
 export default function CoursePage() {
   const { courseId } = useParams();
@@ -294,11 +295,139 @@ export default function CoursePage() {
     if (cached.status === "error") {
       return <div className="text-xs text-red-600">{cached.error}</div>;
     }
-    return (
-      <pre className="overflow-auto rounded-md bg-[var(--muted)]/30 p-3 text-xs leading-relaxed">
-{JSON.stringify(cached.data, null, 2)}
-      </pre>
-    );
+    const { format, data } = cached.data || {};
+    const resolvedFormat = normalizeFormat(format) || normFmt;
+
+    switch (resolvedFormat) {
+      case "video": {
+        return (
+          <div className="space-y-4">
+            {data?.videos?.map((vid) => {
+              if (!vid) return null;
+              let embedUrl = vid.url;
+              try {
+                const u = new URL(vid.url);
+                if (u.hostname === "youtu.be") {
+                  embedUrl = `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+                } else if (u.hostname.includes("youtube.com")) {
+                  if (u.pathname === "/watch") {
+                    const v = u.searchParams.get("v");
+                    if (v) embedUrl = `https://www.youtube.com/embed/${v}`;
+                  } else if (u.pathname.startsWith("/shorts/") || u.pathname.startsWith("/embed/")) {
+                    const id = u.pathname.split("/").filter(Boolean).pop();
+                    if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
+                  }
+                }
+              } catch {}
+              return (
+                <div key={vid.url || vid.title}>
+                  <iframe
+                    src={embedUrl}
+                    title={vid.title}
+                    width="100%"
+                    height="315"
+                    frameBorder="0"
+                    allowFullScreen
+                  />
+                  <p className="mt-2 text-sm"><b>{vid.title}</b> – {vid.duration_min} min</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{vid.summary}</p>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+      case "reading": {
+        const html = marked.parse(data?.body || "");
+        return (
+          <div className="prose max-w-none">
+            <h2>{data?.title}</h2>
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
+        );
+      }
+      case "flashcards": {
+        return (
+          <div className="space-y-4">
+            {data?.cards?.map((card, idx) => (
+              <div key={idx} className="p-4 rounded-lg bg-[var(--surface-2)]">
+                <p className="font-medium">Q: {card?.[0]}</p>
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-[var(--primary)]">Show Answer</summary>
+                  <div className="mt-2 text-sm">
+                    <p><b>Answer:</b> {card?.[1]}</p>
+                    <p><b>Explanation:</b> {card?.[2]}</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">Difficulty: {card?.[3] || "medium"}</p>
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        );
+      }
+      case "mini_quiz":
+      case "practice_exam": {
+        const questions = [];
+        if (resolvedFormat === "mini_quiz" && Array.isArray(data?.questions)) {
+          questions.push(...data.questions);
+        }
+        if (resolvedFormat === "practice_exam") {
+          if (Array.isArray(data?.mcq)) {
+            data.mcq.forEach((q) => {
+              questions.push({ type: "mcq", ...q });
+            });
+          }
+          if (Array.isArray(data?.frq)) {
+            data.frq.forEach((q) => {
+              questions.push({ type: "frq", ...q });
+            });
+          }
+        }
+        return (
+          <div className="space-y-6">
+            {questions.map((q, i) => {
+              if (q?.type === "frq") {
+                return (
+                  <div key={i}>
+                    <p className="font-medium">**Q{ i + 1 } (FRQ):** {q.prompt}</p>
+                    <details className="ml-4 mt-1">
+                      <summary className="cursor-pointer text-[var(--primary)]">Show Solution</summary>
+                      <div className="mt-2 text-sm">
+                        <p><b>Model Answer:</b> {q.model_answer}</p>
+                        <p><b>Rubric:</b> {q.rubric}</p>
+                      </div>
+                    </details>
+                  </div>
+                );
+              }
+              return (
+                <div key={i}>
+                  <p className="font-medium">**Q{ i + 1 }:** {q?.question}</p>
+                  <ul className="ml-6 list-disc text-sm">
+                    {q?.options?.map((opt, j) => (
+                      <li key={j}>{opt}</li>
+                    ))}
+                  </ul>
+                  <details className="ml-4 mt-1">
+                    <summary className="cursor-pointer text-[var(--primary)]">Show Answer</summary>
+                    <div className="mt-1 text-sm">
+                      <p><b>Correct Answer:</b> {q?.answer}</p>
+                      <p><b>Explanation:</b> {q?.explanation}</p>
+                    </div>
+                  </details>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+      default:
+        return (
+          <pre className="overflow-auto text-xs p-3 bg-[var(--surface-2)] rounded">
+            {JSON.stringify(data ?? cached.data, null, 2)}
+          </pre>
+        );
+    }
   }
 
   return (

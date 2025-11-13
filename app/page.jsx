@@ -7,7 +7,7 @@ export default function Home() {
         <div className="mx-auto max-w-2xl">
           <div className="card rounded-[24px] px-10 py-12">
             <div className="mx-auto mb-6">
-              <h2 className="text-2xl font-bold" style={{color: 'var(--primary)'}}>Preply</h2>
+              <h2 className="text-2xl font-bold" style={{color: 'var(--primary)'}}>Kogno</h2>
             </div>
             <h1 className="text-4xl sm:text-5xl font-semibold leading-tight">
               Study for Everything.

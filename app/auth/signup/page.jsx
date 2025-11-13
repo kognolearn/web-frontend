@@ -16,8 +16,13 @@ export default function SignUpPage() {
             Create Account
           </h1>
           <p className="text-[var(--muted-foreground)] text-sm">
-            Join us to get started
+            Join thousands of students using AI for smarter studying.
           </p>
+        </div>
+
+        <div className="mb-8 text-center text-sm italic text-[var(--muted-foreground)]">
+          "EdTech Planner helped me ace my finals with less stress!"<br />
+          <span className="not-italic">- Alex, University sophomore</span>
         </div>
 
         {/* Sign Up Form */}

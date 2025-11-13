@@ -94,8 +94,8 @@ export default function CreateCoursePage() {
   const syllabusInputId = useId();
   const examInputId = useId();
 
-  // only collect university and course title from the user — no catalog lookups or dropdowns
-  const [courseQuery, setCourseQuery] = useState("");
+  // Course title and optional university
+  const [courseTitle, setCourseTitle] = useState("");
   const [collegeName, setCollegeName] = useState("");
 
   const [syllabusText, setSyllabusText] = useState("");
@@ -152,7 +152,7 @@ export default function CreateCoursePage() {
   }, [router]);
 
   const handleCourseInputChange = useCallback((event) => {
-    setCourseQuery(event.target.value);
+    setCourseTitle(event.target.value);
   }, []);
 
   // no click-away handling required for simplified inputs
@@ -200,7 +200,7 @@ export default function CreateCoursePage() {
       userId,
       finishByDate: finishDate ? new Date(finishDate).toISOString() : undefined,
       university: collegeName.trim() || undefined,
-      courseTitle: courseQuery.trim() || undefined,
+      courseTitle: courseTitle.trim() || undefined,
       syllabusText: syllabusText.trim() || undefined,
       syllabusFiles: [],
       examFormatDetails: hasExamMaterials
@@ -237,7 +237,7 @@ export default function CreateCoursePage() {
     } finally {
       setGenerating(false);
     }
-  }, [examFormat, examNotes, finishDate, hasExamMaterials, syllabusText, userId, courseQuery]);
+  }, [examFormat, examNotes, finishDate, hasExamMaterials, syllabusText, userId, courseTitle]);
 
   const handleRatingChange = useCallback((topicId, rating) => {
     setTopicsApproved(false);
@@ -316,7 +316,7 @@ export default function CreateCoursePage() {
       return;
     }
 
-    const className = courseQuery.trim();
+    const className = courseTitle.trim();
 
     if (!className) {
       setCourseGenerationError("Provide a course title before generating the course.");
@@ -401,7 +401,7 @@ export default function CreateCoursePage() {
         }
       }
 
-      setCourseGenerationMessage("Consulting GPT-5 for your learning journey…");
+      setCourseGenerationMessage("Coordinating your learning journey…");
       const response = await fetch(COURSE_STRUCTURE_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -441,7 +441,7 @@ export default function CreateCoursePage() {
     topics,
     topicsApproved,
     userId,
-    courseQuery,
+    courseTitle,
     startDate,
     finishDate,
     syllabusText,
@@ -473,7 +473,7 @@ export default function CreateCoursePage() {
           <div className="card max-w-md w-full rounded-[28px] px-8 py-10 text-center">
             <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
             <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Generating your course</h2>
-            <p className="mt-3 text-sm text-[var(--muted-foreground)]">{courseGenerationMessage}</p>
+            <p className="mt-3 text-sm text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
             <p className="mt-4 text-xs text-[var(--muted-foreground)]">
               We&rsquo;re orchestrating modules, formats, and learning arcs tailored to your needs. Hang tight.
             </p>
@@ -599,7 +599,7 @@ export default function CreateCoursePage() {
                       <input
                         type="text"
                         placeholder={'e.g., "Introduction to Algorithms"'}
-                        value={courseQuery}
+                        value={courseTitle}
                         onChange={handleCourseInputChange}
                         className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
                       />
@@ -920,7 +920,7 @@ export default function CreateCoursePage() {
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
                 <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                  Lock in your topic selection, then generate a complete course structure powered by GPT-5.
+                  Lock in your topic selection, then generate a complete course structure tailored to you.
                 </p>
 
                 {topicsApproved ? (
