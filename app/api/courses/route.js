@@ -41,7 +41,7 @@ export async function POST(request) {
     const url = new URL("/courses", BASE_URL);
 
     const controller = new AbortController();
-    const to = setTimeout(() => controller.abort(), 45000);
+    const to = setTimeout(() => controller.abort(), 120000);
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
