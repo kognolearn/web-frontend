@@ -2,7 +2,7 @@ import SignInForm from "@/components/auth/SignInForm";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "Sign In | Ed Platform",
+  title: "Sign In | Kogno",
   description: "Access your courses and continue learning",
 };
 

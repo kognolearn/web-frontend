@@ -2,7 +2,7 @@ import SignUpForm from "@/components/auth/SignUpForm";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Sign Up | Ed Platform",
+  title: "Sign Up | Kogno",
   description: "Create your account to get started",
 };
 
@@ -21,7 +21,7 @@ export default function SignUpPage() {
         </div>
 
         <div className="mb-8 text-center text-sm italic text-[var(--muted-foreground)]">
-          "EdTech Planner helped me ace my finals with less stress!"<br />
+          "Kogno helped me ace my finals with less stress!"<br />
           <span className="not-italic">- Alex, University sophomore</span>
         </div>
 
