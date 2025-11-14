@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /*
-  Pastel, minimalist design tokens (no gradients)
-  - Light and dark palettes
-  - Subtle shadows and borders
-  - Flat, mature colors with soft contrast
+  Clean, modern design tokens with bright, airy feel
+  - Pure white background with fresh green and blue accents
+  - Dark charcoal text for maximum readability
+  - Ample white space and comfortable spacing
 */
 
 :root {
@@ -13,51 +13,62 @@
   --radius-md: 14px;
   --radius-lg: 20px;
 
-  /* base colors default (dark as initial to match layout.js) */
-  --background: #1a1f2e;
-  --surface-1: #2d3748;
-  --surface-2: #323c51;
-  --surface-muted: #3a455c;
-  --border: #4a5568;
-  --foreground: #f7fafc;
-  --muted-foreground: #a0aec0;
-  --muted-foreground-strong: #e2e8f0;
+  /* base colors default (light theme as primary) */
+  --background: #FFFFFF; /* pure white */
+  --surface-1: #FFFFFF;
+  --surface-2: #F9F9F9;
+  --surface-muted: #F4F4F4;
+  --border: #E5E5E5;
+  --foreground: #202020; /* dark charcoal */
+  --muted-foreground: #666666;
+  --muted-foreground-strong: #404040;
 
-  /* accent (pastel mint) */
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #4ac5a9;
-  --primary-active: #3ab699;
+  /* accent (fresh green) */
+  --primary: #28A745; /* fresh green */
+  --primary-contrast: #FFFFFF;
+  --primary-hover: #218838; /* slightly darker */
+  --primary-active: #1E7E34; /* even darker */
+
+  /* secondary accent (complementary blue) */
+  --secondary: #0066CC; /* complementary blue */
+  --secondary-contrast: #FFFFFF;
+  --secondary-hover: #0052A3; /* slightly darker */
+  --secondary-active: #004085; /* even darker */
 
   /* feedback */
-  --success: #66d08e;
-  --warning: #f4c363;
-  --danger: #e57474;
+  --success: #28A745;
+  --warning: #FFC107;
+  --danger: #DC3545;
 
   /* shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
-  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.16);
-  --shadow-lg: 0 14px 28px rgba(0, 0, 0, 0.18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 html.theme-light {
-  --background: #f8f9fa; /* off-white */
-  --surface-1: #ffffff;
-  --surface-2: #f1f3f5;
-  --surface-muted: #eef1f4;
-  --border: #e5e7eb;
-  --foreground: #2c3e50;
-  --muted-foreground: #7f8c8d;
-  --muted-foreground-strong: #34495e;
+  --background: #FFFFFF; /* pure white */
+  --surface-1: #FFFFFF;
+  --surface-2: #F9F9F9;
+  --surface-muted: #F4F4F4;
+  --border: #E5E5E5;
+  --foreground: #202020; /* dark charcoal */
+  --muted-foreground: #666666;
+  --muted-foreground-strong: #404040;
 
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #7fe5d3; /* slightly lighter on light bg */
-  --primary-active: #4ac5a9;
+  --primary: #28A745;
+  --primary-contrast: #FFFFFF;
+  --primary-hover: #218838;
+  --primary-active: #1E7E34;
+
+  --secondary: #0066CC;
+  --secondary-contrast: #FFFFFF;
+  --secondary-hover: #0052A3;
+  --secondary-active: #004085;
 }
 
 html.theme-dark {
-  --background: #1a1f2e; /* deep navy */
+  --background: #1a1f2e; /* deep navy for dark mode */
   --surface-1: #2d3748;
   --surface-2: #323c51;
   --surface-muted: #3a455c;
@@ -66,10 +77,15 @@ html.theme-dark {
   --muted-foreground: #a0aec0;
   --muted-foreground-strong: #e2e8f0;
 
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #4ac5a9; /* slightly darker on dark bg */
-  --primary-active: #3ab699;
+  --primary: #28A745;
+  --primary-contrast: #FFFFFF;
+  --primary-hover: #32CD5F; /* lighter for dark bg */
+  --primary-active: #28A745;
+
+  --secondary: #0066CC;
+  --secondary-contrast: #FFFFFF;
+  --secondary-hover: #3399FF; /* lighter for dark bg */
+  --secondary-active: #0066CC;
 }
 
 /* Base */
@@ -78,7 +94,27 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-nunito), system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.5rem;
 }
 
 /* Cards */
@@ -88,6 +124,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
@@ -95,7 +132,7 @@ body {
 .card-shell:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 /* Buttons */
@@ -105,11 +142,11 @@ body {
   justify-content: center;
   gap: 0.5rem;
   border-radius: 999px;
-  padding: 0.625rem 1rem;
+  padding: 0.75rem 1.5rem;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1;
-  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
 }
 
 .btn:active { transform: translateY(1px); }
@@ -118,23 +155,27 @@ body {
 .bg-primary { /* keep legacy class name as alias */
   background-color: var(--primary) !important;
   color: var(--primary-contrast) !important;
-  border: 1px solid color-mix(in srgb, var(--primary) 65%, var(--border));
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 20%, transparent);
+  border: 1px solid var(--primary);
+  box-shadow: 0 4px 10px rgba(40, 167, 69, 0.2);
 }
 
 .btn-primary:hover,
 .bg-primary:hover {
   background-color: var(--primary-hover) !important;
+  border-color: var(--primary-hover);
+  box-shadow: 0 6px 14px rgba(40, 167, 69, 0.25);
 }
 
 .btn-outline {
   background: transparent;
-  color: color-mix(in srgb, var(--foreground) 80%, var(--muted-foreground));
-  border: 1px solid var(--border);
+  color: var(--secondary);
+  border: 2px solid var(--secondary);
 }
 
 .btn-outline:hover {
-  background-color: var(--surface-2);
+  background-color: var(--secondary);
+  color: var(--secondary-contrast);
+  border-color: var(--secondary);
 }
 
 /* Inputs */
@@ -146,7 +187,7 @@ select {
   color: var(--foreground);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 1rem;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
@@ -155,8 +196,8 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.1);
 }
 
 /* Tags/Badges */
@@ -202,7 +243,13 @@ select:focus {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--foreground) 85%, var(--muted-foreground));
+  color: var(--muted-foreground);
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.pill-outline:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
 }
 
 /* Remove remaining legacy glass helpers (kept as no-ops for safety) */
@@ -216,15 +263,15 @@ select:focus {
 }
 
 .panel-accent-rose {
-  background-color: #fce8e8;
+  background-color: #FFF5F5;
 }
 
 .panel-accent-sky {
-  background-color: #e8f4fd;
+  background-color: #F0F9FF;
 }
 
 .panel-accent-sun {
-  background-color: #fdf4e4;
+  background-color: #FEFFFE;
 }
 
 .gradient-border {

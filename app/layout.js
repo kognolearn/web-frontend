@@ -10,7 +10,7 @@ const nunito = Nunito({
 });
 
 export const metadata = {
-  title: "Ed-Startup",
+  title: "Kogno",
   description: "Study for Everything.",
 };
 
