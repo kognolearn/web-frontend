@@ -109,7 +109,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={handleSignOut}
-            className="pill-outline text-[10px] text-[var(--muted-foreground-strong)] hover:text-[var(--foreground)]"
+            className="pill-outline text-[10px] text-[var(--muted-foreground-strong)] hover:text-[var(--foreground)] transition-all hover:scale-105 active:scale-95 cursor-pointer"
           >
             Sign out
           </button>

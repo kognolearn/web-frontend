@@ -550,7 +550,7 @@ export default function CoursePage() {
             <button
               type="button"
               onClick={() => router.push('/dashboard')}
-              className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors mb-6 font-medium"
+              className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-all mb-6 font-medium cursor-pointer hover:scale-105 active:scale-95"
             >
               <svg
                 className="w-4 h-4 flex-shrink-0"
@@ -598,10 +598,10 @@ export default function CoursePage() {
                         key={fullTopic}
                         type="button"
                         onClick={() => setSelectedTopic(fullTopic)}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 cursor-pointer ${
                           selectedTopic === fullTopic
-                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
-                            : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
+                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md scale-105"
+                            : "hover:bg-[var(--surface-2)] text-[var(--foreground)] hover:scale-105 active:scale-95"
                         }`}
                         title={smartTitleCase(title)}
                       >
@@ -637,7 +637,7 @@ export default function CoursePage() {
                 <button
                   type="button"
                   onClick={() => setIsSidebarOpen(false)}
-                  className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+                  className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-all cursor-pointer hover:scale-110 active:scale-95"
                   aria-label="Close topics"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -666,10 +666,10 @@ export default function CoursePage() {
                           key={fullTopic}
                           type="button"
                           onClick={() => { setSelectedTopic(fullTopic); setIsSidebarOpen(false); }}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                          className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 cursor-pointer ${
                             selectedTopic === fullTopic
-                              ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
-                              : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
+                              ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md scale-105"
+                              : "hover:bg-[var(--surface-2)] text-[var(--foreground)] hover:scale-105 active:scale-95"
                           }`}
                           title={smartTitleCase(title)}
                         >
@@ -955,7 +955,7 @@ export default function CoursePage() {
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all cursor-pointer hover:scale-105 active:scale-95"
                 title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
               >
                 <svg

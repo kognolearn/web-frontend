@@ -698,7 +698,7 @@ export default function CreateCoursePage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveSyllabusFile(file.name)}
-                            className="text-[var(--muted-foreground)] transition hover:text-red-400"
+                            className="text-[var(--muted-foreground)] transition-all hover:text-red-400 cursor-pointer hover:scale-125 active:scale-95"
                             aria-label={`Remove ${file.name}`}
                           >
                             &times;
@@ -772,7 +772,7 @@ export default function CreateCoursePage() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveExamFile(file.name)}
-                                className="text-[var(--muted-foreground)] transition hover:text-red-400"
+                                className="text-[var(--muted-foreground)] transition-all hover:text-red-400 cursor-pointer hover:scale-125 active:scale-95"
                                 aria-label={`Remove ${file.name}`}
                               >
                                 &times;
@@ -801,14 +801,14 @@ export default function CreateCoursePage() {
             <div className="flex flex-wrap items-center justify-end gap-3">
               <Link
                 href="/dashboard"
-                className="pill-outline text-[10px]"
+                className="pill-outline text-[10px] transition-all hover:scale-105 active:scale-95"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
                 disabled={generating}
-                className="bg-primary rounded-full px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                className="bg-primary rounded-full px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60 transition-all hover:scale-105 active:scale-95 enabled:cursor-pointer shadow-md hover:shadow-lg"
               >
                 {generating ? "Generating topics…" : "Generate study topics"}
               </button>
@@ -859,7 +859,7 @@ export default function CreateCoursePage() {
                         type="button"
                         key={rating}
                         onClick={() => setNewTopicRating(rating)}
-                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer hover:scale-110 active:scale-95 ${
                           rating <= newTopicRating ? "border-primary bg-primary/20 text-primary" : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
                         }`}
                       >
@@ -869,7 +869,7 @@ export default function CreateCoursePage() {
                   </div>
                   <button
                     type="submit"
-                    className="bg-primary rounded-full px-4 py-2 text-xs font-semibold text-gray-900 transition hover:bg-primary-hover"
+                    className="bg-primary rounded-full px-4 py-2 text-xs font-semibold text-gray-900 transition-all hover:bg-primary-hover cursor-pointer hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
                   >
                     Add topic
                   </button>

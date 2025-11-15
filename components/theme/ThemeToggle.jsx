@@ -41,7 +41,7 @@ export default function ThemeToggle() {
         onClick={toggleTheme}
         aria-label="Toggle color mode"
         aria-pressed={isDark}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-muted)] bg-[var(--surface-2)] shadow-sm transition-colors hover:border-[var(--border)] focus:outline-none focus:ring-4 focus:ring-primary/20"
+        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-muted)] bg-[var(--surface-2)] shadow-sm transition-all duration-200 hover:border-[var(--border)] hover:shadow-md hover:scale-110 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20 cursor-pointer"
       >
         {/* Icons layered and cross-faded/rotated for smooth transition */}
         <span

@@ -782,7 +782,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
         onClick={() => setIsOpen(true)}
         type="button"
         aria-label="Open ChatBot"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg transition-all hover:scale-110 hover:shadow-xl"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg transition-all hover:scale-110 hover:shadow-xl active:scale-95 cursor-pointer"
         title="Open ChatBot"
       >
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -804,7 +804,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             type="button"
             aria-label="Toggle chat history"
-            className="no-drag rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+            className="no-drag rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-all hover:scale-110 active:scale-95 cursor-pointer"
             title="Toggle chat history"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -815,7 +815,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
             onClick={createNewChat}
             type="button"
             aria-label="New chat"
-            className="no-drag flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
+            className="no-drag flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] hover:opacity-90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
             title="New chat"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
@@ -831,7 +831,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
             onClick={() => setIsPopped(!isPopped)}
             type="button"
             aria-label={isPopped ? "Dock to side" : "Pop out"}
-            className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+            className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-all hover:scale-110 active:scale-95 cursor-pointer"
             title={isPopped ? "Dock to side" : "Pop out"}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -846,7 +846,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
             onClick={() => setIsOpen(false)}
             type="button"
             aria-label="Close"
-            className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+            className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-all hover:scale-110 active:scale-95 cursor-pointer"
             title="Close"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -864,7 +864,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
               <button
                 onClick={createNewChat}
                 type="button"
-                className="w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
+                className="w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-contrast)] hover:opacity-90 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md hover:shadow-lg"
               >
                 + New Chat
               </button>
@@ -1272,7 +1272,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
                 onClick={() => editingMessageId ? saveEdit() : sendMessage()}
                 disabled={editingMessageId ? !editingContent.trim() : !input.trim() && attachedFiles.length === 0}
                 type={editingMessageId ? "button" : "submit"}
-                className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 enabled:cursor-pointer shadow-md hover:shadow-lg"
                 title={editingMessageId ? "Save and resubmit" : "Send message"}
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

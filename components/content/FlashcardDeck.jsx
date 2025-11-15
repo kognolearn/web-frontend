@@ -60,7 +60,7 @@ export default function FlashcardDeck({ data = {} }) {
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={prev}
-          className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition shadow-sm select-none"
+          className="btn btn-primary select-none"
           aria-label="Previous"
           title="Previous"
         >
@@ -72,7 +72,7 @@ export default function FlashcardDeck({ data = {} }) {
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={next}
-          className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition shadow-sm select-none"
+          className="btn btn-primary select-none"
           aria-label="Next"
           title="Next"
         >
