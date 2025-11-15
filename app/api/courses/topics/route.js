@@ -8,7 +8,8 @@ export async function POST(request) {
     const url = new URL("/courses/topics", BASE_URL);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    // Topic generation may take longer; allow up to 10 minutes (600000 ms)
+    const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000);
     try {
       const res = await fetch(url.toString(), {
         method: "POST",

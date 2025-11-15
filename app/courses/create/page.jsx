@@ -19,6 +19,24 @@ const ratingToFamiliarity = {
   3: "confident",
 };
 
+function resolveCourseId(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const candidates = [
+    payload.courseId,
+    payload.course_id,
+    payload.id,
+    payload?.course?.id,
+    payload?.course?.courseId,
+    payload?.data?.courseId,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
 function toIsoDate(dateString) {
   if (!dateString) return null;
   return `${dateString}T00:00:00.000Z`;
@@ -135,9 +153,13 @@ export default function CreateCoursePage() {
     if (!searchParams || prefillApplied) return;
     const titleParam = searchParams.get("title");
     const collegeParam = searchParams.get("college");
-    if (!titleParam && !collegeParam) return;
+    const courseIdParam = searchParams.get("courseId");
+    if (!titleParam && !collegeParam && !courseIdParam) return;
     setCourseTitle((prev) => (prev ? prev : titleParam || prev));
     setCollegeName((prev) => (prev ? prev : collegeParam || prev));
+    if (courseIdParam) {
+      setCourseId(courseIdParam);
+    }
     setPrefillApplied(true);
   }, [prefillApplied, searchParams]);
 
@@ -263,7 +285,7 @@ export default function CreateCoursePage() {
       setDeletedTopics([]);
       setRawTopicsText(data?.rawTopicsText || "");
       setTopicsApproved(false);
-      setCourseId(data?.courseId ?? null);
+      // courseId stays untouched; /courses/topics doesn't return one
     } catch (error) {
       setGenerationError(error.message || "Unexpected error generating topics.");
     } finally {
@@ -348,11 +370,6 @@ export default function CreateCoursePage() {
       return;
     }
 
-    if (!courseId) {
-      setCourseGenerationError("Generate topics first so we can link them to your course.");
-      return;
-    }
-
     const className = courseTitle.trim();
 
     if (!className) {
@@ -401,7 +418,8 @@ export default function CreateCoursePage() {
       const finishByIso = toIsoDate(finishDate);
       const payload = {
         userId,
-        courseId,
+        // backend creates the course; don't send courseId
+        className,
         courseTitle: className,
         university: collegeName.trim() || undefined,
         finishByDate: finishByIso || undefined,
@@ -436,6 +454,7 @@ export default function CreateCoursePage() {
       }
 
       setCourseGenerationMessage("Coordinating your learning journey…");
+      // Server will enforce a 10 minute timeout for long-running course generation
       const response = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -447,7 +466,7 @@ export default function CreateCoursePage() {
         throw new Error(body?.error || "Failed to generate course. Please try again.");
       }
 
-      const resolvedCourseId = body?.courseId || courseId;
+      const resolvedCourseId = resolveCourseId(body) || courseId;
       setCourseGenerationMessage("Finalizing and saving to your dashboard…");
 
       try {
@@ -460,7 +479,11 @@ export default function CreateCoursePage() {
         router.push("/dashboard");
       }
     } catch (error) {
-      setCourseGenerationError(error.message || "Unexpected error generating course.");
+      if (error?.name === "AbortError") {
+        setCourseGenerationError("Course generation timed out after 10 minutes. Please try again.");
+      } else {
+        setCourseGenerationError(error.message || "Unexpected error generating course.");
+      }
     } finally {
       setCourseGenerating(false);
     }
