@@ -19,10 +19,12 @@ export default function SignInPage() {
           </p>
         </div>
 
-        <div className="card-shell rounded-2xl p-8">
+        <div className="gradient-border rounded-2xl">
+          <div className="card-shell rounded-2xl p-8">
           <Suspense fallback={<SignInFormSkeleton />}>
             <SignInForm />
           </Suspense>
+          </div>
         </div>
 
         <div className="text-center text-xs text-[var(--muted-foreground)] mt-6">
