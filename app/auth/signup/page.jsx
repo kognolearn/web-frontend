@@ -8,40 +8,48 @@ export const metadata = {
 
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-10 w-96 h-96 rounded-full opacity-15 blur-3xl" 
+             style={{background: 'var(--gradient-primary)'}}></div>
+        <div className="absolute bottom-20 left-10 w-80 h-80 rounded-full opacity-15 blur-3xl" 
+             style={{background: 'var(--gradient-accent)'}}></div>
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-semibold text-[var(--foreground)] mb-2">
-            Create Account
+          <h1 className="text-4xl font-bold mb-3">
+            <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] bg-clip-text text-transparent">
+              Create Account
+            </span>
           </h1>
-          <p className="text-[var(--muted-foreground)] text-sm">
+          <p className="text-[var(--muted-foreground)] text-base">
             Join thousands of students using AI for smarter studying.
           </p>
         </div>
 
-        <div className="mb-8 text-center text-sm italic text-[var(--muted-foreground)]">
+        <div className="mb-8 card rounded-2xl p-4 text-center text-sm italic text-[var(--muted-foreground)]">
           "EdTech Planner helped me ace my finals with less stress!"<br />
-          <span className="not-italic">- Alex, University sophomore</span>
+          <span className="not-italic font-semibold text-[var(--foreground)]">- Alex, University sophomore</span>
         </div>
 
         {/* Sign Up Form */}
-        <div className="gradient-border rounded-2xl">
-          <div className="card-shell rounded-2xl p-8">
-            <SignUpForm />
+        <div className="card rounded-2xl p-8">
+          <SignUpForm />
 
-            {/* Sign In Link */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Already have an account?{" "}
-                <Link
-                  href="/auth/signin"
-                  className="font-medium text-[var(--foreground)] hover:text-primary transition-colors"
-                >
-                  Sign In
-                </Link>
-              </p>
-            </div>
+          {/* Sign In Link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Already have an account?{" "}
+              <Link
+                href="/auth/signin"
+                className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors"
+              >
+                Sign In
+              </Link>
+            </p>
           </div>
         </div>
 
