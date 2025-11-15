@@ -1,5 +1,7 @@
 // POST /api/chatbot
-// Bridges requests to OpenRouter Grok 4 Fast with validation and robust error handling.
+// Proxies requests to backend POST /chat endpoint
+const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+
 export async function POST(request) {
   try {
     const body = await safeParseJson(request);
@@ -23,65 +25,41 @@ export async function POST(request) {
       reasoning,
     } = body;
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      // Explicit error if not configured
-      return json({ error: 'Server misconfiguration: OPENROUTER_API_KEY is missing' }, 500);
-    }
-
-    // Build messages for OpenRouter (OpenAI-compatible)
-    const systemPreamble = buildSystemPreamble({
+    // Forward to backend /chat endpoint
+    const url = new URL("/chat", BASE_URL);
+    const payload = {
       system,
-      context,
+      user,
+      userId,
+      ...(context !== undefined ? { context } : {}),
       useWebSearch,
       responseFormat,
-    });
-
-    const userContent = buildUserContent(user, attachments);
-
-    const messages = [
-      { role: 'system', content: systemPreamble },
-      userContent,
-    ];
-
-    // Reasoning options mapping (best-effort, optional)
-    const reasoningConfig = normalizeReasoning(reasoning);
-
-    // Construct payload
-    const payload = {
-      model: 'x-ai/grok-4-fast',
-      messages,
       temperature,
-      max_tokens: maxTokens,
-      // response_format may be ignored by some providers but is safe to include
-      ...(responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
-      ...(reasoningConfig ? { reasoning: reasoningConfig } : {}),
+      maxTokens,
+      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(reasoning !== undefined ? { reasoning } : {}),
     };
 
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const resp = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        // Optional but recommended by OpenRouter
-        ...(process.env.OPENROUTER_REFERER ? { 'HTTP-Referer': process.env.OPENROUTER_REFERER } : {}),
-        ...(process.env.OPENROUTER_TITLE ? { 'X-Title': process.env.OPENROUTER_TITLE } : {}),
-      },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    if (!resp.ok) {
-      const errorText = await safeReadText(resp);
-      // Throwing as requested if the call does not go through
-      throw new Error(`OpenRouter error (${resp.status}): ${truncate(errorText, 2000)}`);
+    const bodyText = await resp.text();
+    let data;
+    try {
+      data = bodyText ? JSON.parse(bodyText) : {};
+    } catch {
+      data = { error: 'Invalid JSON from backend' };
     }
 
-    const data = await resp.json();
-    const content = extractMessageContent(data);
+    if (!resp.ok) {
+      return json({ error: data?.error || `Backend error (${resp.status})`, details: data }, resp.status);
+    }
 
-    return json({ model: 'x-ai/grok-4-fast', content }, 200);
+    return json({ model: data.model || 'x-ai/grok-4-fast', content: data.content || '' }, 200);
   } catch (error) {
-    // Ensure the error is surfaced; include minimal diagnostics
     return json(
       {
         error: 'Internal Server Error',
@@ -156,84 +134,6 @@ function isUuid(v) {
   return uuidRegex.test(v);
 }
 
-function buildSystemPreamble({ system, context, useWebSearch, responseFormat }) {
-  const parts = [system.trim()];
-  if (typeof context !== 'undefined') {
-    const ctx = typeof context === 'string' ? context : safeStringify(context);
-    parts.push(`Context:\n${ctx}`);
-  }
-  if (useWebSearch) {
-    parts.push('Web search may be used when necessary; include sources when applicable.');
-  }
-  if (responseFormat === 'json') {
-    parts.push('Respond with a single valid JSON object only, no extra prose.');
-  }
-  return parts.join('\n\n');
-}
-
-function buildUserContent(user, attachments) {
-  // OpenAI/OpenRouter compatible content composition with optional media
-  const base = [{ type: 'text', text: user }];
-  if (Array.isArray(attachments)) {
-    for (const att of attachments) {
-      const { type, mimeType, data, url, name } = att || {};
-      if (!mimeType && !type && !url && !data) continue;
-
-      const isImage = (mimeType || '').startsWith('image/');
-      const dataUrl = data && mimeType ? `data:${mimeType};base64,${data}` : undefined;
-      const imageUrl = url || dataUrl;
-
-      if (isImage && imageUrl) {
-        base.push({ type: 'image_url', image_url: imageUrl, mime_type: mimeType || undefined, name: name || undefined });
-      } else {
-        // Fallback: include non-image attachments as text descriptors
-        const label = name || 'attachment';
-        const descriptor = url ? url : (data ? `[inline base64 ${mimeType || 'data'} omitted]` : '(no content)');
-        base.push({ type: 'text', text: `Attachment: ${label}${mimeType ? ` (${mimeType})` : ''} -> ${descriptor}` });
-      }
-    }
-  }
-  // If we created multiple parts, use array style; otherwise a simple string also works.
-  return base.length > 1
-    ? { role: 'user', content: base }
-    : { role: 'user', content: base[0].text };
-}
-
-function normalizeReasoning(reasoning) {
-  if (!reasoning) return undefined;
-  if (typeof reasoning === 'object') return reasoning;
-  if (reasoning === true) return { effort: 'medium' };
-  if (typeof reasoning === 'string') return { effort: reasoning };
-  return undefined;
-}
-
-function extractMessageContent(apiResponse) {
-  try {
-    const content = apiResponse?.choices?.[0]?.message?.content;
-    if (typeof content === 'string') return content;
-
-    // If content is array of parts, join text parts for a normalized string
-    if (Array.isArray(content)) {
-      const texts = content
-        .map((part) => (typeof part === 'string' ? part : part?.text || ''))
-        .filter(Boolean);
-      return texts.join('\n');
-    }
-  } catch {
-    // ignore and fall through
-  }
-  return '';
-}
-
-function safeStringify(obj) {
-  try { return JSON.stringify(obj); } catch { return String(obj); }
-}
-
 async function safeReadText(resp) {
   try { return await resp.text(); } catch { return ''; }
-}
-
-function truncate(s, max) {
-  if (!s || s.length <= max) return s;
-  return `${s.slice(0, max)}…`;
 }

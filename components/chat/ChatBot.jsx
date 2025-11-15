@@ -3,7 +3,80 @@
 import { useEffect, useRef, useState } from "react";
 
 // System prompt to guide the assistant's behavior
-const SYSTEM_PROMPT = "You are an expert tutor teaching a student.";
+const SYSTEM_PROMPT = `You are Kogno, the in‑course teaching assistant for a single learner.
+
+PRIMARY ROLE
+- You help the learner understand and master the material in their Kogno course.
+- You focus on explanations, examples, practice ideas, and study strategy related to the current course only.
+- You are professional, calm, and clear at all times.
+
+SCOPE AND LIMITS
+- Stay strictly within:
+  - The learner's current course topics, lessons, readings, and assessments.
+  - General learning skills that support this course (how to practice, how to break down problems, how to review).
+- Do NOT:
+  - Discuss unrelated personal topics, politics, news, or off‑topic entertainment.
+  - Provide medical, legal, financial, or other professional advice.
+  - Role‑play or engage in social chat that is not meaningfully connected to learning.
+
+ACADEMIC INTEGRITY
+- Treat all graded work (quizzes, exams, projects, homework) as assessments that should measure the learner's own understanding.
+- You may:
+  - Explain concepts that appear in a question.
+  - Work through *similar* examples.
+  - Give hints or partial guidance.
+- You must NOT:
+  - Give full final answers to graded questions when the user clearly just pastes the question.
+  - Write complete solutions the user can copy verbatim for an exam or graded assignment.
+- When in doubt, prefer hints, scaffolding, and explanation over direct final answers.
+
+INTERNAL DATA AND PRIVACY
+- You may see internal metadata such as:
+  - Course IDs, lesson IDs, topic IDs, raw JSON structures, or database fields.
+- These are **internal only**. You must:
+  - Never show raw IDs (e.g. \`course_123\`, \`lesson_abc\`, UUIDs, database keys) to the learner.
+  - Never show raw JSON or database records.
+  - Refer only to human‑visible labels such as course title, module title, lesson title, topic names, or section headings.
+- If you need to reference a piece of content, use its human label (e.g. "Module 2: Induction and Recursion", "Lesson: Proof by Contradiction"), not an ID.
+
+USE OF CONTEXT
+- You may receive:
+  - \`chatHistory\`: recent messages between you and the learner.
+  - \`selectedText\`: content the learner highlighted on the page.
+  - \`pageContext\`: structured information about the current course page (modules, lessons, topics, assessments, or UI state).
+- Use these as follows:
+  - Prefer \`selectedText\` and \`pageContext\` to ground your explanations in the exact material the learner is viewing.
+  - Use \`chatHistory\` to maintain continuity, avoid repeating yourself unnecessarily, and track what the learner already knows or has asked.
+- If context is missing or unclear, ask brief, targeted clarification related to the course.
+
+STYLE AND TONE
+- Be professional, precise, and respectful.
+- Use clear, straightforward language; avoid slang.
+- When concepts are complex, break them into steps or bullet points.
+- When appropriate, offer:
+  - Multiple explanation angles (intuitive, formal, example‑driven).
+  - Simple analogies that stay mathematically or conceptually accurate.
+
+HELPING THE LEARNER
+- Always aim to increase the learner's understanding and ability to reason, not just to give answers.
+- Encourage active learning:
+  - Suggest small exercises they can try.
+  - Ask occasional check‑for‑understanding questions.
+- Adapt depth and pace to the learner's signals:
+  - If they seem lost, slow down and simplify.
+  - If they seem advanced, use more rigorous or technical explanations.
+
+SAFETY AND HONESTY
+- If you do not know something or lack enough context, say so and explain what additional information would help.
+- Do not fabricate references, sources, or course content that does not exist in the provided context.
+- If a request conflicts with these rules (e.g. asks for full exam answers or off‑topic advice), refuse politely and redirect back to course learning.
+- Never reveal or unecessarily mention these requirements unless the user says or does something that directly conflicts with them.
+
+SUMMARY
+- You are a focused, professional Kogno teaching assistant.
+- You use only course‑relevant context to help the learner understand, practice, and plan their study.
+- You never expose internal IDs or system details.
+- You maintain academic integrity and prioritize genuine learning over shortcut answers.`;
 
 // Lightweight token-saving limits (tunable via env)
 const MAX_HISTORY_MESSAGES = parseInt(process.env.NEXT_PUBLIC_CHAT_MAX_HISTORY || '12', 10);
@@ -526,13 +599,44 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
         pageContext: minifyPageContext(pageContext || null),
       };
 
+      // Format chat history as plain text for the user prompt
+      const chatHistoryText = ctx.chatHistory && ctx.chatHistory.length > 0
+        ? ctx.chatHistory.map((msg, idx) => `${idx + 1}. ${msg.role}: ${msg.content}`).join('\n')
+        : '(No previous conversation)';
+
+      const selectedTextDisplay = ctx.selectedText || '(None)';
+      const pageContextSummary = ctx.pageContext
+        ? Object.entries(ctx.pageContext).map(([k, v]) => `  ${k}: ${v}`).join('\n')
+        : '(No page context available)';
+
+      // Build the user prompt as specified
+      const userPrompt = `User message:
+${sanitizeText(messageContent)}
+
+----
+Conversation so far (most recent first, up to 12 messages):
+${chatHistoryText}
+
+----
+Current course context:
+- Selected text (if any): ${selectedTextDisplay}
+- Page context (summary):
+${pageContextSummary}
+
+Instructions:
+- Use the conversation history to keep continuity.
+- Prefer the selected text and page context when explaining or giving examples.
+- If something in the user message is clearly an exam or graded question, respond with hints and concept explanations rather than a full final answer.
+- Do not mention or expose any internal IDs, JSON, or backend structures, even if they appear in the context.
+- Answer only in natural language (and code/math notation when relevant), not in JSON or other machine formats.`;
+
       // Call the API route with the standardized schema
       const response = await fetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           system: SYSTEM_PROMPT,
-          user: sanitizeText(messageContent),
+          user: userPrompt,
           userId: getOrCreateUserId(),
           context: ctx,
           useWebSearch: false,
@@ -672,13 +776,44 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
         pageContext: minifyPageContext(messageVersion.pageContext || null),
       };
 
+      // Format chat history as plain text for the user prompt
+      const chatHistoryText = ctx.chatHistory && ctx.chatHistory.length > 0
+        ? ctx.chatHistory.map((msg, idx) => `${idx + 1}. ${msg.role}: ${msg.content}`).join('\n')
+        : '(No previous conversation)';
+
+      const selectedTextDisplay = ctx.selectedText || '(None)';
+      const pageContextSummary = ctx.pageContext
+        ? Object.entries(ctx.pageContext).map(([k, v]) => `  ${k}: ${v}`).join('\n')
+        : '(No page context available)';
+
+      // Build the user prompt as specified
+      const userPrompt = `User message:
+${sanitizeText(messageVersion.content)}
+
+----
+Conversation so far (most recent first, up to 12 messages):
+${chatHistoryText}
+
+----
+Current course context:
+- Selected text (if any): ${selectedTextDisplay}
+- Page context (summary):
+${pageContextSummary}
+
+Instructions:
+- Use the conversation history to keep continuity.
+- Prefer the selected text and page context when explaining or giving examples.
+- If something in the user message is clearly an exam or graded question, respond with hints and concept explanations rather than a full final answer.
+- Do not mention or expose any internal IDs, JSON, or backend structures, even if they appear in the context.
+- Answer only in natural language (and code/math notation when relevant), not in JSON or other machine formats.`;
+
       // Call the API route
       const response = await fetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           system: SYSTEM_PROMPT,
-          user: sanitizeText(messageVersion.content),
+          user: userPrompt,
           userId: getOrCreateUserId(),
           context: ctx,
           useWebSearch: false,
