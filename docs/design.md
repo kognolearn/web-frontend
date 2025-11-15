@@ -1,29 +1,33 @@
 # Design tokens and utilities
 
-A minimalist, pastel design system without gradients. Light is default; dark is deep navy.
+A vibrant, modern design system with gradient accents and smooth animations. Optimized for educational platforms with deep purple/indigo primary colors.
 
 ## Tokens (CSS variables)
 
 - Colors
   - --background, --surface-1, --surface-2, --surface-muted
   - --border, --foreground, --muted-foreground, --muted-foreground-strong
-  - --primary, --primary-hover, --primary-active, --primary-contrast
+  - --primary, --primary-hover, --primary-active, --primary-contrast, --primary-light
+  - --secondary, --secondary-hover, --secondary-light (coral/pink accent)
+  - --accent, --accent-hover, --accent-light (cyan accent)
   - --success, --warning, --danger
+- Gradients
+  - --gradient-primary, --gradient-secondary, --gradient-accent, --gradient-dark
 - Shadows
-  - --shadow-sm, --shadow-md, --shadow-lg
+  - --shadow-sm, --shadow-md, --shadow-lg, --shadow-glow
 - Radius
-  - --radius-sm, --radius-md, --radius-lg
+  - --radius-sm (12px), --radius-md (16px), --radius-lg (24px)
 
 Switch palettes by toggling `html.theme-light` or `html.theme-dark` (done by ThemeProvider).
 
 ## Utilities
 
-- .card: Flat surface with soft border and hover lift
-- .btn, .btn-primary, .btn-outline: Buttons
-- .input: Base input styling
-- .badge: Subtle tag/badge
-- .pill-outline: Uppercase small pill (for toggles/actions)
-- .progress > span: Simple progress bar
+- .card: Elevated surface with gradient accent on hover and smooth lift animation
+- .btn, .btn-primary, .btn-outline: Buttons with gradient backgrounds and ripple effects
+- .input: Enhanced input styling with focus glow
+- .badge: Gradient tag/badge
+- .pill-outline: Uppercase small pill with hover effects
+- .progress > span: Animated progress bar with shimmer effect
 
 ## Usage examples
 
@@ -33,4 +37,4 @@ Switch palettes by toggling `html.theme-light` or `html.theme-dark` (done by The
 - Input: `<input class="input w-full" />`
 - Progress: `<div class="progress"><span style="width:42%" /></div>`
 
-No gradients or glass effects are used; legacy classes like `.gradient-border` remain as no-ops for safety.
+Modern gradients and animations are used throughout. Legacy classes like `.gradient-border` remain for compatibility.

@@ -77,6 +77,14 @@ export default function DashboardPage() {
   if (loading || !mounted) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 right-10 w-96 h-96 rounded-full opacity-10 blur-3xl" 
+               style={{background: 'var(--gradient-primary)'}}></div>
+          <div className="absolute bottom-20 left-10 w-80 h-80 rounded-full opacity-10 blur-3xl" 
+               style={{background: 'var(--gradient-secondary)'}}></div>
+        </div>
+
         <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-8">
           {/* Header skeleton */}
           <div className="card relative rounded-[32px] px-8 py-10 sm:px-10 animate-pulse">
@@ -105,11 +113,19 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors">
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-8">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-10 w-96 h-96 rounded-full opacity-10 blur-3xl" 
+             style={{background: 'var(--gradient-primary)'}}></div>
+        <div className="absolute bottom-20 left-10 w-80 h-80 rounded-full opacity-10 blur-3xl" 
+             style={{background: 'var(--gradient-secondary)'}}></div>
+      </div>
+
+      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-8 z-10">
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={handleSignOut}
-            className="pill-outline text-[10px] text-[var(--muted-foreground-strong)] hover:text-[var(--foreground)]"
+            className="pill-outline text-[10px]"
           >
             Sign out
           </button>
@@ -117,8 +133,8 @@ export default function DashboardPage() {
 
         <header>
           <div className="card relative rounded-[32px] px-8 py-10 sm:px-10">
-            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-              Welcome back, {displayName}.
+            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
+              Welcome back, <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] bg-clip-text text-transparent">{displayName}</span>.
             </h1>
             <p className="mt-4 max-w-xl text-sm text-[var(--muted-foreground)] sm:text-base">
               Dip into your study library or spark a brand-new plan. Everything stays clean and focused.
@@ -128,14 +144,14 @@ export default function DashboardPage() {
                 href="/courses/create"
                 className="btn btn-primary"
               >
-                Create course
+                <span className="relative z-10">Create course</span>
               </Link>
             </div>
           </div>
         </header>
 
         <main className="space-y-6">
-          <h2 className="text-lg font-semibold sm:text-xl">Your courses</h2>
+          <h2 className="text-lg font-bold sm:text-xl">Your courses</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {courses.map((course) => {
               const courseTitle =
