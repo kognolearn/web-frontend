@@ -1085,7 +1085,7 @@ function CreateCoursePageContent() {
               </Link>
               <button
                 type="submit"
-                disabled={generating}
+                disabled={isTopicsLoading}
                 className="btn btn-primary btn-lg"
               >
                 {isTopicsLoading ? "Generating topics…" : "Generate study topics"}
