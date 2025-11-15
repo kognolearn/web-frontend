@@ -15,18 +15,18 @@
   --radius-lg: 20px;
 
   /* base colors default (dark as initial to match layout.js) */
-  --background: #0f1419;
-  --surface-1: #1a1f27;
-  --surface-2: #252b35;
-  --surface-muted: #2d3542;
-  --border: #3d4654;
-  --foreground: #e8eef5;
-  --muted-foreground: #9ca8b8;
-  --muted-foreground-strong: #c5d0df;
+  --background: #1a2317;
+  --surface-1: #283326;
+  --surface-2: #2f3a2d;
+  --surface-muted: #3a4638;
+  --border: #4a5648;
+  --foreground: #f5f7f4;
+  --muted-foreground: #a8b5a3;
+  --muted-foreground-strong: #dfe5dc;
 
   /* accent (vibrant sage green) */
   --primary: #5eb85c;
-  --primary-contrast: #ffffff;
+  --primary-contrast: #1a2317;
   --primary-hover: #6fc96d;
   --primary-active: #4ca74a;
 
@@ -58,17 +58,17 @@ html.theme-light {
 }
 
 html.theme-dark {
-  --background: #0f1419; /* deep charcoal */
-  --surface-1: #1a1f27;
-  --surface-2: #252b35;
-  --surface-muted: #2d3542;
-  --border: #3d4654;
-  --foreground: #e8eef5;
-  --muted-foreground: #9ca8b8;
-  --muted-foreground-strong: #c5d0df;
+  --background: #1a2317; /* deep forest */
+  --surface-1: #283326;
+  --surface-2: #2f3a2d;
+  --surface-muted: #3a4638;
+  --border: #4a5648;
+  --foreground: #f5f7f4;
+  --muted-foreground: #a8b5a3;
+  --muted-foreground-strong: #dfe5dc;
 
   --primary: #5eb85c;
-  --primary-contrast: #ffffff;
+  --primary-contrast: #1a2317;
   --primary-hover: #6fc96d; /* slightly lighter on dark bg */
   --primary-active: #4ca74a;
 }
