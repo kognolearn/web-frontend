@@ -486,7 +486,7 @@ export default function CreateCoursePage() {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
         <div className="create-veil" aria-hidden="true" />
-        <div className="gradient-border rounded-3xl">
+        <div>
           <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
             Checking your session…
           </div>
@@ -512,7 +512,7 @@ export default function CreateCoursePage() {
       <div className="create-veil" aria-hidden="true" />
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12">
-          <div className="gradient-border rounded-[32px]">
+          <div>
             <div className="card-shell glass-panel panel-accent-rose relative overflow-hidden rounded-[32px] px-8 py-10 sm:px-10">
               <div className="pointer-events-none absolute -top-24 left-16 h-52 w-52 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -547,7 +547,7 @@ export default function CreateCoursePage() {
 
         <div className="grid gap-10 lg:grid-cols-[3fr,2fr]">
           <form onSubmit={handleGenerateTopics} className="space-y-8">
-            <section className="gradient-border rounded-[28px]">
+            <section>
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -605,7 +605,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section>
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
                 <h2 className="text-lg font-medium">Course title</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">Enter your university and the course name.</p>
@@ -638,7 +638,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section>
               <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -692,7 +692,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section>
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -795,7 +795,7 @@ export default function CreateCoursePage() {
               </button>
             </div>
             {generationError && (
-              <div className="gradient-border rounded-[24px]">
+              <div>
                 <div className="card-shell rounded-[24px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
                   {generationError}
                 </div>
@@ -804,7 +804,7 @@ export default function CreateCoursePage() {
           </form>
 
           <aside className="space-y-6 lg:sticky lg:top-20">
-            <div className="gradient-border rounded-[28px]">
+            <div>
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
                 <h2 className="text-lg font-medium">Topics &amp; confidence</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">
@@ -827,7 +827,7 @@ export default function CreateCoursePage() {
               </div>
             </div>
 
-            <div className="gradient-border rounded-[28px]">
+            <div>
               <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-6 sm:px-7">
                 <form onSubmit={handleAddTopic} className="space-y-4">
                   <h3 className="text-sm font-medium text-[var(--foreground)]">Add a custom topic</h3>
@@ -864,7 +864,7 @@ export default function CreateCoursePage() {
               </div>
             </div>
 
-            <div className="gradient-border rounded-[28px]">
+            <div>
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-6 sm:px-7">
                 {generating ? (
                   <div className="space-y-4">
@@ -945,7 +945,7 @@ export default function CreateCoursePage() {
               </div>
             </div>
 
-            <div className="gradient-border rounded-[28px]">
+            <div>
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
                 <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">
@@ -997,7 +997,7 @@ export default function CreateCoursePage() {
             </div>
 
             {deletedTopics.length > 0 && (
-              <div className="gradient-border rounded-[28px]">
+              <div>
                 <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-5 text-sm">
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
