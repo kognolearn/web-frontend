@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /*
-  Pastel, minimalist design tokens (no gradients)
-  - Light and dark palettes
+  Nature-inspired, sustainable design tokens
+  - Light and dark palettes with earthy tones
+  - Sage green primary color for growth and focus
+  - Warm cream and deep forest backgrounds
   - Subtle shadows and borders
-  - Flat, mature colors with soft contrast
 */
 
 :root {
@@ -23,7 +24,7 @@
   --muted-foreground: #a8b5a3;
   --muted-foreground-strong: #dfe5dc;
 
-  /* accent (sage green with terracotta touches) */
+  /* accent (sage green) */
   --primary: #7ba37a;
   --primary-contrast: #1a2317;
   --primary-hover: #92b591;
