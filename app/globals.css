@@ -15,20 +15,20 @@
   --radius-lg: 20px;
 
   /* base colors default (dark as initial to match layout.js) */
-  --background: #1a2317;
-  --surface-1: #283326;
-  --surface-2: #2f3a2d;
-  --surface-muted: #3a4638;
-  --border: #4a5648;
-  --foreground: #f5f7f4;
-  --muted-foreground: #a8b5a3;
-  --muted-foreground-strong: #dfe5dc;
+  --background: #1a1d21;
+  --surface-1: #25282e;
+  --surface-2: #2d3139;
+  --surface-muted: #363a44;
+  --border: #454950;
+  --foreground: #e8eaed;
+  --muted-foreground: #9ca3af;
+  --muted-foreground-strong: #c1c7d0;
 
-  /* accent (vibrant sage green) */
-  --primary: #5eb85c;
-  --primary-contrast: #1a2317;
-  --primary-hover: #6fc96d;
-  --primary-active: #4ca74a;
+  /* accent (sage green) */
+  --primary: #7ba37a;
+  --primary-contrast: #ffffff;
+  --primary-hover: #92b591;
+  --primary-active: #668865;
 
   /* feedback */
   --success: #6fb06e;
@@ -51,26 +51,26 @@ html.theme-light {
   --muted-foreground: #708068;
   --muted-foreground-strong: #3d4a38;
 
-  --primary: #5eb85c;
+  --primary: #7ba37a;
   --primary-contrast: #ffffff;
-  --primary-hover: #6fc96d; /* slightly lighter on light bg */
-  --primary-active: #4ca74a;
+  --primary-hover: #8fb18e; /* slightly lighter on light bg */
+  --primary-active: #668865;
 }
 
 html.theme-dark {
-  --background: #1a2317; /* deep forest */
-  --surface-1: #283326;
-  --surface-2: #2f3a2d;
-  --surface-muted: #3a4638;
-  --border: #4a5648;
-  --foreground: #f5f7f4;
-  --muted-foreground: #a8b5a3;
-  --muted-foreground-strong: #dfe5dc;
+  --background: #1a1d21; /* dark gray */
+  --surface-1: #25282e;
+  --surface-2: #2d3139;
+  --surface-muted: #363a44;
+  --border: #454950;
+  --foreground: #e8eaed;
+  --muted-foreground: #9ca3af;
+  --muted-foreground-strong: #c1c7d0;
 
-  --primary: #5eb85c;
-  --primary-contrast: #1a2317;
-  --primary-hover: #6fc96d; /* slightly lighter on dark bg */
-  --primary-active: #4ca74a;
+  --primary: #7ba37a;
+  --primary-contrast: #ffffff;
+  --primary-hover: #92b591; /* slightly lighter on dark bg */
+  --primary-active: #668865;
 }
 
 /* Base */
