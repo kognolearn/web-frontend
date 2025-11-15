@@ -142,6 +142,10 @@ body {
   color: var(--foreground);
   font-family: var(--font-nunito), system-ui, -apple-system, sans-serif;
   transition: background-color 0.25s ease, color 0.25s ease;
+  background-image: 
+    radial-gradient(circle at 20% 50%, color-mix(in srgb, var(--primary) 8%, transparent) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, color-mix(in srgb, var(--secondary) 6%, transparent) 0%, transparent 50%);
+  background-attachment: fixed;
 }
 
 /* Cards */
@@ -268,8 +272,9 @@ input:focus,
 textarea:focus,
 select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
   background-color: var(--surface-2);
+  transform: translateY(-1px);
 }
 
 /* Tags/Badges */
@@ -287,6 +292,13 @@ select:focus {
   font-weight: 600;
   letter-spacing: 0.02em;
   box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+.badge:hover,
+.tag-muted:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 /* Simple progress bar */
@@ -339,12 +351,14 @@ select:focus {
   text-transform: uppercase;
   color: var(--foreground);
   transition: all 0.3s ease;
+  cursor: pointer;
 }
 
 .pill-outline:hover {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 /* Remove remaining legacy glass helpers (kept as no-ops for safety) */
@@ -358,15 +372,15 @@ select:focus {
 }
 
 .panel-accent-rose {
-  background-color: #fce8e8;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--secondary) 8%, var(--surface-1)) 0%, var(--surface-1) 100%);
 }
 
 .panel-accent-sky {
-  background-color: #e8f4fd;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--surface-1)) 0%, var(--surface-1) 100%);
 }
 
 .panel-accent-sun {
-  background-color: #fdf4e4;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-1)) 0%, var(--surface-1) 100%);
 }
 
 .gradient-border {
