@@ -1,6 +1,41 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createServerClient } from "@supabase/ssr";
 
-export default function Home() {
+export default async function Home() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_KEY,
+    {
+      cookies: {
+        get(name) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name, value, options) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name, options) {
+          cookieStore.set({
+            name,
+            value: "",
+            expires: new Date(0),
+            ...options,
+          });
+        },
+      },
+    }
+  );
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 text-[var(--foreground)] transition-colors">
       <div className="w-full max-w-3xl text-center space-y-10">
@@ -17,16 +52,16 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/auth/signup"
+                href="/auth/create-account"
                 className="btn btn-primary"
               >
-                Create your account
+                Create account
               </Link>
               <Link
-                href="/auth/signin"
+                href="/auth/sign-in"
                 className="btn btn-outline"
               >
-                I already have access
+                Sign in
               </Link>
             </div>
           </div>

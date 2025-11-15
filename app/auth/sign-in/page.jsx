@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
 export const metadata = {
-  title: "Sign In | Ed Platform",
+  title: "Sign In | Kogno",
   description: "Access your courses and continue learning",
 };
 
