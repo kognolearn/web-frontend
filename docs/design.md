@@ -33,4 +33,4 @@ Switch palettes by toggling `html.theme-light` or `html.theme-dark` (done by The
 - Input: `<input class="input w-full" />`
 - Progress: `<div class="progress"><span style="width:42%" /></div>`
 
-No gradients or glass effects are used; legacy classes like `.gradient-border` remain as no-ops for safety.
+No gradients or glass effects are used, and the old gradient helper classes have been retired entirely.

@@ -143,7 +143,7 @@ function ConfirmEmailContent() {
 
             <div className="pt-4">
               <Link
-                href="/auth/signup"
+                href="/auth/sign-up"
                 className="text-sm font-medium text-[var(--foreground)] transition-colors hover:text-primary"
               >
                 ← Back to Sign Up

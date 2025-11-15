@@ -110,7 +110,7 @@ export default function SignInForm() {
 
       <p className="text-center text-sm text-[var(--muted-foreground)]">
         Don&apos;t have an account?{" "}
-        <Link href="/auth/signup" className="font-medium hover:opacity-90" style={{color: 'var(--primary)'}}>
+        <Link href="/auth/sign-up" className="font-medium hover:opacity-90" style={{color: 'var(--primary)'}}>
           Create one
         </Link>
       </p>

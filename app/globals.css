@@ -15,18 +15,18 @@
   --radius-lg: 20px;
 
   /* base colors default (dark as initial to match layout.js) */
-  --background: #1a2317;
-  --surface-1: #283326;
-  --surface-2: #2f3a2d;
-  --surface-muted: #3a4638;
-  --border: #4a5648;
-  --foreground: #f5f7f4;
-  --muted-foreground: #a8b5a3;
-  --muted-foreground-strong: #dfe5dc;
+  --background: #1e1e1e;
+  --surface-1: #2a2a2a;
+  --surface-2: #323232;
+  --surface-muted: #3a3a3a;
+  --border: #4a4a4a;
+  --foreground: #e8e8e8;
+  --muted-foreground: #a0a0a0;
+  --muted-foreground-strong: #d0d0d0;
 
   /* accent (sage green) */
   --primary: #7ba37a;
-  --primary-contrast: #1a2317;
+  --primary-contrast: #ffffff;
   --primary-hover: #92b591;
   --primary-active: #668865;
 
@@ -58,17 +58,17 @@ html.theme-light {
 }
 
 html.theme-dark {
-  --background: #1a2317; /* deep forest */
-  --surface-1: #283326;
-  --surface-2: #2f3a2d;
-  --surface-muted: #3a4638;
-  --border: #4a5648;
-  --foreground: #f5f7f4;
-  --muted-foreground: #a8b5a3;
-  --muted-foreground-strong: #dfe5dc;
+  --background: #1e1e1e; /* dark gray */
+  --surface-1: #2a2a2a;
+  --surface-2: #323232;
+  --surface-muted: #3a3a3a;
+  --border: #4a4a4a;
+  --foreground: #e8e8e8;
+  --muted-foreground: #a0a0a0;
+  --muted-foreground-strong: #d0d0d0;
 
   --primary: #7ba37a;
-  --primary-contrast: #1a2317;
+  --primary-contrast: #ffffff;
   --primary-hover: #92b591; /* slightly lighter on dark bg */
   --primary-active: #668865;
 }
@@ -226,11 +226,6 @@ select:focus {
 
 .panel-accent-sun {
   background-color: #fdf6e8;
-}
-
-.gradient-border {
-  border: 2px solid transparent;
-  border-image: linear-gradient(45deg, #e8d4c8, #c8e0d8, #f0e8c8) 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

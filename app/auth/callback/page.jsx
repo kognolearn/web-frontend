@@ -155,7 +155,7 @@ export default function AuthCallbackPage() {
               </p>
               <div className="space-y-2">
                 <a
-                  href="/auth/signup"
+                  href="/auth/sign-up"
                   className="block w-full bg-primary hover:bg-primary-hover text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors duration-200"
                 >
                   Try signing up again

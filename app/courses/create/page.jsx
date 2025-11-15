@@ -486,10 +486,8 @@ export default function CreateCoursePage() {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
         <div className="create-veil" aria-hidden="true" />
-        <div className="gradient-border rounded-3xl">
-          <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
-            Checking your session…
-          </div>
+        <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
+          Checking your session…
         </div>
       </div>
     );
@@ -512,8 +510,7 @@ export default function CreateCoursePage() {
       <div className="create-veil" aria-hidden="true" />
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12">
-          <div className="gradient-border rounded-[32px]">
-            <div className="card-shell glass-panel panel-accent-rose relative overflow-hidden rounded-[32px] px-8 py-10 sm:px-10">
+          <div className="card-shell glass-panel panel-accent-rose relative overflow-hidden rounded-[32px] px-8 py-10 sm:px-10">
               <div className="pointer-events-none absolute -top-24 left-16 h-52 w-52 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-xl">
@@ -540,14 +537,13 @@ export default function CreateCoursePage() {
                     <li>Rate topics to guide what we reinforce first.</li>
                   </ul>
                 </div>
-              </div>
             </div>
           </div>
         </div>
 
         <div className="grid gap-10 lg:grid-cols-[3fr,2fr]">
           <form onSubmit={handleGenerateTopics} className="space-y-8">
-            <section className="gradient-border rounded-[28px]">
+            <section className="rounded-[28px]">
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -605,7 +601,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section className="rounded-[28px]">
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
                 <h2 className="text-lg font-medium">Course title</h2>
                 <p className="mt-2 text-sm text-[var(--muted-foreground)]">Enter your university and the course name.</p>
@@ -638,7 +634,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section className="rounded-[28px]">
               <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -692,7 +688,7 @@ export default function CreateCoursePage() {
               </div>
             </section>
 
-            <section className="gradient-border rounded-[28px]">
+            <section className="rounded-[28px]">
               <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -795,235 +791,223 @@ export default function CreateCoursePage() {
               </button>
             </div>
             {generationError && (
-              <div className="gradient-border rounded-[24px]">
-                <div className="card-shell rounded-[24px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
-                  {generationError}
-                </div>
+              <div className="card-shell rounded-[24px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
+                {generationError}
               </div>
             )}
           </form>
 
           <aside className="space-y-6 lg:sticky lg:top-20">
-            <div className="gradient-border rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
-                <h2 className="text-lg font-medium">Topics &amp; confidence</h2>
-                <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                  Rate how confident you are in each topic. Adjust, remove, or add topics as needed.
-                </p>
-                <div className="mt-5 grid gap-3 text-xs text-[var(--muted-foreground)] sm:grid-cols-3">
-                  {Object.entries(ratingDescriptions).map(([rating, description]) => (
-                    <div key={rating} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3">
-                      <div className="mb-1 flex items-center gap-1 text-[var(--foreground)]">
-                        {Array.from({ length: Number(rating) }).map((_, index) => (
-                          <svg key={index} className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                          </svg>
+            <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
+              <h2 className="text-lg font-medium">Topics &amp; confidence</h2>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                Rate how confident you are in each topic. Adjust, remove, or add topics as needed.
+              </p>
+              <div className="mt-5 grid gap-3 text-xs text-[var(--muted-foreground)] sm:grid-cols-3">
+                {Object.entries(ratingDescriptions).map(([rating, description]) => (
+                  <div key={rating} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3">
+                    <div className="mb-1 flex items-center gap-1 text-[var(--foreground)]">
+                      {Array.from({ length: Number(rating) }).map((_, index) => (
+                        <svg key={index} className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <p>{description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-6 sm:px-7">
+              <form onSubmit={handleAddTopic} className="space-y-4">
+                <h3 className="text-sm font-medium text-[var(--foreground)]">Add a custom topic</h3>
+                <input
+                  type="text"
+                  value={newTopicTitle}
+                  onChange={(event) => setNewTopicTitle(event.target.value)}
+                  placeholder="Topic name"
+                  className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {([1, 2, 3]).map((rating) => (
+                      <button
+                        type="button"
+                        key={rating}
+                        onClick={() => setNewTopicRating(rating)}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                          rating <= newTopicRating ? "border-primary bg-primary/20 text-primary" : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                        }`}
+                      >
+                        {rating}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    className="bg-primary rounded-full px-4 py-2 text-xs font-semibold text-gray-900 transition hover:bg-primary-hover"
+                  >
+                    Add topic
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-6 sm:px-7">
+              {generating ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
+                    <svg className="h-6 w-6 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
+                    </svg>
+                    <div>
+                      <p className="font-medium text-[var(--foreground)]">Crafting your study roadmap…</p>
+                      <p>We&rsquo;re ranking what to learn first and how deep to go.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="space-y-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)]/80 p-4">
+                        <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--surface-muted)]" />
+                        <div className="flex gap-2">
+                          {Array.from({ length: 3 }).map((__, starIndex) => (
+                            <div key={starIndex} className="h-9 w-9 animate-pulse rounded-full border border-[var(--border-muted)] bg-[var(--surface-muted)]" />
+                          ))}
+                        </div>
+                        <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--surface-muted)]" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : topics.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[var(--border-muted)]/60 bg-[var(--surface-2)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
+                  Generated topics will appear here once you run the creator.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {topics.map((topic) => (
+                    <div key={topic.id} className="flex flex-col gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/85 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-[var(--foreground)]">{topic.title}</h3>
+                          {topic.source === "manual" && (
+                            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                              Added by you
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTopic(topic.id)}
+                          className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {([1, 2, 3]).map((rating) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            onClick={() => handleRatingChange(topic.id, rating)}
+                            className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                              rating <= topic.rating
+                                ? "border-primary bg-primary/20 text-primary"
+                                : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                            }`}
+                            aria-label={`Set rating ${rating}`}
+                          >
+                            <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= topic.rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                            </svg>
+                          </button>
                         ))}
                       </div>
-                      <p>{description}</p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {ratingDescriptions[topic.rating]}
+                      </p>
                     </div>
                   ))}
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="gradient-border rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-6 sm:px-7">
-                <form onSubmit={handleAddTopic} className="space-y-4">
-                  <h3 className="text-sm font-medium text-[var(--foreground)]">Add a custom topic</h3>
-                  <input
-                    type="text"
-                    value={newTopicTitle}
-                    onChange={(event) => setNewTopicTitle(event.target.value)}
-                    placeholder="Topic name"
-                    className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                  />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {([1, 2, 3]).map((rating) => (
-                        <button
-                          type="button"
-                          key={rating}
-                          onClick={() => setNewTopicRating(rating)}
-                          className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                            rating <= newTopicRating ? "border-primary bg-primary/20 text-primary" : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                          }`}
-                        >
-                          {rating}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="submit"
-                      className="bg-primary rounded-full px-4 py-2 text-xs font-semibold text-gray-900 transition hover:bg-primary-hover"
-                    >
-                      Add topic
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
+            <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
+              <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                Lock in your topic selection, then generate a complete course structure tailored to you.
+              </p>
 
-            <div className="gradient-border rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-6 sm:px-7">
-                {generating ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
-                      <svg className="h-6 w-6 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
-                      </svg>
-                      <div>
-                        <p className="font-medium text-[var(--foreground)]">Crafting your study roadmap…</p>
-                        <p>We&rsquo;re ranking what to learn first and how deep to go.</p>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {Array.from({ length: 4 }).map((_, index) => (
-                        <div key={index} className="space-y-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)]/80 p-4">
-                          <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--surface-muted)]" />
-                          <div className="flex gap-2">
-                            {Array.from({ length: 3 }).map((__, starIndex) => (
-                              <div key={starIndex} className="h-9 w-9 animate-pulse rounded-full border border-[var(--border-muted)] bg-[var(--surface-muted)]" />
-                            ))}
-                          </div>
-                          <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--surface-muted)]" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : topics.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-[var(--border-muted)]/60 bg-[var(--surface-2)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
-                    Generated topics will appear here once you run the creator.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {topics.map((topic) => (
-                      <div key={topic.id} className="flex flex-col gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/85 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-sm font-semibold text-[var(--foreground)]">{topic.title}</h3>
-                            {topic.source === "manual" && (
-                              <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
-                                Added by you
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTopic(topic.id)}
-                            className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {([1, 2, 3]).map((rating) => (
-                            <button
-                              key={rating}
-                              type="button"
-                              onClick={() => handleRatingChange(topic.id, rating)}
-                              className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                                rating <= topic.rating
-                                  ? "border-primary bg-primary/20 text-primary"
-                                  : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                              }`}
-                              aria-label={`Set rating ${rating}`}
-                            >
-                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= topic.rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
-                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                              </svg>
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {ratingDescriptions[topic.rating]}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="gradient-border rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
-                <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
-                <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                  Lock in your topic selection, then generate a complete course structure tailored to you.
-                </p>
-
-                {topicsApproved ? (
-                  <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border-muted)] bg-green-500/10 px-4 py-3 text-xs text-[var(--success)]">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Topics approved and ready for generation.
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                    Review your topics and their confidence ratings. You can still edit them after approval—just remember to approve again if you make changes.
-                  </div>
-                )}
-
-                <div className="mt-6 flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={handleApproveTopics}
-                    disabled={topics.length === 0 || courseGenerating || topicsApproved}
-                    className={`btn btn-outline w-full justify-center ${topicsApproved ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {topicsApproved ? "Topics approved" : "Approve topics"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleGenerateCourse}
-                    disabled={!topicsApproved || courseGenerating}
-                    className="btn btn-primary w-full justify-center disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {courseGenerating ? "Generating course…" : "Generate Course"}
-                  </button>
+              {topicsApproved ? (
+                <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border-muted)] bg-green-500/10 px-4 py-3 text-xs text-[var(--success)]">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Topics approved and ready for generation.
                 </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                  Review your topics and their confidence ratings. You can still edit them after approval—just remember to approve again if you make changes.
+                </div>
+              )}
 
-                {courseGenerationError && (
-                  <div className="mt-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                    {courseGenerationError}
-                  </div>
-                )}
-
-                <p className="mt-4 text-[11px] text-[var(--muted-foreground)]">
-                  We&rsquo;ll send your context, attachments, and topics to the backend to craft a full course structure. You&rsquo;ll be redirected to the dashboard once it&rsquo;s ready.
-                </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleApproveTopics}
+                  disabled={topics.length === 0 || courseGenerating || topicsApproved}
+                  className={`btn btn-outline w-full justify-center ${topicsApproved ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  {topicsApproved ? "Topics approved" : "Approve topics"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateCourse}
+                  disabled={!topicsApproved || courseGenerating}
+                  className="btn btn-primary w-full justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {courseGenerating ? "Generating course…" : "Generate Course"}
+                </button>
               </div>
+
+              {courseGenerationError && (
+                <div className="mt-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {courseGenerationError}
+                </div>
+              )}
+
+              <p className="mt-4 text-[11px] text-[var(--muted-foreground)]">
+                We&rsquo;ll send your context, attachments, and topics to the backend to craft a full course structure. You&rsquo;ll be redirected to the dashboard once it&rsquo;s ready.
+              </p>
             </div>
 
             {deletedTopics.length > 0 && (
-              <div className="gradient-border rounded-[28px]">
-                <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-5 text-sm">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
-                    <button
-                      type="button"
-                      onClick={handleRestoreAll}
-                      className="text-xs text-primary transition hover:text-primary-hover"
-                    >
-                      Restore all
-                    </button>
-                  </div>
-                  <ul className="mt-3 space-y-2 text-[var(--muted-foreground)]">
-                    {deletedTopics.map((topic) => (
-                      <li key={topic.id} className="flex items-center justify-between gap-3">
-                        <span className="truncate">{topic.title}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRestoreTopic(topic.id)}
-                          className="text-xs text-primary transition hover:text-primary-hover"
-                        >
-                          Restore
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-5 text-sm">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
+                  <button
+                    type="button"
+                    onClick={handleRestoreAll}
+                    className="text-xs text-primary transition hover:text-primary-hover"
+                  >
+                    Restore all
+                  </button>
                 </div>
+                <ul className="mt-3 space-y-2 text-[var(--muted-foreground)]">
+                  {deletedTopics.map((topic) => (
+                    <li key={topic.id} className="flex items-center justify-between gap-3">
+                      <span className="truncate">{topic.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreTopic(topic.id)}
+                        className="text-xs text-primary transition hover:text-primary-hover"
+                      >
+                        Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </aside>
