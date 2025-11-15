@@ -26,22 +26,20 @@ export default function SignUpPage() {
         </div>
 
         {/* Sign Up Form */}
-        <div className="gradient-border rounded-2xl">
-          <div className="card-shell rounded-2xl p-8">
-            <SignUpForm />
+        <div className="card-shell rounded-2xl p-8">
+          <SignUpForm />
 
-            {/* Sign In Link */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Already have an account?{" "}
-                <Link
-                  href="/auth/signin"
-                  className="font-medium text-[var(--foreground)] hover:text-primary transition-colors"
-                >
-                  Sign In
-                </Link>
-              </p>
-            </div>
+          {/* Sign In Link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Already have an account?{" "}
+              <Link
+                href="/auth/signin"
+                className="font-medium text-[var(--foreground)] hover:text-primary transition-colors"
+              >
+                Sign In
+              </Link>
+            </p>
           </div>
         </div>
 
