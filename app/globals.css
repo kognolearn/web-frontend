@@ -139,10 +139,7 @@ body {
 }
 
 /* Inputs */
-.input,
-input,
-textarea,
-select {
+.input {
   background-color: var(--surface-1);
   color: var(--foreground);
   border: 1px solid var(--border);
@@ -152,10 +149,7 @@ select {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-.input:focus,
-input:focus,
-textarea:focus,
-select:focus {
+.input:focus {
   border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
 }
