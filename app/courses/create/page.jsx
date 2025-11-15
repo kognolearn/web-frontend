@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
@@ -18,6 +18,31 @@ const ratingToFamiliarity = {
   2: "developing",
   3: "confident",
 };
+const familiarityLevels = [1, 2, 3];
+const manualOverviewId = "overview_manual";
+const manualOverviewTitle = "Custom topics";
+const nestedPayloadKeys = ["data", "result", "payload", "response", "content"];
+
+/**
+ * @typedef {Object} Subtopic
+ * @property {string} id
+ * @property {string} overviewId
+ * @property {string} title
+ * @property {string} description
+ * @property {string} difficulty
+ * @property {boolean} likelyOnExam
+ * @property {number} familiarity
+ * @property {string} source
+ */
+
+/**
+ * @typedef {Object} OverviewTopic
+ * @property {string} id
+ * @property {string} title
+ * @property {string} description
+ * @property {boolean} likelyOnExam
+ * @property {Subtopic[]} subtopics
+ */
 
 function resolveCourseId(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -93,16 +118,79 @@ function toDateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
-function createTopicObject(title, rating = defaultTopicRating, source = "generated") {
+function createSubtopic({
+  title,
+  overviewId,
+  description = "",
+  difficulty = "intermediate",
+  likelyOnExam = true,
+  familiarity = defaultTopicRating,
+  source = "generated",
+  id,
+}) {
   return {
-    id: globalThis.crypto?.randomUUID?.() ?? `${source}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title,
-    rating,
+    id:
+      id ||
+      globalThis.crypto?.randomUUID?.() ||
+      `${source}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    overviewId,
+    title: String(title || "Untitled topic"),
+    description: description ? String(description) : "",
+    difficulty: typeof difficulty === "string" ? difficulty : "intermediate",
+    likelyOnExam: Boolean(likelyOnExam ?? true),
+    familiarity: familiarity && Number.isFinite(familiarity) ? familiarity : defaultTopicRating,
     source,
   };
 }
 
-export default function CreateCoursePage() {
+function collectPayloadCandidates(payload) {
+  const queue = [];
+  const results = [];
+  const seen = new WeakSet();
+  if (payload && typeof payload === "object") {
+    queue.push(payload);
+  }
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    results.push(current);
+    for (const key of nestedPayloadKeys) {
+      const child = current[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+  return results;
+}
+
+function buildOverviewFromTopics(topics, groupId = "overview_1", groupTitle = "All topics") {
+  return [
+    {
+      id: groupId,
+      title: groupTitle,
+      description: "",
+      likelyOnExam: true,
+      subtopics: topics.map((topic, idx) => ({
+        id: topic?.id || `topic_${idx + 1}`,
+        overviewId: groupId,
+        title:
+          typeof topic === "string"
+            ? topic
+            : String(topic?.title || topic?.name || `Topic ${idx + 1}`),
+        description: typeof topic === "string" ? "" : topic?.description || "",
+        difficulty:
+          typeof topic === "string"
+            ? "intermediate"
+            : topic?.difficulty || "intermediate",
+        likelyOnExam: topic?.likelyOnExam ?? true,
+      })),
+    },
+  ];
+}
+
+function CreateCoursePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const today = useMemo(() => toDateInputValue(new Date()), []);
@@ -133,11 +221,10 @@ export default function CreateCoursePage() {
   const [authStatus, setAuthStatus] = useState("checking");
   const [userId, setUserId] = useState(null);
 
-  const [generating, setGenerating] = useState(false);
-  const [generationError, setGenerationError] = useState("");
-  const [topics, setTopics] = useState([]);
-  const [deletedTopics, setDeletedTopics] = useState([]);
-  const [rawTopicsText, setRawTopicsText] = useState("");
+  const [isTopicsLoading, setIsTopicsLoading] = useState(false);
+  const [topicsError, setTopicsError] = useState(null);
+  const [overviewTopics, setOverviewTopics] = useState([]);
+  const [deletedSubtopics, setDeletedSubtopics] = useState([]);
   const [topicsApproved, setTopicsApproved] = useState(false);
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
@@ -146,6 +233,11 @@ export default function CreateCoursePage() {
   const [courseGenerating, setCourseGenerating] = useState(false);
   const [courseGenerationError, setCourseGenerationError] = useState("");
   const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
+
+  const totalSubtopics = useMemo(
+    () => overviewTopics.reduce((sum, overview) => sum + overview.subtopics.length, 0),
+    [overviewTopics]
+  );
 
   // no dropdown refs needed for simplified inputs
 
@@ -179,7 +271,7 @@ export default function CreateCoursePage() {
         setAuthStatus("ready");
       } catch (error) {
         if (!active) return;
-        setGenerationError("Unable to confirm your session. Please try again.");
+        setTopicsError("Unable to confirm your session. Please try again.");
         setAuthStatus("ready");
       }
     };
@@ -224,21 +316,22 @@ export default function CreateCoursePage() {
   const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
     if (!userId) {
-      setGenerationError("You need to be signed in to generate topics.");
+      setTopicsError("You need to be signed in to generate topics.");
       return;
     }
 
     const trimmedTitle = courseTitle.trim();
     if (!trimmedTitle) {
-      setGenerationError("Provide a course title before generating topics.");
+      setTopicsError("Provide a course title before generating topics.");
       return;
     }
 
-    setGenerating(true);
-    setGenerationError("");
-    setRawTopicsText("");
+    setTopicsError(null);
+    setIsTopicsLoading(true);
     setTopicsApproved(false);
     setCourseGenerationError("");
+    setOverviewTopics([]);
+    setDeletedSubtopics([]);
 
     const finishByIso = toIsoDate(finishDate);
     const payload = {
@@ -272,65 +365,222 @@ export default function CreateCoursePage() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to generate topics. Please try again.");
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.error || "Failed to generate topics.");
       }
 
-      const generatedTopics = Array.isArray(data?.topics) ? data.topics : [];
-      if (generatedTopics.length === 0) {
+      console.log("Backend response:", JSON.stringify(data, null, 2));
+
+      const payloadCandidates = collectPayloadCandidates(data);
+      let rawOverview = [];
+      for (const candidate of payloadCandidates) {
+        const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
+        if (Array.isArray(overviewArray) && overviewArray.length) {
+          rawOverview = overviewArray;
+          console.log("Found overviewTopics with", overviewArray.length, "items");
+          break;
+        }
+      }
+
+      if (!rawOverview.length) {
+        for (const candidate of payloadCandidates) {
+          if (Array.isArray(candidate?.topicTree) && candidate.topicTree.length) {
+            rawOverview = candidate.topicTree;
+            break;
+          }
+          if (Array.isArray(candidate?.topicGroups) && candidate.topicGroups.length) {
+            rawOverview = candidate.topicGroups;
+            break;
+          }
+        }
+      }
+
+      if (!rawOverview.length) {
+        for (const candidate of payloadCandidates) {
+          const topicList = Array.isArray(candidate?.topics)
+            ? candidate.topics
+            : Array.isArray(candidate?.topicList)
+            ? candidate.topicList
+            : null;
+          if (topicList?.length) {
+            rawOverview = buildOverviewFromTopics(topicList);
+            break;
+          }
+        }
+      }
+
+      if (!rawOverview.length) {
+        console.log("rawOverview is still empty, throwing error");
         throw new Error("The model did not return any topics. Please try again.");
       }
 
-      setTopics(generatedTopics.map((topic) => createTopicObject(String(topic).trim())));
-      setDeletedTopics([]);
-      setRawTopicsText(data?.rawTopicsText || "");
+      console.log("rawOverview has", rawOverview.length, "overview topics");
+
+      const hydrated = rawOverview.map((overview, index) => {
+        const overviewId = String(overview?.id ?? `overview_${index + 1}`);
+        const subtopics = Array.isArray(overview?.subtopics)
+          ? overview.subtopics
+          : Array.isArray(overview?.subTopics)
+          ? overview.subTopics
+          : [];
+        return {
+          id: overviewId,
+          title: String(overview?.title ?? `Topic group ${index + 1}`),
+          description: overview?.description ? String(overview.description) : "",
+          likelyOnExam: Boolean(overview?.likelyOnExam ?? true),
+          subtopics: subtopics.map((subtopic, subIndex) =>
+            createSubtopic({
+              id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
+              overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
+              title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
+              description: subtopic?.description || "",
+              difficulty: subtopic?.difficulty || "intermediate",
+              likelyOnExam: subtopic?.likelyOnExam ?? true,
+              familiarity: Number.isFinite(subtopic?.familiarity)
+                ? subtopic.familiarity
+                : defaultTopicRating,
+            })
+          ),
+        };
+      });
+
+      const totalSubtopics = hydrated.reduce((sum, ot) => sum + ot.subtopics.length, 0);
+      console.log("Total subtopics after hydration:", totalSubtopics);
+      if (totalSubtopics === 0) {
+        throw new Error("The model did not return any topics. Please try again.");
+      }
+
+      setOverviewTopics(hydrated);
       setTopicsApproved(false);
-      // courseId stays untouched; /courses/topics doesn't return one
+      setTopicsError(null);
     } catch (error) {
-      setGenerationError(error.message || "Unexpected error generating topics.");
-    } finally {
-      setGenerating(false);
-    }
-  }, [collegeName, courseTitle, examFiles, examFormat, examNotes, finishDate, hasExamMaterials, syllabusFiles, syllabusText, userId]);
-
-  const handleRatingChange = useCallback((topicId, rating) => {
-    setTopicsApproved(false);
-    setTopics((prev) => prev.map((topic) => (topic.id === topicId ? { ...topic, rating } : topic)));
-  }, []);
-
-  const handleDeleteTopic = useCallback((topicId) => {
-    let removedTopic = null;
-    setTopicsApproved(false);
-    setTopics((prev) => {
-      const topic = prev.find((item) => item.id === topicId);
-      if (!topic) return prev;
-      removedTopic = topic;
-      return prev.filter((item) => item.id !== topicId);
-    });
-    if (removedTopic) {
-      setDeletedTopics((removed) => [removedTopic, ...removed.filter((item) => item.id !== removedTopic.id)]);
-    }
-  }, []);
-
-  const handleRestoreTopic = useCallback((topicId) => {
-    let restoredTopic = null;
-    setDeletedTopics((prev) => {
-      const topic = prev.find((item) => item.id === topicId);
-      if (!topic) return prev;
-      restoredTopic = topic;
-      return prev.filter((item) => item.id !== topicId);
-    });
-    if (restoredTopic) {
+      console.error(error);
+      setOverviewTopics([]);
+      setDeletedSubtopics([]);
       setTopicsApproved(false);
-      setTopics((existing) => [restoredTopic, ...existing.filter((item) => item.id !== restoredTopic.id)]);
+      setTopicsError(error?.message || "The model did not return any topics. Please try again.");
+    } finally {
+      setIsTopicsLoading(false);
+    }
+  }, [
+    collegeName,
+    courseTitle,
+    examFiles,
+    examFormat,
+    examNotes,
+    finishDate,
+    hasExamMaterials,
+    syllabusFiles,
+    syllabusText,
+    userId,
+  ]);
+
+  const handleFamiliarityChange = useCallback((overviewId, subtopicId, rating) => {
+    setTopicsApproved(false);
+    setOverviewTopics((prev) =>
+      prev.map((overview) => {
+        if (overview.id !== overviewId) return overview;
+        return {
+          ...overview,
+          subtopics: overview.subtopics.map((subtopic) =>
+            subtopic.id === subtopicId ? { ...subtopic, familiarity: rating } : subtopic
+          ),
+        };
+      })
+    );
+  }, []);
+
+  const handleDeleteSubtopic = useCallback((overviewId, subtopicId) => {
+    let removedSubtopic = null;
+    let overviewTitle = "";
+    setTopicsApproved(false);
+    setOverviewTopics((prev) =>
+      prev
+        .map((overview) => {
+          if (overview.id !== overviewId) return overview;
+          const existing = overview.subtopics.find((subtopic) => subtopic.id === subtopicId);
+          if (!existing) return overview;
+          removedSubtopic = existing;
+          overviewTitle = overview.title;
+          return {
+            ...overview,
+            subtopics: overview.subtopics.filter((subtopic) => subtopic.id !== subtopicId),
+          };
+        })
+        .filter((overview) => overview.subtopics.length > 0)
+    );
+
+    if (removedSubtopic) {
+      setDeletedSubtopics((prev) => [
+        { overviewId, overviewTitle, subtopic: removedSubtopic },
+        ...prev.filter((entry) => entry.subtopic.id !== removedSubtopic.id),
+      ]);
+    }
+  }, []);
+
+  const handleRestoreSubtopic = useCallback((subtopicId) => {
+    let entryToRestore = null;
+    setDeletedSubtopics((prev) => {
+      const match = prev.find((entry) => entry.subtopic.id === subtopicId);
+      if (!match) {
+        return prev;
+      }
+      entryToRestore = match;
+      return prev.filter((entry) => entry.subtopic.id !== subtopicId);
+    });
+
+    if (entryToRestore) {
+      setTopicsApproved(false);
+      setOverviewTopics((prev) => {
+        const index = prev.findIndex((overview) => overview.id === entryToRestore.overviewId);
+        if (index === -1) {
+          return [
+            ...prev,
+            {
+              id: entryToRestore.overviewId,
+              title: entryToRestore.overviewTitle || "Restored topics",
+              description: "",
+              likelyOnExam: true,
+              subtopics: [entryToRestore.subtopic],
+            },
+          ];
+        }
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          subtopics: [entryToRestore.subtopic, ...next[index].subtopics],
+        };
+        return next;
+      });
     }
   }, []);
 
   const handleRestoreAll = useCallback(() => {
+    if (deletedSubtopics.length === 0) return;
     setTopicsApproved(false);
-    setTopics((prev) => [...deletedTopics, ...prev]);
-    setDeletedTopics([]);
-  }, [deletedTopics]);
+    setOverviewTopics((prev) => {
+      const next = [...prev];
+      deletedSubtopics.forEach((entry) => {
+        const index = next.findIndex((overview) => overview.id === entry.overviewId);
+        if (index === -1) {
+          next.push({
+            id: entry.overviewId,
+            title: entry.overviewTitle || "Restored topics",
+            description: "",
+            likelyOnExam: true,
+            subtopics: [entry.subtopic],
+          });
+        } else {
+          next[index] = {
+            ...next[index],
+            subtopics: [entry.subtopic, ...next[index].subtopics],
+          };
+        }
+      });
+      return next;
+    });
+    setDeletedSubtopics([]);
+  }, [deletedSubtopics]);
 
   const handleAddTopic = useCallback(
     (event) => {
@@ -338,24 +588,51 @@ export default function CreateCoursePage() {
       const trimmed = newTopicTitle.trim();
       if (!trimmed) return;
       setTopicsApproved(false);
-      setTopics((prev) => [createTopicObject(trimmed, newTopicRating, "manual"), ...prev]);
+      const manualSubtopic = createSubtopic({
+        title: trimmed,
+        overviewId: manualOverviewId,
+        familiarity: newTopicRating,
+        source: "manual",
+      });
+      setOverviewTopics((prev) => {
+        const index = prev.findIndex((overview) => overview.id === manualOverviewId);
+        if (index === -1) {
+          return [
+            ...prev,
+            {
+              id: manualOverviewId,
+              title: manualOverviewTitle,
+              description: "",
+              likelyOnExam: true,
+              subtopics: [manualSubtopic],
+            },
+          ];
+        }
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          subtopics: [manualSubtopic, ...next[index].subtopics],
+        };
+        return next;
+      });
       setNewTopicTitle("");
       setNewTopicRating(defaultTopicRating);
     },
-    [newTopicTitle, newTopicRating]
+    [newTopicRating, newTopicTitle]
   );
 
   const handleApproveTopics = useCallback(() => {
-    if (topics.length === 0) {
+    if (totalSubtopics === 0) {
       setCourseGenerationError("Generate or add at least one topic before approving.");
       return;
     }
     setCourseGenerationError("");
     setTopicsApproved(true);
-  }, [topics]);
+  }, [totalSubtopics]);
 
   const handleGenerateCourse = useCallback(async () => {
-    if (topics.length === 0) {
+    const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
+    if (allSubtopics.length === 0) {
       setCourseGenerationError("Generate or add at least one topic before generating the course.");
       return;
     }
@@ -389,8 +666,8 @@ export default function CreateCoursePage() {
       return;
     }
 
-    const cleanTopics = topics
-      .map((topic) => (typeof topic.title === "string" ? topic.title.trim() : ""))
+    const cleanTopics = allSubtopics
+      .map((subtopic) => (typeof subtopic.title === "string" ? subtopic.title.trim() : ""))
       .filter(Boolean);
 
     if (cleanTopics.length === 0) {
@@ -400,12 +677,13 @@ export default function CreateCoursePage() {
 
     const cleanTopicSet = new Set(cleanTopics);
 
-    const topicFamiliarityMap = topics.reduce((acc, topic) => {
-      const title = typeof topic.title === "string" ? topic.title.trim() : "";
+    const topicFamiliarityMap = allSubtopics.reduce((acc, subtopic) => {
+      const title = typeof subtopic.title === "string" ? subtopic.title.trim() : "";
       if (!title || !cleanTopicSet.has(title)) {
         return acc;
       }
-      const familiarity = ratingToFamiliarity[topic.rating] || ratingToFamiliarity[defaultTopicRating];
+      const familiarity =
+        ratingToFamiliarity[subtopic.familiarity] || ratingToFamiliarity[defaultTopicRating];
       acc[title] = familiarity;
       return acc;
     }, {});
@@ -488,7 +766,7 @@ export default function CreateCoursePage() {
       setCourseGenerating(false);
     }
   }, [
-    topics,
+    overviewTopics,
     topicsApproved,
     userId,
     courseId,
@@ -807,15 +1085,15 @@ export default function CreateCoursePage() {
               </Link>
               <button
                 type="submit"
-                disabled={generating}
+                disabled={isTopicsLoading}
                 className="bg-primary rounded-full px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {generating ? "Generating topics…" : "Generate study topics"}
+                {isTopicsLoading ? "Generating topics…" : "Generate study topics"}
               </button>
             </div>
-            {generationError && (
+            {topicsError && (
               <div className="card-shell rounded-[24px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
-                {generationError}
+                {topicsError}
               </div>
             )}
           </form>
@@ -854,7 +1132,7 @@ export default function CreateCoursePage() {
                 />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {([1, 2, 3]).map((rating) => (
+                    {familiarityLevels.map((rating) => (
                       <button
                         type="button"
                         key={rating}
@@ -878,7 +1156,7 @@ export default function CreateCoursePage() {
             </div>
 
             <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-6 sm:px-7">
-              {generating ? (
+              {isTopicsLoading ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
                     <svg className="h-6 w-6 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -903,53 +1181,75 @@ export default function CreateCoursePage() {
                     ))}
                   </div>
                 </div>
-              ) : topics.length === 0 ? (
+              ) : totalSubtopics === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[var(--border-muted)]/60 bg-[var(--surface-2)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
                   Generated topics will appear here once you run the creator.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {topics.map((topic) => (
-                    <div key={topic.id} className="flex flex-col gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/85 p-4">
-                      <div className="flex items-start justify-between gap-3">
+                <div className="space-y-5">
+                  {overviewTopics.map((overview) => (
+                    <div key={overview.id} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <h3 className="text-sm font-semibold text-[var(--foreground)]">{topic.title}</h3>
-                          {topic.source === "manual" && (
-                            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
-                              Added by you
-                            </span>
+                          <h3 className="text-sm font-semibold text-[var(--foreground)]">{overview.title}</h3>
+                          {overview.description && (
+                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{overview.description}</p>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTopic(topic.id)}
-                          className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
-                        >
-                          Remove
-                        </button>
+                        {overview.likelyOnExam && (
+                          <span className="self-start rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-wide text-emerald-300">
+                            Likely on exam
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        {([1, 2, 3]).map((rating) => (
-                          <button
-                            key={rating}
-                            type="button"
-                            onClick={() => handleRatingChange(topic.id, rating)}
-                            className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                              rating <= topic.rating
-                                ? "border-primary bg-primary/20 text-primary"
-                                : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                            }`}
-                            aria-label={`Set rating ${rating}`}
-                          >
-                            <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= topic.rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                            </svg>
-                          </button>
+                      <div className="mt-4 space-y-4">
+                        {overview.subtopics.map((subtopic) => (
+                          <div key={subtopic.id} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)]/80 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-[var(--foreground)]">{subtopic.title}</p>
+                                {subtopic.source === "manual" && (
+                                  <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                                    Added by you
+                                  </span>
+                                )}
+                                {subtopic.description && (
+                                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">{subtopic.description}</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
+                                className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2">
+                              {familiarityLevels.map((rating) => (
+                                <button
+                                  key={rating}
+                                  type="button"
+                                  onClick={() => handleFamiliarityChange(overview.id, subtopic.id, rating)}
+                                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                                    rating <= subtopic.familiarity
+                                      ? "border-primary bg-primary/20 text-primary"
+                                      : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                                  }`}
+                                  aria-label={`Set familiarity ${rating}`}
+                                >
+                                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= subtopic.familiarity ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
+                                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                                  </svg>
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                              {ratingDescriptions[subtopic.familiarity]}
+                            </p>
+                          </div>
                         ))}
                       </div>
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {ratingDescriptions[topic.rating]}
-                      </p>
                     </div>
                   ))}
                 </div>
@@ -979,7 +1279,7 @@ export default function CreateCoursePage() {
                 <button
                   type="button"
                   onClick={handleApproveTopics}
-                  disabled={topics.length === 0 || courseGenerating || topicsApproved}
+                  disabled={totalSubtopics === 0 || courseGenerating || topicsApproved}
                   className={`btn btn-outline w-full justify-center ${topicsApproved ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
                   {topicsApproved ? "Topics approved" : "Approve topics"}
@@ -1005,7 +1305,7 @@ export default function CreateCoursePage() {
               </p>
             </div>
 
-            {deletedTopics.length > 0 && (
+            {deletedSubtopics.length > 0 && (
               <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-5 text-sm">
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
@@ -1018,12 +1318,15 @@ export default function CreateCoursePage() {
                   </button>
                 </div>
                 <ul className="mt-3 space-y-2 text-[var(--muted-foreground)]">
-                  {deletedTopics.map((topic) => (
-                    <li key={topic.id} className="flex items-center justify-between gap-3">
-                      <span className="truncate">{topic.title}</span>
+                  {deletedSubtopics.map((entry) => (
+                    <li key={entry.subtopic.id} className="flex items-center justify-between gap-3">
+                      <span className="truncate">
+                        {entry.subtopic.title}
+                        {entry.overviewTitle ? ` · ${entry.overviewTitle}` : ""}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => handleRestoreTopic(topic.id)}
+                        onClick={() => handleRestoreSubtopic(entry.subtopic.id)}
                         className="text-xs text-primary transition hover:text-primary-hover"
                       >
                         Restore
@@ -1037,5 +1340,20 @@ export default function CreateCoursePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CreateCoursePage() {
+  return (
+    <Suspense fallback={
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
+        <div className="create-veil" aria-hidden="true" />
+        <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
+          Loading course creation…
+        </div>
+      </div>
+    }>
+      <CreateCoursePageContent />
+    </Suspense>
   );
 }
