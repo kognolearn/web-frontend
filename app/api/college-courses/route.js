@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 // Proxy route to the backend /college-courses endpoint that now expects
 // { college, subject?, course? } query params and returns { items: [{ code, title }, ...] }.
 // Behavior: if only college, returns colleges; if college+subject, returns subjects; if all, returns courses.
-const API_BASE = process.env.BACKEND_API_URL || "https://edtech-backend-api.onrender.com";
+const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 const MAX_LEN = 120;
 
 export async function GET(request) {

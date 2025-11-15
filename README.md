@@ -3,7 +3,7 @@ Backend API
 
 Course search is served by the backend API hosted on Render:
 
-- Base URL: https://edtech-backend-api.onrender.com
+- Base URL: https://api.kognolearn.com
 - Endpoint: GET /college-courses?query=<term>
 - Auth: None
 

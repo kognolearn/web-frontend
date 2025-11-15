@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Keeps the existing frontend contract: returns { results: Array<{ id, code, title }> }
 // while delegating search to the backend (which uses Supabase under the hood).
 
-const COURSES_API_BASE = process.env.BACKEND_API_URL || "https://edtech-backend-api.onrender.com";
+const COURSES_API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 const MAX_QUERY_LENGTH = 100; // per spec
 
 export async function GET(request) {
