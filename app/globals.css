@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /*
-  Pastel, minimalist design tokens (no gradients)
-  - Light and dark palettes
+  Nature-inspired, sustainable design tokens
+  - Light and dark palettes with earthy tones
+  - Sage green primary color for growth and focus
+  - Warm cream and deep forest backgrounds
   - Subtle shadows and borders
-  - Flat, mature colors with soft contrast
 */
 
 :root {
@@ -14,25 +15,25 @@
   --radius-lg: 20px;
 
   /* base colors default (dark as initial to match layout.js) */
-  --background: #1a1f2e;
-  --surface-1: #2d3748;
-  --surface-2: #323c51;
-  --surface-muted: #3a455c;
-  --border: #4a5568;
-  --foreground: #f7fafc;
-  --muted-foreground: #a0aec0;
-  --muted-foreground-strong: #e2e8f0;
+  --background: #1a2317;
+  --surface-1: #283326;
+  --surface-2: #2f3a2d;
+  --surface-muted: #3a4638;
+  --border: #4a5648;
+  --foreground: #f5f7f4;
+  --muted-foreground: #a8b5a3;
+  --muted-foreground-strong: #dfe5dc;
 
-  /* accent (pastel mint) */
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #4ac5a9;
-  --primary-active: #3ab699;
+  /* accent (sage green) */
+  --primary: #7ba37a;
+  --primary-contrast: #1a2317;
+  --primary-hover: #92b591;
+  --primary-active: #668865;
 
   /* feedback */
-  --success: #66d08e;
-  --warning: #f4c363;
-  --danger: #e57474;
+  --success: #6fb06e;
+  --warning: #d9a066;
+  --danger: #d97777;
 
   /* shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
@@ -41,35 +42,35 @@
 }
 
 html.theme-light {
-  --background: #f8f9fa; /* off-white */
+  --background: #f5f3ef; /* warm cream */
   --surface-1: #ffffff;
-  --surface-2: #f1f3f5;
-  --surface-muted: #eef1f4;
-  --border: #e5e7eb;
-  --foreground: #2c3e50;
-  --muted-foreground: #7f8c8d;
-  --muted-foreground-strong: #34495e;
+  --surface-2: #faf8f5;
+  --surface-muted: #f0ede8;
+  --border: #ddd8d0;
+  --foreground: #2d3a29;
+  --muted-foreground: #708068;
+  --muted-foreground-strong: #3d4a38;
 
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #7fe5d3; /* slightly lighter on light bg */
-  --primary-active: #4ac5a9;
+  --primary: #7ba37a;
+  --primary-contrast: #ffffff;
+  --primary-hover: #8fb18e; /* slightly lighter on light bg */
+  --primary-active: #668865;
 }
 
 html.theme-dark {
-  --background: #1a1f2e; /* deep navy */
-  --surface-1: #2d3748;
-  --surface-2: #323c51;
-  --surface-muted: #3a455c;
-  --border: #4a5568;
-  --foreground: #f7fafc;
-  --muted-foreground: #a0aec0;
-  --muted-foreground-strong: #e2e8f0;
+  --background: #1a2317; /* deep forest */
+  --surface-1: #283326;
+  --surface-2: #2f3a2d;
+  --surface-muted: #3a4638;
+  --border: #4a5648;
+  --foreground: #f5f7f4;
+  --muted-foreground: #a8b5a3;
+  --muted-foreground-strong: #dfe5dc;
 
-  --primary: #63d4bd;
-  --primary-contrast: #0b2a22;
-  --primary-hover: #4ac5a9; /* slightly darker on dark bg */
-  --primary-active: #3ab699;
+  --primary: #7ba37a;
+  --primary-contrast: #1a2317;
+  --primary-hover: #92b591; /* slightly lighter on dark bg */
+  --primary-active: #668865;
 }
 
 /* Base */
@@ -216,20 +217,20 @@ select:focus {
 }
 
 .panel-accent-rose {
-  background-color: #fce8e8;
+  background-color: #f9ede8;
 }
 
 .panel-accent-sky {
-  background-color: #e8f4fd;
+  background-color: #e8f2ed;
 }
 
 .panel-accent-sun {
-  background-color: #fdf4e4;
+  background-color: #fdf6e8;
 }
 
 .gradient-border {
   border: 2px solid transparent;
-  border-image: linear-gradient(45deg, #f9cada, #cde7f5, #f9ecc2) 1;
+  border-image: linear-gradient(45deg, #e8d4c8, #c8e0d8, #f0e8c8) 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
