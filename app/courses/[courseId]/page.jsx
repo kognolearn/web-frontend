@@ -6,14 +6,60 @@ import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
 import { marked } from "marked";
 
+function extractCourseRecord(payload) {
+  if (!payload) return null;
+  let candidate = payload;
+  if (Array.isArray(candidate)) {
+    candidate = candidate[0] ?? null;
+  } else if (candidate?.data) {
+    if (Array.isArray(candidate.data)) {
+      candidate = candidate.data[0] ?? null;
+    } else if (candidate.data.course) {
+      candidate = candidate.data.course;
+    } else if (candidate.data.course_data) {
+      candidate = candidate.data;
+    }
+  } else if (candidate?.course) {
+    candidate = candidate.course;
+  } else if (Array.isArray(candidate?.courses)) {
+    candidate = candidate.courses[0] ?? candidate;
+  }
+
+  if (!candidate) return null;
+  if (candidate.course_data) {
+    return candidate;
+  }
+
+  if (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    (candidate.syllabus || candidate.modules || candidate.lessons || candidate.assessments)
+  ) {
+    return { course_data: candidate };
+  }
+
+  return candidate;
+}
+
+function isCourseV2Data(data) {
+  return Boolean(data && typeof data === "object" && data.syllabus && data.modules);
+}
+
+function ensureKey(value, fallback) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return String(value);
+}
+
 export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [courseMeta, setCourseMeta] = useState(null);
   const [courseData, setCourseData] = useState(null);
-  const [open, setOpen] = useState({});
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [contentCache, setContentCache] = useState({}); // key: format:id -> { status, data, error }
   const [sidebarWidth, setSidebarWidth] = useState(250);
@@ -72,29 +118,26 @@ export default function CoursePage() {
         const url = `/api/courses/data?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(
           String(courseId)
         )}`;
-        console.log("[CoursePage] Fetching course_data:", url);
         const res = await fetch(url);
         if (!res.ok) {
           const text = await res.text();
-          console.log("[CoursePage] course_data non-OK:", res.status, text);
           throw new Error(text || `Request failed: ${res.status}`);
         }
         const json = await res.json();
-        console.log("[CoursePage] course_data OK: keys=", Object.keys(json || {}));
         if (aborted) return;
-        const data = json?.course_data || null;
+        const record = extractCourseRecord(json);
+        setCourseMeta(record);
+        const data = record?.course_data || null;
         setCourseData(data);
-        
-        // Set the first topic as selected by default
-        if (data && typeof data === "object") {
-          const firstTopic = Object.keys(data)[0];
-          if (firstTopic) {
-            setSelectedTopic(firstTopic);
-          }
+
+        if (!isCourseV2Data(data) && data && typeof data === "object") {
+          const firstTopic = Object.keys(data)[0] || null;
+          setSelectedTopic(firstTopic);
+        } else {
+          setSelectedTopic(null);
         }
       } catch (e) {
         if (aborted) return;
-        console.error("[CoursePage] course_data error:", e);
         setError(e?.message || "Failed to load course data.");
       } finally {
         if (!aborted) setLoading(false);
@@ -134,16 +177,18 @@ export default function CoursePage() {
     };
   }, [isResizing]);
 
-  const entries = useMemo(() => {
-    if (!courseData || typeof courseData !== "object") return [];
+  const isCourseV2 = useMemo(() => isCourseV2Data(courseData), [courseData]);
+
+  const legacyEntries = useMemo(() => {
+    if (isCourseV2 || !courseData || typeof courseData !== "object") return [];
     return Object.entries(courseData);
-  }, [courseData]);
+  }, [courseData, isCourseV2]);
 
   // Group topics by their header using "/" as the hierarchy separator
   // Example key: "category/subtopic" => header: "category", title: "subtopic"
-  const groupedTopics = useMemo(() => {
+  const legacyGroupedTopics = useMemo(() => {
     const groups = {};
-    entries.forEach(([topic, items]) => {
+    legacyEntries.forEach(([topic, items]) => {
       const parts = String(topic).split("/").map((s) => s.trim()).filter(Boolean);
       if (parts.length > 1) {
         const header = parts[0];
@@ -158,7 +203,69 @@ export default function CoursePage() {
       }
     });
     return Object.entries(groups);
-  }, [entries]);
+  }, [legacyEntries]);
+
+  const courseTitleDisplay = useMemo(() => {
+    return (
+      courseMeta?.title ||
+      courseMeta?.course_title ||
+      courseMeta?.name ||
+      courseMeta?.course_data?.title ||
+      "Course overview"
+    );
+  }, [courseMeta]);
+
+  const universityName = useMemo(() => {
+    return (
+      courseMeta?.university ||
+      courseMeta?.college ||
+      courseMeta?.institution ||
+      courseMeta?.course_selection?.college ||
+      courseMeta?.course_selection?.university ||
+      courseMeta?.course_selection?.title ||
+      ""
+    );
+  }, [courseMeta]);
+
+  const finishByRaw = courseMeta?.finish_by_date || courseMeta?.finishDate || courseMeta?.finish_by;
+  const finishByLabel = useMemo(() => {
+    if (!finishByRaw) return null;
+    const parsed = new Date(finishByRaw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  }, [finishByRaw]);
+
+  const moduleList = useMemo(() => {
+    if (!isCourseV2) return [];
+    return Array.isArray(courseData?.modules?.modules) ? courseData.modules.modules : [];
+  }, [courseData, isCourseV2]);
+
+  const lessonList = useMemo(() => {
+    if (!isCourseV2) return [];
+    return Array.isArray(courseData?.lessons?.lessons) ? courseData.lessons.lessons : [];
+  }, [courseData, isCourseV2]);
+
+  const lessonsByModule = useMemo(() => {
+    if (!isCourseV2) return {};
+    return lessonList.reduce((acc, lesson, idx) => {
+      const key = ensureKey(
+        lesson?.moduleId ?? lesson?.module_id ?? lesson?.module ?? lesson?.moduleTitle,
+        `lesson-${idx}`
+      );
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(lesson);
+      return acc;
+    }, {});
+  }, [isCourseV2, lessonList]);
+
+  const syllabusOutcomes = Array.isArray(courseData?.syllabus?.outcomes) ? courseData.syllabus.outcomes : [];
+  const syllabusSources = Array.isArray(courseData?.syllabus?.sources) ? courseData.syllabus.sources : [];
+  const topicGraph = courseData?.syllabus?.topic_graph;
+  const assessments = courseData?.assessments || {};
+  const weeklyQuizzes = Array.isArray(assessments?.weekly_quizzes) ? assessments.weekly_quizzes : [];
+  const projectAssessment = assessments?.project;
+  const examBlueprint = assessments?.exam_blueprint;
+  const studyTime = courseData?.study_time_min;
 
   const normalizeFormat = (fmt) => {
     if (!fmt) return "";
@@ -433,7 +540,7 @@ export default function CoursePage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
       {/* Left Sidebar - Course Structure (resizable) */}
-      {!isMobile && isSidebarOpen && (
+      {!isCourseV2 && !isMobile && isSidebarOpen && (
         <aside
           ref={sidebarRef}
           style={{ width: `${sidebarWidth}px` }}
@@ -473,15 +580,15 @@ export default function CoursePage() {
               </div>
             )}
 
-            {!loading && !error && !entries.length && (
+            {!loading && !error && !legacyEntries.length && (
               <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">
                 No content available.
               </div>
             )}
 
-            {!loading && !error && entries.length > 0 && (
+            {!loading && !error && legacyEntries.length > 0 && (
               <nav className="space-y-6">
-                {groupedTopics.map(([header, topics]) => (
+                {legacyGroupedTopics.map(([header, topics]) => (
                   <div key={header} className="space-y-1.5">
                     <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
                       {smartTitleCase(header)}
@@ -516,7 +623,7 @@ export default function CoursePage() {
       )}
 
       {/* Mobile drawer for topics */}
-      {isMobile && isSidebarOpen && (
+      {!isCourseV2 && isMobile && isSidebarOpen && (
         <>
           <div
             className="fixed inset-0 z-50 bg-black/40"
@@ -544,12 +651,12 @@ export default function CoursePage() {
               {!loading && error && (
                 <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--danger)] border-[var(--danger)]">{error}</div>
               )}
-              {!loading && !error && !entries.length && (
+              {!loading && !error && !legacyEntries.length && (
                 <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">No content available.</div>
               )}
-              {!loading && !error && entries.length > 0 && (
+              {!loading && !error && legacyEntries.length > 0 && (
                 <nav className="space-y-6">
-                  {groupedTopics.map(([header, topics]) => (
+                  {legacyGroupedTopics.map(([header, topics]) => (
                     <div key={header} className="space-y-1.5">
                       <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
                         {smartTitleCase(header)}
@@ -578,96 +685,356 @@ export default function CoursePage() {
         </>
       )}
 
-      {/* Right Content Area - Topic Display */}
-      <main 
-        className="flex-1 overflow-y-auto transition-all duration-200"
-        style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
-      >
-        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-          {/* Toggle sidebar button */}
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-              title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-              >
-                {isSidebarOpen ? (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                  />
-                ) : (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                  />
-                )}
-              </svg>
-              {isSidebarOpen ? "Hide" : "Show"} {isMobile ? "topics" : "sidebar"}
-            </button>
-          </div>
+      {/* Right Content Area */}
+      {isCourseV2 ? (
+        <main
+          className="flex-1 overflow-y-auto transition-all duration-200"
+          style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
+        >
+          <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8">
+            {loading && (
+              <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                Loading your CourseV2 plan…
+              </div>
+            )}
 
-          {selectedTopic && (
-            <>
-              <header className="card rounded-[32px] px-8 py-8 sm:px-10">
-                <h1 className="text-3xl font-semibold leading-tight sm:text-4xl text-[var(--foreground)]">
-                  {displaySelectedTopic}
-                </h1>
-                <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
-                  Dive into the content below
-                </p>
-              </header>
+            {!loading && error && (
+              <div className="card rounded-[28px] border border-red-500/30 bg-red-500/10 px-6 py-6 text-sm text-red-200">
+                {error}
+              </div>
+            )}
 
-              <section className="space-y-6">
-                {Array.isArray(courseData?.[selectedTopic]) && courseData[selectedTopic].length > 0 ? (
-                  courseData[selectedTopic].map((item) => (
-                    <article key={item.id} className="card rounded-[28px] px-6 py-6 sm:px-8 sm:py-8">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                          {prettyFormat(item?.Format)}
-                        </h2>
-                        <span className="pill-outline text-[10px]">
-                          ID: {item?.id}
-                        </span>
-                      </div>
-                      {item?.content && (
-                        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                          {item.content}
-                        </p>
-                      )}
-                      <div className="mt-4">
-                        <ItemContent fmt={item?.Format} id={item?.id} />
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-                    No items available for “{selectedTopic}”.
+            {!loading && !error && !courseData && (
+              <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                Course data is not available yet. Please try refreshing in a moment.
+              </div>
+            )}
+
+            {!loading && !error && courseData && (
+              <>
+                <header className="card rounded-[32px] px-8 py-8 sm:px-10">
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-[var(--muted-foreground)]">
+                    <span className="pill-outline">Course V2</span>
+                    {finishByLabel && <span className="pill-outline">Finish by {finishByLabel}</span>}
+                    {moduleList.length > 0 && <span className="pill-outline">{moduleList.length} modules</span>}
                   </div>
-                )}
-              </section>
-            </>
-          )}
+                  <h1 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
+                    {courseTitleDisplay}
+                  </h1>
+                  {universityName && (
+                    <p className="mt-2 text-sm text-[var(--muted-foreground)]">{universityName}</p>
+                  )}
+                  <p className="mt-4 text-sm text-[var(--muted-foreground)]">
+                    A personalized learning sequence generated from your syllabus, timeline, and familiarity ratings.
+                  </p>
+                </header>
 
-          {!selectedTopic && !loading && (
-            <div className="card rounded-[28px] px-8 py-10 text-center">
-              <p className="text-[var(--muted-foreground)]">
-                Select a topic from the left sidebar to view its content.
-              </p>
+                {syllabusOutcomes.length > 0 && (
+                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
+                    <h2 className="text-lg font-semibold">Key outcomes</h2>
+                    <ul className="mt-4 space-y-3 text-sm text-[var(--muted-foreground)]">
+                      {syllabusOutcomes.map((outcome, idx) => (
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="mt-1 h-2 w-2 rounded-full bg-[var(--primary)]" />
+                          <span>{outcome}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {moduleList.length > 0 && (
+                  <section className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold">Modules</h2>
+                      <span className="text-sm text-[var(--muted-foreground)]">{moduleList.length} milestones</span>
+                    </div>
+                    <div className="flex flex-col gap-4">
+                      {moduleList.map((module, idx) => {
+                        const moduleKey = ensureKey(module?.id ?? module?.moduleId ?? module?.slug ?? module?.title, `module-${idx}`);
+                        const moduleLessons = lessonsByModule[moduleKey] || [];
+                        const moduleObjectives = Array.isArray(module?.objectives)
+                          ? module.objectives
+                          : module?.objectives
+                          ? [module.objectives]
+                          : [];
+                        return (
+                          <article key={moduleKey} className="card rounded-[28px] px-6 py-6 sm:px-8">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Module {idx + 1}</p>
+                                <h3 className="mt-2 text-xl font-semibold text-[var(--foreground)]">
+                                  {module?.title || `Module ${idx + 1}`}
+                                </h3>
+                                {(module?.summary || module?.description) && (
+                                  <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                                    {module.summary || module.description}
+                                  </p>
+                                )}
+                              </div>
+                              {module?.duration_hours && (
+                                <div className="rounded-2xl bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--muted-foreground)]">
+                                  ~{module.duration_hours} hrs
+                                </div>
+                              )}
+                            </div>
+                            {moduleObjectives.length > 0 && (
+                              <div className="mt-4 space-y-2 text-sm text-[var(--muted-foreground)]">
+                                {moduleObjectives.map((objective, objectiveIdx) => (
+                                  <div key={objectiveIdx} className="flex gap-2">
+                                    <span className="text-[var(--primary)]">•</span>
+                                    <span>{objective}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {moduleLessons.length > 0 && (
+                              <div className="mt-5 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/60 p-4">
+                                <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Lessons</p>
+                                <ol className="mt-3 space-y-3 text-sm text-[var(--foreground)]">
+                                  {moduleLessons.map((lesson, lessonIdx) => {
+                                    const lessonObjectives = Array.isArray(lesson?.objectives)
+                                      ? lesson.objectives
+                                      : lesson?.objectives
+                                      ? [lesson.objectives]
+                                      : [];
+                                    return (
+                                      <li key={lesson?.id || `${moduleKey}-lesson-${lessonIdx}`}
+                                          className="rounded-2xl bg-[var(--surface-1)]/60 px-4 py-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <span className="font-medium">{lesson?.title || `Lesson ${lessonIdx + 1}`}</span>
+                                          {lesson?.estimated_minutes && (
+                                            <span className="text-xs text-[var(--muted-foreground)]">
+                                              {lesson.estimated_minutes} min
+                                            </span>
+                                          )}
+                                        </div>
+                                        {lessonObjectives.length > 0 && (
+                                          <ul className="mt-1 list-disc pl-5 text-xs text-[var(--muted-foreground)]">
+                                            {lessonObjectives.map((objective, objIdx) => (
+                                              <li key={objIdx}>{objective}</li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ol>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {(weeklyQuizzes.length > 0 || projectAssessment || examBlueprint) && (
+                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
+                    <h2 className="text-lg font-semibold">Assessments</h2>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      {weeklyQuizzes.length > 0 && (
+                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">Weekly quizzes</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                            {weeklyQuizzes.length} quiz{weeklyQuizzes.length === 1 ? "" : "zes"} scheduled
+                          </p>
+                          <ul className="mt-2 space-y-1 text-xs text-[var(--muted-foreground)]">
+                            {weeklyQuizzes.slice(0, 4).map((quiz, idx) => (
+                              <li key={quiz?.id || idx} className="flex items-center gap-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                                <span>{quiz?.title || `Quiz ${idx + 1}`}</span>
+                              </li>
+                            ))}
+                            {weeklyQuizzes.length > 4 && (
+                              <li className="text-[var(--muted-foreground)]">+{weeklyQuizzes.length - 4} more</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      {projectAssessment && (
+                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">Capstone project</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                            {projectAssessment?.title || "Project"}
+                          </p>
+                          {(projectAssessment?.summary || projectAssessment?.description) && (
+                            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                              {projectAssessment.summary || projectAssessment.description}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {examBlueprint && (
+                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4 sm:col-span-2">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">Exam blueprint</p>
+                          {Array.isArray(examBlueprint?.sections) ? (
+                            <ul className="mt-2 space-y-1 text-xs text-[var(--muted-foreground)]">
+                              {examBlueprint.sections.map((section, idx) => (
+                                <li key={section?.title || idx} className="flex items-center gap-2">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                                  <span>{section?.title || `Section ${idx + 1}`}</span>
+                                  {section?.weight && <span className="text-[var(--muted-foreground)]">• {section.weight}%</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-xs text-[var(--muted-foreground)]">Exam outline ready.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {studyTime && (
+                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
+                    <h2 className="text-lg font-semibold">Study time estimate</h2>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {["reading", "video", "practice", "total"].map((key) => (
+                        <div key={key} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-5 text-center">
+                          <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">{key}</p>
+                          <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
+                            {studyTime?.[key] ?? "-"}
+                            <span className="text-sm font-normal text-[var(--muted-foreground)]"> min</span>
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {(syllabusSources.length > 0 || topicGraph) && (
+                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
+                    <h2 className="text-lg font-semibold">Sources & references</h2>
+                    {syllabusSources.length > 0 && (
+                      <ul className="mt-3 space-y-2 text-sm text-[var(--muted-foreground)]">
+                        {syllabusSources.map((source, idx) => (
+                          <li
+                            key={source?.title || source?.url || idx}
+                            className="rounded-2xl border border-[var(--border-muted)]/60 bg-[var(--surface-2)]/60 px-4 py-3"
+                          >
+                            <p className="font-medium text-[var(--foreground)]">{source?.title || source?.name || `Source ${idx + 1}`}</p>
+                            {source?.url && (
+                              <a
+                                href={source.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[var(--primary)] text-xs"
+                              >
+                                {source.url}
+                              </a>
+                            )}
+                            {source?.notes && <p className="text-xs text-[var(--muted-foreground)]">{source.notes}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {topicGraph && (
+                      <details className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/60 px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                        <summary className="cursor-pointer text-[var(--foreground)]">View topic graph JSON</summary>
+                        <pre className="mt-3 max-h-64 overflow-auto rounded-xl bg-[var(--surface-1)] p-3 text-xs">
+{JSON.stringify(topicGraph, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
+          </div>
+        </main>
+      ) : (
+        <main
+          className="flex-1 overflow-y-auto transition-all duration-200"
+          style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
+        >
+          <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+            {/* Toggle sidebar button */}
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                >
+                  {isSidebarOpen ? (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                    />
+                  ) : (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                    />
+                  )}
+                </svg>
+                {isSidebarOpen ? "Hide" : "Show"} {isMobile ? "topics" : "sidebar"}
+              </button>
             </div>
-          )}
-        </div>
-      </main>
+
+            {selectedTopic && (
+              <>
+                <header className="card rounded-[32px] px-8 py-8 sm:px-10">
+                  <h1 className="text-3xl font-semibold leading-tight sm:text-4xl text-[var(--foreground)]">
+                    {displaySelectedTopic}
+                  </h1>
+                  <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
+                    Dive into the content below
+                  </p>
+                </header>
+
+                <section className="space-y-6">
+                  {Array.isArray(courseData?.[selectedTopic]) && courseData[selectedTopic].length > 0 ? (
+                    courseData[selectedTopic].map((item) => (
+                      <article key={item.id} className="card rounded-[28px] px-6 py-6 sm:px-8 sm:py-8">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                            {prettyFormat(item?.Format)}
+                          </h2>
+                          <span className="pill-outline text-[10px]">
+                            ID: {item?.id}
+                          </span>
+                        </div>
+                        {item?.content && (
+                          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                            {item.content}
+                          </p>
+                        )}
+                        <div className="mt-4">
+                          <ItemContent fmt={item?.Format} id={item?.id} />
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                      No items available for “{selectedTopic}”.
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {!selectedTopic && !loading && (
+              <div className="card rounded-[28px] px-8 py-10 text-center">
+                <p className="text-[var(--muted-foreground)]">
+                  Select a topic from the left sidebar to view its content.
+                </p>
+              </div>
+            )}
+          </div>
+        </main>
+      )}
 
       {/* ChatBot Component */}
       <ChatBot 

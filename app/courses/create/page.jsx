@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 const searchDebounceMs = 350;
@@ -18,9 +18,6 @@ const ratingToFamiliarity = {
   2: "developing",
   3: "confident",
 };
-
-const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_BASE?.trim() || "https://edtech-backend-api.onrender.com";
-const COURSE_STRUCTURE_ENDPOINT = `${backendBaseUrl.replace(/\/$/, "")}/course-structure`;
 
 function toIsoDate(dateString) {
   if (!dateString) return null;
@@ -58,11 +55,17 @@ async function buildFilePayload(files) {
   const items = await Promise.all(
     files.map(async (file) => ({
       name: file.name,
-      content: await fileToBase64(file),
+      base64: await fileToBase64(file),
       type: file.type || "application/octet-stream",
     }))
   );
-  return items;
+  return items.map((item, index) => {
+    const sourceFile = files[index];
+    if (typeof sourceFile?.size === "number") {
+      return { ...item, size: sourceFile.size };
+    }
+    return item;
+  });
 }
 
 function toDateInputValue(date) {
@@ -83,6 +86,7 @@ function createTopicObject(title, rating = defaultTopicRating, source = "generat
 
 export default function CreateCoursePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const nextWeek = useMemo(() => {
     const d = new Date();
@@ -97,6 +101,8 @@ export default function CreateCoursePage() {
   // Course title and optional university
   const [courseTitle, setCourseTitle] = useState("");
   const [collegeName, setCollegeName] = useState("");
+  const [prefillApplied, setPrefillApplied] = useState(false);
+  const [courseId, setCourseId] = useState(null);
 
   const [syllabusText, setSyllabusText] = useState("");
   const [syllabusFiles, setSyllabusFiles] = useState([]);
@@ -124,6 +130,16 @@ export default function CreateCoursePage() {
   const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
 
   // no dropdown refs needed for simplified inputs
+
+  useEffect(() => {
+    if (!searchParams || prefillApplied) return;
+    const titleParam = searchParams.get("title");
+    const collegeParam = searchParams.get("college");
+    if (!titleParam && !collegeParam) return;
+    setCourseTitle((prev) => (prev ? prev : titleParam || prev));
+    setCollegeName((prev) => (prev ? prev : collegeParam || prev));
+    setPrefillApplied(true);
+  }, [prefillApplied, searchParams]);
 
   useEffect(() => {
     let active = true;
@@ -190,29 +206,44 @@ export default function CreateCoursePage() {
       return;
     }
 
+    const trimmedTitle = courseTitle.trim();
+    if (!trimmedTitle) {
+      setGenerationError("Provide a course title before generating topics.");
+      return;
+    }
+
     setGenerating(true);
     setGenerationError("");
     setRawTopicsText("");
     setTopicsApproved(false);
     setCourseGenerationError("");
 
+    const finishByIso = toIsoDate(finishDate);
     const payload = {
       userId,
-      finishByDate: finishDate ? new Date(finishDate).toISOString() : undefined,
+      courseTitle: trimmedTitle,
       university: collegeName.trim() || undefined,
-      courseTitle: courseTitle.trim() || undefined,
+      finishByDate: finishByIso || undefined,
       syllabusText: syllabusText.trim() || undefined,
-      syllabusFiles: [],
-      examFormatDetails: hasExamMaterials
-        ? [examFormat ? `Preferred exam format: ${examFormat.toUpperCase()}` : null, examNotes ? `Notes: ${examNotes}` : null]
-            .filter(Boolean)
-            .join(" | ") || undefined
-        : undefined,
-      examFiles: [],
     };
 
+    const examFormatDetails = hasExamMaterials
+      ? formatExamStructure({ hasExamMaterials, examFormat, examNotes })
+      : undefined;
+    if (examFormatDetails) {
+      payload.examFormatDetails = examFormatDetails;
+    }
+
+    if (syllabusFiles.length > 0) {
+      payload.syllabusFiles = await buildFilePayload(syllabusFiles);
+    }
+
+    if (hasExamMaterials && examFiles.length > 0) {
+      payload.examFiles = await buildFilePayload(examFiles);
+    }
+
     try {
-      const res = await fetch("/api/courses", {
+      const res = await fetch("/api/courses/topics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -232,12 +263,13 @@ export default function CreateCoursePage() {
       setDeletedTopics([]);
       setRawTopicsText(data?.rawTopicsText || "");
       setTopicsApproved(false);
+      setCourseId(data?.courseId ?? null);
     } catch (error) {
       setGenerationError(error.message || "Unexpected error generating topics.");
     } finally {
       setGenerating(false);
     }
-  }, [examFormat, examNotes, finishDate, hasExamMaterials, syllabusText, userId, courseTitle]);
+  }, [collegeName, courseTitle, examFiles, examFormat, examNotes, finishDate, hasExamMaterials, syllabusFiles, syllabusText, userId]);
 
   const handleRatingChange = useCallback((topicId, rating) => {
     setTopicsApproved(false);
@@ -316,6 +348,11 @@ export default function CreateCoursePage() {
       return;
     }
 
+    if (!courseId) {
+      setCourseGenerationError("Generate topics first so we can link them to your course.");
+      return;
+    }
+
     const className = courseTitle.trim();
 
     if (!className) {
@@ -361,23 +398,20 @@ export default function CreateCoursePage() {
     setCourseGenerationMessage("Locking in your topic roadmap…");
 
     try {
+      const finishByIso = toIsoDate(finishDate);
       const payload = {
+        userId,
+        courseId,
+        courseTitle: className,
+        university: collegeName.trim() || undefined,
+        finishByDate: finishByIso || undefined,
         topics: cleanTopics,
         topicFamiliarity: topicFamiliarityMap,
-        className,
-        university: collegeName.trim() || undefined,
-        startDate: toIsoDate(startDate),
-        endDate: toIsoDate(finishDate),
-        userId,
+        syllabusText: syllabusText.trim() || undefined,
       };
 
       if (Object.keys(topicFamiliarityMap).length === 0) {
         delete payload.topicFamiliarity;
-      }
-
-      const trimmedSyllabus = syllabusText.trim();
-      if (trimmedSyllabus) {
-        payload.syllabusText = trimmedSyllabus;
       }
 
       if (syllabusFiles.length > 0) {
@@ -388,60 +422,55 @@ export default function CreateCoursePage() {
         }
       }
 
-      const examStructureText = formatExamStructure({ hasExamMaterials, examFormat, examNotes });
-      if (examStructureText) {
-        payload.examStructureText = examStructureText;
+      const examFormatDetails = formatExamStructure({ hasExamMaterials, examFormat, examNotes });
+      if (examFormatDetails) {
+        payload.examFormatDetails = examFormatDetails;
       }
 
       if (hasExamMaterials && examFiles.length > 0) {
         setCourseGenerationMessage("Packaging exam references…");
         const examPayload = await buildFilePayload(examFiles);
         if (examPayload.length > 0) {
-          payload.examStructureFiles = examPayload;
+          payload.examFiles = examPayload;
         }
       }
 
       setCourseGenerationMessage("Coordinating your learning journey…");
-      const response = await fetch(COURSE_STRUCTURE_ENDPOINT, {
+      const response = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
+      const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        let message = "Failed to generate course. Please try again.";
-        if (response.status === 400) {
-          message = "The course generator needs a valid schedule, topics, and user ID.";
-        } else if (response.status === 502) {
-          message = "The model returned an invalid plan. Please regenerate your topics and try again.";
-        } else if (response.status === 500) {
-          message = "The course generator was unavailable. Please try again shortly.";
-        }
-        const errorPayload = await response.json().catch(() => ({}));
-        if (errorPayload?.error) {
-          message = errorPayload.error;
-        }
-        throw new Error(message);
+        throw new Error(body?.error || "Failed to generate course. Please try again.");
       }
 
-      const body = await response.json().catch(() => ({}));
-      const courseId = body?.courseId;
+      const resolvedCourseId = body?.courseId || courseId;
       setCourseGenerationMessage("Finalizing and saving to your dashboard…");
 
       try {
         window.dispatchEvent(new Event("courses:updated"));
       } catch {}
 
-      router.push(`/dashboard${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ""}`);
+      if (resolvedCourseId) {
+        router.push(`/courses/${encodeURIComponent(resolvedCourseId)}`);
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error) {
       setCourseGenerationError(error.message || "Unexpected error generating course.");
+    } finally {
       setCourseGenerating(false);
     }
   }, [
     topics,
     topicsApproved,
     userId,
+    courseId,
     courseTitle,
+    collegeName,
     startDate,
     finishDate,
     syllabusText,

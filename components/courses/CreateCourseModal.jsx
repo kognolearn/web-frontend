@@ -31,37 +31,20 @@ export default function CreateCourseModal({ onClose }) {
 
       if (!user) {
         setError("You must be logged in to create a course");
-        setLoading(false);
         return;
       }
 
-      // Use backend API to generate topics for this user (align payload with backend spec)
-      const resp = await fetch("/api/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          // Provide courseSelection with non-empty code/title to satisfy backend validation
-          courseSelection: {
-            code: formData.courseCode?.trim() || "CUSTOM",
-            title: formData.courseName?.trim() || "Untitled",
-          },
-        }),
-      });
+      const params = new URLSearchParams();
+      const trimmedTitle = formData.courseName.trim();
+      const trimmedCollege = formData.courseCode.trim();
+      if (trimmedTitle) params.set("title", trimmedTitle);
+      if (trimmedCollege) params.set("college", trimmedCollege);
 
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        setError(body?.error || "Failed to create course");
-        setLoading(false);
-        return;
-      }
-
-  // Notify dashboard and refresh view
-  try { window.dispatchEvent(new Event("courses:updated")); } catch {}
-  router.refresh();
-  onClose();
+      onClose();
+      router.push(`/courses/create${params.toString() ? `?${params.toString()}` : ""}`);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
