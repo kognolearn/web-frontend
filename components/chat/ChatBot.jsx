@@ -782,7 +782,8 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
         onClick={() => setIsOpen(true)}
         type="button"
         aria-label="Open ChatBot"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg transition-all hover:scale-110 hover:shadow-xl"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 btn btn-primary btn-fab"
+        style={{ position: "fixed" }}
         title="Open ChatBot"
       >
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

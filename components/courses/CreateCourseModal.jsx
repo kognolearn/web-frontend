@@ -57,8 +57,10 @@ export default function CreateCourseModal({ onClose }) {
             Create New Course
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            className="btn btn-ghost btn-icon-sm"
+            aria-label="Close"
           >
             <svg
               className="w-6 h-6"

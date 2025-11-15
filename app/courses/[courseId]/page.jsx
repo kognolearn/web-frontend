@@ -550,7 +550,7 @@ export default function CoursePage() {
             <button
               type="button"
               onClick={() => router.push('/dashboard')}
-              className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors mb-6 font-medium"
+              className="btn btn-ghost btn-sm w-full justify-start text-sm text-[var(--muted-foreground)] mb-6"
             >
               <svg
                 className="w-4 h-4 flex-shrink-0"
@@ -714,9 +714,13 @@ export default function CoursePage() {
               <>
                 <header className="card rounded-[32px] px-8 py-8 sm:px-10">
                   <div className="flex flex-wrap items-center gap-3 text-[10px] text-[var(--muted-foreground)]">
-                    <span className="pill-outline">Course V2</span>
-                    {finishByLabel && <span className="pill-outline">Finish by {finishByLabel}</span>}
-                    {moduleList.length > 0 && <span className="pill-outline">{moduleList.length} modules</span>}
+                    <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">Course V2</span>
+                    {finishByLabel && (
+                      <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">Finish by {finishByLabel}</span>
+                    )}
+                    {moduleList.length > 0 && (
+                      <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">{moduleList.length} modules</span>
+                    )}
                   </div>
                   <h1 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
                     {courseTitleDisplay}
@@ -955,7 +959,7 @@ export default function CoursePage() {
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="pill-outline text-[10px] flex items-center gap-2 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] gap-2"
                 title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
               >
                 <svg
@@ -1002,7 +1006,7 @@ export default function CoursePage() {
                           <h2 className="text-lg font-semibold text-[var(--foreground)]">
                             {prettyFormat(item?.Format)}
                           </h2>
-                          <span className="pill-outline text-[10px]">
+                          <span className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]">
                             ID: {item?.id}
                           </span>
                         </div>

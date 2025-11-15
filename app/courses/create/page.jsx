@@ -818,7 +818,7 @@ function CreateCoursePageContent() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Link
                       href="/dashboard"
-                      className="pill-outline text-[10px]"
+                      className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]"
                     >
                       Back to dashboard
                     </Link>
@@ -953,7 +953,7 @@ function CreateCoursePageContent() {
                     />
                     <label
                       htmlFor={syllabusInputId}
-                      className="pill-outline cursor-pointer text-[10px]"
+                      className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] cursor-pointer"
                     >
                       Upload files
                     </label>
@@ -976,7 +976,7 @@ function CreateCoursePageContent() {
                           <button
                             type="button"
                             onClick={() => handleRemoveSyllabusFile(file.name)}
-                            className="text-[var(--muted-foreground)] transition hover:text-red-400"
+                            className="btn btn-link btn-xs text-[var(--muted-foreground)] hover:text-red-400"
                             aria-label={`Remove ${file.name}`}
                           >
                             &times;
@@ -996,7 +996,7 @@ function CreateCoursePageContent() {
                     <h2 className="text-lg font-medium">Exam calibration</h2>
                     <p className="text-sm text-[var(--muted-foreground)]">Optional: share formats or examples so we can match difficulty.</p>
                   </div>
-                  <label className="pill-outline cursor-pointer text-[10px]">
+                  <label className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] cursor-pointer">
                     <input
                       type="checkbox"
                       checked={hasExamMaterials}
@@ -1050,7 +1050,7 @@ function CreateCoursePageContent() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveExamFile(file.name)}
-                                className="text-[var(--muted-foreground)] transition hover:text-red-400"
+                                className="btn btn-link btn-xs text-[var(--muted-foreground)] hover:text-red-400"
                                 aria-label={`Remove ${file.name}`}
                               >
                                 &times;
@@ -1079,14 +1079,14 @@ function CreateCoursePageContent() {
             <div className="flex flex-wrap items-center justify-end gap-3">
               <Link
                 href="/dashboard"
-                className="pill-outline text-[10px]"
+                className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
-                disabled={isTopicsLoading}
-                className="bg-primary rounded-full px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={generating}
+                className="btn btn-primary btn-lg"
               >
                 {isTopicsLoading ? "Generating topics…" : "Generate study topics"}
               </button>
@@ -1137,9 +1137,8 @@ function CreateCoursePageContent() {
                         type="button"
                         key={rating}
                         onClick={() => setNewTopicRating(rating)}
-                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                          rating <= newTopicRating ? "border-primary bg-primary/20 text-primary" : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                        }`}
+                        className={`btn btn-circle btn-sm ${rating <= newTopicRating ? "btn-primary" : "btn-muted"}`}
+                        aria-pressed={rating <= newTopicRating}
                       >
                         {rating}
                       </button>
@@ -1147,7 +1146,7 @@ function CreateCoursePageContent() {
                   </div>
                   <button
                     type="submit"
-                    className="bg-primary rounded-full px-4 py-2 text-xs font-semibold text-gray-900 transition hover:bg-primary-hover"
+                    className="btn btn-primary btn-sm"
                   >
                     Add topic
                   </button>
@@ -1312,7 +1311,7 @@ function CreateCoursePageContent() {
                   <button
                     type="button"
                     onClick={handleRestoreAll}
-                    className="text-xs text-primary transition hover:text-primary-hover"
+                    className="btn btn-link btn-xs"
                   >
                     Restore all
                   </button>
@@ -1326,8 +1325,8 @@ function CreateCoursePageContent() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleRestoreSubtopic(entry.subtopic.id)}
-                        className="text-xs text-primary transition hover:text-primary-hover"
+                        onClick={() => handleRestoreTopic(topic.id)}
+                        className="btn btn-link btn-xs"
                       >
                         Restore
                       </button>
@@ -1345,14 +1344,13 @@ function CreateCoursePageContent() {
 
 export default function CreateCoursePage() {
   return (
-    <Suspense fallback={
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
-        <div className="create-veil" aria-hidden="true" />
-        <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
-          Loading course creation…
+    <Suspense
+      fallback={(
+        <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--muted-foreground)]">
+          <span className="text-sm">Loading course creator…</span>
         </div>
-      </div>
-    }>
+      )}
+    >
       <CreateCoursePageContent />
     </Suspense>
   );

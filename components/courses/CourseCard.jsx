@@ -71,11 +71,7 @@ export default function CourseCard({ courseCode, courseName, courseId, endDate, 
         <button
           onClick={handleDelete}
           disabled={deleting}
-          className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-            showDeleteConfirm
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-red-600 hover:text-white"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`btn btn-sm ${showDeleteConfirm ? "btn-danger" : "btn-muted"}`}
           title={showDeleteConfirm ? "Click again to confirm deletion" : "Delete course"}
         >
           {deleting ? "..." : showDeleteConfirm ? "Confirm?" : "Delete"}
@@ -88,7 +84,7 @@ export default function CourseCard({ courseCode, courseName, courseId, endDate, 
             e.stopPropagation();
             setShowDeleteConfirm(false);
           }}
-          className="absolute top-2 right-2 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          className="absolute top-2 right-2 btn btn-link btn-xs text-[var(--muted-foreground)]"
         >
           Cancel
         </button>
