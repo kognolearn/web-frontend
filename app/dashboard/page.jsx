@@ -84,16 +84,6 @@ export default function DashboardPage() {
             <div className="mt-4 h-5 w-3/5 rounded bg-[var(--surface-muted)]" />
           </div>
 
-          {/* Stats skeleton */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="card rounded-2xl p-6 animate-pulse">
-                <div className="h-4 w-24 rounded bg-[var(--surface-muted)]" />
-                <div className="mt-3 h-8 w-16 rounded bg-[var(--surface-muted)]" />
-              </div>
-            ))}
-          </div>
-
           {/* Grid skeleton */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -160,58 +150,6 @@ export default function DashboardPage() {
             </Link>
           </div>
         </header>
-
-        {/* Stats cards */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="card group rounded-2xl border border-[var(--border)] p-6 hover:border-[var(--primary)]/50 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Total Courses</p>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 group-hover:from-blue-500/30 group-hover:to-blue-500/10 transition-all">
-                <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-[var(--foreground)]">{courses.length}</p>
-          </div>
-
-          <div className="card group rounded-2xl border border-[var(--border)] p-6 hover:border-[var(--primary)]/50 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Active</p>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-green-500/20 to-green-500/5 group-hover:from-green-500/30 group-hover:to-green-500/10 transition-all">
-                <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-[var(--foreground)]">{courses.length}</p>
-          </div>
-
-          <div className="card group rounded-2xl border border-[var(--border)] p-6 hover:border-[var(--primary)]/50 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Study Hours</p>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-500/5 group-hover:from-purple-500/30 group-hover:to-purple-500/10 transition-all">
-                <svg className="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-[var(--foreground)]">{courses.length * 12}</p>
-          </div>
-
-          <div className="card group rounded-2xl border border-[var(--border)] p-6 hover:border-[var(--primary)]/50 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Progress</p>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 group-hover:from-[var(--primary)]/30 group-hover:to-[var(--primary)]/10 transition-all">
-                <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-[var(--foreground)]">68%</p>
-          </div>
-        </div>
-
         {/* Courses section */}
         <main className="space-y-6">
           <div className="flex items-center justify-between">
