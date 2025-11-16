@@ -204,6 +204,10 @@ function CreateCoursePageContent() {
   const syllabusInputId = useId();
   const examInputId = useId();
 
+  // Multi-step wizard state
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 4;
+
   // Course title and optional university
   const [courseTitle, setCourseTitle] = useState("");
   const [collegeName, setCollegeName] = useState("");
@@ -238,6 +242,9 @@ function CreateCoursePageContent() {
     () => overviewTopics.reduce((sum, overview) => sum + overview.subtopics.length, 0),
     [overviewTopics]
   );
+
+  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && startDate && finishDate;
+  const canProceedFromStep3 = totalSubtopics > 0;
 
   // no dropdown refs needed for simplified inputs
 
@@ -786,556 +793,696 @@ function CreateCoursePageContent() {
   if (authStatus === "checking") {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
-        <div className="create-veil" aria-hidden="true" />
-        <div className="card-shell glass-panel panel-accent-sky rounded-3xl px-10 py-8 text-sm">
+        <div className="card rounded-3xl px-10 py-8 text-sm">
           Checking your session…
         </div>
       </div>
     );
   }
 
+  const steps = [
+    { number: 1, title: "Course Details", description: "Basic information" },
+    { number: 2, title: "Course Materials", description: "Syllabus & resources" },
+    { number: 3, title: "Generate Topics", description: "AI-powered topics" },
+    { number: 4, title: "Review & Create", description: "Finalize your course" },
+  ];
+
+  const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] py-12 text-[var(--foreground)] transition-colors">
+    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] py-8 text-[var(--foreground)] transition-colors">
+      {/* Animated background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute top-0 right-1/4 h-96 w-96 rounded-full bg-[var(--primary)]/5 blur-3xl"></div>
+        <div className="absolute bottom-0 left-1/4 h-96 w-96 rounded-full bg-[var(--primary)]/5 blur-3xl"></div>
+      </div>
+
       {courseGenerating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/90 px-4 backdrop-blur-sm">
-          <div className="card max-w-md w-full rounded-[28px] px-8 py-10 text-center">
-            <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
-            <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Generating your course</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/95 px-4 backdrop-blur-sm">
+          <div className="card max-w-md w-full rounded-[28px] px-8 py-10 text-center shadow-2xl">
+            <div className="mx-auto h-16 w-16 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
+            <h2 className="mt-6 text-xl font-bold text-[var(--foreground)]">Generating your course</h2>
             <p className="mt-3 text-sm text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
             <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-              We&rsquo;re orchestrating modules, formats, and learning arcs tailored to your needs. Hang tight.
+              Creating a personalized learning plan tailored to your goals.
             </p>
           </div>
         </div>
       )}
-      <div className="create-veil" aria-hidden="true" />
-      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12">
-          <div className="card-shell glass-panel panel-accent-rose relative overflow-hidden rounded-[32px] px-8 py-10 sm:px-10">
-              <div className="pointer-events-none absolute -top-24 left-16 h-52 w-52 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-xl">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Link
-                      href="/dashboard"
-                      className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]"
-                    >
-                      Back to dashboard
-                    </Link>
-                  </div>
-                  <h1 className="mt-6 text-3xl font-semibold leading-tight sm:text-4xl">
-                    Build Study Topics
-                  </h1>
-                  <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
-                    Feed us context, goals, and any supporting material. We&rsquo;ll fabricate a topic map designed for momentum and confidence.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-[var(--border-muted)]/80 bg-[var(--surface-2)]/80 px-6 py-5 text-xs text-[var(--muted-foreground)] shadow-sm backdrop-blur">
-                  <p className="text-[var(--muted-foreground-strong)]">Workflow tips</p>
-                  <ul className="mt-3 space-y-2">
-                    <li>Start with the course context or upload the syllabus.</li>
-                    <li>Use exam calibration to tailor difficulty.</li>
-                    <li>Rate topics to guide what we reinforce first.</li>
-                  </ul>
-                </div>
+
+      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-6"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to dashboard
+          </Link>
+          <h1 className="text-3xl font-bold sm:text-4xl mb-2">Create New Course</h1>
+          <p className="text-[var(--muted-foreground)]">Follow the steps below to build your personalized learning plan</p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="card rounded-[24px] p-6 sm:p-8 mb-8 shadow-lg">
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-[var(--muted-foreground)]">Step {currentStep} of {totalSteps}</span>
+              <span className="text-sm font-bold text-[var(--primary)]">{Math.round(progressPercentage)}%</span>
             </div>
+            <div className="h-3 rounded-full bg-[var(--surface-2)] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)] transition-all duration-500 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Step indicators */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {steps.map((step) => (
+              <div
+                key={step.number}
+                className={`flex items-start gap-3 p-3 rounded-xl transition-all ${
+                  currentStep === step.number
+                    ? "bg-[var(--primary)]/10 border-2 border-[var(--primary)]"
+                    : currentStep > step.number
+                    ? "bg-[var(--surface-2)] border-2 border-[var(--primary)]/30"
+                    : "bg-[var(--surface-2)] border-2 border-transparent"
+                }`}
+              >
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full flex-shrink-0 font-bold text-sm transition-all ${
+                    currentStep > step.number
+                      ? "bg-[var(--primary)] text-white"
+                      : currentStep === step.number
+                      ? "bg-[var(--primary)] text-white"
+                      : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
+                  }`}
+                >
+                  {currentStep > step.number ? (
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    step.number
+                  )}
+                </div>
+                <div className="hidden sm:block flex-1 min-w-0">
+                  <p className={`text-xs font-semibold truncate ${currentStep >= step.number ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
+                    {step.title}
+                  </p>
+                  <p className="text-[10px] text-[var(--muted-foreground)] truncate">{step.description}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="grid gap-10 lg:grid-cols-[3fr,2fr]">
-          <form onSubmit={handleGenerateTopics} className="space-y-8">
-            <section className="rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-medium">Course timeline</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Set your starting point and when you&rsquo;d like to wrap this course.</p>
-                  </div>
-                </div>
-                <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Start date</label>
-                    <div className="mt-3">
-                      <div className="group flex items-center gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 shadow-inner transition focus-within:border-primary focus-within:outline-none focus-within:ring-4 focus-within:ring-primary/20">
-                        <span className="text-[var(--muted-foreground)]">
-                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </span>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setStartDate(value);
-                            if (value && finishDate && new Date(value) > new Date(finishDate)) {
-                              setFinishDate(value);
-                            }
-                          }}
-                          min={today}
-                          max={finishDate || undefined}
-                          className="w-full border-0 bg-transparent p-0 text-[var(--foreground)] outline-none focus:outline-none focus:ring-0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Finish by</label>
-                    <div className="mt-3">
-                      <div className="group flex items-center gap-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 shadow-inner transition focus-within:border-primary focus-within:outline-none focus-within:ring-4 focus-within:ring-primary/20">
-                        <span className="text-[var(--muted-foreground)]">
-                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </span>
-                        <input
-                          type="date"
-                          value={finishDate}
-                          onChange={(event) => setFinishDate(event.target.value)}
-                          min={startDate || today}
-                          className="w-full border-0 bg-transparent p-0 text-[var(--foreground)] outline-none focus:outline-none focus:ring-0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+        {/* Step Content */}
+        <div className="card rounded-[24px] p-6 sm:p-8 shadow-lg">
+          {/* Step 1: Course Details */}
+          {currentStep === 1 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">Course Details</h2>
+                <p className="text-[var(--muted-foreground)]">Let's start with the basics about your course</p>
               </div>
-            </section>
 
-            <section className="rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
-                <h2 className="text-lg font-medium">Course title</h2>
-                <p className="mt-2 text-sm text-[var(--muted-foreground)]">Enter your university and the course name.</p>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <div className="relative">
-                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">College / University</label>
-                    <div className="mt-3">
-                      <input
-                        type="text"
-                        placeholder={'e.g., "University of Washington" or "MIT"'}
-                        value={collegeName}
-                        onChange={(e) => setCollegeName(e.target.value)}
-                        className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-                  <div className="relative">
-                    <label className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Course name</label>
-                    <div className="mt-3">
-                      <input
-                        type="text"
-                        placeholder={'e.g., "Introduction to Algorithms"'}
-                        value={courseTitle}
-                        onChange={handleCourseInputChange}
-                        className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-7 sm:px-8">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-5">
+                {/* Course Title & University */}
+                <div className="grid gap-5 sm:grid-cols-2">
                   <div>
-                    <h2 className="text-lg font-medium">Syllabus details</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Drop in outline notes or upload supporting files.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                    <label className="block text-sm font-medium mb-2">University / Institution *</label>
                     <input
-                      id={syllabusInputId}
-                      type="file"
-                      multiple
-                      accept={syllabusFileTypes}
-                      onChange={handleSyllabusFileChange}
-                      className="sr-only"
+                      type="text"
+                      placeholder='e.g., "MIT" or "University of Washington"'
+                      value={collegeName}
+                      onChange={(e) => setCollegeName(e.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      required
                     />
-                    <label
-                      htmlFor={syllabusInputId}
-                      className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] cursor-pointer"
-                    >
-                      Upload files
-                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Course Name *</label>
+                    <input
+                      type="text"
+                      placeholder='e.g., "Introduction to Machine Learning"'
+                      value={courseTitle}
+                      onChange={handleCourseInputChange}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      required
+                    />
                   </div>
                 </div>
-                <textarea
-                  rows={6}
-                  value={syllabusText}
-                  onChange={(event) => setSyllabusText(event.target.value)}
-                  placeholder="Share objectives, weekly structure, assessments, or anything else that should inform the plan."
-                  className="mt-5 w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                />
-                {syllabusFiles.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Uploaded files (not yet sent)</p>
-                    <ul className="flex flex-wrap gap-2">
-                      {syllabusFiles.map((file) => (
-                        <li key={file.name} className="flex items-center gap-2 rounded-full border border-[var(--border-muted)] bg-[var(--surface-2)] px-3 py-1 text-xs">
-                          <span>{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSyllabusFile(file.name)}
-                            className="btn btn-link btn-xs text-[var(--muted-foreground)] hover:text-red-400"
-                            aria-label={`Remove ${file.name}`}
-                          >
-                            &times;
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </section>
 
-            <section className="rounded-[28px]">
-              <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-7 sm:px-8">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                {/* Timeline */}
+                <div className="grid gap-5 sm:grid-cols-2">
                   <div>
-                    <h2 className="text-lg font-medium">Exam calibration</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Optional: share formats or examples so we can match difficulty.</p>
-                  </div>
-                  <label className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] cursor-pointer">
+                    <label className="block text-sm font-medium mb-2">Start Date *</label>
                     <input
-                      type="checkbox"
-                      checked={hasExamMaterials}
+                      type="date"
+                      value={startDate}
                       onChange={(event) => {
-                        const checked = event.target.checked;
-                        setHasExamMaterials(checked);
-                        if (!checked) {
-                          setExamNotes("");
-                          setExamFiles([]);
+                        const value = event.target.value;
+                        setStartDate(value);
+                        if (value && finishDate && new Date(value) > new Date(finishDate)) {
+                          setFinishDate(value);
                         }
                       }}
-                      className="sr-only"
+                      min={today}
+                      max={finishDate || undefined}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      required
                     />
-                    <span>{hasExamMaterials ? "Included" : "Include exam details"}</span>
-                  </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">End Date *</label>
+                    <input
+                      type="date"
+                      value={finishDate}
+                      onChange={(event) => setFinishDate(event.target.value)}
+                      min={startDate || today}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {(!collegeName.trim() || !courseTitle.trim()) && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>Both university and course name are required to continue</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation */}
+              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
+                <Link href="/dashboard" className="btn btn-outline">Cancel</Link>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(2)}
+                  disabled={!canProceedFromStep1}
+                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next: Course Materials
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Course Materials */}
+          {currentStep === 2 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">Course Materials</h2>
+                <p className="text-[var(--muted-foreground)]">Upload your syllabus and exam materials for better course generation</p>
+                <div className="mt-3 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
+                  <div className="flex items-start gap-2">
+                    <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="font-medium mb-1">Highly recommended</p>
+                      <p className="text-xs">Adding your syllabus and exam materials helps create more accurate, relevant study content tailored to your course</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Syllabus Section */}
+                <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50 p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold mb-1">Syllabus Details</h3>
+                      <p className="text-sm text-[var(--muted-foreground)]">Share objectives, weekly structure, or upload files</p>
+                    </div>
+                    <div>
+                      <input
+                        id={syllabusInputId}
+                        type="file"
+                        multiple
+                        accept={syllabusFileTypes}
+                        onChange={handleSyllabusFileChange}
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor={syllabusInputId}
+                        className="btn btn-outline btn-sm cursor-pointer"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Upload files
+                      </label>
+                    </div>
+                  </div>
+                  <textarea
+                    rows={5}
+                    value={syllabusText}
+                    onChange={(event) => setSyllabusText(event.target.value)}
+                    placeholder="Paste syllabus content, course objectives, or any additional context..."
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                  />
+                  {syllabusFiles.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">Uploaded files</p>
+                      <div className="flex flex-wrap gap-2">
+                        {syllabusFiles.map((file) => (
+                          <div key={file.name} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm">
+                            <svg className="h-4 w-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="truncate max-w-[150px]">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSyllabusFile(file.name)}
+                              className="text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {hasExamMaterials && (
-                  <div className="mt-6 space-y-5 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/80 p-6">
-                    <label className="block text-sm text-[var(--muted-foreground)]">
-                      <span className="mb-2 block text-[var(--foreground)]">Preferred exam format</span>
-                      <select
-                        value={examFormat}
-                        onChange={(event) => setExamFormat(event.target.value)}
-                        className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-2 text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                      >
-                        <option value="pdf">PDF</option>
-                        <option value="docx">DOCX</option>
-                        <option value="slides">Slides</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
+                {/* Exam Materials Section */}
+                <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50 p-6">
+                  <div className="mb-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold">Exam Calibration</h3>
+                      <span className="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium">Recommended</span>
+                    </div>
+                    <p className="text-sm text-[var(--muted-foreground)]">Help us match difficulty and question styles by sharing exam formats</p>
+                  </div>
 
-                    <div>
-                      <label className="text-sm text-[var(--muted-foreground)]">
-                        <span className="mb-2 block text-[var(--foreground)]">Upload sample exams (optional)</span>
+                  <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Exam Format</label>
+                        <select
+                          value={examFormat}
+                          onChange={(event) => setExamFormat(event.target.value)}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                        >
+                          <option value="pdf">PDF</option>
+                          <option value="docx">DOCX</option>
+                          <option value="slides">Slides</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Upload Sample Exams</label>
                         <input
                           id={examInputId}
                           type="file"
                           multiple
                           accept={syllabusFileTypes}
                           onChange={handleExamFileChange}
-                          className="w-full cursor-pointer rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-2 text-sm text-[var(--muted-foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--muted-foreground)] cursor-pointer transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
                         />
-                      </label>
-                      {examFiles.length > 0 && (
-                        <ul className="mt-3 flex flex-wrap gap-2 text-xs">
-                          {examFiles.map((file) => (
-                            <li key={file.name} className="flex items-center gap-2 rounded-full border border-[var(--border-muted)] bg-[var(--surface-muted)] px-3 py-1">
-                              <span>{file.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveExamFile(file.name)}
-                                className="btn btn-link btn-xs text-[var(--muted-foreground)] hover:text-red-400"
-                                aria-label={`Remove ${file.name}`}
-                              >
-                                &times;
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    <label className="block text-sm text-[var(--muted-foreground)]">
-                      <span className="mb-2 block text-[var(--foreground)]">Additional notes</span>
-                      <textarea
-                        rows={4}
-                        value={examNotes}
-                        onChange={(event) => setExamNotes(event.target.value)}
-                        placeholder="Share timing, scoring, or question style preferences."
-                        className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-2 text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <Link
-                href="/dashboard"
-                className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]"
-              >
-                Cancel
-              </Link>
-              <button
-                type="submit"
-                disabled={isTopicsLoading}
-                className="btn btn-primary btn-lg"
-              >
-                {isTopicsLoading ? "Generating topics…" : "Generate study topics"}
-              </button>
-            </div>
-            {topicsError && (
-              <div className="card-shell rounded-[24px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
-                {topicsError}
-              </div>
-            )}
-          </form>
-
-          <aside className="space-y-6 lg:sticky lg:top-20">
-            <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-7 sm:px-8">
-              <h2 className="text-lg font-medium">Topics &amp; confidence</h2>
-              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                Rate how confident you are in each topic. Adjust, remove, or add topics as needed.
-              </p>
-              <div className="mt-5 grid gap-3 text-xs text-[var(--muted-foreground)] sm:grid-cols-3">
-                {Object.entries(ratingDescriptions).map(([rating, description]) => (
-                  <div key={rating} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)] px-4 py-3">
-                    <div className="mb-1 flex items-center gap-1 text-[var(--foreground)]">
-                      {Array.from({ length: Number(rating) }).map((_, index) => (
-                        <svg key={index} className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <p>{description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card-shell glass-panel panel-accent-rose rounded-[28px] px-6 py-6 sm:px-7">
-              <form onSubmit={handleAddTopic} className="space-y-4">
-                <h3 className="text-sm font-medium text-[var(--foreground)]">Add a custom topic</h3>
-                <input
-                  type="text"
-                  value={newTopicTitle}
-                  onChange={(event) => setNewTopicTitle(event.target.value)}
-                  placeholder="Topic name"
-                  className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
-                />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {familiarityLevels.map((rating) => (
-                      <button
-                        type="button"
-                        key={rating}
-                        onClick={() => setNewTopicRating(rating)}
-                        className={`btn btn-circle btn-sm ${rating <= newTopicRating ? "btn-primary" : "btn-muted"}`}
-                        aria-pressed={rating <= newTopicRating}
-                      >
-                        {rating}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="submit"
-                    className="btn btn-primary btn-sm"
-                  >
-                    Add topic
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div className="card-shell glass-panel panel-accent-sky rounded-[28px] px-6 py-6 sm:px-7">
-              {isTopicsLoading ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
-                    <svg className="h-6 w-6 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
-                    </svg>
-                    <div>
-                      <p className="font-medium text-[var(--foreground)]">Crafting your study roadmap…</p>
-                      <p>We&rsquo;re ranking what to learn first and how deep to go.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="space-y-3 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)]/80 p-4">
-                        <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--surface-muted)]" />
-                        <div className="flex gap-2">
-                          {Array.from({ length: 3 }).map((__, starIndex) => (
-                            <div key={starIndex} className="h-9 w-9 animate-pulse rounded-full border border-[var(--border-muted)] bg-[var(--surface-muted)]" />
-                          ))}
-                        </div>
-                        <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--surface-muted)]" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : totalSubtopics === 0 ? (
-                <div className="rounded-2xl border border-dashed border-[var(--border-muted)]/60 bg-[var(--surface-2)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
-                  Generated topics will appear here once you run the creator.
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {overviewTopics.map((overview) => (
-                    <div key={overview.id} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold text-[var(--foreground)]">{overview.title}</h3>
-                          {overview.description && (
-                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{overview.description}</p>
-                          )}
-                        </div>
-                        {overview.likelyOnExam && (
-                          <span className="self-start rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-wide text-emerald-300">
-                            Likely on exam
-                          </span>
+                        {examFiles.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {examFiles.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs">
+                                <span className="truncate max-w-[120px]">{file.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveExamFile(file.name)}
+                                  className="text-[var(--muted-foreground)] hover:text-red-400"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <div className="mt-4 space-y-4">
-                        {overview.subtopics.map((subtopic) => (
-                          <div key={subtopic.id} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)]/80 p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-[var(--foreground)]">{subtopic.title}</p>
-                                {subtopic.source === "manual" && (
-                                  <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
-                                    Added by you
-                                  </span>
-                                )}
-                                {subtopic.description && (
-                                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">{subtopic.description}</p>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
-                                className="text-xs text-[var(--muted-foreground)] transition hover:text-red-400"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                            <div className="mt-3 flex items-center gap-2">
-                              {familiarityLevels.map((rating) => (
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Additional Notes</label>
+                        <textarea
+                          rows={3}
+                          value={examNotes}
+                          onChange={(event) => setExamNotes(event.target.value)}
+                          placeholder="Share timing, scoring, or question style preferences..."
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                        />
+                      </div>
+                    </div>
+                </div>
+              </div>
+
+              {/* Navigation */}
+              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="btn btn-outline"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                  </svg>
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="btn btn-primary"
+                >
+                  Next: Generate Topics
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Generate Topics */}
+          {currentStep === 3 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">Generate Study Topics</h2>
+                <p className="text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
+              </div>
+
+              {!isTopicsLoading && totalSubtopics === 0 && (
+                <div className="text-center py-12 px-6 rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                    <svg className="h-8 w-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold mb-2">Ready to Generate Topics</h3>
+                  <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-md mx-auto">
+                    Click the button below to let our AI analyze your course details and generate a comprehensive topic list
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleGenerateTopics}
+                    disabled={!canProceedFromStep1 || isTopicsLoading}
+                    className="btn btn-primary btn-lg"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Generate Topics
+                  </button>
+                </div>
+              )}
+
+              {isTopicsLoading && (
+                <div className="text-center py-12 px-6">
+                  <div className="mx-auto h-12 w-12 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin mb-4"></div>
+                  <h3 className="text-lg font-semibold mb-2">Crafting your study roadmap...</h3>
+                  <p className="text-sm text-[var(--muted-foreground)]">Analyzing your course materials and generating topics</p>
+                </div>
+              )}
+
+              {topicsError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+                  {topicsError}
+                </div>
+              )}
+
+              {totalSubtopics > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">
+                      <span className="text-2xl font-bold text-[var(--primary)]">{totalSubtopics}</span> topics generated
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGenerateTopics}
+                      className="btn btn-outline btn-sm"
+                      disabled={isTopicsLoading}
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+
+                  {/* Topics List */}
+                  <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
+                    {overviewTopics.map((overview) => (
+                      <div key={overview.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
+                        <div className="flex items-start justify-between mb-3">
+                          <h3 className="text-sm font-bold">{overview.title}</h3>
+                          {overview.likelyOnExam && (
+                            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
+                              Likely on exam
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          {overview.subtopics.map((subtopic) => (
+                            <div key={subtopic.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <p className="text-sm font-semibold flex-1">{subtopic.title}</p>
                                 <button
-                                  key={rating}
                                   type="button"
-                                  onClick={() => handleFamiliarityChange(overview.id, subtopic.id, rating)}
-                                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                                    rating <= subtopic.familiarity
-                                      ? "border-primary bg-primary/20 text-primary"
-                                      : "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                                  }`}
-                                  aria-label={`Set familiarity ${rating}`}
+                                  onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
+                                  className="text-xs text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
                                 >
-                                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill={rating <= subtopic.familiarity ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.2">
-                                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                                  </svg>
+                                  Remove
                                 </button>
-                              ))}
+                              </div>
+                              {subtopic.description && (
+                                <p className="text-xs text-[var(--muted-foreground)] mb-3">{subtopic.description}</p>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-[var(--muted-foreground)]">Confidence:</span>
+                                {familiarityLevels.map((rating) => (
+                                  <button
+                                    key={rating}
+                                    type="button"
+                                    onClick={() => handleFamiliarityChange(overview.id, subtopic.id, rating)}
+                                    className={`flex h-7 w-7 items-center justify-center rounded-full border transition ${
+                                      rating <= subtopic.familiarity
+                                        ? "border-[var(--primary)] bg-[var(--primary)]/20 text-[var(--primary)]"
+                                        : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
+                                    }`}
+                                  >
+                                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill={rating <= subtopic.familiarity ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
+                                      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                                    </svg>
+                                  </button>
+                                ))}
+                                <span className="text-xs text-[var(--muted-foreground)] ml-2">
+                                  {ratingDescriptions[subtopic.familiarity]}
+                                </span>
+                              </div>
                             </div>
-                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                              {ratingDescriptions[subtopic.familiarity]}
-                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add Custom Topic */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
+                    <h4 className="text-sm font-semibold mb-3">Add Custom Topic</h4>
+                    <form onSubmit={handleAddTopic} className="flex gap-3">
+                      <input
+                        type="text"
+                        value={newTopicTitle}
+                        onChange={(event) => setNewTopicTitle(event.target.value)}
+                        placeholder="Topic name..."
+                        className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                      />
+                      <div className="flex items-center gap-1">
+                        {familiarityLevels.map((rating) => (
+                          <button
+                            type="button"
+                            key={rating}
+                            onClick={() => setNewTopicRating(rating)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                              rating <= newTopicRating ? "border-[var(--primary)] bg-[var(--primary)]/20" : "border-[var(--border)]"
+                            }`}
+                          >
+                            {rating}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="submit" className="btn btn-primary btn-sm">Add</button>
+                    </form>
+                  </div>
+
+                  {/* Deleted Topics */}
+                  {deletedSubtopics.length > 0 && (
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold">Recently Removed ({deletedSubtopics.length})</h4>
+                        <button type="button" onClick={handleRestoreAll} className="btn btn-link btn-xs">
+                          Restore All
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {deletedSubtopics.map((entry) => (
+                          <div key={entry.subtopic.id} className="flex items-center justify-between text-sm">
+                            <span className="truncate text-[var(--muted-foreground)]">{entry.subtopic.title}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreSubtopic(entry.subtopic.id)}
+                              className="btn btn-link btn-xs"
+                            >
+                              Restore
+                            </button>
                           </div>
                         ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-6 sm:px-7">
-              <h2 className="text-lg font-medium text-[var(--foreground)]">Finalize your plan</h2>
-              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                Lock in your topic selection, then generate a complete course structure tailored to you.
-              </p>
-
-              {topicsApproved ? (
-                <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border-muted)] bg-green-500/10 px-4 py-3 text-xs text-[var(--success)]">
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  Topics approved and ready for generation.
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                  Review your topics and their confidence ratings. You can still edit them after approval—just remember to approve again if you make changes.
+                  )}
                 </div>
               )}
 
-              <div className="mt-6 flex flex-col gap-3">
+              {/* Navigation */}
+              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
                 <button
                   type="button"
-                  onClick={handleApproveTopics}
-                  disabled={totalSubtopics === 0 || courseGenerating || topicsApproved}
-                  className={`btn btn-outline w-full justify-center ${topicsApproved ? "opacity-60 cursor-not-allowed" : ""}`}
+                  onClick={() => setCurrentStep(2)}
+                  className="btn btn-outline"
                 >
-                  {topicsApproved ? "Topics approved" : "Approve topics"}
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                  </svg>
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(4)}
+                  disabled={!canProceedFromStep3}
+                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next: Review & Create
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Review & Create */}
+          {currentStep === 4 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">Review & Create</h2>
+                <p className="text-[var(--muted-foreground)]">Review your course details and create your personalized learning plan</p>
+              </div>
+
+              {/* Summary */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Course Info</h4>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">Name:</span> <span className="font-medium">{courseTitle || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">University:</span> <span className="font-medium">{collegeName || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">Duration:</span> <span className="font-medium">{startDate} to {finishDate}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Materials</h4>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">Syllabus files:</span> <span className="font-medium">{syllabusFiles.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">Exam files:</span> <span className="font-medium">{examFiles.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--muted-foreground)]">Study topics:</span> <span className="font-medium text-[var(--primary)]">{totalSubtopics}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Approve Topics */}
+              {!topicsApproved && totalSubtopics > 0 && (
+                <div className="rounded-xl border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-6 text-center">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20">
+                    <svg className="h-6 w-6 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold mb-2">Approve Your Topics</h3>
+                  <p className="text-sm text-[var(--muted-foreground)] mb-4">
+                    Review the generated topics and approve them to proceed with course creation
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleApproveTopics}
+                    className="btn btn-primary"
+                  >
+                    Approve {totalSubtopics} Topics
+                  </button>
+                </div>
+              )}
+
+              {topicsApproved && (
+                <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center gap-3">
+                  <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-medium text-green-300">Topics approved and ready for course generation</span>
+                </div>
+              )}
+
+              {courseGenerationError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+                  {courseGenerationError}
+                </div>
+              )}
+
+              {/* Navigation */}
+              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="btn btn-outline"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                  </svg>
+                  Back
                 </button>
                 <button
                   type="button"
                   onClick={handleGenerateCourse}
                   disabled={!topicsApproved || courseGenerating}
-                  className="btn btn-primary w-full justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="btn btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {courseGenerating ? "Generating course…" : "Generate Course"}
+                  {courseGenerating ? "Creating..." : "Create Course"}
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
                 </button>
               </div>
-
-              {courseGenerationError && (
-                <div className="mt-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                  {courseGenerationError}
-                </div>
-              )}
-
-              <p className="mt-4 text-[11px] text-[var(--muted-foreground)]">
-                We&rsquo;ll send your context, attachments, and topics to the backend to craft a full course structure. You&rsquo;ll be redirected to the dashboard once it&rsquo;s ready.
-              </p>
             </div>
-
-            {deletedSubtopics.length > 0 && (
-              <div className="card-shell glass-panel panel-accent-sun rounded-[28px] px-6 py-5 text-sm">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-[var(--foreground)]">Recently removed</h3>
-                  <button
-                    type="button"
-                    onClick={handleRestoreAll}
-                    className="btn btn-link btn-xs"
-                  >
-                    Restore all
-                  </button>
-                </div>
-                <ul className="mt-3 space-y-2 text-[var(--muted-foreground)]">
-                  {deletedSubtopics.map((entry) => (
-                    <li key={entry.subtopic.id} className="flex items-center justify-between gap-3">
-                      <span className="truncate">
-                        {entry.subtopic.title}
-                        {entry.overviewTitle ? ` · ${entry.overviewTitle}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRestoreTopic(topic.id)}
-                        className="btn btn-link btn-xs"
-                      >
-                        Restore
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </aside>
+          )}
         </div>
       </div>
     </div>
