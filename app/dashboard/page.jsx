@@ -42,7 +42,7 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        router.push("/auth/sign-up");
+        router.push("/auth/create-account");
         return;
       }
 

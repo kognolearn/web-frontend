@@ -271,7 +271,7 @@ function CreateCoursePageContent() {
         } = await supabase.auth.getUser();
         if (!active) return;
         if (!user) {
-          router.replace("/auth/signin?redirectTo=/courses/create");
+          router.replace("/auth/sign-in?redirectTo=/courses/create");
           return;
         }
         setUserId(user.id);
