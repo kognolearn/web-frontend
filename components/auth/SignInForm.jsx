@@ -80,12 +80,6 @@ export default function SignInForm() {
           <label htmlFor="password" className="block text-sm font-medium">
             Password
           </label>
-          <Link
-            href="/auth/forgot-password"
-            className="text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-          >
-            Forgot password?
-          </Link>
         </div>
         <input
           type="password"
@@ -107,13 +101,6 @@ export default function SignInForm() {
       >
         {loading ? "Signing In..." : "Sign In"}
       </button>
-
-      <p className="text-center text-sm text-[var(--muted-foreground)]">
-        Don&apos;t have an account?{" "}
-        <Link href="/auth/sign-up" className="font-medium hover:opacity-90" style={{color: 'var(--primary)'}}>
-          Create one
-        </Link>
-      </p>
     </form>
   );
 }

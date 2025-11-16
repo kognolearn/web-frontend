@@ -177,22 +177,22 @@ body {
 
 .btn-outline {
   --btn-bg: linear-gradient(140deg,
-      color-mix(in srgb, #ffffff 92%, var(--surface-1) 8%),
-      color-mix(in srgb, #f7f7f7 88%, var(--surface-2) 12%));
-  --btn-border-color: color-mix(in srgb, var(--primary) 28%, #e3e8e1);
-  --btn-color: color-mix(in srgb, var(--foreground) 90%, var(--muted-foreground));
-  --btn-shadow: 0 14px 28px rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.08);
-  --btn-shadow-hover: 0 22px 40px rgba(0, 0, 0, 0.15);
+      color-mix(in srgb, var(--surface-1) 90%, var(--primary) 10%),
+      color-mix(in srgb, var(--surface-2) 85%, var(--primary) 15%));
+  --btn-border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  --btn-color: var(--foreground);
+  --btn-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  --btn-shadow-hover: 0 14px 30px rgba(0, 0, 0, 0.2);
 }
 
 .btn-ghost {
   --btn-bg: linear-gradient(125deg,
-      color-mix(in srgb, var(--surface-muted) 75%, transparent),
-      color-mix(in srgb, var(--surface-2) 70%, transparent));
-  --btn-border-color: color-mix(in srgb, var(--border) 60%, transparent);
-  --btn-color: color-mix(in srgb, var(--foreground) 75%, var(--muted-foreground));
-  --btn-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
-  --btn-shadow-hover: 0 12px 26px rgba(0, 0, 0, 0.18);
+      color-mix(in srgb, var(--surface-2) 90%, transparent),
+      color-mix(in srgb, var(--surface-muted) 85%, transparent));
+  --btn-border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  --btn-color: var(--foreground);
+  --btn-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  --btn-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .btn-danger {
@@ -378,6 +378,22 @@ select:focus {
   .card-shell {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease-out forwards;
 }
 
 /* Placeholder support for contentEditable inputs (used by ChatBot) */
