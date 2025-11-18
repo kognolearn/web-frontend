@@ -127,6 +127,11 @@ function createSubtopic({
   familiarity = defaultTopicRating,
   source = "generated",
   id,
+  focus,
+  bloomLevel,
+  estimatedStudyTimeMinutes,
+  importanceScore,
+  examRelevanceReasoning,
 }) {
   return {
     id:
@@ -140,7 +145,28 @@ function createSubtopic({
     likelyOnExam: Boolean(likelyOnExam ?? true),
     familiarity: familiarity && Number.isFinite(familiarity) ? familiarity : defaultTopicRating,
     source,
+    focus,
+    bloomLevel,
+    estimatedStudyTimeMinutes,
+    importanceScore,
+    examRelevanceReasoning,
   };
+}
+
+function importanceScoreToTag(score) {
+  if (!Number.isFinite(score)) return null;
+  if (score >= 9) return { label: "Critical", color: "bg-red-500/15 text-red-500" };
+  if (score >= 7) return { label: "High", color: "bg-amber-500/15 text-amber-500" };
+  if (score >= 5) return { label: "Medium", color: "bg-blue-500/10 text-blue-500" };
+  return { label: "Low", color: "bg-gray-200 text-[var(--muted-foreground)]" };
+}
+
+function formatStudyTime(minutes) {
+  if (!Number.isFinite(minutes)) return null;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
 function collectPayloadCandidates(payload) {
@@ -450,7 +476,7 @@ function CreateCoursePageContent() {
           description: overview?.description ? String(overview.description) : "",
           likelyOnExam: Boolean(overview?.likelyOnExam ?? true),
           subtopics: subtopics.map((subtopic, subIndex) =>
-            createSubtopic({
+              createSubtopic({
               id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
               overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
               title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
@@ -460,6 +486,19 @@ function CreateCoursePageContent() {
               familiarity: Number.isFinite(subtopic?.familiarity)
                 ? subtopic.familiarity
                 : defaultTopicRating,
+                // new metadata from backend
+                focus: subtopic?.focus || subtopic?.focus || subtopic?.category || undefined,
+                bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
+                estimatedStudyTimeMinutes: Number.isFinite(subtopic?.estimated_study_time_minutes)
+                  ? subtopic.estimated_study_time_minutes
+                  : Number.isFinite(subtopic?.estimatedStudyTimeMinutes)
+                  ? subtopic.estimatedStudyTimeMinutes
+                  : undefined,
+                importanceScore:
+                  Number.isFinite(subtopic?.importance_score) || Number.isFinite(subtopic?.importanceScore)
+                    ? Number(subtopic?.importance_score ?? subtopic?.importanceScore)
+                    : undefined,
+                examRelevanceReasoning: subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
             })
           ),
         };
@@ -615,6 +654,11 @@ function CreateCoursePageContent() {
         overviewId: manualOverviewId,
         familiarity: newTopicRating,
         source: "manual",
+        focus: "Manual",
+        bloomLevel: "Understand",
+        estimatedStudyTimeMinutes: 20,
+        importanceScore: 5,
+        examRelevanceReasoning: "",
       });
       setOverviewTopics((prev) => {
         const index = prev.findIndex((overview) => overview.id === manualOverviewId);
@@ -1281,7 +1325,16 @@ function CreateCoursePageContent() {
                     {overviewTopics.map((overview) => (
                       <div key={overview.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
                         <div className="flex items-start justify-between mb-3">
-                          <h3 className="text-sm font-bold">{overview.title}</h3>
+                          <div className="flex items-baseline gap-3">
+                            <h3 className="text-sm font-bold">{overview.title}</h3>
+                            {/* Overview total estimated time */}
+                            {(() => {
+                              const totalMin = overview.subtopics.reduce((sum, st) => sum + (Number.isFinite(st.estimatedStudyTimeMinutes) ? st.estimatedStudyTimeMinutes : 0), 0);
+                              const formatted = formatStudyTime(totalMin);
+                              if (!formatted) return null;
+                              return <span className="text-xs text-[var(--muted-foreground)]">Estimated: {formatted}</span>;
+                            })()}
+                          </div>
                           {overview.likelyOnExam && (
                             <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
                               Likely on exam
@@ -1301,8 +1354,31 @@ function CreateCoursePageContent() {
                                   Remove
                                 </button>
                               </div>
+                              {/* Meta row: focus, bloom level, importance and estimated time */}
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                {subtopic.focus && (
+                                  <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-muted)] text-[var(--muted-foreground)] font-medium">{subtopic.focus}</span>
+                                )}
+                                {subtopic.bloomLevel && (
+                                  <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-1)] text-[var(--muted-foreground)] font-medium">{subtopic.bloomLevel}</span>
+                                )}
+                                {subtopic.importanceScore !== undefined && (
+                                  (() => {
+                                    const tag = importanceScoreToTag(subtopic.importanceScore);
+                                    return (
+                                      <span className={`text-[11px] px-2 py-1 rounded-full ${tag.color} font-semibold`}>{tag.label}</span>
+                                    );
+                                  })()
+                                )}
+                                {subtopic.estimatedStudyTimeMinutes !== undefined && (
+                                  <span className="text-xs text-[var(--muted-foreground)]">⏱ {formatStudyTime(subtopic.estimatedStudyTimeMinutes)}</span>
+                                )}
+                              </div>
                               {subtopic.description && (
-                                <p className="text-xs text-[var(--muted-foreground)] mb-3">{subtopic.description}</p>
+                                <p className="text-xs text-[var(--muted-foreground)] mb-2">{subtopic.description}</p>
+                              )}
+                              {subtopic.examRelevanceReasoning && (
+                                <p className="text-xs italic text-[var(--muted-foreground)] mb-2">{subtopic.examRelevanceReasoning}</p>
                               )}
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-[var(--muted-foreground)]">Confidence:</span>

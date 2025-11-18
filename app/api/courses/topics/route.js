@@ -21,7 +21,9 @@ export async function POST(request) {
       let data;
       try {
         data = bodyText ? JSON.parse(bodyText) : {};
-      } catch {
+      } catch (err) {
+        // Log the raw response body so we can inspect invalid JSON returned by the backend
+        console.error("Invalid JSON from backend for", url.toString(), "-- response body:", bodyText, "error:", String(err));
         data = { error: "Invalid JSON from backend" };
       }
       return NextResponse.json(data, { status: res.status });
