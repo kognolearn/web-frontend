@@ -16,7 +16,7 @@ export async function GET(request) {
     if (userId) url.searchParams.set("userId", userId);
     if (courseId) url.searchParams.set("courseId", courseId);
 
-    console.log("[/api/content] proxy →", url.toString());
+    console.log("[/api/content] proxy ->", url.toString());
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 5000);
     try {

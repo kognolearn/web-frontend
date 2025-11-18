@@ -19,8 +19,8 @@ export async function POST(request) {
       context,
       useWebSearch = false,
       responseFormat = 'text',
-      temperature = 0.5,
-      maxTokens = 600,
+      temperature = 0.6,
+      maxTokens = 1200,
       attachments = [],
       reasoning,
     } = body;
