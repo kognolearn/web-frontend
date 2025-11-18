@@ -221,6 +221,15 @@ function CreateCoursePageContent() {
   const [examFormat, setExamFormat] = useState("pdf");
   const [examNotes, setExamNotes] = useState("");
   const [examFiles, setExamFiles] = useState([]);
+  const [confirmedNoExamDetails, setConfirmedNoExamDetails] = useState(false);
+  const [showConfirmNoExamModal, setShowConfirmNoExamModal] = useState(false);
+  
+  useEffect(() => {
+    // If the user adds any exam details, clear the 'no exam details' confirmation
+    if (hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim())) {
+      setConfirmedNoExamDetails(false);
+    }
+  }, [hasExamMaterials, examFiles, examNotes]);
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [userId, setUserId] = useState(null);
@@ -244,6 +253,8 @@ function CreateCoursePageContent() {
   );
 
   const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && startDate && finishDate;
+  const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
+  const canProceedFromStep2 = examDetailsProvided || confirmedNoExamDetails;
   const canProceedFromStep3 = totalSubtopics > 0;
 
   // no dropdown refs needed for simplified inputs
@@ -334,6 +345,11 @@ function CreateCoursePageContent() {
     }
 
     setTopicsError(null);
+    // Disallow generating topics unless the user provided exam details or explicitly confirmed they have none
+    if (!examDetailsProvided && !confirmedNoExamDetails) {
+      setTopicsError("Provide exam details (notes/files) or confirm that you don't have any before generating topics.");
+      return;
+    }
     setIsTopicsLoading(true);
     setTopicsApproved(false);
     setCourseGenerationError("");
@@ -349,9 +365,7 @@ function CreateCoursePageContent() {
       syllabusText: syllabusText.trim() || undefined,
     };
 
-    const examFormatDetails = hasExamMaterials
-      ? formatExamStructure({ hasExamMaterials, examFormat, examNotes })
-      : undefined;
+    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes });
     if (examFormatDetails) {
       payload.examFormatDetails = examFormatDetails;
     }
@@ -360,7 +374,7 @@ function CreateCoursePageContent() {
       payload.syllabusFiles = await buildFilePayload(syllabusFiles);
     }
 
-    if (hasExamMaterials && examFiles.length > 0) {
+    if (examFiles.length > 0) {
       payload.examFiles = await buildFilePayload(examFiles);
     }
 
@@ -480,6 +494,7 @@ function CreateCoursePageContent() {
     syllabusFiles,
     syllabusText,
     userId,
+    confirmedNoExamDetails,
   ]);
 
   const handleFamiliarityChange = useCallback((overviewId, subtopicId, rating) => {
@@ -725,12 +740,12 @@ function CreateCoursePageContent() {
         }
       }
 
-      const examFormatDetails = formatExamStructure({ hasExamMaterials, examFormat, examNotes });
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes });
       if (examFormatDetails) {
         payload.examFormatDetails = examFormatDetails;
       }
 
-      if (hasExamMaterials && examFiles.length > 0) {
+      if (examFiles.length > 0) {
         setCourseGenerationMessage("Packaging exam references…");
         const examPayload = await buildFilePayload(examFiles);
         if (examPayload.length > 0) {
@@ -787,6 +802,7 @@ function CreateCoursePageContent() {
     examFormat,
     examNotes,
     examFiles,
+    examDetailsProvided,
     router,
   ]);
 
@@ -984,6 +1000,22 @@ function CreateCoursePageContent() {
                 </div>
               )}
 
+              {/* (moved) Confirmation modal for 'no exam details' is shown near Step 2 */}
+
+              {/* Confirmation modal for 'no exam details' */}
+              {showConfirmNoExamModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/70 px-4">
+                  <div className="card max-w-lg w-full rounded-xl p-6 text-sm bg-[var(--surface-2)] border border-[var(--border)] shadow-2xl">
+                    <h3 className="text-lg font-semibold mb-2">Are you sure?</h3>
+                    <p className="text-sm text-[var(--muted-foreground)] mb-6">Not including exam details will lead to courses with less fit. Only check this if you yourself do not have any indication at all of what will be on the test and we'll try our best to figure it out.</p>
+                    <div className="flex items-center justify-end gap-3">
+                      <button type="button" onClick={() => { setConfirmedNoExamDetails(false); setShowConfirmNoExamModal(false); }} className="btn btn-outline">Cancel</button>
+                      <button type="button" onClick={() => { setConfirmedNoExamDetails(true); setShowConfirmNoExamModal(false); }} className="btn btn-primary">Confirm - proceed without exam details</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Navigation */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
                 <Link href="/dashboard" className="btn btn-outline">Cancel</Link>
@@ -1145,6 +1177,8 @@ function CreateCoursePageContent() {
                           className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
                         />
                       </div>
+                      {/* Confirm no exam details checkbox */}
+                      {/* no-op: duplicate; checkbox shown in Step 2 */}
                     </div>
                 </div>
               </div>
@@ -1163,14 +1197,18 @@ function CreateCoursePageContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(3)}
-                  className="btn btn-primary"
+                  onClick={() => canProceedFromStep2 && setCurrentStep(3)}
+                  disabled={!canProceedFromStep2}
+                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next: Generate Topics
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </button>
+                {!canProceedFromStep2 && (
+                  <div className="text-xs text-amber-400 mt-2">Provide exam notes or sample exams, or check “I don't have any exam details” to proceed.</div>
+                )}
               </div>
             </div>
           )}
@@ -1392,7 +1430,7 @@ function CreateCoursePageContent() {
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Course Info</h4>
                   <div className="space-y-2 text-sm">
-                    <div>
+                      <div>
                       <span className="text-[var(--muted-foreground)]">Name:</span> <span className="font-medium">{courseTitle || "—"}</span>
                     </div>
                     <div>
@@ -1407,7 +1445,7 @@ function CreateCoursePageContent() {
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Materials</h4>
                   <div className="space-y-2 text-sm">
-                    <div>
+                      <div>
                       <span className="text-[var(--muted-foreground)]">Syllabus files:</span> <span className="font-medium">{syllabusFiles.length}</span>
                     </div>
                     <div>
@@ -1416,6 +1454,7 @@ function CreateCoursePageContent() {
                     <div>
                       <span className="text-[var(--muted-foreground)]">Study topics:</span> <span className="font-medium text-[var(--primary)]">{totalSubtopics}</span>
                     </div>
+                      {/* summary-only checkbox removed; checkbox is available on Step 2 */}
                   </div>
                 </div>
               </div>
