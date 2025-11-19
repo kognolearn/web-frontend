@@ -7,21 +7,61 @@ import { supabase } from "@/lib/supabase/client";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
-const ratingDescriptions = {
-  1: "Needs focused attention",
-  2: "Developing understanding",
-  3: "Confident mastery",
-};
 const defaultTopicRating = 2;
-const ratingToFamiliarity = {
-  1: "needs review",
-  2: "developing",
-  3: "confident",
-};
 const familiarityLevels = [1, 2, 3];
 const manualOverviewId = "overview_manual";
 const manualOverviewTitle = "Custom topics";
 const nestedPayloadKeys = ["data", "result", "payload", "response", "content"];
+
+const NEW_EXCEPTION_SCORE = 0.7;
+const CONFIDENT_EXCEPTION_SCORE = 0.3;
+const SOMEWHAT_KNOW_SCORE = 0.9;
+const SOMEWHAT_GAP_SCORE = 0.3;
+
+const moduleConfidenceOptions = [
+  {
+    id: "new",
+    label: "New to me",
+    emoji: "🔴",
+    baseScore: 0.1,
+    badgeClass: "bg-red-500/15 text-red-400",
+    buttonClass: "border-red-500/40 text-red-300",
+    activeClass: "bg-red-500/15 border-red-500 text-red-100",
+    linkLabel: "Do you know any of these?",
+  },
+  {
+    id: "somewhat",
+    label: "Somewhat",
+    emoji: "🟡",
+    baseScore: 0.5,
+    badgeClass: "bg-amber-500/15 text-amber-400",
+    buttonClass: "border-amber-500/40 text-amber-300",
+    activeClass: "bg-amber-500/15 border-amber-500 text-amber-100",
+    linkLabel: null,
+  },
+  {
+    id: "confident",
+    label: "Confident",
+    emoji: "🟢",
+    baseScore: 0.9,
+    badgeClass: "bg-emerald-500/15 text-emerald-400",
+    buttonClass: "border-emerald-500/40 text-emerald-300",
+    activeClass: "bg-emerald-500/15 border-emerald-500 text-emerald-100",
+    linkLabel: "Any gaps in your knowledge?",
+  },
+];
+
+const moduleConfidencePresets = moduleConfidenceOptions.reduce((acc, option) => {
+  acc[option.id] = option;
+  return acc;
+}, {});
+
+function scoreToFamiliarityBand(score) {
+  if (!Number.isFinite(score)) return "developing";
+  if (score >= 0.75) return "confident";
+  if (score <= 0.25) return "needs review";
+  return "developing";
+}
 
 /**
  * @typedef {Object} Subtopic
@@ -216,6 +256,68 @@ function buildOverviewFromTopics(topics, groupId = "overview_1", groupTitle = "A
   ];
 }
 
+function buildGrokDraftPayload(overviewTopics) {
+  const flatTopics = overviewTopics.flatMap((overview) => {
+    const overviewId = String(overview?.id ?? "");
+    const overviewTitle = String(overview?.title ?? "");
+    const subtopics = Array.isArray(overview?.subtopics) ? overview.subtopics : [];
+    return subtopics
+      .map((subtopic) => {
+        const id = typeof subtopic?.id === "string" ? subtopic.id.trim() : "";
+        if (!id) return null;
+        return {
+          id,
+          title: typeof subtopic?.title === "string" ? subtopic.title : "Untitled topic",
+          overviewId,
+          overviewTitle,
+          source: subtopic?.source || "generated",
+          focus: subtopic?.focus,
+          bloomLevel: subtopic?.bloomLevel,
+          estimatedStudyTimeMinutes: subtopic?.estimatedStudyTimeMinutes,
+          importanceScore: subtopic?.importanceScore,
+          examRelevanceReasoning: subtopic?.examRelevanceReasoning,
+        };
+      })
+      .filter(Boolean);
+  });
+
+  return { topics: flatTopics };
+}
+
+function normalizeGrokDraftPayload(rawDraft) {
+  if (!rawDraft || typeof rawDraft !== "object") return null;
+  const topics = Array.isArray(rawDraft.topics) ? rawDraft.topics : [];
+  const normalized = topics
+    .map((topic, index) => {
+      const id = typeof topic?.id === "string" ? topic.id.trim() : "";
+      if (!id) return null;
+      return {
+        id,
+        title: typeof topic?.title === "string" ? topic.title : `Topic ${index + 1}`,
+        overviewId: typeof topic?.overviewId === "string" ? topic.overviewId : undefined,
+        overviewTitle: typeof topic?.overviewTitle === "string" ? topic.overviewTitle : undefined,
+        source: typeof topic?.source === "string" ? topic.source : "generated",
+        focus: topic?.focus,
+        bloomLevel: topic?.bloom_level || topic?.bloomLevel,
+        estimatedStudyTimeMinutes: Number.isFinite(topic?.estimatedStudyTimeMinutes)
+          ? topic.estimatedStudyTimeMinutes
+          : Number.isFinite(topic?.estimated_study_time_minutes)
+          ? topic.estimated_study_time_minutes
+          : undefined,
+        importanceScore: Number.isFinite(topic?.importanceScore)
+          ? topic.importanceScore
+          : Number.isFinite(topic?.importance_score)
+          ? topic.importance_score
+          : undefined,
+        examRelevanceReasoning:
+          topic?.exam_relevance_reasoning || topic?.examRelevanceReasoning || "",
+      };
+    })
+    .filter(Boolean);
+  if (!normalized.length) return null;
+  return { topics: normalized };
+}
+
 function CreateCoursePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -263,6 +365,9 @@ function CreateCoursePageContent() {
   const [isTopicsLoading, setIsTopicsLoading] = useState(false);
   const [topicsError, setTopicsError] = useState(null);
   const [overviewTopics, setOverviewTopics] = useState([]);
+  const [moduleConfidenceState, setModuleConfidenceState] = useState({});
+  const [openAccordions, setOpenAccordions] = useState({});
+  const [generatedGrokDraft, setGeneratedGrokDraft] = useState(null);
   const [deletedSubtopics, setDeletedSubtopics] = useState([]);
   const [topicsApproved, setTopicsApproved] = useState(false);
 
@@ -282,6 +387,66 @@ function CreateCoursePageContent() {
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = examDetailsProvided || confirmedNoExamDetails;
   const canProceedFromStep3 = totalSubtopics > 0;
+
+  useEffect(() => {
+    if (!overviewTopics.length) {
+      setModuleConfidenceState((prev) => (Object.keys(prev).length ? {} : prev));
+      return;
+    }
+    setModuleConfidenceState((prev) => {
+      let changed = false;
+      const next = {};
+      overviewTopics.forEach((overview) => {
+        const existing = prev[overview.id];
+        const validSubtopicIds = new Set(overview.subtopics.map((subtopic) => subtopic.id));
+        const overrides = existing?.overrides
+          ? Object.entries(existing.overrides).reduce((acc, [subtopicId, value]) => {
+              if (validSubtopicIds.has(subtopicId)) {
+                acc[subtopicId] = value;
+              } else {
+                changed = true;
+              }
+              return acc;
+            }, {})
+          : {};
+        const mode = existing?.mode || "somewhat";
+        next[overview.id] = { mode, overrides };
+        if (!existing || existing.mode !== mode || Object.keys(overrides).length !== Object.keys(existing?.overrides || {}).length) {
+          changed = true;
+        }
+      });
+      if (Object.keys(prev).length !== Object.keys(next).length) {
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [overviewTopics]);
+
+  useEffect(() => {
+    if (!overviewTopics.length) {
+      setOpenAccordions((prev) => (Object.keys(prev).length ? {} : prev));
+      return;
+    }
+    setOpenAccordions((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const validIds = new Set(overviewTopics.map((overview) => overview.id));
+      for (const key of Object.keys(next)) {
+        if (!validIds.has(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      overviewTopics.forEach((overview) => {
+        if (next[overview.id] === undefined) {
+          const mode = moduleConfidenceState[overview.id]?.mode || "somewhat";
+          next[overview.id] = mode === "somewhat";
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [overviewTopics, moduleConfidenceState]);
 
   // no dropdown refs needed for simplified inputs
 
@@ -381,6 +546,9 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
     setOverviewTopics([]);
     setDeletedSubtopics([]);
+    setGeneratedGrokDraft(null);
+    setModuleConfidenceState({});
+    setOpenAccordions({});
 
     const finishByIso = toIsoDate(finishDate);
     const payload = {
@@ -419,6 +587,16 @@ function CreateCoursePageContent() {
       console.log("Backend response:", JSON.stringify(data, null, 2));
 
       const payloadCandidates = collectPayloadCandidates(data);
+      let extractedGrokDraft = null;
+      for (const candidate of payloadCandidates) {
+        const normalizedDraft = normalizeGrokDraftPayload(
+          candidate?.grok_draft || candidate?.grokDraft || candidate?.grokDraftPayload
+        );
+        if (normalizedDraft) {
+          extractedGrokDraft = normalizedDraft;
+          break;
+        }
+      }
       let rawOverview = [];
       for (const candidate of payloadCandidates) {
         const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
@@ -510,6 +688,7 @@ function CreateCoursePageContent() {
         throw new Error("The model did not return any topics. Please try again.");
       }
 
+      setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
       setOverviewTopics(hydrated);
       setTopicsApproved(false);
       setTopicsError(null);
@@ -536,20 +715,75 @@ function CreateCoursePageContent() {
     confirmedNoExamDetails,
   ]);
 
-  const handleFamiliarityChange = useCallback((overviewId, subtopicId, rating) => {
+  const handleModuleModeChange = useCallback((overviewId, mode) => {
     setTopicsApproved(false);
-    setOverviewTopics((prev) =>
-      prev.map((overview) => {
-        if (overview.id !== overviewId) return overview;
-        return {
-          ...overview,
-          subtopics: overview.subtopics.map((subtopic) =>
-            subtopic.id === subtopicId ? { ...subtopic, familiarity: rating } : subtopic
-          ),
-        };
-      })
-    );
+    setModuleConfidenceState((prev) => {
+      const current = prev[overviewId];
+      if (current && current.mode === mode && Object.keys(current.overrides || {}).length === 0) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [overviewId]: { mode, overrides: {} },
+      };
+    });
+    setOpenAccordions((prev) => ({
+      ...prev,
+      [overviewId]: mode === "somewhat",
+    }));
   }, []);
+
+  const handleAccordionToggle = useCallback((overviewId, open) => {
+    setOpenAccordions((prev) => ({ ...prev, [overviewId]: open }));
+  }, []);
+
+  const handleExceptionToggle = useCallback((overviewId, subtopicId, isActive, overrideValue) => {
+    setTopicsApproved(false);
+    setModuleConfidenceState((prev) => {
+      const existing = prev[overviewId] || { mode: "somewhat", overrides: {} };
+      const overrides = { ...existing.overrides };
+      if (isActive) {
+        overrides[subtopicId] = overrideValue;
+      } else {
+        delete overrides[subtopicId];
+      }
+      return {
+        ...prev,
+        [overviewId]: { ...existing, overrides },
+      };
+    });
+  }, []);
+
+  const handleSomewhatToggle = useCallback((overviewId, subtopicId, selection) => {
+    setTopicsApproved(false);
+    setModuleConfidenceState((prev) => {
+      const existing = prev[overviewId] || { mode: "somewhat", overrides: {} };
+      const overrides = { ...existing.overrides };
+      if (selection === "known") {
+        overrides[subtopicId] = SOMEWHAT_KNOW_SCORE;
+      } else if (selection === "gap") {
+        overrides[subtopicId] = SOMEWHAT_GAP_SCORE;
+      } else {
+        delete overrides[subtopicId];
+      }
+      return {
+        ...prev,
+        [overviewId]: { ...existing, overrides },
+      };
+    });
+  }, []);
+
+  const resolveSubtopicConfidence = useCallback(
+    (overviewId, subtopicId) => {
+      const moduleState = moduleConfidenceState[overviewId];
+      const mode = moduleState?.mode || "somewhat";
+      const baseScore = moduleConfidencePresets[mode]?.baseScore ?? moduleConfidencePresets.somewhat.baseScore;
+      const overrideValue = moduleState?.overrides?.[subtopicId];
+      const resolved = Number.isFinite(overrideValue) ? overrideValue : baseScore;
+      return Number(resolved.toFixed(2));
+    },
+    [moduleConfidenceState]
+  );
 
   const handleDeleteSubtopic = useCallback((overviewId, subtopicId) => {
     let removedSubtopic = null;
@@ -748,11 +982,47 @@ function CreateCoursePageContent() {
       if (!title || !cleanTopicSet.has(title)) {
         return acc;
       }
-      const familiarity =
-        ratingToFamiliarity[subtopic.familiarity] || ratingToFamiliarity[defaultTopicRating];
-      acc[title] = familiarity;
+      const score = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
+      acc[title] = scoreToFamiliarityBand(score);
       return acc;
     }, {});
+
+    const fallbackGrokDraft = buildGrokDraftPayload(overviewTopics);
+    let grokDraft = fallbackGrokDraft;
+    if (generatedGrokDraft?.topics?.length) {
+      const currentTopicIds = new Set(
+        allSubtopics
+          .map((subtopic) => (typeof subtopic.id === "string" ? subtopic.id.trim() : ""))
+          .filter(Boolean)
+      );
+      const backendTopics = generatedGrokDraft.topics.filter((topic) => currentTopicIds.has(topic.id));
+      const backendIds = new Set(backendTopics.map((topic) => topic.id));
+      const fallbackLookup = new Map(
+        (fallbackGrokDraft?.topics || []).map((topic) => [topic.id, topic])
+      );
+      const supplementalTopics = Array.from(currentTopicIds)
+        .map((id) => fallbackLookup.get(id))
+        .filter((topic) => topic && !backendIds.has(topic.id));
+      const combined = [...backendTopics, ...supplementalTopics];
+      grokDraft = { topics: combined };
+    }
+
+    if (!grokDraft.topics.length) {
+      setCourseGenerationError("Topics are missing identifiers. Please regenerate and try again.");
+      return;
+    }
+
+    const userConfidenceMap = allSubtopics.reduce((acc, subtopic) => {
+      const id = typeof subtopic.id === "string" ? subtopic.id.trim() : "";
+      if (!id) return acc;
+      acc[id] = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
+      return acc;
+    }, {});
+
+    if (Object.keys(userConfidenceMap).length === 0) {
+      setCourseGenerationError("Unable to map topic confidence. Please regenerate your topics.");
+      return;
+    }
 
     setCourseGenerating(true);
     setCourseGenerationError("");
@@ -760,6 +1030,18 @@ function CreateCoursePageContent() {
 
     try {
       const finishByIso = toIsoDate(finishDate);
+      const trimmedSyllabusText = syllabusText.trim();
+      const syllabusTextPayload = trimmedSyllabusText || cleanTopics.join("\n");
+      const examDetailsPayload = examDetailsProvided
+        ? {
+            type: examFormat,
+            notes: examNotes?.trim() || undefined,
+            has_exam_materials: true,
+            sample_exam_file_names: examFiles.map((file) => file.name),
+          }
+        : confirmedNoExamDetails
+        ? { userConfirmedNoExamDetails: true }
+        : undefined;
       const payload = {
         userId,
         // backend creates the course; don't send courseId
@@ -769,11 +1051,18 @@ function CreateCoursePageContent() {
         finishByDate: finishByIso || undefined,
         topics: cleanTopics,
         topicFamiliarity: topicFamiliarityMap,
-        syllabusText: syllabusText.trim() || undefined,
+        syllabusText: trimmedSyllabusText || undefined,
+        syllabus_text: syllabusTextPayload,
+        grok_draft: grokDraft,
+        user_confidence_map: userConfidenceMap,
       };
 
       if (Object.keys(topicFamiliarityMap).length === 0) {
         delete payload.topicFamiliarity;
+      }
+
+      if (examDetailsPayload) {
+        payload.exam_details = examDetailsPayload;
       }
 
       if (syllabusFiles.length > 0) {
@@ -847,6 +1136,9 @@ function CreateCoursePageContent() {
     examNotes,
     examFiles,
     examDetailsProvided,
+    confirmedNoExamDetails,
+    generatedGrokDraft,
+    resolveSubtopicConfidence,
     router,
   ]);
 
@@ -1322,91 +1614,194 @@ function CreateCoursePageContent() {
 
                   {/* Topics List */}
                   <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
-                    {overviewTopics.map((overview) => (
-                      <div key={overview.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-baseline gap-3">
-                            <h3 className="text-sm font-bold">{overview.title}</h3>
-                            {/* Overview total estimated time */}
-                            {(() => {
-                              const totalMin = overview.subtopics.reduce((sum, st) => sum + (Number.isFinite(st.estimatedStudyTimeMinutes) ? st.estimatedStudyTimeMinutes : 0), 0);
-                              const formatted = formatStudyTime(totalMin);
-                              if (!formatted) return null;
-                              return <span className="text-xs text-[var(--muted-foreground)]">Estimated: {formatted}</span>;
-                            })()}
+                    {overviewTopics.map((overview) => {
+                      const moduleState = moduleConfidenceState[overview.id] || { mode: "somewhat", overrides: {} };
+                      const modeConfig = moduleConfidencePresets[moduleState.mode] || moduleConfidencePresets.somewhat;
+                      const isAccordionOpen = (openAccordions[overview.id] ?? moduleState.mode === "somewhat") || moduleState.mode === "somewhat";
+                      const totalMin = overview.subtopics.reduce(
+                        (sum, st) => sum + (Number.isFinite(st.estimatedStudyTimeMinutes) ? st.estimatedStudyTimeMinutes : 0),
+                        0
+                      );
+                      const formattedTime = formatStudyTime(totalMin);
+                      return (
+                        <div key={overview.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
+                          <div className="flex items-start justify-between gap-3 mb-4">
+                            <div>
+                              <h3 className="text-base font-semibold">{overview.title}</h3>
+                              {formattedTime && (
+                                <p className="text-xs text-[var(--muted-foreground)]">Estimated total focus: {formattedTime}</p>
+                              )}
+                              <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                                Applies to {overview.subtopics.length} subtopics
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              {overview.likelyOnExam && (
+                                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
+                                  Likely on exam
+                                </span>
+                              )}
+                              <span className={`text-[11px] px-2 py-1 rounded-full font-medium ${modeConfig.badgeClass}`}>
+                                {modeConfig.emoji} {modeConfig.label}
+                              </span>
+                            </div>
                           </div>
-                          {overview.likelyOnExam && (
-                            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
-                              Likely on exam
-                            </span>
+                          <div className="flex flex-wrap gap-2">
+                            {moduleConfidenceOptions.map((option) => {
+                              const isActive = moduleState.mode === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => handleModuleModeChange(overview.id, option.id)}
+                                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                                    isActive
+                                      ? option.activeClass
+                                      : `${option.buttonClass} bg-[var(--surface-1)]`
+                                  }`}
+                                >
+                                  <span>{option.emoji}</span>
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {moduleState.mode !== "somewhat" && !(openAccordions[overview.id] ?? false) && modeConfig.linkLabel && (
+                            <button
+                              type="button"
+                              onClick={() => handleAccordionToggle(overview.id, true)}
+                              className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline"
+                            >
+                              {modeConfig.linkLabel}
+                            </button>
+                          )}
+                          {(moduleState.mode === "somewhat" || isAccordionOpen) && (
+                            <div className="mt-4 space-y-3">
+                              {moduleState.mode !== "somewhat" && (
+                                <div className="flex items-center justify-between text-[11px] text-[var(--muted-foreground)]">
+                                  <span>
+                                    {moduleState.mode === "new"
+                                      ? "Check the topics you already feel confident about."
+                                      : "Uncheck the topics that still feel shaky."}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-[var(--primary)] hover:underline"
+                                    onClick={() => handleAccordionToggle(overview.id, false)}
+                                  >
+                                    Collapse
+                                  </button>
+                                </div>
+                              )}
+                              {overview.subtopics.map((subtopic) => {
+                                const overrideValue = moduleState.overrides?.[subtopic.id];
+                                const resolvedScore = resolveSubtopicConfidence(overview.id, subtopic.id);
+                                const isNewMode = moduleState.mode === "new";
+                                const isConfidentMode = moduleState.mode === "confident";
+                                const checkboxChecked = isNewMode
+                                  ? overrideValue === NEW_EXCEPTION_SCORE
+                                  : isConfidentMode
+                                  ? overrideValue !== CONFIDENT_EXCEPTION_SCORE
+                                  : false;
+                                return (
+                                  <div key={subtopic.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex-1">
+                                        <p className="text-sm font-semibold">{subtopic.title}</p>
+                                        {subtopic.description && (
+                                          <p className="text-xs text-[var(--muted-foreground)] mt-1">{subtopic.description}</p>
+                                        )}
+                                        {subtopic.examRelevanceReasoning && (
+                                          <p className="text-[11px] italic text-[var(--muted-foreground)] mt-1">{subtopic.examRelevanceReasoning}</p>
+                                        )}
+                                        <div className="flex items-center gap-2 flex-wrap mt-2">
+                                          {subtopic.focus && (
+                                            <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-muted)] text-[var(--muted-foreground)] font-medium">{subtopic.focus}</span>
+                                          )}
+                                          {subtopic.bloomLevel && (
+                                            <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-1)] text-[var(--muted-foreground)] font-medium">{subtopic.bloomLevel}</span>
+                                          )}
+                                          {subtopic.importanceScore !== undefined && (() => {
+                                            const tag = importanceScoreToTag(subtopic.importanceScore);
+                                            return <span className={`text-[11px] px-2 py-1 rounded-full ${tag.color} font-semibold`}>{tag.label}</span>;
+                                          })()}
+                                          {subtopic.estimatedStudyTimeMinutes !== undefined && (
+                                            <span className="text-xs text-[var(--muted-foreground)]">⏱ {formatStudyTime(subtopic.estimatedStudyTimeMinutes)}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-2 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
+                                          className="text-[11px] text-[var(--muted-foreground)] hover:text-red-400"
+                                        >
+                                          Remove
+                                        </button>
+                                        {(isNewMode || isConfidentMode) && (
+                                          <label className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
+                                            <input
+                                              type="checkbox"
+                                              className="h-4 w-4 rounded border-[var(--border)]"
+                                              checked={checkboxChecked}
+                                              onChange={(event) => {
+                                                if (isNewMode) {
+                                                  handleExceptionToggle(overview.id, subtopic.id, event.target.checked, NEW_EXCEPTION_SCORE);
+                                                } else {
+                                                  handleExceptionToggle(overview.id, subtopic.id, !event.target.checked, CONFIDENT_EXCEPTION_SCORE);
+                                                }
+                                              }}
+                                            />
+                                            <span>
+                                              {isNewMode ? "I already know this" : "I'm confident here"}
+                                            </span>
+                                          </label>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {moduleState.mode === "somewhat" && (
+                                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <span className="text-[11px] text-[var(--muted-foreground)] mr-2">How do you feel?</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSomewhatToggle(
+                                            overview.id,
+                                            subtopic.id,
+                                            overrideValue === SOMEWHAT_KNOW_SCORE ? null : "known"
+                                          )}
+                                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                            overrideValue === SOMEWHAT_KNOW_SCORE
+                                              ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
+                                              : "border-[var(--border)] text-[var(--muted-foreground)]"
+                                          }`}
+                                        >
+                                          Know it
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSomewhatToggle(
+                                            overview.id,
+                                            subtopic.id,
+                                            overrideValue === SOMEWHAT_GAP_SCORE ? null : "gap"
+                                          )}
+                                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                            overrideValue === SOMEWHAT_GAP_SCORE
+                                              ? "border-red-400 bg-red-500/20 text-red-200"
+                                              : "border-[var(--border)] text-[var(--muted-foreground)]"
+                                          }`}
+                                        >
+                                          Need review
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
-                        <div className="space-y-3">
-                          {overview.subtopics.map((subtopic) => (
-                            <div key={subtopic.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
-                              <div className="flex items-start justify-between gap-3 mb-3">
-                                <p className="text-sm font-semibold flex-1">{subtopic.title}</p>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
-                                  className="text-xs text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                              {/* Meta row: focus, bloom level, importance and estimated time */}
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                {subtopic.focus && (
-                                  <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-muted)] text-[var(--muted-foreground)] font-medium">{subtopic.focus}</span>
-                                )}
-                                {subtopic.bloomLevel && (
-                                  <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-1)] text-[var(--muted-foreground)] font-medium">{subtopic.bloomLevel}</span>
-                                )}
-                                {subtopic.importanceScore !== undefined && (
-                                  (() => {
-                                    const tag = importanceScoreToTag(subtopic.importanceScore);
-                                    return (
-                                      <span className={`text-[11px] px-2 py-1 rounded-full ${tag.color} font-semibold`}>{tag.label}</span>
-                                    );
-                                  })()
-                                )}
-                                {subtopic.estimatedStudyTimeMinutes !== undefined && (
-                                  <span className="text-xs text-[var(--muted-foreground)]">⏱ {formatStudyTime(subtopic.estimatedStudyTimeMinutes)}</span>
-                                )}
-                              </div>
-                              {subtopic.description && (
-                                <p className="text-xs text-[var(--muted-foreground)] mb-2">{subtopic.description}</p>
-                              )}
-                              {subtopic.examRelevanceReasoning && (
-                                <p className="text-xs italic text-[var(--muted-foreground)] mb-2">{subtopic.examRelevanceReasoning}</p>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-[var(--muted-foreground)]">Confidence:</span>
-                                {familiarityLevels.map((rating) => (
-                                  <button
-                                    key={rating}
-                                    type="button"
-                                    onClick={() => handleFamiliarityChange(overview.id, subtopic.id, rating)}
-                                    className={`flex h-7 w-7 items-center justify-center rounded-full border transition ${
-                                      rating <= subtopic.familiarity
-                                        ? "border-[var(--primary)] bg-[var(--primary)]/20 text-[var(--primary)]"
-                                        : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--muted-foreground)]"
-                                    }`}
-                                  >
-                                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill={rating <= subtopic.familiarity ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
-                                      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                                    </svg>
-                                  </button>
-                                ))}
-                                <span className="text-xs text-[var(--muted-foreground)] ml-2">
-                                  {ratingDescriptions[subtopic.familiarity]}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Add Custom Topic */}
