@@ -1087,11 +1087,16 @@ function CreateCoursePageContent() {
       }
 
       setCourseGenerationMessage("Coordinating your learning journey…");
-      // Server will enforce a 10 minute timeout for long-running course generation
+      // Server will enforce a 30 minute timeout for long-running course generation
+      // Client-side AbortController to cancel request after 30 minutes
+      const controller = new AbortController();
+      const timeoutMs = 30 * 60 * 1000; // 30 minutes
+      const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
       const response = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
       const body = await response.json().catch(() => ({}));
@@ -1113,11 +1118,14 @@ function CreateCoursePageContent() {
       }
     } catch (error) {
       if (error?.name === "AbortError") {
-        setCourseGenerationError("Course generation timed out after 10 minutes. Please try again.");
+        setCourseGenerationError("Course generation timed out after 30 minutes. Please try again.");
       } else {
         setCourseGenerationError(error.message || "Unexpected error generating course.");
       }
     } finally {
+      try {
+        clearTimeout(timeoutHandle);
+      } catch {}
       setCourseGenerating(false);
     }
   }, [
@@ -1583,10 +1591,50 @@ function CreateCoursePageContent() {
               )}
 
               {isTopicsLoading && (
-                <div className="text-center py-12 px-6">
-                  <div className="mx-auto h-12 w-12 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin mb-4"></div>
-                  <h3 className="text-lg font-semibold mb-2">Crafting your study roadmap...</h3>
-                  <p className="text-sm text-[var(--muted-foreground)]">Analyzing your course materials and generating topics</p>
+                <div className="space-y-6 py-8 px-6">
+                  {/* Animated pulse header */}
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="h-3 w-3 rounded-full bg-[var(--primary)] animate-pulse"></div>
+                    <h3 className="text-lg font-semibold">Analyzing your course materials...</h3>
+                    <span className="flex-1"></span>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--primary)]/10 border border-[var(--primary)]/30">
+                      <div className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse"></div>
+                      <span className="text-sm text-[var(--muted-foreground)]">This may take 30-60 seconds</span>
+                    </div>
+                  </div>
+
+                  {/* Skeleton loading cards */}
+                  <div className="space-y-4">
+                    {[1, 2].map((index) => (
+                      <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5 animate-pulse" style={{ animationDelay: `${index * 100}ms` }}>
+                        {/* Header skeleton */}
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="h-5 bg-[var(--surface-muted)] rounded-md w-3/4"></div>
+                            <div className="h-3 bg-[var(--surface-muted)] rounded-md w-1/2"></div>
+                          </div>
+                          <div className="h-6 w-24 bg-[var(--surface-muted)] rounded-full"></div>
+                        </div>
+
+                        {/* Subtopics skeleton */}
+                        <div className="space-y-3 mt-4">
+                          {[1, 2, 3].map((subIndex) => (
+                            <div key={subIndex} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+                              <div className="space-y-2">
+                                <div className="h-4 bg-[var(--surface-muted)] rounded-md w-5/6"></div>
+                                <div className="h-3 bg-[var(--surface-muted)] rounded-md w-full"></div>
+                                <div className="flex gap-2 mt-3">
+                                  <div className="h-5 w-16 bg-[var(--surface-muted)] rounded-full"></div>
+                                  <div className="h-5 w-20 bg-[var(--surface-muted)] rounded-full"></div>
+                                  <div className="h-5 w-12 bg-[var(--surface-muted)] rounded-full"></div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
