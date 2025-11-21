@@ -4,7 +4,7 @@ import React, {
 } from "react";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
-export default function FlashcardDeck({ data = {} }) {
+export default function FlashcardDeck({ data = {}, onCardChange }) {
   const cards = useMemo(
     () =>
       Object.entries(data)
@@ -19,6 +19,21 @@ export default function FlashcardDeck({ data = {} }) {
 
   const next = useCallback(() => setI(p => (p + 1) % Math.max(total, 1)), [total]);
   const prev = useCallback(() => setI(p => (p - 1 + Math.max(total, 1)) % Math.max(total, 1)), [total]);
+
+  // Notify parent when card changes
+  useEffect(() => {
+    if (onCardChange && cards[i]) {
+      const [num, tuple] = cards[i];
+      onCardChange({
+        index: i,
+        number: num,
+        question: tuple[0],
+        answer: tuple[1],
+        explanation: tuple[2],
+        total: total
+      });
+    }
+  }, [i, cards, total, onCardChange]);
 
   // global keys (no focus required)
   useEffect(() => {
@@ -60,23 +75,28 @@ export default function FlashcardDeck({ data = {} }) {
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={prev}
-          className="btn btn-primary btn-sm btn-circle select-none"
+          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
           aria-label="Previous"
-          title="Previous"
+          title="Previous (←)"
         >
-          ←
+          ← Previous
         </button>
+        
+        <span className="text-sm text-[var(--muted-foreground)]">
+          {i + 1} / {total}
+        </span>
+        
         <button
           type="button"
           tabIndex={-1}
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={next}
-          className="btn btn-primary btn-sm btn-circle select-none"
+          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
           aria-label="Next"
-          title="Next"
+          title="Next (→)"
         >
-          →
+          Next →
         </button>
       </div>
     </div>
@@ -141,33 +161,28 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
         onTransitionEnd={handleTransitionEnd}
       >
         <div
-          className="absolute inset-0 p-6 flex flex-col"
+          className="absolute inset-0 p-6 flex flex-col min-h-0"
           style={{ transform: `rotateY(${angle}deg)` }}
         >
           {showBack ? (
             <>
               <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">Answer</div>
-              <div className="text-base font-medium text-[var(--foreground)] whitespace-pre-wrap mb-3">
-                {answer}
+
+              {/* ANSWER: allow vertical scroll if long */}
+              <div className="flex-1 overflow-y-auto min-h-0 mb-3 text-[var(--foreground)]">
+                <p className="text-base leading-relaxed whitespace-pre-wrap">{answer}</p>
               </div>
-              <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
-                {/* <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mt-[2px] text-[var(--muted-foreground)] opacity-80 shrink-0"
-                > 
-                  <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />
-                </svg> */}
-                <span>{explanation}</span>
-              </div>
-              <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
+
+              {/* EXPLANATION: usually short (no scroll) */}
+              {explanation && (
+                <div className="mt-auto pt-3 border-t border-[var(--border)]">
+                  <p className="text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
+                    {explanation}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-3 pt-2 text-xs text-[var(--muted-foreground)] text-center">
                 Press Space to flip back
               </div>
             </>
@@ -176,10 +191,15 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
               <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                 Question {num}
               </div>
-              <div className="text-base text-[var(--foreground)] whitespace-pre-wrap">
-                {question}
+
+              {/* QUESTION: no scroll by default */}
+              <div className="flex-1 overflow-y-auto min-h-0 mb-3">
+                <p className="text-lg font-medium text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">
+                  {question}
+                </p>
               </div>
-              <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
+
+              <div className="mt-auto pt-3 text-xs text-[var(--muted-foreground)] text-center">
                 Click or press Space to flip
               </div>
             </>
