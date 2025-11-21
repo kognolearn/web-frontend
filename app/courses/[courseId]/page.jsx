@@ -34,7 +34,8 @@ function ItemContent({
   setContentCache,
   setCurrentViewingItem,
   handleCardChange,
-  onQuizQuestionChange
+  onQuizQuestionChange,
+  handleQuizCompleted
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
@@ -209,7 +210,16 @@ function ItemContent({
     case "mini_quiz":
     case "practice_exam": {
       // Pass the data directly to Quiz component which handles normalization
-  return <Quiz questions={data?.questions || data} onQuestionChange={onQuizQuestionChange} />;
+  return (
+    <Quiz 
+      questions={data?.questions || data} 
+      onQuestionChange={onQuizQuestionChange}
+      onQuizCompleted={handleQuizCompleted}
+      userId={userId}
+      courseId={courseId}
+      lessonId={id}
+    />
+  );
     }
     default:
       return (
@@ -359,6 +369,21 @@ export default function CoursePage() {
     };
   }, [userId, courseId]);
 
+  const refetchStudyPlan = useCallback(async () => {
+    if (!userId || !courseId) return;
+    try {
+      const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}&hours=50`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+      const json = await res.json();
+      setStudyPlan(json);
+    } catch (e) {
+      console.error('Failed to refetch study plan:', e);
+    }
+  }, [userId, courseId]);
+
   // Prefetch all unlocked content when study plan loads
   useEffect(() => {
     if (!studyPlan || !userId || !courseId) return;
@@ -455,6 +480,11 @@ export default function CoursePage() {
       ...cardInfo
     });
   }, []);
+
+  // Callback for quiz completion
+  const handleQuizCompleted = useCallback(async () => {
+    await refetchStudyPlan();
+  }, [refetchStudyPlan]);
 
   // Get available content types from cached data
   const getAvailableContentTypes = (lessonId) => {
@@ -873,6 +903,7 @@ export default function CoursePage() {
                   handleCardChange={handleCardChange}
                   setCurrentViewingItem={setCurrentViewingItem}
                   onQuizQuestionChange={setChatQuizContext}
+                  handleQuizCompleted={refetchStudyPlan}
                 />
               </section>
             </>

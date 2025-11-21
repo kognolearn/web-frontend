@@ -287,12 +287,25 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
  *      feedback?: RichBlock-compatible
  *    }>
  *  - onAnswer?: ({ id, option, isCorrect }) => void
+ *  - userId?: string - user identifier for progress tracking
+ *  - courseId?: string - course identifier for progress tracking
+ *  - lessonId?: string - lesson/node identifier for progress tracking
  *
  * The component assumes a single-correct-answer quiz. Selecting an option
  * reveals whether it is correct (when the `correct` flag is provided) and
  * surfaces any rich feedback block supplied on the option.
  */
-export default function Quiz({ questions, question, options = [], onAnswer, onQuestionChange }) {
+export default function Quiz({ 
+  questions, 
+  question, 
+  options = [], 
+  onAnswer, 
+  onQuestionChange,
+  userId,
+  courseId,
+  lessonId,
+  onQuizCompleted,
+}) {
   const normalizedQuestions = useMemo(() => {
     if (questions && typeof questions === "object" && !Array.isArray(questions)) {
       const sequenceLike = Object.entries(questions)
@@ -335,6 +348,7 @@ export default function Quiz({ questions, question, options = [], onAnswer, onQu
   const [responses, setResponses] = useState({});
   const [revealedByQuestion, setRevealedByQuestion] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Track the last notification sent to parent to prevent duplicate calls
   const lastNotificationRef = useRef(null);
@@ -363,6 +377,7 @@ export default function Quiz({ questions, question, options = [], onAnswer, onQu
     setResponses({});
     setRevealedByQuestion({});
     setIsSubmitted(false);
+    setIsSubmitting(false);
     lastNotificationRef.current = null;
   }, [questionsSignature]);
 
@@ -405,9 +420,59 @@ export default function Quiz({ questions, question, options = [], onAnswer, onQu
     [currentIndex, isSubmitted, normalizedQuestions, onAnswer]
   );
 
-  const handleSubmit = useCallback(() => {
-    if (isSubmitted || questionCount === 0) return;
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitted || isSubmitting || questionCount === 0) return;
 
+    setIsSubmitting(true);
+
+    // Calculate score first
+    let correctCount = 0;
+    let totalCount = 0;
+
+    normalizedQuestions.forEach((question) => {
+      if (!question?.id || !Array.isArray(question.options)) return;
+      
+      totalCount++;
+      const userResponseId = responses[question.id];
+      if (!userResponseId) return;
+
+      const selectedOption = question.options.find((opt) => opt.id === userResponseId);
+      if (selectedOption?.correct) {
+        correctCount++;
+      }
+    });
+
+    // Update progress if tracking info is available
+    if (userId && courseId && lessonId) {
+      try {
+        const allCorrect = totalCount > 0 && correctCount === totalCount;
+        const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
+        const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
+
+        const response = await fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            mastery_status: masteryStatus,
+            familiarity_score: familiarityScore,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Progress update failed: ${response.status}`);
+        }
+
+        // Notify parent that quiz was completed successfully
+        if (typeof onQuizCompleted === 'function') {
+          await onQuizCompleted({ masteryStatus, familiarityScore });
+        }
+      } catch (error) {
+        console.error('Failed to update quiz progress:', error);
+      }
+    }
+
+    // Now reveal answers
     setIsSubmitted(true);
     setRevealedByQuestion((prev) => {
       const next = { ...prev };
@@ -419,7 +484,8 @@ export default function Quiz({ questions, question, options = [], onAnswer, onQu
       return next;
     });
     setCurrentIndex(0);
-  }, [isSubmitted, normalizedQuestions, questionCount]);
+    setIsSubmitting(false);
+  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted]);
 
   const handleNavigate = useCallback(
     (direction) => {
@@ -618,13 +684,23 @@ export default function Quiz({ questions, question, options = [], onAnswer, onQu
               {currentIndex === questionCount - 1 && !isSubmitted ? (
                 <button
                   type="button"
-                  className="rounded-full bg-emerald-500 px-6 py-2 text-sm font-semibold text-white hover:opacity-90 transition shadow-sm select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full bg-emerald-500 px-6 py-2 text-sm font-semibold text-white hover:opacity-90 transition shadow-sm select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
                   onClick={handleSubmit}
                   onPointerDown={(e) => e.currentTarget.blur()}
                   tabIndex={-1}
-                  disabled={questionCount === 0}
+                  disabled={isSubmitting || questionCount === 0}
                 >
-                  Submit Quiz
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Quiz'
+                  )}
                 </button>
               ) : (
                 <button

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { courseId } = params;
     const { searchParams } = new URL(request.url);
     
     // Get query parameters
@@ -25,7 +25,7 @@ export async function GET(request, { params }) {
     }
 
     // Build the backend API URL
-    const backendUrl = new URL(`https://api.kognolearn.com/courses/${id}/plan`);
+    const backendUrl = new URL(`https://api.kognolearn.com/courses/${courseId}/plan`);
     backendUrl.searchParams.set('userId', userId);
     backendUrl.searchParams.set('hours', hours);
 
@@ -56,7 +56,7 @@ export async function GET(request, { params }) {
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error('Error in /api/courses/[id]/plan:', error);
+    console.error('Error in /api/courses/[courseId]/plan:', error);
     return NextResponse.json(
       { error: 'Internal server error', message: error.message },
       { status: 500 }
