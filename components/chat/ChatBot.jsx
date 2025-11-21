@@ -258,8 +258,23 @@ const minifyPageContext = (ctx) => {
     }
   }
   
+  // Quiz context: small set of useful fields without ids
+  if (ctx.quizContext && typeof ctx.quizContext === 'object') {
+    out.quizContext = {
+      index: typeof ctx.quizContext.index === 'number' ? ctx.quizContext.index : undefined,
+      questionText: sanitizeText(ctx.quizContext.questionText, 500),
+      optionLabels: Array.isArray(ctx.quizContext.optionLabels)
+        ? ctx.quizContext.optionLabels.map((l) => sanitizeText(l, 200))
+        : undefined,
+      selectedIndex: typeof ctx.quizContext.selectedIndex === 'number' ? ctx.quizContext.selectedIndex : undefined,
+      isCorrect: typeof ctx.quizContext.isCorrect === 'boolean' ? ctx.quizContext.isCorrect : undefined,
+      revealed: typeof ctx.quizContext.revealed === 'boolean' ? ctx.quizContext.revealed : undefined,
+    };
+  }
+
   return Object.keys(out).length ? out : null;
 };
+
 
 const sanitizeMessageForApi = (msg) => {
   return {

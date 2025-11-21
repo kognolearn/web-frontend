@@ -113,31 +113,61 @@ export async function GET(request) {
         
         // Quiz questions (both mini_quiz and practice_exam format)
         ...(contentPayload.quiz && contentPayload.quiz.length > 0 && {
-          questions: contentPayload.quiz.map(q => ({
-            type: q.type || 'mcq',
-            question: q.question || q.prompt || '',
-            options: q.options || [],
-            answer: q.correct_index !== undefined 
-              ? (q.options?.[q.correct_index] || String(q.correct_index))
-              : (q.correct_answer || q.answer || ''),
-            explanation: q.explanation || '',
-            ...(q.type === 'frq' && {
-              prompt: q.prompt || q.question,
-              model_answer: q.model_answer || q.answer,
-              rubric: q.rubric || ''
-            })
-          })),
+          questions: contentPayload.quiz.map(q => {
+            const resolvedCorrectIndex = Number.isInteger(q.correct_index)
+              ? q.correct_index
+              : Number.isInteger(q.correctIndex)
+              ? q.correctIndex
+              : null;
+            const resolvedAnswer =
+              q.correct_answer ??
+              q.correctAnswer ??
+              q.answer ??
+              (resolvedCorrectIndex !== null && Array.isArray(q.options)
+                ? q.options[resolvedCorrectIndex]
+                : '');
+
+            return {
+              type: q.type || 'mcq',
+              question: q.question || q.prompt || '',
+              options: q.options || [],
+              answer: resolvedAnswer,
+              correctAnswer: resolvedAnswer,
+              correctIndex: resolvedCorrectIndex,
+              explanation: q.explanation || '',
+              ...(q.type === 'frq' && {
+                prompt: q.prompt || q.question,
+                model_answer: q.model_answer || q.answer,
+                rubric: q.rubric || ''
+              })
+            };
+          }),
           // Also provide in exam format
           mcq: contentPayload.quiz
             .filter(q => !q.type || q.type === 'mcq')
-            .map(q => ({
-              question: q.question || '',
-              options: q.options || [],
-              answer: q.correct_index !== undefined 
-                ? (q.options?.[q.correct_index] || String(q.correct_index))
-                : (q.correct_answer || ''),
-              explanation: q.explanation || ''
-            })),
+            .map(q => {
+              const resolvedCorrectIndex = Number.isInteger(q.correct_index)
+                ? q.correct_index
+                : Number.isInteger(q.correctIndex)
+                ? q.correctIndex
+                : null;
+              const resolvedAnswer =
+                q.correct_answer ??
+                q.correctAnswer ??
+                q.answer ??
+                (resolvedCorrectIndex !== null && Array.isArray(q.options)
+                  ? q.options[resolvedCorrectIndex]
+                  : '');
+
+              return {
+                question: q.question || '',
+                options: q.options || [],
+                answer: resolvedAnswer,
+                correctAnswer: resolvedAnswer,
+                correctIndex: resolvedCorrectIndex,
+                explanation: q.explanation || ''
+              };
+            }),
           frq: contentPayload.quiz
             .filter(q => q.type === 'frq')
             .map(q => ({

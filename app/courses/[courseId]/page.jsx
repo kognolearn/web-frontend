@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
+import RichBlock from "@/components/content/RichBlock";
+import Quiz from "@/components/content/Quiz";
 import { marked } from "marked";
 
 // Utility functions moved outside
@@ -30,7 +33,8 @@ function ItemContent({
   contentCache,
   setContentCache,
   setCurrentViewingItem,
-  handleCardChange
+  handleCardChange,
+  onQuizQuestionChange
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
@@ -103,6 +107,14 @@ function ItemContent({
   const data = cachedPayload || {};
   const resolvedFormat = normalizeFormat(cachedEnvelope.format) || normFmt;
 
+  // Clear quiz context if this content is not a quiz
+  useEffect(() => {
+    if (!onQuizQuestionChange) return;
+    if (resolvedFormat !== "mini_quiz" && resolvedFormat !== "practice_exam") {
+      onQuizQuestionChange(null);
+    }
+  }, [resolvedFormat, onQuizQuestionChange]);
+
   switch (resolvedFormat) {
     case "video": {
       // Set the first video as currently viewing when component mounts
@@ -169,97 +181,35 @@ function ItemContent({
       );
     }
     case "reading": {
-      const html = marked.parse(data?.body || "");
+      // Check if data has structured content blocks
+      const hasRichContent = data?.content && Array.isArray(data.content);
+      
       return (
         <article className="card rounded-[28px] px-6 py-6 sm:px-8">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-[var(--foreground)]">Reading</span>
           </div>
-          <div className="prose prose-sm max-w-none text-[var(--foreground)]">
-            <div dangerouslySetInnerHTML={{ __html: html }} />
-          </div>
+          {hasRichContent ? (
+            <RichBlock 
+              block={data} 
+              maxWidth="100%" 
+              containerClassName="text-[var(--foreground)]"
+            />
+          ) : (
+            <div className="prose prose-sm max-w-none text-[var(--foreground)]">
+              <div dangerouslySetInnerHTML={{ __html: marked.parse(data?.body || "") }} />
+            </div>
+          )}
         </article>
       );
     }
     case "flashcards": {
-      return (
-        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-[var(--foreground)]">Flashcards</span>
-          </div>
-          <FlashcardDeck 
-            data={flashcardData} 
-            onCardChange={handleCardChange}
-          />
-        </article>
-      );
+      return <FlashcardDeck data={flashcardData} onCardChange={handleCardChange} />;
     }
     case "mini_quiz":
     case "practice_exam": {
-      const questions = [];
-      if (resolvedFormat === "mini_quiz" && Array.isArray(data?.questions)) {
-        questions.push(...data.questions);
-      }
-      if (resolvedFormat === "practice_exam") {
-        if (Array.isArray(data?.mcq)) {
-          data.mcq.forEach((q) => questions.push({ type: "mcq", ...q }));
-        }
-        if (Array.isArray(data?.frq)) {
-          data.frq.forEach((q) => questions.push({ type: "frq", ...q }));
-        }
-      }
-      return (
-        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              {resolvedFormat === "practice_exam" ? "Practice Exam" : "Mini Quiz"}
-            </span>
-          </div>
-          <div className="space-y-6">
-            {questions.map((q, i) => {
-              if (q?.type === "frq") {
-                return (
-                  <div key={i} className="space-y-2">
-                    <p className="font-medium text-[var(--foreground)]">
-                      Q{i + 1} (FRQ): {q.prompt}
-                    </p>
-                    <details className="ml-4">
-                      <summary className="cursor-pointer text-sm text-[var(--primary)] hover:underline">
-                        Show Solution
-                      </summary>
-                      <div className="mt-3 space-y-2 text-sm bg-[var(--surface-2)] p-4 rounded-lg">
-                        <p><span className="font-semibold">Model Answer:</span> {q.model_answer}</p>
-                        <p><span className="font-semibold">Rubric:</span> {q.rubric}</p>
-                      </div>
-                    </details>
-                  </div>
-                );
-              }
-              return (
-                <div key={i} className="space-y-2">
-                  <p className="font-medium text-[var(--foreground)]">Q{i + 1}: {q?.question}</p>
-                  <ul className="ml-6 list-disc text-sm space-y-1">
-                    {q?.options?.map((opt, j) => (
-                      <li key={j}>{opt}</li>
-                    ))}
-                  </ul>
-                  <details className="ml-4">
-                    <summary className="cursor-pointer text-sm text-[var(--primary)] hover:underline">
-                      Show Answer
-                    </summary>
-                    <div className="mt-3 space-y-2 text-sm bg-[var(--surface-2)] p-4 rounded-lg">
-                      <p><span className="font-semibold">Correct Answer:</span> {q?.answer}</p>
-                      {q?.explanation && (
-                        <p><span className="font-semibold">Explanation:</span> {q?.explanation}</p>
-                      )}
-                    </div>
-                  </details>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-      );
+      // Pass the data directly to Quiz component which handles normalization
+  return <Quiz questions={data?.questions || data} onQuestionChange={onQuizQuestionChange} />;
     }
     default:
       return (
@@ -286,6 +236,7 @@ export default function CoursePage() {
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [contentCache, setContentCache] = useState({});
   const [chatBotWidth, setChatBotWidth] = useState(0);
+  const [chatQuizContext, setChatQuizContext] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState("syllabus"); // "syllabus" or "topic"
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -408,6 +359,23 @@ export default function CoursePage() {
     };
   }, [userId, courseId]);
 
+  // Prefetch all unlocked content when study plan loads
+  useEffect(() => {
+    if (!studyPlan || !userId || !courseId) return;
+
+    const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
+      module.lessons?.filter(lesson => !lesson.is_locked) || []
+    ) || [];
+
+    // Prefetch all content types for all unlocked lessons
+    allUnlockedLessons.forEach(lesson => {
+      if (lesson.id) {
+        // Prefetch all available content types
+        prefetchLessonContent(lesson.id, ['reading', 'video', 'flashcards', 'mini_quiz']);
+      }
+    });
+  }, [studyPlan, userId, courseId]);
+
   const handleLessonClick = (lesson) => {
     if (lesson.is_locked) return;
     
@@ -423,41 +391,43 @@ export default function CoursePage() {
     setExpandedLessons(newExpanded);
   };
 
-  const prefetchLessonContent = (lessonId) => {
-    // Create a cache key for any format (we'll use 'reading' as default)
-    const key = `reading:${lessonId}:${userId || ''}:${courseId || ''}`;
-    
-    // If already cached or loading, skip
-    if (contentCache[key]) return;
-    
-    // Start fetch
-    setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
-    
-    (async () => {
-      try {
-        const params = new URLSearchParams({ 
-          format: 'reading', 
-          id: String(lessonId) 
-        });
-        if (userId) params.set("userId", String(userId));
-        if (courseId) params.set("courseId", String(courseId));
-        const url = `/api/content?${params.toString()}`;
-        const res = await fetch(url);
-        let data;
+  const prefetchLessonContent = (lessonId, formats = ['reading']) => {
+    formats.forEach(format => {
+      const normFmt = normalizeFormat(format);
+      const key = `${normFmt}:${lessonId}:${userId || ''}:${courseId || ''}`;
+      
+      // If already cached or loading, skip
+      if (contentCache[key]) return;
+      
+      // Start fetch
+      setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
+      
+      (async () => {
         try {
-          data = await res.json();
-        } catch (_) {
-          const raw = await res.text().catch(() => "");
-          data = raw ? { raw } : {};
+          const params = new URLSearchParams({ 
+            format: normFmt, 
+            id: String(lessonId) 
+          });
+          if (userId) params.set("userId", String(userId));
+          if (courseId) params.set("courseId", String(courseId));
+          const url = `/api/content?${params.toString()}`;
+          const res = await fetch(url);
+          let data;
+          try {
+            data = await res.json();
+          } catch (_) {
+            const raw = await res.text().catch(() => "");
+            data = raw ? { raw } : {};
+          }
+          if (!res.ok) {
+            throw new Error((data && data.error) || `Failed (${res.status})`);
+          }
+          setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
+        } catch (e) {
+          setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
         }
-        if (!res.ok) {
-          throw new Error((data && data.error) || `Failed (${res.status})`);
-        }
-        setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
-      } catch (e) {
-        setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
-      }
-    })();
+      })();
+    });
   };
 
   const handleContentTypeClick = (lesson, contentType) => {
@@ -593,11 +563,11 @@ export default function CoursePage() {
                           type="button"
                           onClick={() => handleLessonClick(lesson)}
                           disabled={lesson.is_locked}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between group ${
+                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
                             lesson.is_locked
                               ? "opacity-50 cursor-not-allowed"
                               : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
-                              ? "bg-[var(--primary)] text-[var(--primary-contrast)] shadow-sm cursor-pointer"
+                              ? "border-b-2 border-[var(--primary)] cursor-pointer"
                               : "hover:bg-[var(--surface-2)] cursor-pointer"
                           }`}
                         >
@@ -620,26 +590,135 @@ export default function CoursePage() {
                           )}
                         </button>
 
-                        {/* Content types dropdown */}
-                        {expandedLessons.has(lesson.id) && !lesson.is_locked && (
-                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-[var(--border)] pl-2">
-                            {getAvailableContentTypes(lesson.id).map((contentType) => (
-                              <button
-                                key={contentType.value}
-                                type="button"
-                                onClick={() => handleContentTypeClick(lesson, contentType.value)}
-                                className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${
-                                  selectedContentType?.lessonId === lesson.id && 
-                                  selectedContentType?.type === contentType.value
-                                    ? "bg-[var(--primary)] text-[var(--primary-contrast)]"
-                                    : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)]"
-                                }`}
+                        {/* Content types dropdown with Framer Motion animation */}
+                        <AnimatePresence mode="wait">
+                          {expandedLessons.has(lesson.id) && !lesson.is_locked && (
+                            <motion.div
+                              key={`dropdown-${lesson.id}`}
+                              initial={{ 
+                                opacity: 0,
+                                height: 0,
+                                scaleY: 0.8,
+                                originY: 0
+                              }}
+                              animate={{ 
+                                opacity: 1,
+                                height: "auto",
+                                scaleY: 1,
+                                transition: {
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 25,
+                                    mass: 0.8
+                                  },
+                                  opacity: {
+                                    duration: 0.2,
+                                    ease: "easeOut"
+                                  },
+                                  scaleY: {
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 28
+                                  }
+                                }
+                              }}
+                              exit={{ 
+                                opacity: 0,
+                                height: 0,
+                                scaleY: 0.8,
+                                transition: {
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 30
+                                  },
+                                  opacity: {
+                                    duration: 0.15,
+                                    ease: "easeIn"
+                                  },
+                                  scaleY: {
+                                    duration: 0.2,
+                                    ease: "easeIn"
+                                  }
+                                }
+                              }}
+                              className="ml-4 mt-1 mb-2 overflow-hidden border-l-2 border-[var(--border)] pl-2"
+                            >
+                              <motion.div 
+                                className="space-y-0.5"
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                variants={{
+                                  visible: {
+                                    transition: {
+                                      staggerChildren: 0.06,
+                                      delayChildren: 0.08
+                                    }
+                                  },
+                                  hidden: {
+                                    transition: {
+                                      staggerChildren: 0.03,
+                                      staggerDirection: -1
+                                    }
+                                  }
+                                }}
                               >
-                                {contentType.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                                {getAvailableContentTypes(lesson.id).map((contentType, index) => (
+                                  <motion.button
+                                    key={contentType.value}
+                                    type="button"
+                                    onClick={() => handleContentTypeClick(lesson, contentType.value)}
+                                    variants={{
+                                      hidden: { 
+                                        opacity: 0,
+                                        x: -12,
+                                        scale: 0.92
+                                      },
+                                      visible: { 
+                                        opacity: 1,
+                                        x: 0,
+                                        scale: 1,
+                                        transition: {
+                                          type: "spring",
+                                          stiffness: 350,
+                                          damping: 25,
+                                          mass: 0.6
+                                        }
+                                      }
+                                    }}
+                                    whileHover={{ 
+                                      x: 4,
+                                      scale: 1.02,
+                                      transition: {
+                                        type: "spring",
+                                        stiffness: 400,
+                                        damping: 20
+                                      }
+                                    }}
+                                    whileTap={{ 
+                                      scale: 0.96,
+                                      transition: {
+                                        type: "spring",
+                                        stiffness: 500,
+                                        damping: 25
+                                      }
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${
+                                      selectedContentType?.lessonId === lesson.id && 
+                                      selectedContentType?.type === contentType.value
+                                        ? "bg-[var(--primary)] text-[var(--primary-contrast)]"
+                                        : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)]"
+                                    }`}
+                                  >
+                                    {contentType.label}
+                                  </motion.button>
+                                ))}
+                              </motion.div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     ))}
                   </div>
@@ -793,6 +872,7 @@ export default function CoursePage() {
                   setContentCache={setContentCache}
                   handleCardChange={handleCardChange}
                   setCurrentViewingItem={setCurrentViewingItem}
+                  onQuizQuestionChange={setChatQuizContext}
                 />
               </section>
             </>
@@ -828,15 +908,36 @@ export default function CoursePage() {
                 content.flashcards = data.cards;
               }
               if (data.questions || data.mcq || data.frq) {
-                content.questions = data.questions || [];
-                if (data.mcq) content.questions.push(...data.mcq.map(q => ({ ...q, type: 'mcq' })));
-                if (data.frq) content.questions.push(...data.frq.map(q => ({ ...q, type: 'frq' })));
+                const mergedQuestions = [];
+
+                if (Array.isArray(data.questions)) {
+                  mergedQuestions.push(...data.questions.map((q) => ({ ...q })));
+                } else if (data.questions) {
+                  mergedQuestions.push({ ...data.questions });
+                }
+
+                if (Array.isArray(data.mcq)) {
+                  mergedQuestions.push(
+                    ...data.mcq.map((q) => ({ ...q, type: q?.type || "mcq" }))
+                  );
+                }
+
+                if (Array.isArray(data.frq)) {
+                  mergedQuestions.push(
+                    ...data.frq.map((q) => ({ ...q, type: q?.type || "frq" }))
+                  );
+                }
+
+                if (mergedQuestions.length > 0) {
+                  content.questions = mergedQuestions;
+                }
               }
               
               return content;
             }
             return null;
-          })() : null
+          })() : null,
+          quizContext: chatQuizContext
         }}
         onWidthChange={setChatBotWidth}
       />
