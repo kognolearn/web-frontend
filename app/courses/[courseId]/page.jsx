@@ -389,7 +389,7 @@ export default function CoursePage() {
     if (!studyPlan || !userId || !courseId) return;
 
     const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
-      module.lessons?.filter(lesson => !lesson.is_locked) || []
+      module.lessons || []
     ) || [];
 
     // Prefetch all content types for all unlocked lessons
@@ -402,8 +402,6 @@ export default function CoursePage() {
   }, [studyPlan, userId, courseId]);
 
   const handleLessonClick = (lesson) => {
-    if (lesson.is_locked) return;
-    
     // Toggle expanded state
     const newExpanded = new Set(expandedLessons);
     if (newExpanded.has(lesson.id)) {
@@ -592,22 +590,14 @@ export default function CoursePage() {
                         <button
                           type="button"
                           onClick={() => handleLessonClick(lesson)}
-                          disabled={lesson.is_locked}
                           className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
-                            lesson.is_locked
-                              ? "opacity-50 cursor-not-allowed"
-                              : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
+                            expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
                               ? "border-b-2 border-[var(--primary)] cursor-pointer"
                               : "hover:bg-[var(--surface-2)] cursor-pointer"
                           }`}
                         >
                           <span className="flex-1 truncate">{lesson.title}</span>
-                          {lesson.is_locked ? (
-                            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                          ) : (
-                            <svg 
+                          <svg 
                               className={`w-3 h-3 flex-shrink-0 transition-transform ${
                                 expandedLessons.has(lesson.id) ? "rotate-90" : ""
                               }`} 
@@ -617,12 +607,11 @@ export default function CoursePage() {
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
-                          )}
                         </button>
 
                         {/* Content types dropdown with Framer Motion animation */}
                         <AnimatePresence mode="wait">
-                          {expandedLessons.has(lesson.id) && !lesson.is_locked && (
+                          {expandedLessons.has(lesson.id) && (
                             <motion.div
                               key={`dropdown-${lesson.id}`}
                               initial={{ 

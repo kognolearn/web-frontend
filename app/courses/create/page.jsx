@@ -5,63 +5,27 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
+import {
+  defaultTopicRating,
+  familiarityLevels,
+  manualOverviewId,
+  manualOverviewTitle,
+  NEW_EXCEPTION_SCORE,
+  CONFIDENT_EXCEPTION_SCORE,
+  SOMEWHAT_KNOW_SCORE,
+  SOMEWHAT_GAP_SCORE,
+  moduleConfidenceOptions,
+  moduleConfidencePresets,
+  scoreToFamiliarityBand,
+  importanceScoreToTag,
+  formatStudyTime
+} from "./utils";
+import TopicExplorer from "@/components/courses/TopicExplorer";
+import { AnimatePresence } from "framer-motion";
+
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
-const defaultTopicRating = 2;
-const familiarityLevels = [1, 2, 3];
-const manualOverviewId = "overview_manual";
-const manualOverviewTitle = "Custom topics";
 const nestedPayloadKeys = ["data", "result", "payload", "response", "content"];
-
-const NEW_EXCEPTION_SCORE = 0.7;
-const CONFIDENT_EXCEPTION_SCORE = 0.3;
-const SOMEWHAT_KNOW_SCORE = 0.9;
-const SOMEWHAT_GAP_SCORE = 0.3;
-
-const moduleConfidenceOptions = [
-  {
-    id: "new",
-    label: "New to me",
-    emoji: "🔴",
-    baseScore: 0.1,
-    badgeClass: "bg-red-500/15 text-red-400",
-    buttonClass: "border-red-500/40 text-red-300",
-    activeClass: "bg-red-500/15 border-red-500 text-red-100",
-    linkLabel: "Do you know any of these?",
-  },
-  {
-    id: "somewhat",
-    label: "Somewhat",
-    emoji: "🟡",
-    baseScore: 0.5,
-    badgeClass: "bg-amber-500/15 text-amber-400",
-    buttonClass: "border-amber-500/40 text-amber-300",
-    activeClass: "bg-amber-500/15 border-amber-500 text-amber-100",
-    linkLabel: null,
-  },
-  {
-    id: "confident",
-    label: "Confident",
-    emoji: "🟢",
-    baseScore: 0.9,
-    badgeClass: "bg-emerald-500/15 text-emerald-400",
-    buttonClass: "border-emerald-500/40 text-emerald-300",
-    activeClass: "bg-emerald-500/15 border-emerald-500 text-emerald-100",
-    linkLabel: "Any gaps in your knowledge?",
-  },
-];
-
-const moduleConfidencePresets = moduleConfidenceOptions.reduce((acc, option) => {
-  acc[option.id] = option;
-  return acc;
-}, {});
-
-function scoreToFamiliarityBand(score) {
-  if (!Number.isFinite(score)) return "developing";
-  if (score >= 0.75) return "confident";
-  if (score <= 0.25) return "needs review";
-  return "developing";
-}
 
 /**
  * @typedef {Object} Subtopic
@@ -193,21 +157,7 @@ function createSubtopic({
   };
 }
 
-function importanceScoreToTag(score) {
-  if (!Number.isFinite(score)) return null;
-  if (score >= 9) return { label: "Critical", color: "bg-red-500/15 text-red-500" };
-  if (score >= 7) return { label: "High", color: "bg-amber-500/15 text-amber-500" };
-  if (score >= 5) return { label: "Medium", color: "bg-blue-500/10 text-blue-500" };
-  return { label: "Low", color: "bg-gray-200 text-[var(--muted-foreground)]" };
-}
 
-function formatStudyTime(minutes) {
-  if (!Number.isFinite(minutes)) return null;
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
 
 function collectPayloadCandidates(payload) {
   const queue = [];
@@ -370,6 +320,7 @@ function CreateCoursePageContent() {
   const [generatedGrokDraft, setGeneratedGrokDraft] = useState(null);
   const [deletedSubtopics, setDeletedSubtopics] = useState([]);
   const [topicsApproved, setTopicsApproved] = useState(false);
+  const [showTopicExplorer, setShowTopicExplorer] = useState(false);
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
@@ -692,6 +643,7 @@ function CreateCoursePageContent() {
       setOverviewTopics(hydrated);
       setTopicsApproved(false);
       setTopicsError(null);
+      setShowTopicExplorer(true);
     } catch (error) {
       console.error(error);
       setOverviewTopics([]);
@@ -1644,270 +1596,39 @@ function CreateCoursePageContent() {
                 </div>
               )}
 
-              {totalSubtopics > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">
-                      <span className="text-2xl font-bold text-[var(--primary)]">{totalSubtopics}</span> topics generated
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleGenerateTopics}
-                      className="btn btn-outline btn-sm"
-                      disabled={isTopicsLoading}
-                    >
-                      Regenerate
-                    </button>
-                  </div>
-
-                  {/* Topics List */}
-                  <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
-                    {overviewTopics.map((overview) => {
-                      const moduleState = moduleConfidenceState[overview.id] || { mode: "somewhat", overrides: {} };
-                      const modeConfig = moduleConfidencePresets[moduleState.mode] || moduleConfidencePresets.somewhat;
-                      const isAccordionOpen = (openAccordions[overview.id] ?? moduleState.mode === "somewhat") || moduleState.mode === "somewhat";
-                      const totalMin = overview.subtopics.reduce(
-                        (sum, st) => sum + (Number.isFinite(st.estimatedStudyTimeMinutes) ? st.estimatedStudyTimeMinutes : 0),
-                        0
-                      );
-                      const formattedTime = formatStudyTime(totalMin);
-                      return (
-                        <div key={overview.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
-                          <div className="flex items-start justify-between gap-3 mb-4">
-                            <div>
-                              <h3 className="text-base font-semibold">{overview.title}</h3>
-                              {formattedTime && (
-                                <p className="text-xs text-[var(--muted-foreground)]">Estimated total focus: {formattedTime}</p>
-                              )}
-                              <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-                                Applies to {overview.subtopics.length} subtopics
-                              </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              {overview.likelyOnExam && (
-                                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
-                                  Likely on exam
-                                </span>
-                              )}
-                              <span className={`text-[11px] px-2 py-1 rounded-full font-medium ${modeConfig.badgeClass}`}>
-                                {modeConfig.emoji} {modeConfig.label}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {moduleConfidenceOptions.map((option) => {
-                              const isActive = moduleState.mode === option.id;
-                              return (
-                                <button
-                                  key={option.id}
-                                  type="button"
-                                  onClick={() => handleModuleModeChange(overview.id, option.id)}
-                                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                                    isActive
-                                      ? option.activeClass
-                                      : `${option.buttonClass} bg-[var(--surface-1)]`
-                                  }`}
-                                >
-                                  <span>{option.emoji}</span>
-                                  {option.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {moduleState.mode !== "somewhat" && !(openAccordions[overview.id] ?? false) && modeConfig.linkLabel && (
-                            <button
-                              type="button"
-                              onClick={() => handleAccordionToggle(overview.id, true)}
-                              className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline"
-                            >
-                              {modeConfig.linkLabel}
-                            </button>
-                          )}
-                          {(moduleState.mode === "somewhat" || isAccordionOpen) && (
-                            <div className="mt-4 space-y-3">
-                              {moduleState.mode !== "somewhat" && (
-                                <div className="flex items-center justify-between text-[11px] text-[var(--muted-foreground)]">
-                                  <span>
-                                    {moduleState.mode === "new"
-                                      ? "Check the topics you already feel confident about."
-                                      : "Uncheck the topics that still feel shaky."}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="text-[var(--primary)] hover:underline"
-                                    onClick={() => handleAccordionToggle(overview.id, false)}
-                                  >
-                                    Collapse
-                                  </button>
-                                </div>
-                              )}
-                              {overview.subtopics.map((subtopic) => {
-                                const overrideValue = moduleState.overrides?.[subtopic.id];
-                                const resolvedScore = resolveSubtopicConfidence(overview.id, subtopic.id);
-                                const isNewMode = moduleState.mode === "new";
-                                const isConfidentMode = moduleState.mode === "confident";
-                                const checkboxChecked = isNewMode
-                                  ? overrideValue === NEW_EXCEPTION_SCORE
-                                  : isConfidentMode
-                                  ? overrideValue !== CONFIDENT_EXCEPTION_SCORE
-                                  : false;
-                                return (
-                                  <div key={subtopic.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="flex-1">
-                                        <p className="text-sm font-semibold">{subtopic.title}</p>
-                                        {subtopic.description && (
-                                          <p className="text-xs text-[var(--muted-foreground)] mt-1">{subtopic.description}</p>
-                                        )}
-                                        {subtopic.examRelevanceReasoning && (
-                                          <p className="text-[11px] italic text-[var(--muted-foreground)] mt-1">{subtopic.examRelevanceReasoning}</p>
-                                        )}
-                                        <div className="flex items-center gap-2 flex-wrap mt-2">
-                                          {subtopic.focus && (
-                                            <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-muted)] text-[var(--muted-foreground)] font-medium">{subtopic.focus}</span>
-                                          )}
-                                          {subtopic.bloomLevel && (
-                                            <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--surface-1)] text-[var(--muted-foreground)] font-medium">{subtopic.bloomLevel}</span>
-                                          )}
-                                          {subtopic.importanceScore !== undefined && (() => {
-                                            const tag = importanceScoreToTag(subtopic.importanceScore);
-                                            return <span className={`text-[11px] px-2 py-1 rounded-full ${tag.color} font-semibold`}>{tag.label}</span>;
-                                          })()}
-                                          {subtopic.estimatedStudyTimeMinutes !== undefined && (
-                                            <span className="text-xs text-[var(--muted-foreground)]">⏱ {formatStudyTime(subtopic.estimatedStudyTimeMinutes)}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col items-end gap-2 text-right">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
-                                          className="text-[11px] text-[var(--muted-foreground)] hover:text-red-400"
-                                        >
-                                          Remove
-                                        </button>
-                                        {(isNewMode || isConfidentMode) && (
-                                          <label className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
-                                            <input
-                                              type="checkbox"
-                                              className="h-4 w-4 rounded border-[var(--border)]"
-                                              checked={checkboxChecked}
-                                              onChange={(event) => {
-                                                if (isNewMode) {
-                                                  handleExceptionToggle(overview.id, subtopic.id, event.target.checked, NEW_EXCEPTION_SCORE);
-                                                } else {
-                                                  handleExceptionToggle(overview.id, subtopic.id, !event.target.checked, CONFIDENT_EXCEPTION_SCORE);
-                                                }
-                                              }}
-                                            />
-                                            <span>
-                                              {isNewMode ? "I already know this" : "I'm confident here"}
-                                            </span>
-                                          </label>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {moduleState.mode === "somewhat" && (
-                                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                                        <span className="text-[11px] text-[var(--muted-foreground)] mr-2">How do you feel?</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSomewhatToggle(
-                                            overview.id,
-                                            subtopic.id,
-                                            overrideValue === SOMEWHAT_KNOW_SCORE ? null : "known"
-                                          )}
-                                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                            overrideValue === SOMEWHAT_KNOW_SCORE
-                                              ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
-                                              : "border-[var(--border)] text-[var(--muted-foreground)]"
-                                          }`}
-                                        >
-                                          Know it
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSomewhatToggle(
-                                            overview.id,
-                                            subtopic.id,
-                                            overrideValue === SOMEWHAT_GAP_SCORE ? null : "gap"
-                                          )}
-                                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                            overrideValue === SOMEWHAT_GAP_SCORE
-                                              ? "border-red-400 bg-red-500/20 text-red-200"
-                                              : "border-[var(--border)] text-[var(--muted-foreground)]"
-                                          }`}
-                                        >
-                                          Need review
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                  {/* Topics Summary & View Button */}
+                  {totalSubtopics > 0 && (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-6 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                          <svg className="h-8 w-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                          </svg>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Add Custom Topic */}
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
-                    <h4 className="text-sm font-semibold mb-3">Add Custom Topic</h4>
-                    <form onSubmit={handleAddTopic} className="flex gap-3">
-                      <input
-                        type="text"
-                        value={newTopicTitle}
-                        onChange={(event) => setNewTopicTitle(event.target.value)}
-                        placeholder="Topic name..."
-                        className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                      />
-                      <div className="flex items-center gap-1">
-                        {familiarityLevels.map((rating) => (
+                        <h3 className="text-xl font-bold mb-2">{totalSubtopics} Topics Generated</h3>
+                        <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-md mx-auto">
+                          Your course topics have been generated. Review and customize them to fit your learning goals.
+                        </p>
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                           <button
                             type="button"
-                            key={rating}
-                            onClick={() => setNewTopicRating(rating)}
-                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
-                              rating <= newTopicRating ? "border-[var(--primary)] bg-[var(--primary)]/20" : "border-[var(--border)]"
-                            }`}
+                            onClick={() => setShowTopicExplorer(true)}
+                            className="btn btn-primary"
                           >
-                            {rating}
+                            View & Edit Topics
                           </button>
-                        ))}
-                      </div>
-                      <button type="submit" className="btn btn-primary btn-sm">Add</button>
-                    </form>
-                  </div>
-
-                  {/* Deleted Topics */}
-                  {deletedSubtopics.length > 0 && (
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold">Recently Removed ({deletedSubtopics.length})</h4>
-                        <button type="button" onClick={handleRestoreAll} className="btn btn-link btn-xs">
-                          Restore All
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {deletedSubtopics.map((entry) => (
-                          <div key={entry.subtopic.id} className="flex items-center justify-between text-sm">
-                            <span className="truncate text-[var(--muted-foreground)]">{entry.subtopic.title}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRestoreSubtopic(entry.subtopic.id)}
-                              className="btn btn-link btn-xs"
-                            >
-                              Restore
-                            </button>
-                          </div>
-                        ))}
+                          <button
+                            type="button"
+                            onClick={handleGenerateTopics}
+                            className="btn btn-outline"
+                            disabled={isTopicsLoading}
+                          >
+                            Regenerate
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
               {/* Navigation */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
@@ -2043,6 +1764,31 @@ function CreateCoursePageContent() {
           )}
         </div>
       </div>
+      {/* Expanded Topic Explorer Overlay */}
+      <AnimatePresence>
+        {showTopicExplorer && (
+          <TopicExplorer
+            overviewTopics={overviewTopics}
+            moduleConfidenceState={moduleConfidenceState}
+            openAccordions={openAccordions}
+            handleModuleModeChange={handleModuleModeChange}
+            handleAccordionToggle={handleAccordionToggle}
+            handleExceptionToggle={handleExceptionToggle}
+            handleSomewhatToggle={handleSomewhatToggle}
+            handleDeleteSubtopic={handleDeleteSubtopic}
+            handleAddTopic={handleAddTopic}
+            handleRestoreSubtopic={handleRestoreSubtopic}
+            handleRestoreAll={handleRestoreAll}
+            deletedSubtopics={deletedSubtopics}
+            newTopicTitle={newTopicTitle}
+            setNewTopicTitle={setNewTopicTitle}
+            newTopicRating={newTopicRating}
+            setNewTopicRating={setNewTopicRating}
+            resolveSubtopicConfidence={resolveSubtopicConfidence}
+            onClose={() => setShowTopicExplorer(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
