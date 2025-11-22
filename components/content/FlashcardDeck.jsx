@@ -2,9 +2,10 @@
 import React, {
   useMemo, useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle
 } from "react";
+import { motion } from "framer-motion";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
-export default function FlashcardDeck({ data = {} }) {
+export default function FlashcardDeck({ data = {}, onCardChange }) {
   const cards = useMemo(
     () =>
       Object.entries(data)
@@ -19,6 +20,21 @@ export default function FlashcardDeck({ data = {} }) {
 
   const next = useCallback(() => setI(p => (p + 1) % Math.max(total, 1)), [total]);
   const prev = useCallback(() => setI(p => (p - 1 + Math.max(total, 1)) % Math.max(total, 1)), [total]);
+
+  // Notify parent when card changes
+  useEffect(() => {
+    if (onCardChange && cards[i]) {
+      const [num, tuple] = cards[i];
+      onCardChange({
+        index: i,
+        number: num,
+        question: tuple[0],
+        answer: tuple[1],
+        explanation: tuple[2],
+        total: total
+      });
+    }
+  }, [i, cards, total, onCardChange]);
 
   // global keys (no focus required)
   useEffect(() => {
@@ -40,7 +56,7 @@ export default function FlashcardDeck({ data = {} }) {
 
   if (!total) {
     return (
-      <div className="rounded-2xl bg-[var(--surface-2)] p-6 text-center text-sm text-[var(--muted-foreground)] shadow">
+      <div className="text-center text-sm text-[var(--muted-foreground)]">
         No flashcards available.
       </div>
     );
@@ -49,7 +65,7 @@ export default function FlashcardDeck({ data = {} }) {
   const [num, tuple] = cards[i];
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-5xl">
       <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
 
       {/* Prev / Next — never keep focus */}
@@ -60,31 +76,35 @@ export default function FlashcardDeck({ data = {} }) {
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={prev}
-          className="btn btn-primary btn-sm btn-circle select-none"
+          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
           aria-label="Previous"
-          title="Previous"
+          title="Previous (←)"
         >
-          ←
+          ← Previous
         </button>
+        
+        <span className="text-sm text-[var(--muted-foreground)]">
+          {i + 1} / {total}
+        </span>
+        
         <button
           type="button"
           tabIndex={-1}
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={next}
-          className="btn btn-primary btn-sm btn-circle select-none"
+          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
           aria-label="Next"
-          title="Next"
+          title="Next (→)"
         >
-          →
+          Next →
         </button>
       </div>
     </div>
   );
 }
 
-/* ------------ Horizontal flip: container rotates, content counter-rotates ------------ */
-/* No backface-visibility. We toggle content with showBack ? BACK : FRONT. */
+/* ------------ Horizontal flip with Framer Motion: smooth spring physics ------------ */
 const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
   const [question, answer, explanation] = tuple ?? ["", "", ""];
   const [showBack, setShowBack] = useState(false);
@@ -107,19 +127,18 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
     setIsAnimating(false);
   }, [num]);
 
-  const angle = showBack ? 180 : 0;
-
   const handleClick = () => {
     if (isAnimating) return;
     setIsAnimating(true);
     setShowBack((v) => !v);
   };
 
-  const handleTransitionEnd = (e) => {
-    // Only end when the rotateY finishes (not padding/margin etc)
-    if (e.propertyName === "transform") {
-      setIsAnimating(false);
-    }
+  // Spring configuration for smooth, organic flip
+  const springConfig = {
+    type: "spring",
+    stiffness: 260,
+    damping: 20,
+    mass: 0.8
   };
 
   return (
@@ -128,64 +147,113 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
       aria-label={showBack ? "Show question" : "Reveal answer"}
       onClick={handleClick}
       className="relative w-full"
-      style={{ perspective: "1000px" }}
+      style={{ perspective: "1200px" }}
     >
-      <div
-        className="relative h-[18rem] sm:h-[20rem] w-full rounded-2xl bg-[var(--surface-2)] shadow-md overflow-hidden"
+      <motion.div
+        className="relative h-[24rem] sm:h-[26rem] w-full rounded-2xl shadow-lg overflow-hidden"
         style={{
           transformStyle: "preserve-3d",
-          transform: `rotateY(${angle}deg)`,
-          transition: "transform 400ms cubic-bezier(.2,.6,.2,1)",
           cursor: isAnimating ? "default" : "pointer",
         }}
-        onTransitionEnd={handleTransitionEnd}
+        animate={{
+          rotateY: showBack ? 180 : 0,
+        }}
+        transition={springConfig}
+        onAnimationStart={() => setIsAnimating(true)}
+        onAnimationComplete={() => setIsAnimating(false)}
       >
-        <div
-          className="absolute inset-0 p-6 flex flex-col"
-          style={{ transform: `rotateY(${angle}deg)` }}
+        {/* Front face - Question */}
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 p-8 flex flex-col justify-center items-center"
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+          }}
+          animate={{
+            opacity: showBack ? 0 : 1,
+            scale: showBack ? 0.9 : 1,
+          }}
+          transition={{
+            opacity: { duration: 0.2, delay: showBack ? 0 : 0.15 },
+            scale: springConfig,
+          }}
         >
-          {showBack ? (
-            <>
-              <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">Answer</div>
-              <div className="text-base font-medium text-[var(--foreground)] whitespace-pre-wrap mb-3">
-                {answer}
-              </div>
-              <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] whitespace-pre-wrap">
-                {/* <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mt-[2px] text-[var(--muted-foreground)] opacity-80 shrink-0"
-                > 
-                  <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />
-                </svg> */}
-                <span>{explanation}</span>
-              </div>
-              <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
-                Press Space to flip back
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">
-                Question {num}
-              </div>
-              <div className="text-base text-[var(--foreground)] whitespace-pre-wrap">
+          <div className="w-full max-w-2xl text-center">
+            <div className="mb-6 inline-block px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-sm">
+              <span className="text-sm font-semibold text-white/90">Question {num}</span>
+            </div>
+
+            <div className="flex-1 flex items-center justify-center mb-8">
+              <p className="text-2xl sm:text-3xl font-bold text-white leading-relaxed whitespace-pre-wrap">
                 {question}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
+              <span>Click or press Space to reveal answer</span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Back face - Answer (counter-rotated to fix mirroring) */}
+        <motion.div
+          className="absolute inset-0 bg-[var(--surface-2)] p-8 flex flex-col"
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+          animate={{
+            opacity: showBack ? 1 : 0,
+            scale: showBack ? 1 : 0.9,
+          }}
+          transition={{
+            opacity: { duration: 0.2, delay: showBack ? 0.15 : 0 },
+            scale: springConfig,
+          }}
+        >
+          {/* Counter-rotate content to fix mirroring */}
+          <div className="w-full h-full flex flex-col" style={{ transform: "rotateY(180deg)" }}>
+            <div className="mb-4 inline-block self-start px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+              <span className="text-sm font-semibold text-green-600 dark:text-green-400">Answer</span>
+            </div>
+
+            {/* ANSWER: centered and prominent */}
+            <div className="flex-1 flex flex-col justify-center items-center text-center mb-6 overflow-y-auto">
+              <p className="text-xl sm:text-2xl font-semibold text-[var(--foreground)] leading-relaxed whitespace-pre-wrap max-w-2xl">
+                {answer}
+              </p>
+            </div>
+
+            {/* EXPLANATION: styled as a callout */}
+            {explanation && (
+              <div className="mt-auto p-4 rounded-xl bg-[var(--primary)]/5 border border-[var(--primary)]/10">
+                <div className="flex items-start gap-2">
+                  <svg className="w-5 h-5 text-[var(--primary)] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <div className="text-xs font-semibold text-[var(--primary)] mb-1">Explanation</div>
+                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
+                      {explanation}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="mt-auto pt-4 text-xs text-[var(--muted-foreground)]">
-                Click or press Space to flip
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-center gap-2 text-[var(--muted-foreground)] text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
+              <span>Click or press Space to flip back</span>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 });

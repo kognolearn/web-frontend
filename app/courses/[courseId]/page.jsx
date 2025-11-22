@@ -1,55 +1,238 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
+import FlashcardDeck from "@/components/content/FlashcardDeck";
+import RichBlock from "@/components/content/RichBlock";
+import Quiz from "@/components/content/Quiz";
 import { marked } from "marked";
 
-function extractCourseRecord(payload) {
-  if (!payload) return null;
-  let candidate = payload;
-  if (Array.isArray(candidate)) {
-    candidate = candidate[0] ?? null;
-  } else if (candidate?.data) {
-    if (Array.isArray(candidate.data)) {
-      candidate = candidate.data[0] ?? null;
-    } else if (candidate.data.course) {
-      candidate = candidate.data.course;
-    } else if (candidate.data.course_data) {
-      candidate = candidate.data;
+// Utility functions moved outside
+const normalizeFormat = (fmt) => {
+  if (!fmt) return "";
+  const f = String(fmt).trim().toLowerCase().replace(/[-\s]+/g, "_");
+  if (f === "miniquiz" || f === "mini_quiz") return "mini_quiz";
+  if (f === "practiceexam" || f === "practice_exam") return "practice_exam";
+  return f;
+};
+
+const prettyFormat = (fmt) => {
+  const base = String(fmt || "").toLowerCase().replace(/[_-]+/g, " ");
+  return base.replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+// ItemContent component moved outside CoursePage
+function ItemContent({
+  fmt,
+  id,
+  userId,
+  courseId,
+  contentCache,
+  setContentCache,
+  setCurrentViewingItem,
+  handleCardChange,
+  onQuizQuestionChange,
+  handleQuizCompleted
+}) {
+  const normFmt = normalizeFormat(fmt);
+  const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
+  const cached = contentCache[key];
+  const fetchInitiatedRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!normFmt || !id) return undefined;
+    if (fetchInitiatedRef.current.has(key)) return undefined;
+    const existing = contentCache[key];
+    if (existing && (existing.status === "loaded" || existing.status === "loading")) return undefined;
+
+    fetchInitiatedRef.current.add(key);
+    const ac = new AbortController();
+    setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({ format: normFmt, id: String(id) });
+        if (userId) params.set("userId", String(userId));
+        if (courseId) params.set("courseId", String(courseId));
+        const url = `/api/content?${params.toString()}`;
+        const res = await fetch(url, { signal: ac.signal });
+        let data;
+        try {
+          data = await res.json();
+        } catch (_) {
+          const raw = await res.text().catch(() => "");
+          data = raw ? { raw } : {};
+        }
+        if (!res.ok) {
+          throw new Error((data && data.error) || `Failed (${res.status})`);
+        }
+        setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
+      }
+    })();
+
+    return () => {
+      fetchInitiatedRef.current.delete(key);
+      ac.abort();
+    };
+    // We intentionally exclude contentCache from deps to avoid aborting in-flight fetches
+    // whenever cache state updates to "loading" or "loaded".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normFmt, id, key, userId, courseId]);
+
+  const cachedEnvelope = cached?.data || {};
+  const cachedPayload = cachedEnvelope.data;
+  const cardsArray = cachedPayload?.cards;
+  const flashcardData = useMemo(() => {
+    if (!Array.isArray(cardsArray)) return {};
+    return cardsArray.reduce((acc, card, idx) => {
+      acc[String(idx + 1)] = card;
+      return acc;
+    }, {});
+  }, [cardsArray]);
+
+  if (!normFmt || !id) {
+    return <div className="text-xs text-red-600">Missing format or id.</div>;
+  }
+  if (!cached || cached.status === "loading") {
+    return <div className="text-xs text-[var(--muted-foreground)]">Loading {normFmt}…</div>;
+  }
+  if (cached.status === "error") {
+    return <div className="text-xs text-red-600">{cached.error}</div>;
+  }
+  const data = cachedPayload || {};
+  const resolvedFormat = normalizeFormat(cachedEnvelope.format) || normFmt;
+
+  // Clear quiz context if this content is not a quiz
+  useEffect(() => {
+    if (!onQuizQuestionChange) return;
+    if (resolvedFormat !== "mini_quiz" && resolvedFormat !== "practice_exam") {
+      onQuizQuestionChange(null);
     }
-  } else if (candidate?.course) {
-    candidate = candidate.course;
-  } else if (Array.isArray(candidate?.courses)) {
-    candidate = candidate.courses[0] ?? candidate;
+  }, [resolvedFormat, onQuizQuestionChange]);
+
+  switch (resolvedFormat) {
+    case "video": {
+      // Set the first video as currently viewing when component mounts
+      useEffect(() => {
+        if (data?.videos?.[0]) {
+          setCurrentViewingItem({
+            type: 'video',
+            index: 0,
+            title: data.videos[0].title,
+            duration_min: data.videos[0].duration_min,
+            summary: data.videos[0].summary,
+            total: data.videos.length
+          });
+        }
+      // Added setCurrentViewingItem (which is stable) to dependencies
+      }, [data?.videos, setCurrentViewingItem]);
+      
+      return (
+        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-[var(--foreground)]">Video</span>
+          </div>
+          <div className="space-y-4">
+            {data?.videos?.map((vid, idx) => {
+              if (!vid) return null;
+              let embedUrl = vid.url;
+              try {
+                const u = new URL(vid.url);
+                if (u.hostname === "youtu.be") {
+                  embedUrl = `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+                } else if (u.hostname.includes("youtube.com")) {
+                  if (u.pathname === "/watch") {
+                    const v = u.searchParams.get("v");
+                    if (v) embedUrl = `https://www.youtube.com/embed/${v}`;
+                  } else if (u.pathname.startsWith("/shorts/") || u.pathname.startsWith("/embed/")) {
+                    const id = u.pathname.split("/").filter(Boolean).pop();
+                    if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
+                  }
+                }
+              } catch {}
+              return (
+                <div key={idx}>
+                  <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                    <iframe
+                      src={embedUrl}
+                      title={vid.title}
+                      className="absolute top-0 left-0 w-full h-full rounded-lg"
+                      frameBorder="0"
+                      allowFullScreen
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-base font-semibold">{vid.title}</p>
+                    <p className="text-sm text-[var(--muted-foreground)] mt-1">{vid.duration_min} min</p>
+                    {vid.summary && (
+                      <p className="text-sm text-[var(--muted-foreground)] mt-2">{vid.summary}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </article>
+      );
+    }
+    case "reading": {
+      // Check if data has structured content blocks
+      const hasRichContent = data?.content && Array.isArray(data.content);
+      
+      return (
+        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-[var(--foreground)]">Reading</span>
+          </div>
+          {hasRichContent ? (
+            <RichBlock 
+              block={data} 
+              maxWidth="100%" 
+              containerClassName="text-[var(--foreground)]"
+            />
+          ) : (
+            <div className="prose prose-sm max-w-none text-[var(--foreground)]">
+              <div dangerouslySetInnerHTML={{ __html: marked.parse(data?.body || "") }} />
+            </div>
+          )}
+        </article>
+      );
+    }
+    case "flashcards": {
+      return <FlashcardDeck data={flashcardData} onCardChange={handleCardChange} />;
+    }
+    case "mini_quiz":
+    case "practice_exam": {
+      // Pass the data directly to Quiz component which handles normalization
+  return (
+    <Quiz 
+      questions={data?.questions || data} 
+      onQuestionChange={onQuizQuestionChange}
+      onQuizCompleted={handleQuizCompleted}
+      userId={userId}
+      courseId={courseId}
+      lessonId={id}
+    />
+  );
+    }
+    default:
+      return (
+        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-[var(--foreground)]">Content</span>
+          </div>
+          <pre className="overflow-auto text-xs p-4 bg-[var(--surface-2)] rounded-lg">
+            {JSON.stringify(data ?? cached.data, null, 2)}
+          </pre>
+        </article>
+      );
   }
-
-  if (!candidate) return null;
-  if (candidate.course_data) {
-    return candidate;
-  }
-
-  if (
-    typeof candidate === "object" &&
-    candidate !== null &&
-    (candidate.syllabus || candidate.modules || candidate.lessons || candidate.assessments)
-  ) {
-    return { course_data: candidate };
-  }
-
-  return candidate;
-}
-
-function isCourseV2Data(data) {
-  return Boolean(data && typeof data === "object" && data.syllabus && data.modules);
-}
-
-function ensureKey(value, fallback) {
-  if (value === undefined || value === null || value === "") {
-    return fallback;
-  }
-  return String(value);
 }
 
 export default function CoursePage() {
@@ -58,16 +241,20 @@ export default function CoursePage() {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [courseMeta, setCourseMeta] = useState(null);
-  const [courseData, setCourseData] = useState(null);
-  const [selectedTopic, setSelectedTopic] = useState(null);
-  const [contentCache, setContentCache] = useState({}); // key: format:id -> { status, data, error }
-  const [sidebarWidth, setSidebarWidth] = useState(250);
-  const [isResizing, setIsResizing] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [courseName, setCourseName] = useState("");
+  const [studyPlan, setStudyPlan] = useState(null);
+  const [selectedLesson, setSelectedLesson] = useState(null);
+  const [contentCache, setContentCache] = useState({});
   const [chatBotWidth, setChatBotWidth] = useState(0);
-  const sidebarRef = useRef(null);
+  const [chatQuizContext, setChatQuizContext] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [viewMode, setViewMode] = useState("syllabus"); // "syllabus" or "topic"
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [expandedLessons, setExpandedLessons] = useState(new Set());
+  const [selectedContentType, setSelectedContentType] = useState(null); // { lessonId, type }
+  const [currentViewingItem, setCurrentViewingItem] = useState(null); // Current flashcard or video being viewed
 
   useEffect(() => {
     let mounted = true;
@@ -97,16 +284,46 @@ export default function CoursePage() {
   // Track viewport for responsive adjustments
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
-    const update = () => setIsMobile(mq.matches);
+    const update = () => {
+      setIsMobile(mq.matches);
+      if (mq.matches) {
+        setSidebarOpen(false);
+      }
+    };
     update();
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
   }, []);
 
-  // On mobile, hide the sidebar by default
+  // Sidebar resize handler
   useEffect(() => {
-    if (isMobile) setIsSidebarOpen(false);
-  }, [isMobile]);
+    if (!isResizingSidebar) return;
+
+    const handleMouseMove = (e) => {
+      const newWidth = e.clientX;
+      if (newWidth >= 250 && newWidth <= 500) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingSidebar]);
 
   useEffect(() => {
     if (!userId || !courseId) return;
@@ -115,9 +332,18 @@ export default function CoursePage() {
     setError("");
     (async () => {
       try {
-        const url = `/api/courses/data?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(
-          String(courseId)
-        )}`;
+        // Fetch course metadata first to get the course name
+        const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(courseId)}`;
+        const courseMetaRes = await fetch(courseMetaUrl);
+        if (courseMetaRes.ok) {
+          const courseMeta = await courseMetaRes.json();
+          if (!aborted && courseMeta?.name) {
+            setCourseName(courseMeta.name);
+          }
+        }
+        
+        // Fetch study plan
+        const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}&hours=50`;
         const res = await fetch(url);
         if (!res.ok) {
           const text = await res.text();
@@ -125,20 +351,15 @@ export default function CoursePage() {
         }
         const json = await res.json();
         if (aborted) return;
-        const record = extractCourseRecord(json);
-        setCourseMeta(record);
-        const data = record?.course_data || null;
-        setCourseData(data);
-
-        if (!isCourseV2Data(data) && data && typeof data === "object") {
-          const firstTopic = Object.keys(data)[0] || null;
-          setSelectedTopic(firstTopic);
-        } else {
-          setSelectedTopic(null);
+        setStudyPlan(json);
+        
+        // Auto-select first lesson if available
+        if (json?.modules?.[0]?.lessons?.[0]) {
+          setSelectedLesson(json.modules[0].lessons[0]);
         }
       } catch (e) {
         if (aborted) return;
-        setError(e?.message || "Failed to load course data.");
+        setError(e?.message || "Failed to load study plan.");
       } finally {
         if (!aborted) setLoading(false);
       }
@@ -148,224 +369,74 @@ export default function CoursePage() {
     };
   }, [userId, courseId]);
 
-  // Handle sidebar resizing
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (!isResizing) return;
-      const newWidth = e.clientX;
-      if (newWidth >= 200 && newWidth <= 500) {
-        setSidebarWidth(newWidth);
+  const refetchStudyPlan = useCallback(async () => {
+    if (!userId || !courseId) return;
+    try {
+      const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}&hours=50`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
       }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      const json = await res.json();
+      setStudyPlan(json);
+    } catch (e) {
+      console.error('Failed to refetch study plan:', e);
     }
+  }, [userId, courseId]);
 
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing]);
+  // Prefetch all unlocked content when study plan loads
+  useEffect(() => {
+    if (!studyPlan || !userId || !courseId) return;
 
-  const isCourseV2 = useMemo(() => isCourseV2Data(courseData), [courseData]);
+    const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
+      module.lessons?.filter(lesson => !lesson.is_locked) || []
+    ) || [];
 
-  const legacyEntries = useMemo(() => {
-    if (isCourseV2 || !courseData || typeof courseData !== "object") return [];
-    return Object.entries(courseData);
-  }, [courseData, isCourseV2]);
-
-  // Group topics by their header using "/" as the hierarchy separator
-  // Example key: "category/subtopic" => header: "category", title: "subtopic"
-  const legacyGroupedTopics = useMemo(() => {
-    const groups = {};
-    legacyEntries.forEach(([topic, items]) => {
-      const parts = String(topic).split("/").map((s) => s.trim()).filter(Boolean);
-      if (parts.length > 1) {
-        const header = parts[0];
-        const title = parts.slice(1).join(" / "); // support deeper nesting gracefully
-        if (!groups[header]) groups[header] = [];
-        groups[header].push({ fullTopic: topic, title, items });
-      } else {
-        // If no separator, use the whole topic as both header and title
-        const header = parts[0] || topic;
-        if (!groups[header]) groups[header] = [];
-        groups[header].push({ fullTopic: topic, title: header, items });
+    // Prefetch all content types for all unlocked lessons
+    allUnlockedLessons.forEach(lesson => {
+      if (lesson.id) {
+        // Prefetch all available content types
+        prefetchLessonContent(lesson.id, ['reading', 'video', 'flashcards', 'mini_quiz']);
       }
     });
-    return Object.entries(groups);
-  }, [legacyEntries]);
+  }, [studyPlan, userId, courseId]);
 
-  const courseTitleDisplay = useMemo(() => {
-    return (
-      courseMeta?.title ||
-      courseMeta?.course_title ||
-      courseMeta?.name ||
-      courseMeta?.course_data?.title ||
-      "Course overview"
-    );
-  }, [courseMeta]);
-
-  const universityName = useMemo(() => {
-    return (
-      courseMeta?.university ||
-      courseMeta?.college ||
-      courseMeta?.institution ||
-      courseMeta?.course_selection?.college ||
-      courseMeta?.course_selection?.university ||
-      courseMeta?.course_selection?.title ||
-      ""
-    );
-  }, [courseMeta]);
-
-  const finishByRaw = courseMeta?.finish_by_date || courseMeta?.finishDate || courseMeta?.finish_by;
-  const finishByLabel = useMemo(() => {
-    if (!finishByRaw) return null;
-    const parsed = new Date(finishByRaw);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-  }, [finishByRaw]);
-
-  const moduleList = useMemo(() => {
-    if (!isCourseV2) return [];
-    return Array.isArray(courseData?.modules?.modules) ? courseData.modules.modules : [];
-  }, [courseData, isCourseV2]);
-
-  const lessonList = useMemo(() => {
-    if (!isCourseV2) return [];
-    return Array.isArray(courseData?.lessons?.lessons) ? courseData.lessons.lessons : [];
-  }, [courseData, isCourseV2]);
-
-  const lessonsByModule = useMemo(() => {
-    if (!isCourseV2) return {};
-    return lessonList.reduce((acc, lesson, idx) => {
-      const key = ensureKey(
-        lesson?.moduleId ?? lesson?.module_id ?? lesson?.module ?? lesson?.moduleTitle,
-        `lesson-${idx}`
-      );
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(lesson);
-      return acc;
-    }, {});
-  }, [isCourseV2, lessonList]);
-
-  const syllabusOutcomes = Array.isArray(courseData?.syllabus?.outcomes) ? courseData.syllabus.outcomes : [];
-  const syllabusSources = Array.isArray(courseData?.syllabus?.sources) ? courseData.syllabus.sources : [];
-  const topicGraph = courseData?.syllabus?.topic_graph;
-  const assessments = courseData?.assessments || {};
-  const weeklyQuizzes = Array.isArray(assessments?.weekly_quizzes) ? assessments.weekly_quizzes : [];
-  const projectAssessment = assessments?.project;
-  const examBlueprint = assessments?.exam_blueprint;
-  const studyTime = courseData?.study_time_min;
-
-  const normalizeFormat = (fmt) => {
-    if (!fmt) return "";
-    const f = String(fmt).trim().toLowerCase().replace(/[-\s]+/g, "_");
-    // map known aliases
-    if (f === "miniquiz" || f === "mini_quiz") return "mini_quiz";
-    if (f === "practiceexam" || f === "practice_exam") return "practice_exam";
-    // pass through supported: video, reading, flashcards
-    return f;
-  };
-
-  const prettyFormat = (fmt) => {
-    const base = String(fmt || "").toLowerCase().replace(/[_-]+/g, " ");
-    return base.replace(/\b\w/g, (m) => m.toUpperCase());
-  };
-
-  // Smart title casing for headers and titles
-  const SMALL_WORDS = new Set([
-    "a","an","the","and","but","or","nor","for","so","yet",
-    "as","at","by","in","of","on","to","via","vs","vs.","per","with","from","into","over","under"
-  ]);
-  const ACRONYMS = new Set([
-    "API","CPU","GPU","SQL","HTML","CSS","JS","HTTP","HTTPS","URL","ID","OOP","BST","DFS","BFS","UI","UX"
-  ]);
-  const capWord = (w, isFirst, isLast) => {
-    if (!w) return w;
-    const clean = w; // preserve punctuation minimalistically
-    const upper = clean.toUpperCase();
-    if (ACRONYMS.has(upper)) return upper;
-    // hyphenated words: title-case each part
-    if (clean.includes("-")) {
-      return clean
-        .split("-")
-        .map((part, idx) => capWord(part, isFirst && idx === 0, isLast && idx === clean.split("-").length - 1))
-        .join("-");
+  const handleLessonClick = (lesson) => {
+    if (lesson.is_locked) return;
+    
+    // Toggle expanded state
+    const newExpanded = new Set(expandedLessons);
+    if (newExpanded.has(lesson.id)) {
+      newExpanded.delete(lesson.id);
+    } else {
+      newExpanded.add(lesson.id);
+      // Prefetch content to determine available content types
+      prefetchLessonContent(lesson.id);
     }
-    const lower = clean.toLowerCase();
-    // keep small words lower unless at boundaries
-    if (!isFirst && !isLast && SMALL_WORDS.has(lower)) return lower;
-    // default: capitalize first letter
-    return lower.charAt(0).toUpperCase() + lower.slice(1);
-  };
-  const smartTitleCase = (str) => {
-    if (!str) return "";
-    // Support slash-delimited subsegments
-    return String(str)
-      .split("/")
-      .map((seg) => {
-        const words = seg.trim().split(/\s+/);
-        return words
-          .map((w, i) => capWord(w, i === 0, i === words.length - 1))
-          .join(" ");
-      })
-      .join(" / ");
+    setExpandedLessons(newExpanded);
   };
 
-  const displaySelectedTopic = useMemo(() => {
-    if (!selectedTopic) return "";
-    const parts = String(selectedTopic).split("/").map((s) => s.trim()).filter(Boolean);
-    if (!parts.length) return "";
-    const header = smartTitleCase(parts[0]);
-    const tail = parts.slice(1).map(smartTitleCase).join(" / ");
-    return tail ? `${header} / ${tail}` : header;
-  }, [selectedTopic]);
-
-  function ItemContent({ fmt, id }) {
-    const normFmt = normalizeFormat(fmt);
-    const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
-    const cached = contentCache[key];
-    const fetchInitiatedRef = useRef(new Set());
-
-    useEffect(() => {
-      if (!normFmt || !id) return;
+  const prefetchLessonContent = (lessonId, formats = ['reading']) => {
+    formats.forEach(format => {
+      const normFmt = normalizeFormat(format);
+      const key = `${normFmt}:${lessonId}:${userId || ''}:${courseId || ''}`;
       
-      // Check if we've already initiated a fetch for this key
-      if (fetchInitiatedRef.current.has(key)) {
-        return;
-      }
+      // If already cached or loading, skip
+      if (contentCache[key]) return;
       
-      // Check if already loaded or loading
-      const existing = contentCache[key];
-      if (existing && (existing.status === "loaded" || existing.status === "loading")) {
-        return;
-      }
-      
-      // Mark that we're initiating a fetch
-      fetchInitiatedRef.current.add(key);
-      
-  const ac = new AbortController();
-      
+      // Start fetch
       setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
       
       (async () => {
         try {
-          const params = new URLSearchParams({ format: normFmt, id: String(id) });
+          const params = new URLSearchParams({ 
+            format: normFmt, 
+            id: String(lessonId) 
+          });
           if (userId) params.set("userId", String(userId));
           if (courseId) params.set("courseId", String(courseId));
           const url = `/api/content?${params.toString()}`;
-          console.log("[ItemContent] Fetching content:", { url, normFmt, id });
-          const res = await fetch(url, { signal: ac.signal });
+          const res = await fetch(url);
           let data;
           try {
             data = await res.json();
@@ -373,679 +444,531 @@ export default function CoursePage() {
             const raw = await res.text().catch(() => "");
             data = raw ? { raw } : {};
           }
-          console.log("[ItemContent] Response:", res.status, data);
           if (!res.ok) {
             throw new Error((data && data.error) || `Failed (${res.status})`);
           }
           setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
         } catch (e) {
-          console.error("[ItemContent] Error:", e);
           setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
         }
       })();
-      
-      return () => {
-        // Do not abort the fetch here. In React Strict Mode (dev), effects are mounted,
-        // cleaned up, and re-mounted, which would abort in-flight requests and leave
-        // the UI stuck in a loading state. We rely on the `cancelled` flag to avoid
-        // setting state after unmount.
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [normFmt, id, key]);
+    });
+  };
 
-    if (!normFmt || !id) {
-      return <div className="text-xs text-red-600">Missing format or id.</div>;
-    }
-    if (!cached || cached.status === "loading") {
-      return <div className="text-xs text-[var(--muted-foreground)]">Loading {normFmt}…</div>;
-    }
-    if (cached.status === "error") {
-      return <div className="text-xs text-red-600">{cached.error}</div>;
-    }
-    const { format, data } = cached.data || {};
-    const resolvedFormat = normalizeFormat(format) || normFmt;
+  const handleContentTypeClick = (lesson, contentType) => {
+    setSelectedLesson(lesson);
+    setSelectedContentType({ lessonId: lesson.id, type: contentType });
+    setViewMode("topic");
+    setCurrentViewingItem(null); // Reset when switching content
+  };
 
-    switch (resolvedFormat) {
-      case "video": {
-        return (
-          <div className="space-y-4">
-            {data?.videos?.map((vid) => {
-              if (!vid) return null;
-              let embedUrl = vid.url;
-              try {
-                const u = new URL(vid.url);
-                if (u.hostname === "youtu.be") {
-                  embedUrl = `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
-                } else if (u.hostname.includes("youtube.com")) {
-                  if (u.pathname === "/watch") {
-                    const v = u.searchParams.get("v");
-                    if (v) embedUrl = `https://www.youtube.com/embed/${v}`;
-                  } else if (u.pathname.startsWith("/shorts/") || u.pathname.startsWith("/embed/")) {
-                    const id = u.pathname.split("/").filter(Boolean).pop();
-                    if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
-                  }
-                }
-              } catch {}
-              return (
-                <div key={vid.url || vid.title}>
-                  <iframe
-                    src={embedUrl}
-                    title={vid.title}
-                    width="100%"
-                    height="315"
-                    frameBorder="0"
-                    allowFullScreen
-                  />
-                  <p className="mt-2 text-sm"><b>{vid.title}</b> – {vid.duration_min} min</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">{vid.summary}</p>
-                </div>
-              );
-            })}
-          </div>
-        );
+  const handleBackToSyllabus = () => {
+    setViewMode("syllabus");
+    setSelectedLesson(null);
+    setSelectedContentType(null);
+    setCurrentViewingItem(null); // Reset when going back
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  // Memoized callback for flashcard changes
+  const handleCardChange = useCallback((cardInfo) => {
+    setCurrentViewingItem({
+      type: 'flashcard',
+      ...cardInfo
+    });
+  }, []);
+
+  // Callback for quiz completion
+  const handleQuizCompleted = useCallback(async () => {
+    await refetchStudyPlan();
+  }, [refetchStudyPlan]);
+
+  // Get available content types from cached data
+  const getAvailableContentTypes = (lessonId) => {
+    const types = [];
+    const cacheKeys = Object.keys(contentCache);
+    
+    // Check what content is available for this lesson
+    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
+    if (lessonCacheKey) {
+      const cached = contentCache[lessonCacheKey];
+      if (cached?.status === "loaded" && cached?.data?.data) {
+        const data = cached.data.data;
+        if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
+        if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
+        if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
+        if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
       }
-      case "reading": {
-        const html = marked.parse(data?.body || "");
-        return (
-          <div className="prose max-w-none">
-            <h2>{data?.title}</h2>
-            <div dangerouslySetInnerHTML={{ __html: html }} />
-          </div>
-        );
-      }
-      case "flashcards": {
-        return (
-          <div className="space-y-4">
-            {data?.cards?.map((card, idx) => (
-              <div key={idx} className="p-4 rounded-lg bg-[var(--surface-2)]">
-                <p className="font-medium">Q: {card?.[0]}</p>
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-[var(--primary)]">Show Answer</summary>
-                  <div className="mt-2 text-sm">
-                    <p><b>Answer:</b> {card?.[1]}</p>
-                    <p><b>Explanation:</b> {card?.[2]}</p>
-                    <p className="text-xs text-[var(--muted-foreground)]">Difficulty: {card?.[3] || "medium"}</p>
-                  </div>
-                </details>
-              </div>
-            ))}
-          </div>
-        );
-      }
-      case "mini_quiz":
-      case "practice_exam": {
-        const questions = [];
-        if (resolvedFormat === "mini_quiz" && Array.isArray(data?.questions)) {
-          questions.push(...data.questions);
-        }
-        if (resolvedFormat === "practice_exam") {
-          if (Array.isArray(data?.mcq)) {
-            data.mcq.forEach((q) => {
-              questions.push({ type: "mcq", ...q });
-            });
-          }
-          if (Array.isArray(data?.frq)) {
-            data.frq.forEach((q) => {
-              questions.push({ type: "frq", ...q });
-            });
-          }
-        }
-        return (
-          <div className="space-y-6">
-            {questions.map((q, i) => {
-              if (q?.type === "frq") {
-                return (
-                  <div key={i}>
-                    <p className="font-medium">**Q{ i + 1 } (FRQ):** {q.prompt}</p>
-                    <details className="ml-4 mt-1">
-                      <summary className="cursor-pointer text-[var(--primary)]">Show Solution</summary>
-                      <div className="mt-2 text-sm">
-                        <p><b>Model Answer:</b> {q.model_answer}</p>
-                        <p><b>Rubric:</b> {q.rubric}</p>
-                      </div>
-                    </details>
-                  </div>
-                );
-              }
-              return (
-                <div key={i}>
-                  <p className="font-medium">**Q{ i + 1 }:** {q?.question}</p>
-                  <ul className="ml-6 list-disc text-sm">
-                    {q?.options?.map((opt, j) => (
-                      <li key={j}>{opt}</li>
-                    ))}
-                  </ul>
-                  <details className="ml-4 mt-1">
-                    <summary className="cursor-pointer text-[var(--primary)]">Show Answer</summary>
-                    <div className="mt-1 text-sm">
-                      <p><b>Correct Answer:</b> {q?.answer}</p>
-                      <p><b>Explanation:</b> {q?.explanation}</p>
-                    </div>
-                  </details>
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      default:
-        return (
-          <pre className="overflow-auto text-xs p-3 bg-[var(--surface-2)] rounded">
-            {JSON.stringify(data ?? cached.data, null, 2)}
-          </pre>
-        );
     }
-  }
+    
+    // Fallback: assume all lessons have reading by default
+    if (types.length === 0) {
+      types.push({ label: "Reading", value: "reading" });
+    }
+    
+    return types;
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
-      {/* Left Sidebar - Course Structure (resizable) */}
-      {!isCourseV2 && !isMobile && isSidebarOpen && (
-        <aside
-          ref={sidebarRef}
-          style={{ width: `${sidebarWidth}px` }}
-          className="relative border-r border-[var(--border)] overflow-y-auto flex-shrink-0 bg-[var(--surface-1)]"
-        >
-          <div className="p-6">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="btn btn-ghost btn-sm w-full justify-start text-sm text-[var(--muted-foreground)] mb-6"
-            >
-              <svg
-                className="w-4 h-4 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              <span className="break-words">Back to Dashboard</span>
-            </button>
-            
-            {loading && (
-              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                Loading...
-              </div>
-            )}
-
-            {!loading && error && (
-              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--danger)] border-[var(--danger)]">
-                {error}
-              </div>
-            )}
-
-            {!loading && !error && !legacyEntries.length && (
-              <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                No content available.
-              </div>
-            )}
-
-            {!loading && !error && legacyEntries.length > 0 && (
-              <nav className="space-y-6">
-                {legacyGroupedTopics.map(([header, topics]) => (
-                  <div key={header} className="space-y-1.5">
-                    <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
-                      {smartTitleCase(header)}
-                    </h3>
-                    {topics.map(({ fullTopic, title }) => (
-                      <button
-                        key={fullTopic}
-                        type="button"
-                        onClick={() => setSelectedTopic(fullTopic)}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                          selectedTopic === fullTopic
-                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
-                            : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
-                        }`}
-                        title={smartTitleCase(title)}
-                      >
-                        <span className="block break-words">{smartTitleCase(title)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </nav>
-            )}
-          </div>
-
-          {/* Resize handle (desktop only) */}
-          <div
-            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
-            onMouseDown={() => setIsResizing(true)}
-          />
-        </aside>
-      )}
-
-      {/* Mobile drawer for topics */}
-      {!isCourseV2 && isMobile && isSidebarOpen && (
+      {/* Sidebar */}
+      {!loading && !error && studyPlan && (
         <>
-          <div
-            className="fixed inset-0 z-50 bg-black/40"
-            onClick={() => setIsSidebarOpen(false)}
-            aria-hidden="true"
-          />
-          <div className="fixed left-0 top-0 bottom-0 z-[60] w-[85vw] max-w-sm bg-[var(--surface-1)] border-r border-[var(--border)] overflow-y-auto shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[var(--foreground)]">Topics</h2>
+          {/* Mobile backdrop */}
+          {isMobile && sidebarOpen && (
+            <div
+              className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+          
+          {/* Sidebar container */}
+          <aside
+            className={`fixed left-0 top-0 h-screen bg-[var(--surface-1)] border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
+              isMobile
+                ? sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+            style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
+          >
+            {/* Sidebar header */}
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="btn btn-ghost btn-sm text-xs text-[var(--muted-foreground)] gap-1 px-2"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Dashboard
+              </button>
+              {isMobile && (
                 <button
                   type="button"
-                  onClick={() => setIsSidebarOpen(false)}
-                  className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
-                  aria-label="Close topics"
+                  onClick={() => setSidebarOpen(false)}
+                  className="rounded p-1 hover:bg-[var(--surface-2)] transition-colors"
                 >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-              </div>
-              {loading && (
-                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">Loading...</div>
-              )}
-              {!loading && error && (
-                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--danger)] border-[var(--danger)]">{error}</div>
-              )}
-              {!loading && !error && !legacyEntries.length && (
-                <div className="card rounded-2xl px-4 py-3 text-xs text-[var(--muted-foreground)]">No content available.</div>
-              )}
-              {!loading && !error && legacyEntries.length > 0 && (
-                <nav className="space-y-6">
-                  {legacyGroupedTopics.map(([header, topics]) => (
-                    <div key={header} className="space-y-1.5">
-                      <h3 className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-[0.12em] mb-3 break-words">
-                        {smartTitleCase(header)}
-                      </h3>
-                      {topics.map(({ fullTopic, title }) => (
-                        <button
-                          key={fullTopic}
-                          type="button"
-                          onClick={() => { setSelectedTopic(fullTopic); setIsSidebarOpen(false); }}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                            selectedTopic === fullTopic
-                              ? "bg-[var(--primary)] text-[var(--primary-contrast)] font-semibold shadow-md"
-                              : "hover:bg-[var(--surface-2)] text-[var(--foreground)]"
-                          }`}
-                          title={smartTitleCase(title)}
-                        >
-                          <span className="block break-words">{smartTitleCase(title)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </nav>
               )}
             </div>
-          </div>
+
+            {/* Course title */}
+            <div className="p-4 border-b border-[var(--border)]">
+              <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
+                Course
+              </p>
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">
+                {courseName || "Study Plan"}
+              </h2>
+            </div>
+
+            {/* Modules and lessons navigation */}
+            <nav className="flex-1 overflow-y-auto p-4 space-y-6">
+              {studyPlan.modules?.map((module, moduleIdx) => (
+                <div key={moduleIdx}>
+                  <div className="mb-3 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">
+                        {moduleIdx + 1}
+                      </div>
+                      <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-[var(--primary)] opacity-80">
+                        {module.title}
+                      </h3>
+                    </div>
+                  </div>
+                  
+                  {/* Lessons */}
+                  <div className="space-y-1">
+                    {module.lessons?.map((lesson, lessonIdx) => (
+                      <div key={lesson.id || lessonIdx}>
+                        {/* Lesson button */}
+                        <button
+                          type="button"
+                          onClick={() => handleLessonClick(lesson)}
+                          disabled={lesson.is_locked}
+                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
+                            lesson.is_locked
+                              ? "opacity-50 cursor-not-allowed"
+                              : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
+                              ? "border-b-2 border-[var(--primary)] cursor-pointer"
+                              : "hover:bg-[var(--surface-2)] cursor-pointer"
+                          }`}
+                        >
+                          <span className="flex-1 truncate">{lesson.title}</span>
+                          {lesson.is_locked ? (
+                            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          ) : (
+                            <svg 
+                              className={`w-3 h-3 flex-shrink-0 transition-transform ${
+                                expandedLessons.has(lesson.id) ? "rotate-90" : ""
+                              }`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Content types dropdown with Framer Motion animation */}
+                        <AnimatePresence mode="wait">
+                          {expandedLessons.has(lesson.id) && !lesson.is_locked && (
+                            <motion.div
+                              key={`dropdown-${lesson.id}`}
+                              initial={{ 
+                                opacity: 0,
+                                height: 0,
+                                scaleY: 0.8,
+                                originY: 0
+                              }}
+                              animate={{ 
+                                opacity: 1,
+                                height: "auto",
+                                scaleY: 1,
+                                transition: {
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 25,
+                                    mass: 0.8
+                                  },
+                                  opacity: {
+                                    duration: 0.2,
+                                    ease: "easeOut"
+                                  },
+                                  scaleY: {
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 28
+                                  }
+                                }
+                              }}
+                              exit={{ 
+                                opacity: 0,
+                                height: 0,
+                                scaleY: 0.8,
+                                transition: {
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 30
+                                  },
+                                  opacity: {
+                                    duration: 0.15,
+                                    ease: "easeIn"
+                                  },
+                                  scaleY: {
+                                    duration: 0.2,
+                                    ease: "easeIn"
+                                  }
+                                }
+                              }}
+                              className="ml-4 mt-1 mb-2 overflow-hidden border-l-2 border-[var(--border)] pl-2"
+                            >
+                              <motion.div 
+                                className="space-y-0.5"
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                variants={{
+                                  visible: {
+                                    transition: {
+                                      staggerChildren: 0.06,
+                                      delayChildren: 0.08
+                                    }
+                                  },
+                                  hidden: {
+                                    transition: {
+                                      staggerChildren: 0.03,
+                                      staggerDirection: -1
+                                    }
+                                  }
+                                }}
+                              >
+                                {getAvailableContentTypes(lesson.id).map((contentType, index) => (
+                                  <motion.button
+                                    key={contentType.value}
+                                    type="button"
+                                    onClick={() => handleContentTypeClick(lesson, contentType.value)}
+                                    variants={{
+                                      hidden: { 
+                                        opacity: 0,
+                                        x: -12,
+                                        scale: 0.92
+                                      },
+                                      visible: { 
+                                        opacity: 1,
+                                        x: 0,
+                                        scale: 1,
+                                        transition: {
+                                          type: "spring",
+                                          stiffness: 350,
+                                          damping: 25,
+                                          mass: 0.6
+                                        }
+                                      }
+                                    }}
+                                    whileHover={{ 
+                                      x: 4,
+                                      scale: 1.02,
+                                      transition: {
+                                        type: "spring",
+                                        stiffness: 400,
+                                        damping: 20
+                                      }
+                                    }}
+                                    whileTap={{ 
+                                      scale: 0.96,
+                                      transition: {
+                                        type: "spring",
+                                        stiffness: 500,
+                                        damping: 25
+                                      }
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${
+                                      selectedContentType?.lessonId === lesson.id && 
+                                      selectedContentType?.type === contentType.value
+                                        ? "bg-[var(--primary)] text-[var(--primary-contrast)]"
+                                        : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)]"
+                                    }`}
+                                  >
+                                    {contentType.label}
+                                  </motion.button>
+                                ))}
+                              </motion.div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+
+            {/* Resize handle (desktop only) */}
+            {!isMobile && (
+              <div
+                className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
+                onMouseDown={() => setIsResizingSidebar(true)}
+              />
+            )}
+          </aside>
         </>
       )}
 
-      {/* Right Content Area */}
-      {isCourseV2 ? (
-        <main
-          className="flex-1 overflow-y-auto transition-all duration-200"
-          style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
-        >
-          <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8">
-            {loading && (
-              <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-                Loading your CourseV2 plan…
-              </div>
-            )}
-
-            {!loading && error && (
-              <div className="card rounded-[28px] border border-red-500/30 bg-red-500/10 px-6 py-6 text-sm text-red-200">
-                {error}
-              </div>
-            )}
-
-            {!loading && !error && !courseData && (
-              <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-                Course data is not available yet. Please try refreshing in a moment.
-              </div>
-            )}
-
-            {!loading && !error && courseData && (
-              <>
-                <header className="card rounded-[32px] px-8 py-8 sm:px-10">
-                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-[var(--muted-foreground)]">
-                    <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">Course V2</span>
-                    {finishByLabel && (
-                      <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">Finish by {finishByLabel}</span>
-                    )}
-                    {moduleList.length > 0 && (
-                      <span className="btn btn-outline btn-xs uppercase tracking-[0.24em]">{moduleList.length} modules</span>
-                    )}
-                  </div>
-                  <h1 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
-                    {courseTitleDisplay}
-                  </h1>
-                  {universityName && (
-                    <p className="mt-2 text-sm text-[var(--muted-foreground)]">{universityName}</p>
-                  )}
-                  <p className="mt-4 text-sm text-[var(--muted-foreground)]">
-                    A personalized learning sequence generated from your syllabus, timeline, and familiarity ratings.
-                  </p>
-                </header>
-
-                {syllabusOutcomes.length > 0 && (
-                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
-                    <h2 className="text-lg font-semibold">Key outcomes</h2>
-                    <ul className="mt-4 space-y-3 text-sm text-[var(--muted-foreground)]">
-                      {syllabusOutcomes.map((outcome, idx) => (
-                        <li key={idx} className="flex items-start gap-3">
-                          <span className="mt-1 h-2 w-2 rounded-full bg-[var(--primary)]" />
-                          <span>{outcome}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-
-                {moduleList.length > 0 && (
-                  <section className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h2 className="text-lg font-semibold">Modules</h2>
-                      <span className="text-sm text-[var(--muted-foreground)]">{moduleList.length} milestones</span>
-                    </div>
-                    <div className="flex flex-col gap-4">
-                      {moduleList.map((module, idx) => {
-                        const moduleKey = ensureKey(module?.id ?? module?.moduleId ?? module?.slug ?? module?.title, `module-${idx}`);
-                        const moduleLessons = lessonsByModule[moduleKey] || [];
-                        const moduleObjectives = Array.isArray(module?.objectives)
-                          ? module.objectives
-                          : module?.objectives
-                          ? [module.objectives]
-                          : [];
-                        return (
-                          <article key={moduleKey} className="card rounded-[28px] px-6 py-6 sm:px-8">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Module {idx + 1}</p>
-                                <h3 className="mt-2 text-xl font-semibold text-[var(--foreground)]">
-                                  {module?.title || `Module ${idx + 1}`}
-                                </h3>
-                                {(module?.summary || module?.description) && (
-                                  <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                                    {module.summary || module.description}
-                                  </p>
-                                )}
-                              </div>
-                              {module?.duration_hours && (
-                                <div className="rounded-2xl bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--muted-foreground)]">
-                                  ~{module.duration_hours} hrs
-                                </div>
-                              )}
-                            </div>
-                            {moduleObjectives.length > 0 && (
-                              <div className="mt-4 space-y-2 text-sm text-[var(--muted-foreground)]">
-                                {moduleObjectives.map((objective, objectiveIdx) => (
-                                  <div key={objectiveIdx} className="flex gap-2">
-                                    <span className="text-[var(--primary)]">•</span>
-                                    <span>{objective}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {moduleLessons.length > 0 && (
-                              <div className="mt-5 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/60 p-4">
-                                <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">Lessons</p>
-                                <ol className="mt-3 space-y-3 text-sm text-[var(--foreground)]">
-                                  {moduleLessons.map((lesson, lessonIdx) => {
-                                    const lessonObjectives = Array.isArray(lesson?.objectives)
-                                      ? lesson.objectives
-                                      : lesson?.objectives
-                                      ? [lesson.objectives]
-                                      : [];
-                                    return (
-                                      <li key={lesson?.id || `${moduleKey}-lesson-${lessonIdx}`}
-                                          className="rounded-2xl bg-[var(--surface-1)]/60 px-4 py-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <span className="font-medium">{lesson?.title || `Lesson ${lessonIdx + 1}`}</span>
-                                          {lesson?.estimated_minutes && (
-                                            <span className="text-xs text-[var(--muted-foreground)]">
-                                              {lesson.estimated_minutes} min
-                                            </span>
-                                          )}
-                                        </div>
-                                        {lessonObjectives.length > 0 && (
-                                          <ul className="mt-1 list-disc pl-5 text-xs text-[var(--muted-foreground)]">
-                                            {lessonObjectives.map((objective, objIdx) => (
-                                              <li key={objIdx}>{objective}</li>
-                                            ))}
-                                          </ul>
-                                        )}
-                                      </li>
-                                    );
-                                  })}
-                                </ol>
-                              </div>
-                            )}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
-
-                {(weeklyQuizzes.length > 0 || projectAssessment || examBlueprint) && (
-                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
-                    <h2 className="text-lg font-semibold">Assessments</h2>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      {weeklyQuizzes.length > 0 && (
-                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
-                          <p className="text-sm font-semibold text-[var(--foreground)]">Weekly quizzes</p>
-                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                            {weeklyQuizzes.length} quiz{weeklyQuizzes.length === 1 ? "" : "zes"} scheduled
-                          </p>
-                          <ul className="mt-2 space-y-1 text-xs text-[var(--muted-foreground)]">
-                            {weeklyQuizzes.slice(0, 4).map((quiz, idx) => (
-                              <li key={quiz?.id || idx} className="flex items-center gap-2">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                                <span>{quiz?.title || `Quiz ${idx + 1}`}</span>
-                              </li>
-                            ))}
-                            {weeklyQuizzes.length > 4 && (
-                              <li className="text-[var(--muted-foreground)]">+{weeklyQuizzes.length - 4} more</li>
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                      {projectAssessment && (
-                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4">
-                          <p className="text-sm font-semibold text-[var(--foreground)]">Capstone project</p>
-                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                            {projectAssessment?.title || "Project"}
-                          </p>
-                          {(projectAssessment?.summary || projectAssessment?.description) && (
-                            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                              {projectAssessment.summary || projectAssessment.description}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {examBlueprint && (
-                        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 p-4 sm:col-span-2">
-                          <p className="text-sm font-semibold text-[var(--foreground)]">Exam blueprint</p>
-                          {Array.isArray(examBlueprint?.sections) ? (
-                            <ul className="mt-2 space-y-1 text-xs text-[var(--muted-foreground)]">
-                              {examBlueprint.sections.map((section, idx) => (
-                                <li key={section?.title || idx} className="flex items-center gap-2">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                                  <span>{section?.title || `Section ${idx + 1}`}</span>
-                                  {section?.weight && <span className="text-[var(--muted-foreground)]">• {section.weight}%</span>}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="mt-2 text-xs text-[var(--muted-foreground)]">Exam outline ready.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                )}
-
-                {studyTime && (
-                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
-                    <h2 className="text-lg font-semibold">Study time estimate</h2>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      {["reading", "video", "practice", "total"].map((key) => (
-                        <div key={key} className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-2)]/70 px-4 py-5 text-center">
-                          <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted-foreground)]">{key}</p>
-                          <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
-                            {studyTime?.[key] ?? "-"}
-                            <span className="text-sm font-normal text-[var(--muted-foreground)]"> min</span>
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {(syllabusSources.length > 0 || topicGraph) && (
-                  <section className="card rounded-[28px] px-6 py-6 sm:px-8">
-                    <h2 className="text-lg font-semibold">Sources & references</h2>
-                    {syllabusSources.length > 0 && (
-                      <ul className="mt-3 space-y-2 text-sm text-[var(--muted-foreground)]">
-                        {syllabusSources.map((source, idx) => (
-                          <li
-                            key={source?.title || source?.url || idx}
-                            className="rounded-2xl border border-[var(--border-muted)]/60 bg-[var(--surface-2)]/60 px-4 py-3"
-                          >
-                            <p className="font-medium text-[var(--foreground)]">{source?.title || source?.name || `Source ${idx + 1}`}</p>
-                            {source?.url && (
-                              <a
-                                href={source.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[var(--primary)] text-xs"
-                              >
-                                {source.url}
-                              </a>
-                            )}
-                            {source?.notes && <p className="text-xs text-[var(--muted-foreground)]">{source.notes}</p>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {topicGraph && (
-                      <details className="mt-4 rounded-2xl border border-dashed border-[var(--border-muted)] bg-[var(--surface-2)]/60 px-4 py-3 text-sm text-[var(--muted-foreground)]">
-                        <summary className="cursor-pointer text-[var(--foreground)]">View topic graph JSON</summary>
-                        <pre className="mt-3 max-h-64 overflow-auto rounded-xl bg-[var(--surface-1)] p-3 text-xs">
-{JSON.stringify(topicGraph, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </section>
-                )}
-              </>
-            )}
-          </div>
-        </main>
-      ) : (
-        <main
-          className="flex-1 overflow-y-auto transition-all duration-200"
-          style={{ marginRight: isMobile ? 0 : `${chatBotWidth}px` }}
-        >
-          <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-            {/* Toggle sidebar button */}
-            <div className="flex items-center">
+      <main
+        className="flex-1 overflow-y-auto transition-all duration-200"
+        style={{ 
+          marginLeft: !isMobile && sidebarOpen && !loading && !error && studyPlan ? `${sidebarWidth}px` : 0,
+          marginRight: isMobile ? 0 : `${chatBotWidth}px` 
+        }}
+      >
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8">
+          
+          {/* Sidebar toggle button */}
+          {!loading && !error && studyPlan && (
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px] gap-2"
-                title={isSidebarOpen ? (isMobile ? "Hide topics" : "Hide sidebar") : (isMobile ? "Show topics" : "Show sidebar")}
+                onClick={toggleSidebar}
+                className="btn btn-ghost btn-sm text-sm text-[var(--muted-foreground)] gap-2"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                >
-                  {isSidebarOpen ? (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                    />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                    />
-                  )}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
-                {isSidebarOpen ? "Hide" : "Show"} {isMobile ? "topics" : "sidebar"}
+                {sidebarOpen ? "Hide" : "Show"} Sidebar
               </button>
             </div>
+          )}
+          {/* Loading State */}
+          {loading && (
+            <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+              Loading your study plan…
+            </div>
+          )}
 
-            {selectedTopic && (
-              <>
-                <header className="card rounded-[32px] px-8 py-8 sm:px-10">
-                  <h1 className="text-3xl font-semibold leading-tight sm:text-4xl text-[var(--foreground)]">
-                    {displaySelectedTopic}
-                  </h1>
-                  <p className="mt-3 text-sm text-[var(--muted-foreground)] sm:text-base">
-                    Dive into the content below
-                  </p>
-                </header>
+          {/* Error State */}
+          {!loading && error && (
+            <div className="card rounded-[28px] border border-red-500/30 bg-red-500/10 px-6 py-6 text-sm text-red-200">
+              {error}
+            </div>
+          )}
 
-                <section className="space-y-6">
-                  {Array.isArray(courseData?.[selectedTopic]) && courseData[selectedTopic].length > 0 ? (
-                    courseData[selectedTopic].map((item) => (
-                      <article key={item.id} className="card rounded-[28px] px-6 py-6 sm:px-8 sm:py-8">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                            {prettyFormat(item?.Format)}
-                          </h2>
-                          <span className="btn btn-outline btn-xs uppercase tracking-[0.24em] text-[10px]">
-                            ID: {item?.id}
-                          </span>
-                        </div>
-                        {item?.content && (
-                          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                            {item.content}
-                          </p>
-                        )}
-                        <div className="mt-4">
-                          <ItemContent fmt={item?.Format} id={item?.id} />
-                        </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-                      No items available for “{selectedTopic}”.
+          {/* Empty State */}
+          {!loading && !error && !studyPlan && (
+            <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
+              Study plan is not available yet. Please try refreshing in a moment.
+            </div>
+          )}
+
+          {/* Syllabus View (Main Content Area A) */}
+          {!loading && !error && studyPlan && viewMode === "syllabus" && (
+            <>
+              {/* Course Statistics Overview */}
+              {studyPlan.modules && (
+                <section>
+                  <h2 className="mb-4 text-lg font-semibold">Course Overview</h2>
+                  
+                  {/* Main Statistics Grid */}
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-6">
+                    {/* Total Lessons */}
+                    <div className="card rounded-2xl px-4 py-6 text-center">
+                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
+                        Total Lessons
+                      </p>
+                      <p className="text-3xl font-bold text-[var(--foreground)]">
+                        {studyPlan.modules.flatMap(m => m.lessons || []).length}
+                      </p>
                     </div>
-                  )}
+
+                    {/* Total Time */}
+                    <div className="card rounded-2xl px-4 py-6 text-center">
+                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
+                        Total Time
+                      </p>
+                      <p className="text-3xl font-bold text-[var(--foreground)]">
+                        {studyPlan.total_minutes ? Math.round(studyPlan.total_minutes / 60) : 0}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                        hours
+                      </p>
+                    </div>
+
+                    {/* Modules */}
+                    <div className="card rounded-2xl px-4 py-6 text-center">
+                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
+                        Modules
+                      </p>
+                      <p className="text-3xl font-bold text-[var(--foreground)]">
+                        {studyPlan.modules.length}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Study Time Breakdown by Content Type */}
+                  <h3 className="mb-3 text-base font-semibold">Time by Content Type</h3>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {(() => {
+                      const allLessons = studyPlan.modules.flatMap(m => m.lessons || []);
+                      const timeByType = allLessons.reduce((acc, lesson) => {
+                        const type = lesson.type || 'other';
+                        acc[type] = (acc[type] || 0) + (lesson.duration || 0);
+                        return acc;
+                      }, {});
+                      
+                      return Object.entries(timeByType).map(([type, minutes]) => (
+                        <div key={type} className="card rounded-2xl px-4 py-6 text-center">
+                          <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
+                            {prettyFormat(type)}
+                          </p>
+                          <p className="text-3xl font-bold text-[var(--foreground)]">
+                            {minutes}
+                          </p>
+                          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                            minutes
+                          </p>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </section>
-              </>
-            )}
+              )}
+            </>
+          )}
 
-            {!selectedTopic && !loading && (
-              <div className="card rounded-[28px] px-8 py-10 text-center">
-                <p className="text-[var(--muted-foreground)]">
-                  Select a topic from the left sidebar to view its content.
-                </p>
-              </div>
-            )}
-          </div>
-        </main>
-      )}
+          {/* Topic View (Main Content Area B) */}
+          {!loading && !error && studyPlan && viewMode === "topic" && selectedLesson && selectedContentType && (
+            <>
+              {/* Content Stream */}
+              <section className="space-y-6">
+                {/* Use the extracted ItemContent component and pass necessary props */}
+                <ItemContent 
+                  fmt={selectedContentType.type} 
+                  id={selectedLesson.id}
+                  userId={userId}
+                  courseId={courseId}
+                  contentCache={contentCache}
+                  setContentCache={setContentCache}
+                  handleCardChange={handleCardChange}
+                  setCurrentViewingItem={setCurrentViewingItem}
+                  onQuizQuestionChange={setChatQuizContext}
+                  handleQuizCompleted={refetchStudyPlan}
+                />
+              </section>
+            </>
+          )}
+        </div>
+      </main>
 
-      {/* ChatBot Component */}
       <ChatBot 
         pageContext={{
           courseId,
-          selectedTopic,
-          courseData,
+          courseName,
+          studyPlan,
+          selectedLesson,
+          currentViewingItem,
+          currentContent: selectedContentType && selectedLesson ? (() => {
+            // Get the cached content for the currently selected lesson and content type
+            const normFmt = normalizeFormat(selectedContentType.type);
+            const key = `${normFmt}:${selectedLesson.id}:${userId || ''}:${courseId || ''}`;
+            const cached = contentCache[key];
+            
+            if (cached?.status === "loaded" && cached?.data?.data) {
+              const data = cached.data.data;
+              const content = { contentType: selectedContentType.type };
+              
+              // Extract relevant content based on type
+              if (data.body || data.reading) {
+                content.reading = data.body || data.reading;
+              }
+              if (data.videos && data.videos.length > 0) {
+                content.videos = data.videos;
+              }
+              if (data.cards && data.cards.length > 0) {
+                content.flashcards = data.cards;
+              }
+              if (data.questions || data.mcq || data.frq) {
+                const mergedQuestions = [];
+
+                if (Array.isArray(data.questions)) {
+                  mergedQuestions.push(...data.questions.map((q) => ({ ...q })));
+                } else if (data.questions) {
+                  mergedQuestions.push({ ...data.questions });
+                }
+
+                if (Array.isArray(data.mcq)) {
+                  mergedQuestions.push(
+                    ...data.mcq.map((q) => ({ ...q, type: q?.type || "mcq" }))
+                  );
+                }
+
+                if (Array.isArray(data.frq)) {
+                  mergedQuestions.push(
+                    ...data.frq.map((q) => ({ ...q, type: q?.type || "frq" }))
+                  );
+                }
+
+                if (mergedQuestions.length > 0) {
+                  content.questions = mergedQuestions;
+                }
+              }
+              
+              return content;
+            }
+            return null;
+          })() : null,
+          quizContext: chatQuizContext
         }}
         onWidthChange={setChatBotWidth}
       />
