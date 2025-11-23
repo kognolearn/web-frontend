@@ -60,29 +60,29 @@ export default function TopicExplorer({
         {/* Add Custom Topic Section */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5 mt-6">
           <h4 className="text-sm font-semibold mb-3">Add Custom Topic</h4>
-          <form onSubmit={handleAddTopic} className="flex gap-3">
+          <form onSubmit={handleAddTopic} className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
               value={newTopicTitle}
               onChange={(event) => setNewTopicTitle(event.target.value)}
               placeholder="Topic name..."
-              className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+              className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5 text-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
             />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-center gap-2">
               {familiarityLevels.map((rating) => (
                 <button
                   type="button"
                   key={rating}
                   onClick={() => setNewTopicRating(rating)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
-                    rating <= newTopicRating ? "border-[var(--primary)] bg-[var(--primary)]/20" : "border-[var(--border)]"
+                  className={`flex h-10 w-10 sm:h-8 sm:w-8 items-center justify-center rounded-full border transition text-sm ${
+                    rating <= newTopicRating ? "border-[var(--primary)] bg-[var(--primary)]/20 font-semibold" : "border-[var(--border)]"
                   }`}
                 >
                   {rating}
                 </button>
               ))}
             </div>
-            <button type="submit" className="btn btn-primary btn-sm">Add</button>
+            <button type="submit" className="btn btn-primary w-full sm:w-auto">Add Topic</button>
           </form>
         </div>
 
@@ -134,7 +134,7 @@ export default function TopicExplorer({
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--surface-1)]">
           <div>
             <h2 className="text-xl font-bold">Course Topics</h2>
-            <p className="text-sm text-[var(--muted-foreground)]">Review and customize your learning path</p>
+            <p className="text-sm text-[var(--muted-foreground)]">Rank your familiarity with each topic</p>
           </div>
           <button 
             onClick={onClose}
@@ -250,37 +250,35 @@ function TopicCard({
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
-      <div className="flex items-center justify-end mb-3">
-        <button
-          type="button"
-          onClick={() => handleDeleteAllSubtopics(overview.id)}
-          className="text-xs text-[var(--muted-foreground)] transition"
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "")}
-        >
-          Remove All
-        </button>
-      </div>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h3 className="text-lg font-semibold">{overview.title}</h3>
-          {formattedTime && (
-            <p className="text-xs text-[var(--muted-foreground)]">Estimated total focus: {formattedTime}</p>
-          )}
-          <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-            {overview.subtopics.length} subtopics
-          </p>
+      <div className="mb-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <h3 className="text-lg font-semibold">{overview.title}</h3>
+            {formattedTime && (
+              <p className="text-xs text-[var(--muted-foreground)]">Estimated total focus: {formattedTime}</p>
+            )}
+            <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+              {overview.subtopics.length} subtopics
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleDeleteAllSubtopics(overview.id)}
+            className="text-xs text-[var(--muted-foreground)] transition flex-shrink-0"
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "")}
+          >
+            Remove All
+          </button>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {overview.likelyOnExam && (
-            <span className="rounded-full border border-[var(--success)]/40 bg-[var(--success)]/15 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-[var(--success)]">
-              Likely on exam
-            </span>
-          )}
-        </div>
+        {overview.likelyOnExam && (
+          <span className="inline-flex rounded-full border border-[var(--success)]/40 bg-[var(--success)]/15 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-[var(--success)]">
+            Likely on exam
+          </span>
+        )}
       </div>
       
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 mb-4">
         {moduleConfidenceOptions.map((option) => {
           const isActive = moduleState.mode === option.id;
           return (
@@ -288,13 +286,13 @@ function TopicCard({
               key={option.id}
               type="button"
               onClick={() => handleModuleModeChange(overview.id, option.id)}
-              className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              className={`flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 sm:py-1.5 text-sm font-medium transition ${
                 isActive
                   ? option.activeClass
                   : `${option.buttonClass} bg-[var(--surface-1)]`
               }`}
             >
-              <span>{option.emoji}</span>
+              {getConfidenceIcon(option.id)}
               {option.label}
             </button>
           );
@@ -365,68 +363,40 @@ function TopicCard({
                     </div>
                   </div>
                   
-                  <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
+                  <div className="mt-3 pt-3 border-t border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      {moduleState.mode === "somewhat" ? (
-                        <>
+                      {moduleConfidenceOptions.map((option) => {
+                        const currentScore = resolveSubtopicConfidence(overview.id, subtopic.id);
+                        const isSelected = Math.abs(currentScore - option.baseScore) < 0.01;
+                        
+                        return (
                           <button
+                            key={option.id}
                             type="button"
-                            onClick={() => handleSomewhatToggle(
-                              overview.id,
-                              subtopic.id,
-                              overrideValue === SOMEWHAT_KNOW_SCORE ? null : "known"
-                            )}
-                            className={`h-6 w-6 flex items-center justify-center rounded-full border transition ${
-                              overrideValue === SOMEWHAT_KNOW_SCORE
-                                ? "border-[var(--success)] bg-[var(--success)]/20 text-[var(--success)]"
-                                : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--foreground)]"
-                            }`}
-                            title="I know this"
-                          >
-                            <span className="text-xs">✓</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSomewhatToggle(
-                              overview.id,
-                              subtopic.id,
-                              overrideValue === SOMEWHAT_GAP_SCORE ? null : "gap"
-                            )}
-                            className={`h-6 w-6 flex items-center justify-center rounded-full border transition ${
-                              overrideValue === SOMEWHAT_GAP_SCORE
-                                ? "border-[var(--danger)] bg-[var(--danger)]/20 text-[var(--danger)]"
-                                : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--foreground)]"
-                            }`}
-                            title="Need review"
-                          >
-                            <span className="text-xs">!</span>
-                          </button>
-                        </>
-                      ) : (isNewMode || isConfidentMode) && (
-                        <label className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-[var(--border)]"
-                            checked={checkboxChecked}
-                            onChange={(event) => {
-                              if (isNewMode) {
-                                handleExceptionToggle(overview.id, subtopic.id, event.target.checked, NEW_EXCEPTION_SCORE);
+                            onClick={() => {
+                              if (moduleState.mode === option.id) {
+                                handleExceptionToggle(overview.id, subtopic.id, false, 0);
                               } else {
-                                handleExceptionToggle(overview.id, subtopic.id, !event.target.checked, CONFIDENT_EXCEPTION_SCORE);
+                                handleExceptionToggle(overview.id, subtopic.id, true, option.baseScore);
                               }
                             }}
-                          />
-                          <span>
-                            {isNewMode ? "Know it" : "Not confident"}
-                          </span>
-                        </label>
-                      )}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                              isSelected
+                                ? option.activeClass
+                                : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--foreground)]"
+                            }`}
+                            title={option.label}
+                          >
+                            {getConfidenceIcon(option.id)}
+                          </button>
+                        );
+                      })}
                     </div>
                     
                     <button
                       type="button"
                       onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
-                      className="text-[10px] text-[var(--muted-foreground)] transition"
+                      className="text-xs sm:text-[10px] text-[var(--muted-foreground)] transition self-start sm:self-auto"
                       onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
                       onMouseLeave={(e) => (e.currentTarget.style.color = "")}
                     >
@@ -441,4 +411,29 @@ function TopicCard({
       )}
     </div>
   );
+}
+
+function getConfidenceIcon(id) {
+  switch (id) {
+    case "new":
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    case "somewhat":
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      );
+    case "confident":
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }

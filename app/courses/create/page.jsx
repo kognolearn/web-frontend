@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
@@ -1106,6 +1106,63 @@ function CreateCoursePageContent() {
     router,
   ]);
 
+  // Floating Navigation Logic
+  const [navVisibility, setNavVisibility] = useState({ top: true, bottom: true });
+  const observerRef = useRef(null);
+
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver((entries) => {
+      setNavVisibility(prev => {
+        let next = { ...prev };
+        let changed = false;
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('data-nav-id');
+          if (id === 'top') { next.top = entry.isIntersecting; changed = true; }
+          if (id === 'bottom') { next.bottom = entry.isIntersecting; changed = true; }
+        });
+        return changed ? next : prev;
+      });
+    }, { threshold: 0.1 });
+    
+    return () => observerRef.current?.disconnect();
+  }, []);
+
+  const topNavCallback = useCallback((node) => {
+    if (node) {
+      node.setAttribute('data-nav-id', 'top');
+      observerRef.current?.observe(node);
+    }
+  }, []);
+
+  const bottomNavCallback = useCallback((node) => {
+    if (node) {
+      node.setAttribute('data-nav-id', 'bottom');
+      observerRef.current?.observe(node);
+    }
+  }, []);
+
+  const showFloatingNav = !navVisibility.top && !navVisibility.bottom;
+
+  const handleFloatingBack = () => {
+    if (currentStep === 1) router.push("/dashboard");
+    else setCurrentStep(prev => prev - 1);
+  };
+
+  const handleFloatingNext = () => {
+    if (currentStep === 1 && canProceedFromStep1) setCurrentStep(2);
+    else if (currentStep === 2 && canProceedFromStep2) setCurrentStep(3);
+    else if (currentStep === 3 && canProceedFromStep3) handleGenerateCourse();
+  };
+
+  const isFloatingNextDisabled = useMemo(() => {
+    if (currentStep === 1) return !canProceedFromStep1;
+    if (currentStep === 2) return !canProceedFromStep2;
+    if (currentStep === 3) return !canProceedFromStep3 || courseGenerating;
+    return true;
+  }, [currentStep, canProceedFromStep1, canProceedFromStep2, canProceedFromStep3, courseGenerating]);
+
+  const isOnFinalStep = currentStep === 3;
+
   if (authStatus === "checking") {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
@@ -1145,7 +1202,7 @@ function CreateCoursePageContent() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-6">
           <Link
@@ -1206,27 +1263,9 @@ function CreateCoursePageContent() {
           {currentStep === 1 && (
             <div className="space-y-5 animate-fadeIn">
               {/* Top Navigation */}
-              <div className="pb-5 border-b border-[var(--border)]">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold mb-1">Course Details</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Let's start with the basics about your course</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link href="/dashboard" className="btn btn-outline btn-sm">Cancel</Link>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStep(2)}
-                      disabled={!canProceedFromStep1}
-                      className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+              <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
+                <h2 className="text-xl font-bold mb-1">Course Details</h2>
+                <p className="text-sm text-[var(--muted-foreground)]">Let's start with the basics about your course</p>
               </div>
 
               <div className="space-y-4">
@@ -1318,7 +1357,7 @@ function CreateCoursePageContent() {
               )}
 
               {/* Navigation */}
-              <div className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
+              <div ref={bottomNavCallback} className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
                 <Link href="/dashboard" className="btn btn-outline btn-sm">Cancel</Link>
                 <button
                   type="button"
@@ -1339,7 +1378,7 @@ function CreateCoursePageContent() {
           {currentStep === 2 && (
             <div className="space-y-5 animate-fadeIn">
               {/* Top Navigation */}
-              <div className="pb-5 border-b border-[var(--border)]">
+              <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-bold mb-1">Course Materials</h2>
@@ -1530,7 +1569,7 @@ function CreateCoursePageContent() {
 
 
               {/* Navigation */}
-              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
+              <div ref={bottomNavCallback} className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
@@ -1560,7 +1599,7 @@ function CreateCoursePageContent() {
           {currentStep === 3 && (
             <div className="space-y-5 animate-fadeIn">
               {/* Top Navigation */}
-              <div className="pb-5 border-b border-[var(--border)]">
+              <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-bold mb-1">Generate Study Topics</h2>
@@ -1620,10 +1659,11 @@ function CreateCoursePageContent() {
               {isTopicsLoading && (
                 <div className="space-y-5 py-6 px-5">
                   {/* Animated pulse header */}
-                  <div className="flex items-center gap-2.5 mb-5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-[var(--primary)] animate-pulse"></div>
-                    <h3 className="text-base font-semibold">Analyzing your course materials...</h3>
-                    <span className="flex-1"></span>
+                  <div className="mb-5">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-[var(--primary)] animate-pulse"></div>
+                      <h3 className="text-base font-semibold">Analyzing your course materials...</h3>
+                    </div>
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--info)]/10 border border-[var(--info)]/30">
                       <div className="h-1.5 w-1.5 rounded-full bg-[var(--info)] animate-pulse"></div>
                       <span className="text-xs text-[var(--muted-foreground)]">30-60 seconds</span>
@@ -1716,7 +1756,7 @@ function CreateCoursePageContent() {
               )}
 
               {/* Navigation */}
-              <div className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
+              <div ref={bottomNavCallback} className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
@@ -1745,6 +1785,39 @@ function CreateCoursePageContent() {
 
         </div>
       </div>
+      {/* Floating Navigation */}
+      <div className={`fixed bottom-6 right-6 flex gap-3 transition-opacity duration-300 z-40 ${showFloatingNav ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        {/* Back / Cancel Button */}
+        <button
+            onClick={handleFloatingBack}
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-1)] text-[var(--muted-foreground)] shadow-lg transition hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            aria-label="Back"
+        >
+            {/* X Icon */}
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+
+        {/* Next / Create Button */}
+        <button
+            onClick={handleFloatingNext}
+            disabled={isFloatingNextDisabled}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)] text-white shadow-lg transition hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={isOnFinalStep ? "Create Course" : "Next"}
+        >
+            {isOnFinalStep ? (
+              // Check Icon for final step
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              // Arrow Icon for next
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            )}
+        </button>
+      </div>
+
       <ThemeToggle />
     </div>
   );
