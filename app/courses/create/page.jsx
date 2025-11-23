@@ -319,7 +319,7 @@ function CreateCoursePageContent() {
   const [openAccordions, setOpenAccordions] = useState({});
   const [generatedGrokDraft, setGeneratedGrokDraft] = useState(null);
   const [deletedSubtopics, setDeletedSubtopics] = useState([]);
-  const [topicsApproved, setTopicsApproved] = useState(false);
+  // Approval step removed; rely on topic count checks instead
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
@@ -487,7 +487,6 @@ function CreateCoursePageContent() {
 
     setTopicsError(null);
     setIsTopicsLoading(true);
-    setTopicsApproved(false);
     setCourseGenerationError("");
     setOverviewTopics([]);
     setDeletedSubtopics([]);
@@ -635,13 +634,11 @@ function CreateCoursePageContent() {
 
       setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
       setOverviewTopics(hydrated);
-      setTopicsApproved(false);
       setTopicsError(null);
     } catch (error) {
       console.error(error);
       setOverviewTopics([]);
       setDeletedSubtopics([]);
-      setTopicsApproved(false);
       setTopicsError(error?.message || "The model did not return any topics. Please try again.");
     } finally {
       setIsTopicsLoading(false);
@@ -661,7 +658,6 @@ function CreateCoursePageContent() {
   ]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
-    setTopicsApproved(false);
     setModuleConfidenceState((prev) => {
       const current = prev[overviewId];
       if (current && current.mode === mode && Object.keys(current.overrides || {}).length === 0) {
@@ -683,7 +679,6 @@ function CreateCoursePageContent() {
   }, []);
 
   const handleExceptionToggle = useCallback((overviewId, subtopicId, isActive, overrideValue) => {
-    setTopicsApproved(false);
     setModuleConfidenceState((prev) => {
       const existing = prev[overviewId] || { mode: "somewhat", overrides: {} };
       const overrides = { ...existing.overrides };
@@ -700,7 +695,6 @@ function CreateCoursePageContent() {
   }, []);
 
   const handleSomewhatToggle = useCallback((overviewId, subtopicId, selection) => {
-    setTopicsApproved(false);
     setModuleConfidenceState((prev) => {
       const existing = prev[overviewId] || { mode: "somewhat", overrides: {} };
       const overrides = { ...existing.overrides };
@@ -733,7 +727,6 @@ function CreateCoursePageContent() {
   const handleDeleteSubtopic = useCallback((overviewId, subtopicId) => {
     let removedSubtopic = null;
     let overviewTitle = "";
-    setTopicsApproved(false);
     setOverviewTopics((prev) =>
       prev
         .map((overview) => {
@@ -759,7 +752,6 @@ function CreateCoursePageContent() {
   }, []);
 
   const handleDeleteAllSubtopics = useCallback((overviewId) => {
-    setTopicsApproved(false);
     const targetOverview = overviewTopics.find((overview) => overview.id === overviewId);
     if (!targetOverview) return;
 
@@ -785,7 +777,6 @@ function CreateCoursePageContent() {
     });
 
     if (entryToRestore) {
-      setTopicsApproved(false);
       setOverviewTopics((prev) => {
         const index = prev.findIndex((overview) => overview.id === entryToRestore.overviewId);
         if (index === -1) {
@@ -812,7 +803,6 @@ function CreateCoursePageContent() {
 
   const handleRestoreAll = useCallback(() => {
     if (deletedSubtopics.length === 0) return;
-    setTopicsApproved(false);
     setOverviewTopics((prev) => {
       const next = [...prev];
       deletedSubtopics.forEach((entry) => {
@@ -842,7 +832,6 @@ function CreateCoursePageContent() {
       event.preventDefault();
       const trimmed = newTopicTitle.trim();
       if (!trimmed) return;
-      setTopicsApproved(false);
       const manualSubtopic = createSubtopic({
         title: trimmed,
         overviewId: manualOverviewId,
@@ -881,24 +870,10 @@ function CreateCoursePageContent() {
     [newTopicRating, newTopicTitle]
   );
 
-  const handleApproveTopics = useCallback(() => {
-    if (totalSubtopics === 0) {
-      setCourseGenerationError("Generate or add at least one topic before approving.");
-      return;
-    }
-    setCourseGenerationError("");
-    setTopicsApproved(true);
-  }, [totalSubtopics]);
-
   const handleGenerateCourse = useCallback(async () => {
     const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
     if (allSubtopics.length === 0) {
       setCourseGenerationError("Generate or add at least one topic before generating the course.");
-      return;
-    }
-
-    if (!topicsApproved) {
-      setCourseGenerationError("Please approve your topic list before generating the course.");
       return;
     }
 
@@ -1086,7 +1061,6 @@ function CreateCoursePageContent() {
     }
   }, [
     overviewTopics,
-    topicsApproved,
     userId,
     courseId,
     courseTitle,
