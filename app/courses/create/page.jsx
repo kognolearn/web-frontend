@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useId, useMemo, useState } from "reac
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 import {
   defaultTopicRating,
@@ -21,7 +22,6 @@ import {
   formatStudyTime
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
-import { AnimatePresence } from "framer-motion";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
@@ -284,7 +284,7 @@ function CreateCoursePageContent() {
 
   // Multi-step wizard state
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   // Course title and optional university
   const [courseTitle, setCourseTitle] = useState("");
@@ -320,7 +320,6 @@ function CreateCoursePageContent() {
   const [generatedGrokDraft, setGeneratedGrokDraft] = useState(null);
   const [deletedSubtopics, setDeletedSubtopics] = useState([]);
   const [topicsApproved, setTopicsApproved] = useState(false);
-  const [showTopicExplorer, setShowTopicExplorer] = useState(false);
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
@@ -336,7 +335,7 @@ function CreateCoursePageContent() {
 
   const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && startDate && finishDate;
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
-  const canProceedFromStep2 = examDetailsProvided || confirmedNoExamDetails;
+  const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
 
   useEffect(() => {
@@ -487,11 +486,6 @@ function CreateCoursePageContent() {
     }
 
     setTopicsError(null);
-    // Disallow generating topics unless the user provided exam details or explicitly confirmed they have none
-    if (!examDetailsProvided && !confirmedNoExamDetails) {
-      setTopicsError("Provide exam details (notes/files) or confirm that you don't have any before generating topics.");
-      return;
-    }
     setIsTopicsLoading(true);
     setTopicsApproved(false);
     setCourseGenerationError("");
@@ -507,7 +501,7 @@ function CreateCoursePageContent() {
       courseTitle: trimmedTitle,
       university: collegeName.trim() || undefined,
       finishByDate: finishByIso || undefined,
-      syllabusText: syllabusText.trim() || undefined,
+      syllabusText: syllabusText.trim() || "Not provided.",
     };
 
     const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes });
@@ -643,7 +637,6 @@ function CreateCoursePageContent() {
       setOverviewTopics(hydrated);
       setTopicsApproved(false);
       setTopicsError(null);
-      setShowTopicExplorer(true);
     } catch (error) {
       console.error(error);
       setOverviewTopics([]);
@@ -764,6 +757,21 @@ function CreateCoursePageContent() {
       ]);
     }
   }, []);
+
+  const handleDeleteAllSubtopics = useCallback((overviewId) => {
+    setTopicsApproved(false);
+    const targetOverview = overviewTopics.find((overview) => overview.id === overviewId);
+    if (!targetOverview) return;
+
+    const removedSubtopics = targetOverview.subtopics.map((subtopic) => ({
+      overviewId,
+      overviewTitle: targetOverview.title,
+      subtopic,
+    }));
+
+    setOverviewTopics((prev) => prev.filter((overview) => overview.id !== overviewId));
+    setDeletedSubtopics((prev) => [...removedSubtopics, ...prev]);
+  }, [overviewTopics]);
 
   const handleRestoreSubtopic = useCallback((subtopicId) => {
     let entryToRestore = null;
@@ -983,17 +991,15 @@ function CreateCoursePageContent() {
     try {
       const finishByIso = toIsoDate(finishDate);
       const trimmedSyllabusText = syllabusText.trim();
-      const syllabusTextPayload = trimmedSyllabusText || cleanTopics.join("\n");
+      const syllabusTextPayload = trimmedSyllabusText || "Not provided.";
       const examDetailsPayload = examDetailsProvided
         ? {
             type: examFormat,
-            notes: examNotes?.trim() || undefined,
+            notes: examNotes?.trim() || "Not provided.",
             has_exam_materials: true,
             sample_exam_file_names: examFiles.map((file) => file.name),
           }
-        : confirmedNoExamDetails
-        ? { userConfirmedNoExamDetails: true }
-        : undefined;
+        : { notes: "Not provided.", has_exam_materials: false };
       const payload = {
         userId,
         // backend creates the course; don't send courseId
@@ -1003,7 +1009,7 @@ function CreateCoursePageContent() {
         finishByDate: finishByIso || undefined,
         topics: cleanTopics,
         topicFamiliarity: topicFamiliarityMap,
-        syllabusText: trimmedSyllabusText || undefined,
+        syllabusText: trimmedSyllabusText || "Not provided.",
         syllabus_text: syllabusTextPayload,
         grok_draft: grokDraft,
         user_confidence_map: userConfidenceMap,
@@ -1013,9 +1019,7 @@ function CreateCoursePageContent() {
         delete payload.topicFamiliarity;
       }
 
-      if (examDetailsPayload) {
-        payload.exam_details = examDetailsPayload;
-      }
+      payload.exam_details = examDetailsPayload;
 
       if (syllabusFiles.length > 0) {
         setCourseGenerationMessage("Encoding syllabus materials…");
@@ -1025,7 +1029,7 @@ function CreateCoursePageContent() {
         }
       }
 
-      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes });
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes: examNotes?.trim() || "Not provided." });
       if (examFormatDetails) {
         payload.examFormatDetails = examFormatDetails;
       }
@@ -1105,7 +1109,7 @@ function CreateCoursePageContent() {
   if (authStatus === "checking") {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--background)] text-[var(--muted-foreground)]">
-        <div className="card rounded-3xl px-10 py-8 text-sm">
+        <div className="card rounded-2xl px-8 py-6 text-xs">
           Checking your session…
         </div>
       </div>
@@ -1116,7 +1120,6 @@ function CreateCoursePageContent() {
     { number: 1, title: "Course Details", description: "Basic information" },
     { number: 2, title: "Course Materials", description: "Syllabus & resources" },
     { number: 3, title: "Generate Topics", description: "AI-powered topics" },
-    { number: 4, title: "Review & Create", description: "Finalize your course" },
   ];
 
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
@@ -1131,130 +1134,132 @@ function CreateCoursePageContent() {
 
       {courseGenerating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/95 px-4 backdrop-blur-sm">
-          <div className="card max-w-md w-full rounded-[28px] px-8 py-10 text-center shadow-2xl">
-            <div className="mx-auto h-16 w-16 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
-            <h2 className="mt-6 text-xl font-bold text-[var(--foreground)]">Generating your course</h2>
-            <p className="mt-3 text-sm text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
-            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+          <div className="card max-w-md w-full rounded-2xl px-6 py-8 text-center shadow-2xl">
+            <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
+            <h2 className="mt-5 text-lg font-bold text-[var(--foreground)]">Generating your course</h2>
+            <p className="mt-2 text-xs text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
+            <p className="mt-3 text-[10px] text-[var(--muted-foreground)]">
               Creating a personalized learning plan tailored to your goals.
             </p>
           </div>
         </div>
       )}
 
-      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-6"
+            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-4"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             Back to dashboard
           </Link>
-          <h1 className="text-3xl font-bold sm:text-4xl mb-2">Create New Course</h1>
-          <p className="text-[var(--muted-foreground)]">Follow the steps below to build your personalized learning plan</p>
+          <h1 className="text-2xl font-bold sm:text-3xl mb-1">Create New Course</h1>
+          <p className="text-sm text-[var(--muted-foreground)]">Build your personalized learning plan in 3 simple steps</p>
         </div>
 
-        {/* Progress Bar */}
-        <div className="card rounded-[24px] p-6 sm:p-8 mb-8 shadow-lg">
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-[var(--muted-foreground)]">Step {currentStep} of {totalSteps}</span>
-              <span className="text-sm font-bold text-[var(--primary)]">{Math.round(progressPercentage)}%</span>
-            </div>
-            <div className="h-3 rounded-full bg-[var(--surface-2)] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)] transition-all duration-500 ease-out"
-                style={{ width: `${progressPercentage}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Step indicators */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {steps.map((step) => (
-              <div
-                key={step.number}
-                className={`flex items-start gap-3 p-3 rounded-xl transition-all ${
-                  currentStep === step.number
-                    ? "bg-[var(--primary)]/10 border-2 border-[var(--primary)]"
-                    : currentStep > step.number
-                    ? "bg-[var(--surface-2)] border-2 border-[var(--primary)]/30"
-                    : "bg-[var(--surface-2)] border-2 border-transparent"
-                }`}
-              >
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full flex-shrink-0 font-bold text-sm transition-all ${
-                    currentStep > step.number
-                      ? "bg-[var(--primary)] text-white"
-                      : currentStep === step.number
-                      ? "bg-[var(--primary)] text-white"
-                      : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
-                  }`}
-                >
-                  {currentStep > step.number ? (
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    step.number
-                  )}
+        {/* Progress Stepper */}
+        <div className="mb-8">
+          <div className="flex items-start justify-center gap-2 sm:gap-4">
+            {steps.map((step, index) => (
+              <div key={step.number} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-full font-semibold text-sm transition-all ${
+                      currentStep > step.number
+                        ? "bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/30"
+                        : currentStep === step.number
+                        ? "bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/30 scale-110"
+                        : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
+                    }`}
+                  >
+                    {currentStep > step.number ? (
+                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      step.number
+                    )}
+                  </div>
+                  <div className="mt-2 text-center max-w-[80px] sm:max-w-none">
+                    <p className={`text-[10px] sm:text-xs font-semibold leading-tight ${currentStep >= step.number ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
+                      {step.title}
+                    </p>
+                  </div>
                 </div>
-                <div className="hidden sm:block flex-1 min-w-0">
-                  <p className={`text-xs font-semibold truncate ${currentStep >= step.number ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
-                    {step.title}
-                  </p>
-                  <p className="text-[10px] text-[var(--muted-foreground)] truncate">{step.description}</p>
-                </div>
+                {index < steps.length - 1 && (
+                  <div className="w-12 sm:w-32 h-0.5 mx-1 sm:mx-2 mb-6 sm:mb-8">
+                    <div className={`h-full transition-all duration-500 ${currentStep > step.number ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}></div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         {/* Step Content */}
-        <div className="card rounded-[24px] p-6 sm:p-8 shadow-lg">
+        <div className="card rounded-2xl p-5 sm:p-7 shadow-lg">
           {/* Step 1: Course Details */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Course Details</h2>
-                <p className="text-[var(--muted-foreground)]">Let's start with the basics about your course</p>
+            <div className="space-y-5 animate-fadeIn">
+              {/* Top Navigation */}
+              <div className="pb-5 border-b border-[var(--border)]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold mb-1">Course Details</h2>
+                    <p className="text-sm text-[var(--muted-foreground)]">Let's start with the basics about your course</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link href="/dashboard" className="btn btn-outline btn-sm">Cancel</Link>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      disabled={!canProceedFromStep1}
+                      className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {/* Course Title & University */}
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium mb-2">University / Institution *</label>
+                    <label className="block text-sm font-semibold mb-1.5">University / Institution *</label>
                     <input
                       type="text"
-                      placeholder='e.g., "MIT" or "University of Washington"'
+                      placeholder="MIT"
                       value={collegeName}
                       onChange={(e) => setCollegeName(e.target.value)}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Course Name *</label>
+                    <label className="block text-sm font-semibold mb-1.5">Course Name *</label>
                     <input
                       type="text"
-                      placeholder='e.g., "Introduction to Machine Learning"'
+                      placeholder="Introduction to Machine Learning"
                       value={courseTitle}
                       onChange={handleCourseInputChange}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
                   </div>
                 </div>
 
                 {/* Timeline */}
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Start Date *</label>
+                    <label className="block text-sm font-semibold mb-1.5">Start Date *</label>
                     <input
                       type="date"
                       value={startDate}
@@ -1267,18 +1272,18 @@ function CreateCoursePageContent() {
                       }}
                       min={today}
                       max={finishDate || undefined}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">End Date *</label>
+                    <label className="block text-sm font-semibold mb-1.5">End Date *</label>
                     <input
                       type="date"
                       value={finishDate}
                       onChange={(event) => setFinishDate(event.target.value)}
                       min={startDate || today}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
                   </div>
@@ -1286,12 +1291,12 @@ function CreateCoursePageContent() {
               </div>
 
               {(!collegeName.trim() || !courseTitle.trim()) && (
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                <div className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3.5 py-2.5 text-xs">
                   <div className="flex items-center gap-2">
-                    <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="h-4 w-4 flex-shrink-0" style={{color: 'var(--warning)'}} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
-                    <span>Both university and course name are required to continue</span>
+                    <span style={{color: 'color-mix(in srgb, var(--warning) 95%, white)'}}>Both university and course name are required to continue</span>
                   </div>
                 </div>
               )}
@@ -1300,26 +1305,26 @@ function CreateCoursePageContent() {
 
               {/* Confirmation modal for 'no exam details' */}
               {showConfirmNoExamModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/70 px-4">
-                  <div className="card max-w-lg w-full rounded-xl p-6 text-sm bg-[var(--surface-2)] border border-[var(--border)] shadow-2xl">
-                    <h3 className="text-lg font-semibold mb-2">Are you sure?</h3>
-                    <p className="text-sm text-[var(--muted-foreground)] mb-6">Not including exam details will lead to courses with less fit. Only check this if you yourself do not have any indication at all of what will be on the test and we'll try our best to figure it out.</p>
-                    <div className="flex items-center justify-end gap-3">
-                      <button type="button" onClick={() => { setConfirmedNoExamDetails(false); setShowConfirmNoExamModal(false); }} className="btn btn-outline">Cancel</button>
-                      <button type="button" onClick={() => { setConfirmedNoExamDetails(true); setShowConfirmNoExamModal(false); }} className="btn btn-primary">Confirm - proceed without exam details</button>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/70 px-4 backdrop-blur-sm">
+                  <div className="card max-w-lg w-full rounded-2xl p-5 text-sm bg-[var(--surface-2)] border border-[var(--border)] shadow-2xl">
+                    <h3 className="text-base font-semibold mb-2">Are you sure?</h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mb-5">Not including exam details will lead to courses with less fit. Only check this if you yourself do not have any indication at all of what will be on the test and we'll try our best to figure it out.</p>
+                    <div className="flex items-center justify-end gap-2.5">
+                      <button type="button" onClick={() => { setConfirmedNoExamDetails(false); setShowConfirmNoExamModal(false); }} className="btn btn-outline btn-sm">Cancel</button>
+                      <button type="button" onClick={() => { setConfirmedNoExamDetails(true); setShowConfirmNoExamModal(false); }} className="btn btn-primary btn-sm">Confirm - proceed without exam details</button>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Navigation */}
-              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
-                <Link href="/dashboard" className="btn btn-outline">Cancel</Link>
+              <div className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
+                <Link href="/dashboard" className="btn btn-outline btn-sm">Cancel</Link>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
                   disabled={!canProceedFromStep1}
-                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next: Course Materials
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1332,152 +1337,197 @@ function CreateCoursePageContent() {
 
           {/* Step 2: Course Materials */}
           {currentStep === 2 && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Course Materials</h2>
-                <p className="text-[var(--muted-foreground)]">Upload your syllabus and exam materials for better course generation</p>
-                <div className="mt-3 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
-                  <div className="flex items-start gap-2">
-                    <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                    <div>
-                      <p className="font-medium mb-1">Highly recommended</p>
-                      <p className="text-xs">Adding your syllabus and exam materials helps create more accurate, relevant study content tailored to your course</p>
-                    </div>
+            <div className="space-y-5 animate-fadeIn">
+              {/* Top Navigation */}
+              <div className="pb-5 border-b border-[var(--border)]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold mb-1">Course Materials</h2>
+                    <p className="text-sm text-[var(--muted-foreground)]">Upload syllabus and exam materials for better course generation</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(1)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                      </svg>
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => canProceedFromStep2 && setCurrentStep(3)}
+                      disabled={!canProceedFromStep2}
+                      className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {/* Syllabus Section */}
-                <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50 p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold mb-1">Syllabus Details</h3>
-                      <p className="text-sm text-[var(--muted-foreground)]">Share objectives, weekly structure, or upload files</p>
-                    </div>
-                    <div>
-                      <input
-                        id={syllabusInputId}
-                        type="file"
-                        multiple
-                        accept={syllabusFileTypes}
-                        onChange={handleSyllabusFileChange}
-                        className="sr-only"
-                      />
-                      <label
-                        htmlFor={syllabusInputId}
-                        className="btn btn-outline btn-sm cursor-pointer"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        Upload files
-                      </label>
-                    </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
+                    <p className="text-xs text-[var(--muted-foreground)]">Share course objectives</p>
                   </div>
-                  <textarea
-                    rows={5}
-                    value={syllabusText}
-                    onChange={(event) => setSyllabusText(event.target.value)}
-                    placeholder="Paste syllabus content, course objectives, or any additional context..."
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
-                  />
-                  {syllabusFiles.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">Uploaded files</p>
-                      <div className="flex flex-wrap gap-2">
-                        {syllabusFiles.map((file) => (
-                          <div key={file.name} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm">
-                            <svg className="h-4 w-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            <span className="truncate max-w-[150px]">{file.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSyllabusFile(file.name)}
-                              className="text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
-                            >
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
+                  
+                  {/* File Upload Section */}
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-[var(--foreground)] mb-2">Upload Files</h4>
+                    <input
+                      id={syllabusInputId}
+                      type="file"
+                      multiple
+                      accept={syllabusFileTypes}
+                      onChange={handleSyllabusFileChange}
+                      className="sr-only"
+                    />
+                    <label
+                      htmlFor={syllabusInputId}
+                      className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--surface-2)]/50"
+                    >
+                      <svg className="h-8 w-8 text-[var(--muted-foreground)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <p className="text-sm font-medium text-[var(--foreground)] mb-1">Click to upload or drag and drop</p>
+                      <p className="text-xs text-[var(--muted-foreground)]">PDF, DOC, DOCX, PPT, PPTX, or TXT</p>
+                    </label>
+                    
+                    {syllabusFiles.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">{syllabusFiles.length} file{syllabusFiles.length !== 1 ? 's' : ''} uploaded</p>
+                        <div className="space-y-2">
+                          {syllabusFiles.map((file) => (
+                            <div key={file.name} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                <svg className="h-4 w-4 text-[var(--primary)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[var(--foreground)] truncate">{file.name}</p>
+                                  <p className="text-xs text-[var(--muted-foreground)]">{(file.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSyllabusFile(file.name)}
+                                className="flex-shrink-0 p-1 rounded-full transition-colors"
+                                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                                style={{color: 'var(--muted-foreground)'}}
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  
+                  {/* Text Input Section */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--foreground)] mb-2">Additional Notes</h4>
+                    <textarea
+                      rows={4}
+                      value={syllabusText}
+                      onChange={(event) => setSyllabusText(event.target.value)}
+                      placeholder="Paste syllabus content, course objectives, or any additional context..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
+                    />
+                  </div>
                 </div>
 
                 {/* Exam Materials Section */}
-                <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50 p-6">
-                  <div className="mb-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold">Exam Calibration</h3>
-                      <span className="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium">Recommended</span>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
+                  <div className="mb-3">
+                    <div className="flex items-start justify-between mb-1">
+                      <h3 className="font-semibold text-sm">Exam Details</h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--info)]/20 font-semibold" style={{color: 'var(--info)'}}>Recommended</span>
                     </div>
-                    <p className="text-sm text-[var(--muted-foreground)]">Help us match difficulty and question styles by sharing exam formats</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">Share exam details to create better practice problems and study material</p>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-medium mb-2">Exam Format</label>
-                        <select
-                          value={examFormat}
-                          onChange={(event) => setExamFormat(event.target.value)}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
-                        >
-                          <option value="pdf">PDF</option>
-                          <option value="docx">DOCX</option>
-                          <option value="slides">Slides</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Upload Sample Exams</label>
+                        <label className="block text-xs font-semibold mb-2">Upload Sample Exams</label>
                         <input
                           id={examInputId}
                           type="file"
                           multiple
                           accept={syllabusFileTypes}
                           onChange={handleExamFileChange}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--muted-foreground)] cursor-pointer transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                          className="sr-only"
                         />
+                        <label
+                          htmlFor={examInputId}
+                          className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--surface-2)]/50"
+                        >
+                          <svg className="h-8 w-8 text-[var(--muted-foreground)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <p className="text-sm font-medium text-[var(--foreground)] mb-1">Click to upload or drag and drop</p>
+                          <p className="text-xs text-[var(--muted-foreground)]">Past Exams, Practice Tests, or Study Guides</p>
+                        </label>
+                        
                         {examFiles.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {examFiles.map((file) => (
-                              <div key={file.name} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs">
-                                <span className="truncate max-w-[120px]">{file.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveExamFile(file.name)}
-                                  className="text-[var(--muted-foreground)] hover:text-red-400"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">{examFiles.length} file{examFiles.length !== 1 ? 's' : ''} uploaded</p>
+                            <div className="space-y-2">
+                              {examFiles.map((file) => (
+                                <div key={file.name} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5">
+                                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                    <svg className="h-4 w-4 text-[var(--info)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-[var(--foreground)] truncate">{file.name}</p>
+                                      <p className="text-xs text-[var(--muted-foreground)]">{(file.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveExamFile(file.name)}
+                                    className="flex-shrink-0 p-1 rounded-full transition-colors"
+                                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+                                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                                    style={{color: 'var(--muted-foreground)'}}
+                                  >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-2">Additional Notes</label>
+                        <label className="block text-xs font-semibold mb-1.5">Additional Notes</label>
                         <textarea
                           rows={3}
                           value={examNotes}
                           onChange={(event) => setExamNotes(event.target.value)}
                           placeholder="Share timing, scoring, or question style preferences..."
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-[var(--primary)]/20"
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                         />
                       </div>
-                      {/* Confirm no exam details checkbox */}
-                      {/* no-op: duplicate; checkbox shown in Step 2 */}
                     </div>
                 </div>
               </div>
+
 
               {/* Navigation */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
@@ -1502,39 +1552,64 @@ function CreateCoursePageContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </button>
-                {!canProceedFromStep2 && (
-                  <div className="text-xs text-amber-400 mt-2">Provide exam notes or sample exams, or check “I don't have any exam details” to proceed.</div>
-                )}
               </div>
             </div>
           )}
 
           {/* Step 3: Generate Topics */}
           {currentStep === 3 && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Generate Study Topics</h2>
-                <p className="text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
+            <div className="space-y-5 animate-fadeIn">
+              {/* Top Navigation */}
+              <div className="pb-5 border-b border-[var(--border)]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold mb-1">Generate Study Topics</h2>
+                    <p className="text-sm text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                      </svg>
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateCourse}
+                      disabled={!canProceedFromStep3 || courseGenerating}
+                      className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {courseGenerating ? "Creating..." : "Create Course"}
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {!isTopicsLoading && totalSubtopics === 0 && (
-                <div className="text-center py-12 px-6 rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/50">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                    <svg className="h-8 w-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="text-center py-10 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                    <svg className="h-7 w-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold mb-2">Ready to Generate Topics</h3>
-                  <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-md mx-auto">
-                    Click the button below to let our AI analyze your course details and generate a comprehensive topic list
+                  <h3 className="text-base font-bold mb-1.5">Ready to Generate Topics</h3>
+                  <p className="text-xs text-[var(--muted-foreground)] mb-5 max-w-md mx-auto">
+                    AI will analyze your course details and create a comprehensive topic list
                   </p>
                   <button
                     type="button"
                     onClick={handleGenerateTopics}
                     disabled={!canProceedFromStep1 || isTopicsLoading}
-                    className="btn btn-primary btn-lg"
+                    className="btn btn-primary"
                   >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                     Generate Topics
@@ -1543,42 +1618,42 @@ function CreateCoursePageContent() {
               )}
 
               {isTopicsLoading && (
-                <div className="space-y-6 py-8 px-6">
+                <div className="space-y-5 py-6 px-5">
                   {/* Animated pulse header */}
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="h-3 w-3 rounded-full bg-[var(--primary)] animate-pulse"></div>
-                    <h3 className="text-lg font-semibold">Analyzing your course materials...</h3>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-[var(--primary)] animate-pulse"></div>
+                    <h3 className="text-base font-semibold">Analyzing your course materials...</h3>
                     <span className="flex-1"></span>
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--primary)]/10 border border-[var(--primary)]/30">
-                      <div className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse"></div>
-                      <span className="text-sm text-[var(--muted-foreground)]">This may take 30-60 seconds</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--info)]/10 border border-[var(--info)]/30">
+                      <div className="h-1.5 w-1.5 rounded-full bg-[var(--info)] animate-pulse"></div>
+                      <span className="text-xs text-[var(--muted-foreground)]">30-60 seconds</span>
                     </div>
                   </div>
 
                   {/* Skeleton loading cards */}
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {[1, 2].map((index) => (
-                      <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5 animate-pulse" style={{ animationDelay: `${index * 100}ms` }}>
+                      <div key={index} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 animate-pulse" style={{ animationDelay: `${index * 100}ms` }}>
                         {/* Header skeleton */}
-                        <div className="flex items-start justify-between gap-3 mb-4">
+                        <div className="flex items-start justify-between gap-3 mb-3">
                           <div className="flex-1 space-y-2">
-                            <div className="h-5 bg-[var(--surface-muted)] rounded-md w-3/4"></div>
+                            <div className="h-4 bg-[var(--surface-muted)] rounded-md w-3/4"></div>
                             <div className="h-3 bg-[var(--surface-muted)] rounded-md w-1/2"></div>
                           </div>
-                          <div className="h-6 w-24 bg-[var(--surface-muted)] rounded-full"></div>
+                          <div className="h-5 w-20 bg-[var(--surface-muted)] rounded-full"></div>
                         </div>
 
                         {/* Subtopics skeleton */}
-                        <div className="space-y-3 mt-4">
+                        <div className="space-y-2.5 mt-3">
                           {[1, 2, 3].map((subIndex) => (
-                            <div key={subIndex} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
-                              <div className="space-y-2">
-                                <div className="h-4 bg-[var(--surface-muted)] rounded-md w-5/6"></div>
+                            <div key={subIndex} className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
+                              <div className="space-y-1.5">
+                                <div className="h-3.5 bg-[var(--surface-muted)] rounded-md w-5/6"></div>
                                 <div className="h-3 bg-[var(--surface-muted)] rounded-md w-full"></div>
-                                <div className="flex gap-2 mt-3">
-                                  <div className="h-5 w-16 bg-[var(--surface-muted)] rounded-full"></div>
-                                  <div className="h-5 w-20 bg-[var(--surface-muted)] rounded-full"></div>
-                                  <div className="h-5 w-12 bg-[var(--surface-muted)] rounded-full"></div>
+                                <div className="flex gap-2 mt-2">
+                                  <div className="h-4 w-14 bg-[var(--surface-muted)] rounded-full"></div>
+                                  <div className="h-4 w-16 bg-[var(--surface-muted)] rounded-full"></div>
+                                  <div className="h-4 w-10 bg-[var(--surface-muted)] rounded-full"></div>
                                 </div>
                               </div>
                             </div>
@@ -1591,157 +1666,61 @@ function CreateCoursePageContent() {
               )}
 
               {topicsError && (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+                <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-xs" style={{color: 'color-mix(in srgb, var(--danger) 90%, white)'}}>
                   {topicsError}
                 </div>
               )}
 
-                  {/* Topics Summary & View Button */}
-                  {totalSubtopics > 0 && (
-                    <div className="space-y-4">
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-6 text-center">
-                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                          <svg className="h-8 w-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                          </svg>
-                        </div>
-                        <h3 className="text-xl font-bold mb-2">{totalSubtopics} Topics Generated</h3>
-                        <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-md mx-auto">
-                          Your course topics have been generated. Review and customize them to fit your learning goals.
-                        </p>
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setShowTopicExplorer(true)}
-                            className="btn btn-primary"
-                          >
-                            View & Edit Topics
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleGenerateTopics}
-                            className="btn btn-outline"
-                            disabled={isTopicsLoading}
-                          >
-                            Regenerate
-                          </button>
-                        </div>
-                      </div>
+              {/* Topics Explorer Inline */}
+              {totalSubtopics > 0 && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                        Review and customize your learning path
+                      </p>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleGenerateTopics}
+                      className="btn btn-outline btn-sm"
+                      disabled={isTopicsLoading}
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                  
+                  <TopicExplorer
+                    overviewTopics={overviewTopics}
+                    moduleConfidenceState={moduleConfidenceState}
+                    openAccordions={openAccordions}
+                    handleModuleModeChange={handleModuleModeChange}
+                    handleAccordionToggle={handleAccordionToggle}
+                    handleExceptionToggle={handleExceptionToggle}
+                    handleSomewhatToggle={handleSomewhatToggle}
+                    handleDeleteSubtopic={handleDeleteSubtopic}
+                    handleDeleteAllSubtopics={handleDeleteAllSubtopics}
+                    handleAddTopic={handleAddTopic}
+                    handleRestoreSubtopic={handleRestoreSubtopic}
+                    handleRestoreAll={handleRestoreAll}
+                    deletedSubtopics={deletedSubtopics}
+                    newTopicTitle={newTopicTitle}
+                    setNewTopicTitle={setNewTopicTitle}
+                    newTopicRating={newTopicRating}
+                    setNewTopicRating={setNewTopicRating}
+                    resolveSubtopicConfidence={resolveSubtopicConfidence}
+                    inline={true}
+                  />
+                </div>
+              )}
 
               {/* Navigation */}
-              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className="btn btn-outline"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                  </svg>
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(4)}
-                  disabled={!canProceedFromStep3}
-                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next: Review & Create
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Review & Create */}
-          {currentStep === 4 && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Review & Create</h2>
-                <p className="text-[var(--muted-foreground)]">Review your course details and create your personalized learning plan</p>
-              </div>
-
-              {/* Summary */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Course Info</h4>
-                  <div className="space-y-2 text-sm">
-                      <div>
-                      <span className="text-[var(--muted-foreground)]">Name:</span> <span className="font-medium">{courseTitle || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[var(--muted-foreground)]">University:</span> <span className="font-medium">{collegeName || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[var(--muted-foreground)]">Duration:</span> <span className="font-medium">{startDate} to {finishDate}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Materials</h4>
-                  <div className="space-y-2 text-sm">
-                      <div>
-                      <span className="text-[var(--muted-foreground)]">Syllabus files:</span> <span className="font-medium">{syllabusFiles.length}</span>
-                    </div>
-                    <div>
-                      <span className="text-[var(--muted-foreground)]">Exam files:</span> <span className="font-medium">{examFiles.length}</span>
-                    </div>
-                    <div>
-                      <span className="text-[var(--muted-foreground)]">Study topics:</span> <span className="font-medium text-[var(--primary)]">{totalSubtopics}</span>
-                    </div>
-                      {/* summary-only checkbox removed; checkbox is available on Step 2 */}
-                  </div>
-                </div>
-              </div>
-
-              {/* Approve Topics */}
-              {!topicsApproved && totalSubtopics > 0 && (
-                <div className="rounded-xl border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20">
-                    <svg className="h-6 w-6 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">Approve Your Topics</h3>
-                  <p className="text-sm text-[var(--muted-foreground)] mb-4">
-                    Review the generated topics and approve them to proceed with course creation
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleApproveTopics}
-                    className="btn btn-primary"
-                  >
-                    Approve {totalSubtopics} Topics
-                  </button>
-                </div>
-              )}
-
-              {topicsApproved && (
-                <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center gap-3">
-                  <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm font-medium text-green-300">Topics approved and ready for course generation</span>
-                </div>
-              )}
-
-              {courseGenerationError && (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-                  {courseGenerationError}
-                </div>
-              )}
-
-              {/* Navigation */}
-              <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(3)}
-                  className="btn btn-outline"
+                  className="btn btn-outline btn-sm"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
@@ -1751,44 +1730,22 @@ function CreateCoursePageContent() {
                 <button
                   type="button"
                   onClick={handleGenerateCourse}
-                  disabled={!topicsApproved || courseGenerating}
-                  className="btn btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canProceedFromStep3 || courseGenerating}
+                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {courseGenerating ? "Creating..." : "Create Course"}
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </button>
               </div>
             </div>
           )}
+
+
         </div>
       </div>
-      {/* Expanded Topic Explorer Overlay */}
-      <AnimatePresence>
-        {showTopicExplorer && (
-          <TopicExplorer
-            overviewTopics={overviewTopics}
-            moduleConfidenceState={moduleConfidenceState}
-            openAccordions={openAccordions}
-            handleModuleModeChange={handleModuleModeChange}
-            handleAccordionToggle={handleAccordionToggle}
-            handleExceptionToggle={handleExceptionToggle}
-            handleSomewhatToggle={handleSomewhatToggle}
-            handleDeleteSubtopic={handleDeleteSubtopic}
-            handleAddTopic={handleAddTopic}
-            handleRestoreSubtopic={handleRestoreSubtopic}
-            handleRestoreAll={handleRestoreAll}
-            deletedSubtopics={deletedSubtopics}
-            newTopicTitle={newTopicTitle}
-            setNewTopicTitle={setNewTopicTitle}
-            newTopicRating={newTopicRating}
-            setNewTopicRating={setNewTopicRating}
-            resolveSubtopicConfidence={resolveSubtopicConfidence}
-            onClose={() => setShowTopicExplorer(false)}
-          />
-        )}
-      </AnimatePresence>
+      <ThemeToggle />
     </div>
   );
 }

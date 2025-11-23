@@ -24,6 +24,7 @@ export default function TopicExplorer({
   handleExceptionToggle,
   handleSomewhatToggle,
   handleDeleteSubtopic,
+  handleDeleteAllSubtopics,
   handleAddTopic,
   handleRestoreSubtopic,
   handleRestoreAll,
@@ -33,8 +34,88 @@ export default function TopicExplorer({
   newTopicRating,
   setNewTopicRating,
   resolveSubtopicConfidence,
-  onClose
+  onClose,
+  inline = false
 }) {
+  // Inline mode - render without modal wrapper
+  if (inline) {
+    return (
+      <div className="space-y-6">
+        {overviewTopics.map((overview) => (
+          <TopicCard 
+            key={overview.id}
+            overview={overview}
+            moduleConfidenceState={moduleConfidenceState}
+            openAccordions={openAccordions}
+            handleModuleModeChange={handleModuleModeChange}
+            handleAccordionToggle={handleAccordionToggle}
+            handleExceptionToggle={handleExceptionToggle}
+            handleSomewhatToggle={handleSomewhatToggle}
+            handleDeleteSubtopic={handleDeleteSubtopic}
+            handleDeleteAllSubtopics={handleDeleteAllSubtopics}
+            resolveSubtopicConfidence={resolveSubtopicConfidence}
+          />
+        ))}
+
+        {/* Add Custom Topic Section */}
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5 mt-6">
+          <h4 className="text-sm font-semibold mb-3">Add Custom Topic</h4>
+          <form onSubmit={handleAddTopic} className="flex gap-3">
+            <input
+              type="text"
+              value={newTopicTitle}
+              onChange={(event) => setNewTopicTitle(event.target.value)}
+              placeholder="Topic name..."
+              className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+            />
+            <div className="flex items-center gap-1">
+              {familiarityLevels.map((rating) => (
+                <button
+                  type="button"
+                  key={rating}
+                  onClick={() => setNewTopicRating(rating)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                    rating <= newTopicRating ? "border-[var(--primary)] bg-[var(--primary)]/20" : "border-[var(--border)]"
+                  }`}
+                >
+                  {rating}
+                </button>
+              ))}
+            </div>
+            <button type="submit" className="btn btn-primary btn-sm">Add</button>
+          </form>
+        </div>
+
+        {/* Deleted Topics */}
+        {deletedSubtopics.length > 0 && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold">Recently Removed ({deletedSubtopics.length})</h4>
+              <button type="button" onClick={handleRestoreAll} className="btn btn-link btn-xs">
+                Restore All
+              </button>
+            </div>
+            <div className="space-y-2">
+              {deletedSubtopics.map((entry) => (
+                <div key={entry.subtopic.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate text-[var(--muted-foreground)]">{entry.subtopic.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreSubtopic(entry.subtopic.id)}
+                    className="btn btn-link btn-xs"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Modal mode
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -80,6 +161,7 @@ export default function TopicExplorer({
                 handleExceptionToggle={handleExceptionToggle}
                 handleSomewhatToggle={handleSomewhatToggle}
                 handleDeleteSubtopic={handleDeleteSubtopic}
+                handleDeleteAllSubtopics={handleDeleteAllSubtopics}
                 resolveSubtopicConfidence={resolveSubtopicConfidence}
               />
             ))}
@@ -154,6 +236,7 @@ function TopicCard({
   handleExceptionToggle,
   handleSomewhatToggle,
   handleDeleteSubtopic,
+  handleDeleteAllSubtopics,
   resolveSubtopicConfidence
 }) {
   const moduleState = moduleConfidenceState[overview.id] || { mode: "somewhat", overrides: {} };
@@ -167,6 +250,17 @@ function TopicCard({
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/70 p-5">
+      <div className="flex items-center justify-end mb-3">
+        <button
+          type="button"
+          onClick={() => handleDeleteAllSubtopics(overview.id)}
+          className="text-xs text-[var(--muted-foreground)] transition"
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "")}
+        >
+          Remove All
+        </button>
+      </div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-lg font-semibold">{overview.title}</h3>
@@ -179,13 +273,10 @@ function TopicCard({
         </div>
         <div className="flex flex-col items-end gap-2">
           {overview.likelyOnExam && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-emerald-300">
+            <span className="rounded-full border border-[var(--success)]/40 bg-[var(--success)]/15 px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-[var(--success)]">
               Likely on exam
             </span>
           )}
-          <span className={`text-[11px] px-2 py-1 rounded-full font-medium ${modeConfig.badgeClass}`}>
-            {modeConfig.emoji} {modeConfig.label}
-          </span>
         </div>
       </div>
       
@@ -287,7 +378,7 @@ function TopicCard({
                             )}
                             className={`h-6 w-6 flex items-center justify-center rounded-full border transition ${
                               overrideValue === SOMEWHAT_KNOW_SCORE
-                                ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
+                                ? "border-[var(--success)] bg-[var(--success)]/20 text-[var(--success)]"
                                 : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--foreground)]"
                             }`}
                             title="I know this"
@@ -303,7 +394,7 @@ function TopicCard({
                             )}
                             className={`h-6 w-6 flex items-center justify-center rounded-full border transition ${
                               overrideValue === SOMEWHAT_GAP_SCORE
-                                ? "border-red-400 bg-red-500/20 text-red-200"
+                                ? "border-[var(--danger)] bg-[var(--danger)]/20 text-[var(--danger)]"
                                 : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--foreground)]"
                             }`}
                             title="Need review"
@@ -335,7 +426,9 @@ function TopicCard({
                     <button
                       type="button"
                       onClick={() => handleDeleteSubtopic(overview.id, subtopic.id)}
-                      className="text-[10px] text-[var(--muted-foreground)] hover:text-red-400 transition"
+                      className="text-[10px] text-[var(--muted-foreground)] transition"
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "")}
                     >
                       Remove
                     </button>

@@ -13,31 +13,31 @@ export const moduleConfidenceOptions = [
   {
     id: "new",
     label: "New to me",
-    emoji: "🔴",
+    emoji: "📚",
     baseScore: 0.1,
-    badgeClass: "bg-red-500/15 text-red-400",
-    buttonClass: "border-red-500/40 text-red-300",
-    activeClass: "bg-red-500/15 border-red-500 text-red-100",
+    badgeClass: "bg-[var(--danger)]/15 text-[var(--danger)]",
+    buttonClass: "border-[var(--danger)]/30 text-[var(--danger)]",
+    activeClass: "bg-[var(--danger)]/20 border-[var(--danger)] text-[var(--danger)]",
     linkLabel: "Do you know any of these?",
   },
   {
     id: "somewhat",
     label: "Somewhat",
-    emoji: "🟡",
+    emoji: "⚡",
     baseScore: 0.5,
-    badgeClass: "bg-amber-500/15 text-amber-400",
-    buttonClass: "border-amber-500/40 text-amber-300",
-    activeClass: "bg-amber-500/15 border-amber-500 text-amber-100",
+    badgeClass: "bg-[var(--warning)]/15 text-[var(--warning)]",
+    buttonClass: "border-[var(--warning)]/30 text-[var(--warning)]",
+    activeClass: "bg-[var(--warning)]/20 border-[var(--warning)] text-[var(--warning)]",
     linkLabel: null,
   },
   {
     id: "confident",
     label: "Confident",
-    emoji: "🟢",
+    emoji: "✨",
     baseScore: 0.9,
-    badgeClass: "bg-emerald-500/15 text-emerald-400",
-    buttonClass: "border-emerald-500/40 text-emerald-300",
-    activeClass: "bg-emerald-500/15 border-emerald-500 text-emerald-100",
+    badgeClass: "bg-[var(--success)]/15 text-[var(--success)]",
+    buttonClass: "border-[var(--success)]/30 text-[var(--success)]",
+    activeClass: "bg-[var(--success)]/20 border-[var(--success)] text-[var(--success)]",
     linkLabel: "Any gaps in your knowledge?",
   },
 ];
@@ -56,10 +56,10 @@ export function scoreToFamiliarityBand(score) {
 
 export function importanceScoreToTag(score) {
   if (!Number.isFinite(score)) return null;
-  if (score >= 9) return { label: "Critical", color: "bg-red-500/15 text-red-500" };
-  if (score >= 7) return { label: "High", color: "bg-amber-500/15 text-amber-500" };
-  if (score >= 5) return { label: "Medium", color: "bg-blue-500/10 text-blue-500" };
-  return { label: "Low", color: "bg-gray-200 text-[var(--muted-foreground)]" };
+  if (score >= 9) return { label: "Critical", color: "bg-[var(--danger)]/15 text-[var(--danger)]" };
+  if (score >= 7) return { label: "High", color: "bg-[var(--warning)]/15 text-[var(--warning)]" };
+  if (score >= 5) return { label: "Medium", color: "bg-[var(--info)]/15 text-[var(--info)]" };
+  return { label: "Low", color: "bg-[var(--surface-muted)] text-[var(--muted-foreground)]" };
 }
 
 export function formatStudyTime(minutes) {
