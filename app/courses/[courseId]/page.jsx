@@ -458,38 +458,22 @@ export default function CoursePage() {
     }
   }, [userId, courseId]);
 
-  // Prefetch all unlocked content when study plan loads
-  useEffect(() => {
-    if (!studyPlan || !userId || !courseId) return;
 
-    const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
-      module.lessons || []
-    ) || [];
-
-    // Prefetch all content types for all unlocked lessons
-    allUnlockedLessons.forEach(lesson => {
-      if (lesson.id) {
-        // Prefetch all available content types
-        prefetchLessonContent(lesson.id, ['reading', 'video', 'flashcards', 'mini_quiz']);
-      }
-    });
-  }, [studyPlan, userId, courseId]);
 
   const handleLessonClick = (lesson) => {
-    
     // Toggle expanded state
     const newExpanded = new Set(expandedLessons);
     if (newExpanded.has(lesson.id)) {
       newExpanded.delete(lesson.id);
     } else {
       newExpanded.add(lesson.id);
-      // Prefetch content to determine available content types
-      prefetchLessonContent(lesson.id);
+      // Fetch content to determine available content types when expanded
+      fetchLessonContent(lesson.id);
     }
     setExpandedLessons(newExpanded);
   };
 
-  const prefetchLessonContent = (lessonId, formats = ['reading']) => {
+  const fetchLessonContent = (lessonId, formats = ['reading']) => {
     formats.forEach(format => {
       const normFmt = normalizeFormat(format);
       const key = `${normFmt}:${lessonId}:${userId || ''}:${courseId || ''}`;
@@ -533,6 +517,8 @@ export default function CoursePage() {
     setSelectedContentType({ lessonId: lesson.id, type: contentType });
     setViewMode("topic");
     setCurrentViewingItem(null); // Reset when switching content
+    // Fetch content for the selected content type if not already cached
+    fetchLessonContent(lesson.id, [contentType]);
   };
 
   const handleBackToSyllabus = () => {

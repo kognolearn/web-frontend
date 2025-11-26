@@ -976,6 +976,14 @@ function CreateCoursePageContent() {
         syllabus_text: syllabusTextPayload,
         grok_draft: grokDraft,
         user_confidence_map: userConfidenceMap,
+        // Course metadata for downstream workers and DB. Keep top-level keys for backwards compatibility.
+        courseMetadata: {
+          title: className,
+          syllabus_text: syllabusTextPayload,
+          exam_details: examDetailsPayload,
+          startDate: toIsoDate(startDate) || undefined,
+          endDate: finishByIso || undefined,
+        },
       };
 
       if (Object.keys(topicFamiliarityMap).length === 0) {
