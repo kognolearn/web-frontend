@@ -871,6 +871,13 @@ function CreateCoursePageContent() {
   );
 
   const handleGenerateCourse = useCallback(async () => {
+    console.debug("[CreateCourse] handleGenerateCourse called", {
+      totalSubtopics: overviewTopics.flatMap((overview) => overview.subtopics).length,
+      userId,
+      courseTitle,
+      courseId,
+      courseGenerating,
+    });
     const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
     if (allSubtopics.length === 0) {
       setCourseGenerationError("Generate or add at least one topic before generating the course.");

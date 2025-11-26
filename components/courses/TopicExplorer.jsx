@@ -74,10 +74,19 @@ export default function TopicExplorer({
             {overviewTopics.map((module) => {
                 const moduleState = moduleConfidenceState[module.id] || { mode: "somewhat", overrides: {} };
                 return (
-                <button
+                <div
                     key={module.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => { setSelectedModuleId(module.id); setShowMobileDetail(true); }}
-                    className={`w-full text-left p-4 border-b border-[var(--border)] transition-all hover:bg-[var(--surface-2)] ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedModuleId(module.id);
+                        setShowMobileDetail(true);
+                      }
+                    }}
+                    className={`w-full text-left p-4 border-b border-[var(--border)] transition-all hover:bg-[var(--surface-2)] cursor-pointer ${
                         selectedModuleId === module.id 
                         ? 'bg-[var(--surface-2)] border-l-4 border-l-[var(--primary)]' 
                         : 'border-l-4 border-l-transparent'
@@ -118,14 +127,23 @@ export default function TopicExplorer({
                             );
                         })}
                     </div>
-                </button>
+                </div>
             )})}
 
             {/* Trash Item */}
             {deletedSubtopics.length > 0 && (
-                <button
+                <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => { setSelectedModuleId('trash'); setShowMobileDetail(true); }}
-                    className={`w-full text-left p-4 border-b border-[var(--border)] transition-all hover:bg-[var(--surface-2)] ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedModuleId('trash');
+                        setShowMobileDetail(true);
+                      }
+                    }}
+                    className={`w-full text-left p-4 border-b border-[var(--border)] transition-all hover:bg-[var(--surface-2)] cursor-pointer ${
                         selectedModuleId === 'trash'
                         ? 'bg-[var(--surface-2)] border-l-4 border-l-[var(--danger)]'
                         : 'border-l-4 border-l-transparent'
@@ -137,7 +155,7 @@ export default function TopicExplorer({
                         </h4>
                     </div>
                     <span className="text-xs text-[var(--muted-foreground)]">{deletedSubtopics.length} items</span>
-                </button>
+                </div>
             )}
         </div>
 
