@@ -4,7 +4,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { MathJaxContext } from "better-react-mathjax";
-import "katex/dist/katex.min.css";
+
 
 const nunito = Nunito({
   variable: "--font-nunito",
