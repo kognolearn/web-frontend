@@ -22,6 +22,7 @@ import {
   formatStudyTime
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
+import { motion } from "framer-motion";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
@@ -277,8 +278,8 @@ function CreateCoursePageContent() {
     d.setDate(d.getDate() + 7);
     return toDateInputValue(d);
   }, []);
-  const [startDate, setStartDate] = useState(today);
-  const [finishDate, setFinishDate] = useState(nextWeek);
+  const [studyHours, setStudyHours] = useState(50);
+  const [studyMinutes, setStudyMinutes] = useState(0);
   const syllabusInputId = useId();
   const examInputId = useId();
 
@@ -333,7 +334,7 @@ function CreateCoursePageContent() {
     [overviewTopics]
   );
 
-  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && startDate && finishDate;
+  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && studyHours >= 0 && studyMinutes >= 0;
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
@@ -494,7 +495,7 @@ function CreateCoursePageContent() {
     setModuleConfidenceState({});
     setOpenAccordions({});
 
-    const finishByIso = toIsoDate(finishDate);
+    const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const payload = {
       userId,
       courseTitle: trimmedTitle,
@@ -649,7 +650,6 @@ function CreateCoursePageContent() {
     examFiles,
     examFormat,
     examNotes,
-    finishDate,
     hasExamMaterials,
     syllabusFiles,
     syllabusText,
@@ -889,18 +889,6 @@ function CreateCoursePageContent() {
       return;
     }
 
-    if (!startDate || !finishDate) {
-      setCourseGenerationError("Select both a start date and an end date for your course.");
-      return;
-    }
-
-    const start = new Date(startDate);
-    const end = new Date(finishDate);
-    if (Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start > end) {
-      setCourseGenerationError("The start date must be before the end date.");
-      return;
-    }
-
     const cleanTopics = allSubtopics
       .map((subtopic) => (typeof subtopic.title === "string" ? subtopic.title.trim() : ""))
       .filter(Boolean);
@@ -964,7 +952,7 @@ function CreateCoursePageContent() {
     setCourseGenerationMessage("Locking in your topic roadmap…");
 
     try {
-      const finishByIso = toIsoDate(finishDate);
+      const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
       const trimmedSyllabusText = syllabusText.trim();
       const syllabusTextPayload = trimmedSyllabusText || "Not provided.";
       const examDetailsPayload = examDetailsProvided
@@ -1018,6 +1006,11 @@ function CreateCoursePageContent() {
       }
 
       setCourseGenerationMessage("Coordinating your learning journey…");
+      
+      // Calculate seconds_to_complete from studyHours and studyMinutes
+      const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
+      payload.seconds_to_complete = secondsToComplete;
+      
       // Server will enforce a 30 minute timeout for long-running course generation
       // Client-side AbortController to cancel request after 30 minutes
       const controller = new AbortController();
@@ -1065,8 +1058,6 @@ function CreateCoursePageContent() {
     courseId,
     courseTitle,
     collegeName,
-    startDate,
-    finishDate,
     syllabusText,
     syllabusFiles,
     hasExamMaterials,
@@ -1176,7 +1167,7 @@ function CreateCoursePageContent() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className={`relative mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${totalSubtopics > 0 && currentStep === 3 ? "max-w-[90rem]" : "max-w-5xl"}`}>
         {/* Header */}
         <div className="mb-6">
           <Link
@@ -1269,33 +1260,28 @@ function CreateCoursePageContent() {
                   </div>
                 </div>
 
-                {/* Timeline */}
+                {/* Study Time */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5">Start Date *</label>
+                    <label className="block text-sm font-semibold mb-1.5">Study Hours *</label>
                     <input
-                      type="date"
-                      value={startDate}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setStartDate(value);
-                        if (value && finishDate && new Date(value) > new Date(finishDate)) {
-                          setFinishDate(value);
-                        }
-                      }}
-                      min={today}
-                      max={finishDate || undefined}
+                      type="number"
+                      min="0"
+                      max="1000"
+                      value={studyHours}
+                      onChange={(e) => setStudyHours(Math.max(0, parseInt(e.target.value) || 0))}
                       className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5">End Date *</label>
+                    <label className="block text-sm font-semibold mb-1.5">Study Minutes *</label>
                     <input
-                      type="date"
-                      value={finishDate}
-                      onChange={(event) => setFinishDate(event.target.value)}
-                      min={startDate || today}
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={studyMinutes}
+                      onChange={(e) => setStudyMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
                       className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
                       required
                     />
@@ -1456,7 +1442,12 @@ function CreateCoursePageContent() {
                       value={syllabusText}
                       onChange={(event) => setSyllabusText(event.target.value)}
                       placeholder="Paste syllabus content, course objectives, or any additional context..."
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none overflow-y-auto"
+                      style={{ minHeight: '6rem', maxHeight: '12rem' }}
+                      onInput={(e) => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 192) + 'px';
+                      }}
                     />
                   </div>
                 </div>
@@ -1534,7 +1525,12 @@ function CreateCoursePageContent() {
                           value={examNotes}
                           onChange={(event) => setExamNotes(event.target.value)}
                           placeholder="Share timing, scoring, or question style preferences..."
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none overflow-y-auto"
+                          style={{ minHeight: '4.5rem', maxHeight: '10rem' }}
+                          onInput={(e) => {
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                          }}
                         />
                       </div>
                     </div>
@@ -1572,38 +1568,26 @@ function CreateCoursePageContent() {
           {/* Step 3: Generate Topics */}
           {currentStep === 3 && (
             <div className="space-y-5 animate-fadeIn">
-              {/* Top Navigation */}
-              <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold mb-1">Generate Study Topics</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStep(2)}
-                      className="btn btn-outline btn-sm"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                      </svg>
-                      Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateCourse}
-                      disabled={!canProceedFromStep3 || courseGenerating}
-                      className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {courseGenerating ? "Creating..." : "Create Course"}
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
+              <motion.div
+                layout
+                initial={{ opacity: 0, width: "100%" }}
+                animate={{ 
+                  opacity: 1, 
+                  width: totalSubtopics > 0 ? "100%" : "100%",
+                  maxWidth: totalSubtopics > 0 ? "100%" : "100%"
+                }}
+                className={`space-y-5 ${totalSubtopics > 0 ? "w-full" : ""}`}
+              >
+                {/* Top Navigation - REMOVED for Step 3 as requested */}
+                <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-bold mb-1">Generate Study Topics</h2>
+                      <p className="text-sm text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
+                    </div>
+                    {/* Top buttons removed */}
                   </div>
                 </div>
-              </div>
 
               {!isTopicsLoading && totalSubtopics === 0 && (
                 <div className="text-center py-10 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50">
@@ -1646,7 +1630,7 @@ function CreateCoursePageContent() {
 
                   {/* Skeleton loading cards */}
                   <div className="space-y-3">
-                    {[1, 2].map((index) => (
+                    {[1].map((index) => (
                       <div key={index} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 animate-pulse" style={{ animationDelay: `${index * 100}ms` }}>
                         {/* Header skeleton */}
                         <div className="flex items-start justify-between gap-3 mb-3">
@@ -1687,8 +1671,12 @@ function CreateCoursePageContent() {
 
               {/* Topics Explorer Inline */}
               {totalSubtopics > 0 && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between">
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="flex flex-col"
+                >
+                  <div className="flex items-center justify-between mb-4 flex-shrink-0">
                     <div>
                       <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
                       <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
@@ -1705,32 +1693,34 @@ function CreateCoursePageContent() {
                     </button>
                   </div>
                   
-                  <TopicExplorer
-                    overviewTopics={overviewTopics}
-                    moduleConfidenceState={moduleConfidenceState}
-                    openAccordions={openAccordions}
-                    handleModuleModeChange={handleModuleModeChange}
-                    handleAccordionToggle={handleAccordionToggle}
-                    handleExceptionToggle={handleExceptionToggle}
-                    handleSomewhatToggle={handleSomewhatToggle}
-                    handleDeleteSubtopic={handleDeleteSubtopic}
-                    handleDeleteAllSubtopics={handleDeleteAllSubtopics}
-                    handleAddTopic={handleAddTopic}
-                    handleRestoreSubtopic={handleRestoreSubtopic}
-                    handleRestoreAll={handleRestoreAll}
-                    deletedSubtopics={deletedSubtopics}
-                    newTopicTitle={newTopicTitle}
-                    setNewTopicTitle={setNewTopicTitle}
-                    newTopicRating={newTopicRating}
-                    setNewTopicRating={setNewTopicRating}
-                    resolveSubtopicConfidence={resolveSubtopicConfidence}
-                    inline={true}
-                  />
-                </div>
+                  <div className="max-h-[90vh] overflow-y-auto pr-2 -mr-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--surface-1)]">
+                    <TopicExplorer
+                      overviewTopics={overviewTopics}
+                      moduleConfidenceState={moduleConfidenceState}
+                      openAccordions={openAccordions}
+                      handleModuleModeChange={handleModuleModeChange}
+                      handleAccordionToggle={handleAccordionToggle}
+                      handleExceptionToggle={handleExceptionToggle}
+                      handleSomewhatToggle={handleSomewhatToggle}
+                      handleDeleteSubtopic={handleDeleteSubtopic}
+                      handleDeleteAllSubtopics={handleDeleteAllSubtopics}
+                      handleAddTopic={handleAddTopic}
+                      handleRestoreSubtopic={handleRestoreSubtopic}
+                      handleRestoreAll={handleRestoreAll}
+                      deletedSubtopics={deletedSubtopics}
+                      newTopicTitle={newTopicTitle}
+                      setNewTopicTitle={setNewTopicTitle}
+                      newTopicRating={newTopicRating}
+                      setNewTopicRating={setNewTopicRating}
+                      resolveSubtopicConfidence={resolveSubtopicConfidence}
+                      inline={true}
+                    />
+                  </div>
+                </motion.div>
               )}
 
-              {/* Navigation */}
-              <div ref={bottomNavCallback} className="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
+              {/* Navigation - Sticky Bottom */}
+              <div ref={bottomNavCallback} className={`flex items-center justify-between pt-5 border-t border-[var(--border)] ${totalSubtopics > 0 ? "sticky bottom-0 z-10 pb-2" : "mt-6"}`}>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
@@ -1753,6 +1743,7 @@ function CreateCoursePageContent() {
                   </svg>
                 </button>
               </div>
+            </motion.div>
             </div>
           )}
 

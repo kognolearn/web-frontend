@@ -253,6 +253,8 @@ export default function CoursePage() {
   const [expandedLessons, setExpandedLessons] = useState(new Set());
   const [selectedContentType, setSelectedContentType] = useState(null); // { lessonId, type }
   const [currentViewingItem, setCurrentViewingItem] = useState(null); // Current flashcard or video being viewed
+  const [secondsRemaining, setSecondsRemaining] = useState(null); // Countdown timer
+  const [initialSeconds, setInitialSeconds] = useState(null); // Initial time value for tracking changes
 
   useEffect(() => {
     let mounted = true;
@@ -278,6 +280,48 @@ export default function CoursePage() {
       mounted = false;
     };
   }, []);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (secondsRemaining === null || secondsRemaining <= 0) return;
+
+    const intervalId = setInterval(() => {
+      setSecondsRemaining(prev => {
+        if (prev === null || prev <= 0) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [secondsRemaining]);
+
+  // Send PATCH request on page unload
+  useEffect(() => {
+    if (!userId || !courseId || initialSeconds === null) return;
+
+    const handleBeforeUnload = async () => {
+      if (secondsRemaining === null) return;
+      
+      // Use sendBeacon for reliable delivery during page unload
+      const payload = {
+        userId,
+        seconds_to_complete: secondsRemaining
+      };
+      
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      navigator.sendBeacon(`/api/courses/${courseId}/settings`, blob);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also send on component unmount
+      if (secondsRemaining !== null) {
+        handleBeforeUnload();
+      }
+    };
+  }, [userId, courseId, secondsRemaining, initialSeconds]);
 
   // Track viewport for responsive adjustments
   useEffect(() => {
@@ -330,7 +374,7 @@ export default function CoursePage() {
     setError("");
     (async () => {
       try {
-        // Fetch course metadata first to get the course name
+        // Fetch course metadata first to get the course name and seconds_to_complete
         const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(courseId)}`;
         const courseMetaRes = await fetch(courseMetaUrl);
         if (courseMetaRes.ok) {
@@ -338,10 +382,14 @@ export default function CoursePage() {
           if (!aborted && courseMeta?.name) {
             setCourseName(courseMeta.name);
           }
+          if (!aborted && typeof courseMeta?.seconds_to_complete === 'number') {
+            setSecondsRemaining(courseMeta.seconds_to_complete);
+            setInitialSeconds(courseMeta.seconds_to_complete);
+          }
         }
         
         // Fetch study plan
-        const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}&hours=50`;
+        const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
         const res = await fetch(url);
         if (!res.ok) {
           const text = await res.text();
@@ -370,7 +418,7 @@ export default function CoursePage() {
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
     try {
-      const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}&hours=50`;
+      const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
