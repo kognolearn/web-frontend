@@ -94,6 +94,34 @@ function ItemContent({
     }, {});
   }, [cardsArray]);
 
+  // Ensure effect hooks are defined before any early return so hook order remains stable
+  // Clear quiz context if this content is not a quiz
+  useEffect(() => {
+    if (!onQuizQuestionChange) return;
+    if (normalizeFormat(cachedEnvelope.format || fmt) !== "mini_quiz" && normalizeFormat(cachedEnvelope.format || fmt) !== "practice_exam") {
+      onQuizQuestionChange(null);
+    }
+  }, [cachedEnvelope.format, onQuizQuestionChange, fmt]);
+
+  // Ensure we set the first video as the current viewing item when this
+  // content resolves to a video type. This effect must run at top-level
+  // so hooks order remains stable across renders.
+  useEffect(() => {
+    const resolvedFormat = normalizeFormat(cachedEnvelope.format || fmt) || normFmt;
+    if (resolvedFormat !== 'video') return;
+    const videos = cachedPayload?.videos;
+    if (videos?.[0]) {
+      setCurrentViewingItem({
+        type: 'video',
+        index: 0,
+        title: videos[0].title,
+        duration_min: videos[0].duration_min,
+        summary: videos[0].summary,
+        total: videos.length
+      });
+    }
+  }, [cachedEnvelope.format, cachedPayload?.videos, fmt, normFmt, setCurrentViewingItem]);
+
   if (!normFmt || !id) {
     return <div className="text-xs text-red-600">Missing format or id.</div>;
   }
@@ -106,30 +134,11 @@ function ItemContent({
   const data = cachedPayload || {};
   const resolvedFormat = normalizeFormat(cachedEnvelope.format) || normFmt;
 
-  // Clear quiz context if this content is not a quiz
-  useEffect(() => {
-    if (!onQuizQuestionChange) return;
-    if (resolvedFormat !== "mini_quiz" && resolvedFormat !== "practice_exam") {
-      onQuizQuestionChange(null);
-    }
-  }, [resolvedFormat, onQuizQuestionChange]);
+  // (Effects moved earlier) Clear quiz and video effects are declared above to
+  // keep hook order stable across renders.
 
   switch (resolvedFormat) {
     case "video": {
-      // Set the first video as currently viewing when component mounts
-      useEffect(() => {
-        if (data?.videos?.[0]) {
-          setCurrentViewingItem({
-            type: 'video',
-            index: 0,
-            title: data.videos[0].title,
-            duration_min: data.videos[0].duration_min,
-            summary: data.videos[0].summary,
-            total: data.videos.length
-          });
-        }
-      // Added setCurrentViewingItem (which is stable) to dependencies
-      }, [data?.videos, setCurrentViewingItem]);
       
       return (
         <article className="card rounded-[28px] px-6 py-6 sm:px-8">
@@ -397,11 +406,22 @@ export default function CoursePage() {
         }
         const json = await res.json();
         if (aborted) return;
-        setStudyPlan(json);
+        // Ensure everything is unlocked regardless of backend data
+        const unlockStudyPlan = (p) => {
+          if (!p) return p;
+          const modules = (p.modules || []).map((m) => ({
+            ...m,
+            lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
+          }));
+          return { ...p, modules };
+        };
+
+        const unlocked = unlockStudyPlan(json);
+        setStudyPlan(unlocked);
         
         // Auto-select first lesson if available
-        if (json?.modules?.[0]?.lessons?.[0]) {
-          setSelectedLesson(json.modules[0].lessons[0]);
+        if (unlocked?.modules?.[0]?.lessons?.[0]) {
+          setSelectedLesson(unlocked.modules[0].lessons[0]);
         }
       } catch (e) {
         if (aborted) return;
@@ -424,7 +444,15 @@ export default function CoursePage() {
         throw new Error(`Request failed: ${res.status}`);
       }
       const json = await res.json();
-      setStudyPlan(json);
+      const unlockStudyPlan = (p) => {
+        if (!p) return p;
+        const modules = (p.modules || []).map((m) => ({
+          ...m,
+          lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
+        }));
+        return { ...p, modules };
+      };
+      setStudyPlan(unlockStudyPlan(json));
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
@@ -435,7 +463,7 @@ export default function CoursePage() {
     if (!studyPlan || !userId || !courseId) return;
 
     const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
-      module.lessons?.filter(lesson => !lesson.is_locked) || []
+      module.lessons || []
     ) || [];
 
     // Prefetch all content types for all unlocked lessons
@@ -448,7 +476,6 @@ export default function CoursePage() {
   }, [studyPlan, userId, courseId]);
 
   const handleLessonClick = (lesson) => {
-    if (lesson.is_locked) return;
     
     // Toggle expanded state
     const newExpanded = new Set(expandedLessons);
@@ -519,6 +546,10 @@ export default function CoursePage() {
     setSidebarOpen(!sidebarOpen);
   };
 
+  const canRenderSidebar = !loading && !error && Boolean(studyPlan);
+  const renderedSidebarWidth = isMobile ? 280 : sidebarWidth;
+  const sidebarOffset = canRenderSidebar && sidebarOpen ? renderedSidebarWidth : 0;
+
   // Memoized callback for flashcard changes
   const handleCardChange = useCallback((cardInfo) => {
     setCurrentViewingItem({
@@ -560,8 +591,25 @@ export default function CoursePage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
+      {canRenderSidebar && (
+        <motion.button
+          type="button"
+          onClick={toggleSidebar}
+          className="fixed left-0 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)]/90 px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-lg backdrop-blur transition-colors"
+          animate={{ x: sidebarOffset + 16 }}
+          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          initial={false}
+          whileHover={{ scale: 1.06 }}
+          whileTap={{ scale: 0.94 }}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          {sidebarOpen ? "Hide" : "Show"} Sidebar
+        </motion.button>
+      )}
       {/* Sidebar */}
-      {!loading && !error && studyPlan && (
+      {canRenderSidebar && (
         <>
           {/* Mobile backdrop */}
           {isMobile && sidebarOpen && (
@@ -638,9 +686,9 @@ export default function CoursePage() {
                         <button
                           type="button"
                           onClick={() => handleLessonClick(lesson)}
-                          disabled={lesson.is_locked}
+                          disabled={false}
                           className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
-                            lesson.is_locked
+                            false
                               ? "opacity-50 cursor-not-allowed"
                               : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
                               ? "border-b-2 border-[var(--primary)] cursor-pointer"
@@ -648,7 +696,7 @@ export default function CoursePage() {
                           }`}
                         >
                           <span className="flex-1 truncate">{lesson.title}</span>
-                          {lesson.is_locked ? (
+                          {false ? (
                             <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
@@ -668,7 +716,7 @@ export default function CoursePage() {
 
                         {/* Content types dropdown with Framer Motion animation */}
                         <AnimatePresence mode="wait">
-                          {expandedLessons.has(lesson.id) && !lesson.is_locked && (
+                          {expandedLessons.has(lesson.id) && (
                             <motion.div
                               key={`dropdown-${lesson.id}`}
                               initial={{ 
@@ -816,27 +864,11 @@ export default function CoursePage() {
       <main
         className="flex-1 overflow-y-auto transition-all duration-200"
         style={{ 
-          marginLeft: !isMobile && sidebarOpen && !loading && !error && studyPlan ? `${sidebarWidth}px` : 0,
+          marginLeft: !isMobile ? `${sidebarOffset}px` : 0,
           marginRight: isMobile ? 0 : `${chatBotWidth}px` 
         }}
       >
         <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8">
-          
-          {/* Sidebar toggle button */}
-          {!loading && !error && studyPlan && (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                className="btn btn-ghost btn-sm text-sm text-[var(--muted-foreground)] gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-                {sidebarOpen ? "Hide" : "Show"} Sidebar
-              </button>
-            </div>
-          )}
           {/* Loading State */}
           {loading && (
             <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">

@@ -140,7 +140,7 @@ const minifyPageContext = (ctx) => {
       ctx.studyPlan.modules.forEach((module, moduleIdx) => {
         if (Array.isArray(module.lessons)) {
           module.lessons.forEach((lesson) => {
-            plan.all_lessons.push({
+              plan.all_lessons.push({
               module_index: moduleIdx,
               module_title: sanitizeText(module.title || `Module ${moduleIdx + 1}`, 100),
               lesson_id: lesson.id,
@@ -148,7 +148,8 @@ const minifyPageContext = (ctx) => {
               type: lesson.type,
               duration: lesson.duration,
               status: lesson.status,
-              is_locked: lesson.is_locked
+              // Always show content as unlocked
+              is_locked: false
             });
           });
         }
@@ -166,7 +167,8 @@ const minifyPageContext = (ctx) => {
       type: ctx.selectedLesson.type,
       duration: ctx.selectedLesson.duration,
       status: ctx.selectedLesson.status,
-      is_locked: ctx.selectedLesson.is_locked
+      // Always show content as unlocked
+      is_locked: false
     };
   }
   
@@ -808,7 +810,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
             parts.push(`    - All Lessons (${plan.all_lessons.length}):`);
             plan.all_lessons.slice(0, 10).forEach((lesson) => {
               const status = lesson.status ? ` [${lesson.status}]` : '';
-              const locked = lesson.is_locked ? ' 🔒' : '';
+              const locked = false ? ' 🔒' : '';
               parts.push(`      • ${lesson.lesson_title} (${lesson.type}, ${lesson.duration}min)${status}${locked}`);
             });
             if (plan.all_lessons.length > 10) {
@@ -825,7 +827,7 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
           parts.push(`    - Type: ${lesson.type}`);
           parts.push(`    - Duration: ${lesson.duration} minutes`);
           if (lesson.status) parts.push(`    - Status: ${lesson.status}`);
-          if (lesson.is_locked) parts.push(`    - Access: Locked`);
+          if (false) parts.push(`    - Access: Locked`);
         }
         
         // Other context
@@ -1054,7 +1056,7 @@ Instructions:
             parts.push(`    - All Lessons (${plan.all_lessons.length}):`);
             plan.all_lessons.slice(0, 10).forEach((lesson) => {
               const status = lesson.status ? ` [${lesson.status}]` : '';
-              const locked = lesson.is_locked ? ' 🔒' : '';
+              const locked = false ? ' 🔒' : '';
               parts.push(`      • ${lesson.lesson_title} (${lesson.type}, ${lesson.duration}min)${status}${locked}`);
             });
             if (plan.all_lessons.length > 10) {
@@ -1071,7 +1073,7 @@ Instructions:
           parts.push(`    - Type: ${lesson.type}`);
           parts.push(`    - Duration: ${lesson.duration} minutes`);
           if (lesson.status) parts.push(`    - Status: ${lesson.status}`);
-          if (lesson.is_locked) parts.push(`    - Access: Locked`);
+          if (false) parts.push(`    - Access: Locked`);
         }
         
         // Other context

@@ -7,7 +7,6 @@ export async function GET(request, { params }) {
     
     // Get query parameters
     const userId = searchParams.get('userId');
-    const hours = searchParams.get('hours');
 
     // Validate required parameters
     if (!userId) {
@@ -17,17 +16,11 @@ export async function GET(request, { params }) {
       );
     }
 
-    if (!hours) {
-      return NextResponse.json(
-        { error: 'hours is required' },
-        { status: 400 }
-      );
-    }
+    // 'hours' param removed: backend no longer expects this parameter
 
     // Build the backend API URL
     const backendUrl = new URL(`https://api.kognolearn.com/courses/${courseId}/plan`);
     backendUrl.searchParams.set('userId', userId);
-    backendUrl.searchParams.set('hours', hours);
 
     // Forward the request to the backend API
     const response = await fetch(backendUrl.toString(), {
@@ -51,9 +44,20 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Parse and return the backend response
+    // Parse backend response
     const data = await response.json();
-    return NextResponse.json(data);
+
+    // Normalize to ensure everything is unlocked regardless of backend data
+    const unlockPlan = (p) => {
+      if (!p) return p;
+      const modules = (p.modules || []).map((m) => ({
+        ...m,
+        lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false }))
+      }));
+      return { ...p, modules };
+    };
+
+    return NextResponse.json(unlockPlan(data));
 
   } catch (error) {
     console.error('Error in /api/courses/[courseId]/plan:', error);
