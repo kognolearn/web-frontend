@@ -3,6 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
+import { MathJaxContext } from "better-react-mathjax";
+import "katex/dist/katex.min.css";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -15,16 +17,27 @@ export const metadata = {
   description: "Study for Everything.",
 };
 
+const mathJaxConfig = {
+  loader: { load: ["[tex]/html"] },
+  tex: {
+    packages: { "[+]": ["html"] },
+    inlineMath: [["$", "$"], ["\\(", "\\)"]],
+    displayMath: [["$$", "$$"], ["\\[", "\\]"]]
+  }
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="theme-light">
       <body className={`${nunito.variable} antialiased`}>
-        <ThemeProvider>
-          <SupabaseSessionProvider />
-          {/* Persistent theme toggle (shown only when logged in) */}
-          <ThemeToggle />
-          {children}
-        </ThemeProvider>
+        <MathJaxContext config={mathJaxConfig}>
+          <ThemeProvider>
+            <SupabaseSessionProvider />
+            {/* Persistent theme toggle (shown only when logged in) */}
+            <ThemeToggle />
+            {children}
+          </ThemeProvider>
+        </MathJaxContext>
       </body>
     </html>
   );

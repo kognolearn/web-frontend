@@ -3,6 +3,7 @@ import React, {
   useMemo, useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle
 } from "react";
 import { motion } from "framer-motion";
+import { MathJax } from "better-react-mathjax";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
 export default function FlashcardDeck({ data = {}, onCardChange }) {
@@ -65,11 +66,14 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
   const [num, tuple] = cards[i];
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
-      <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
+    <>
+      <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
-      {/* Prev / Next — never keep focus */}
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mx-auto w-full max-w-5xl">
+        <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
+
+        {/* Prev / Next — never keep focus */}
+        <div className="mt-4 flex items-center justify-between">
         <button
           type="button"
           tabIndex={-1}
@@ -99,8 +103,9 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
         >
           Next →
         </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -184,9 +189,11 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
             </div>
 
             <div className="flex-1 flex items-center justify-center mb-8">
-              <p className="text-2xl sm:text-3xl font-bold text-white leading-relaxed whitespace-pre-wrap">
-                {question}
-              </p>
+              <MathJax dynamic>
+                <p className="text-2xl sm:text-3xl font-bold text-white leading-relaxed whitespace-pre-wrap">
+                  {question}
+                </p>
+              </MathJax>
             </div>
 
             <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
@@ -223,9 +230,11 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
 
             {/* ANSWER: centered and prominent */}
             <div className="flex-1 flex flex-col justify-center items-center text-center mb-6 overflow-y-auto">
-              <p className="text-xl sm:text-2xl font-semibold text-[var(--foreground)] leading-relaxed whitespace-pre-wrap max-w-2xl">
-                {answer}
-              </p>
+              <MathJax dynamic>
+                <p className="text-xl sm:text-2xl font-semibold text-[var(--foreground)] leading-relaxed whitespace-pre-wrap max-w-2xl">
+                  {answer}
+                </p>
+              </MathJax>
             </div>
 
             {/* EXPLANATION: styled as a callout */}
@@ -237,9 +246,11 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
                   </svg>
                   <div>
                     <div className="text-xs font-semibold text-[var(--primary)] mb-1">Explanation</div>
-                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
-                      {explanation}
-                    </p>
+                    <MathJax dynamic>
+                      <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
+                        {explanation}
+                      </p>
+                    </MathJax>
                   </div>
                 </div>
               </div>

@@ -6,9 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
-import RichBlock from "@/components/content/RichBlock";
 import Quiz from "@/components/content/Quiz";
-import { marked } from "marked";
 
 // Utility functions moved outside
 const normalizeFormat = (fmt) => {
@@ -141,9 +139,11 @@ function ItemContent({
           <div className="space-y-4">
             {data?.videos?.map((vid, idx) => {
               if (!vid) return null;
-              let embedUrl = vid.url;
+              const rawUrl = typeof vid.url === "string" ? vid.url.trim() : "";
+              let embedUrl = rawUrl || null;
               try {
-                const u = new URL(vid.url);
+                if (!rawUrl) throw new Error("missing url");
+                const u = new URL(rawUrl);
                 if (u.hostname === "youtu.be") {
                   embedUrl = `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
                 } else if (u.hostname.includes("youtube.com")) {
@@ -156,6 +156,13 @@ function ItemContent({
                   }
                 }
               } catch {}
+              if (!embedUrl) {
+                return (
+                  <div key={idx} className="rounded-lg border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted-foreground)]">
+                    Video link missing or invalid.
+                  </div>
+                );
+              }
               return (
                 <div key={idx}>
                   <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
@@ -182,25 +189,16 @@ function ItemContent({
       );
     }
     case "reading": {
-      // Check if data has structured content blocks
-      const hasRichContent = data?.content && Array.isArray(data.content);
+      const latexContent = data?.body || data?.reading || "";
       
       return (
         <article className="card rounded-[28px] px-6 py-6 sm:px-8">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-[var(--foreground)]">Reading</span>
           </div>
-          {hasRichContent ? (
-            <RichBlock 
-              block={data} 
-              maxWidth="100%" 
-              containerClassName="text-[var(--foreground)]"
-            />
-          ) : (
-            <div className="prose prose-sm max-w-none text-[var(--foreground)]">
-              <div dangerouslySetInnerHTML={{ __html: marked.parse(data?.body || "") }} />
-            </div>
-          )}
+          <div className="prose prose-sm max-w-none text-[var(--foreground)]">
+            <div dangerouslySetInnerHTML={{ __html: latexContent }} />
+          </div>
         </article>
       );
     }
@@ -389,7 +387,7 @@ export default function CoursePage() {
     if (!studyPlan || !userId || !courseId) return;
 
     const allUnlockedLessons = studyPlan.modules?.flatMap(module => 
-      module.lessons || []
+      module.lessons?.filter(lesson => !lesson.is_locked) || []
     ) || [];
 
     // Prefetch all content types for all unlocked lessons
@@ -402,6 +400,8 @@ export default function CoursePage() {
   }, [studyPlan, userId, courseId]);
 
   const handleLessonClick = (lesson) => {
+    if (lesson.is_locked) return;
+    
     // Toggle expanded state
     const newExpanded = new Set(expandedLessons);
     if (newExpanded.has(lesson.id)) {
@@ -590,14 +590,22 @@ export default function CoursePage() {
                         <button
                           type="button"
                           onClick={() => handleLessonClick(lesson)}
+                          disabled={lesson.is_locked}
                           className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
-                            expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
+                            lesson.is_locked
+                              ? "opacity-50 cursor-not-allowed"
+                              : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
                               ? "border-b-2 border-[var(--primary)] cursor-pointer"
                               : "hover:bg-[var(--surface-2)] cursor-pointer"
                           }`}
                         >
                           <span className="flex-1 truncate">{lesson.title}</span>
-                          <svg 
+                          {lesson.is_locked ? (
+                            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          ) : (
+                            <svg 
                               className={`w-3 h-3 flex-shrink-0 transition-transform ${
                                 expandedLessons.has(lesson.id) ? "rotate-90" : ""
                               }`} 
@@ -607,11 +615,12 @@ export default function CoursePage() {
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
+                          )}
                         </button>
 
                         {/* Content types dropdown with Framer Motion animation */}
                         <AnimatePresence mode="wait">
-                          {expandedLessons.has(lesson.id) && (
+                          {expandedLessons.has(lesson.id) && !lesson.is_locked && (
                             <motion.div
                               key={`dropdown-${lesson.id}`}
                               initial={{ 
