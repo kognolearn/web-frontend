@@ -871,6 +871,7 @@ function CreateCoursePageContent() {
   );
 
   const handleGenerateCourse = useCallback(async () => {
+    console.log("[CreateCourse] handleGenerateCourse called");
     console.debug("[CreateCourse] handleGenerateCourse called", {
       totalSubtopics: overviewTopics.flatMap((overview) => overview.subtopics).length,
       userId,
@@ -880,11 +881,13 @@ function CreateCoursePageContent() {
     });
     const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
     if (allSubtopics.length === 0) {
+      console.log("[CreateCourse] EARLY RETURN: no subtopics");
       setCourseGenerationError("Generate or add at least one topic before generating the course.");
       return;
     }
 
     if (!userId) {
+      console.log("[CreateCourse] EARLY RETURN: no userId");
       setCourseGenerationError("You need to be signed in to generate your course.");
       return;
     }
@@ -892,6 +895,7 @@ function CreateCoursePageContent() {
     const className = courseTitle.trim();
 
     if (!className) {
+      console.log("[CreateCourse] EARLY RETURN: no className");
       setCourseGenerationError("Provide a course title before generating the course.");
       return;
     }
@@ -901,6 +905,7 @@ function CreateCoursePageContent() {
       .filter(Boolean);
 
     if (cleanTopics.length === 0) {
+      console.log("[CreateCourse] EARLY RETURN: cleanTopics empty");
       setCourseGenerationError("Your topic list is empty. Please add topics before generating the course.");
       return;
     }
@@ -938,6 +943,7 @@ function CreateCoursePageContent() {
     }
 
     if (!grokDraft.topics.length) {
+      console.log("[CreateCourse] EARLY RETURN: grokDraft.topics empty");
       setCourseGenerationError("Topics are missing identifiers. Please regenerate and try again.");
       return;
     }
@@ -950,10 +956,12 @@ function CreateCoursePageContent() {
     }, {});
 
     if (Object.keys(userConfidenceMap).length === 0) {
+      console.log("[CreateCourse] EARLY RETURN: userConfidenceMap empty");
       setCourseGenerationError("Unable to map topic confidence. Please regenerate your topics.");
       return;
     }
 
+    console.log("[CreateCourse] All checks passed, setting courseGenerating=true");
     setCourseGenerating(true);
     setCourseGenerationError("");
     setCourseGenerationMessage("Locking in your topic roadmap…");
@@ -988,8 +996,6 @@ function CreateCoursePageContent() {
           title: className,
           syllabus_text: syllabusTextPayload,
           exam_details: examDetailsPayload,
-          startDate: toIsoDate(startDate) || undefined,
-          endDate: finishByIso || undefined,
         },
       };
 
@@ -1031,19 +1037,23 @@ function CreateCoursePageContent() {
       const controller = new AbortController();
       const timeoutMs = 30 * 60 * 1000; // 30 minutes
       const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+      console.log("[CreateCourse] About to fetch /api/courses");
       const response = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+      console.log("[CreateCourse] Fetch completed, response.ok:", response.ok);
 
       const body = await response.json().catch(() => ({}));
+      console.log("[CreateCourse] Response body:", body);
       if (!response.ok) {
         throw new Error(body?.error || "Failed to generate course. Please try again.");
       }
 
       const resolvedCourseId = resolveCourseId(body) || courseId;
+      console.log("[CreateCourse] resolvedCourseId:", resolvedCourseId);
       setCourseGenerationMessage("Finalizing and saving to your dashboard…");
 
       try {
@@ -1051,11 +1061,14 @@ function CreateCoursePageContent() {
       } catch {}
 
       if (resolvedCourseId) {
+        console.log("[CreateCourse] Navigating to course page");
         router.push(`/courses/${encodeURIComponent(resolvedCourseId)}`);
       } else {
+        console.log("[CreateCourse] Navigating to dashboard");
         router.push("/dashboard");
       }
     } catch (error) {
+      console.log("[CreateCourse] ERROR:", error);
       if (error?.name === "AbortError") {
         setCourseGenerationError("Course generation timed out after 30 minutes. Please try again.");
       } else {
