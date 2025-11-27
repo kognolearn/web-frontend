@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 
-export async function PATCH(request, { params }) {
+async function updateSettings(request, { params }) {
   try {
     const { courseId } = params;
     
@@ -55,4 +55,14 @@ export async function PATCH(request, { params }) {
       details: String(err) 
     }, { status: 500 });
   }
+}
+
+// PATCH handler for normal requests
+export async function PATCH(request, context) {
+  return updateSettings(request, context);
+}
+
+// POST handler for sendBeacon (which only supports POST)
+export async function POST(request, context) {
+  return updateSettings(request, context);
 }

@@ -2,7 +2,7 @@
 import React, {
   useMemo, useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle
 } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
@@ -17,10 +17,18 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
 
   const total = cards.length;
   const [i, setI] = useState(0);
+  const [direction, setDirection] = useState(0); // -1 for prev, 1 for next
   const cardApiRef = useRef(null);
 
-  const next = useCallback(() => setI(p => (p + 1) % Math.max(total, 1)), [total]);
-  const prev = useCallback(() => setI(p => (p - 1 + Math.max(total, 1)) % Math.max(total, 1)), [total]);
+  const next = useCallback(() => {
+    setDirection(1);
+    setI(p => (p + 1) % Math.max(total, 1));
+  }, [total]);
+  
+  const prev = useCallback(() => {
+    setDirection(-1);
+    setI(p => (p - 1 + Math.max(total, 1)) % Math.max(total, 1));
+  }, [total]);
 
   // Notify parent when card changes
   useEffect(() => {
@@ -57,7 +65,7 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
 
   if (!total) {
     return (
-      <div className="text-center text-sm text-[var(--muted-foreground)]">
+      <div className="flex items-center justify-center min-h-[60vh] text-center text-sm text-[var(--muted-foreground)]">
         No flashcards available.
       </div>
     );
@@ -65,29 +73,66 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
 
   const [num, tuple] = cards[i];
 
+  // Swipe animation variants
+  const slideVariants = {
+    enter: (dir) => ({
+      x: dir > 0 ? 300 : -300,
+      opacity: 0,
+      scale: 0.9,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+      scale: 1,
+    },
+    exit: (dir) => ({
+      x: dir > 0 ? -300 : 300,
+      opacity: 0,
+      scale: 0.9,
+    }),
+  };
+
   return (
     <>
       <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
-      <div className="mx-auto w-full max-w-5xl">
-        <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
+      <div className="mx-auto w-full max-w-5xl flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="w-full relative overflow-hidden">
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={i}
+              custom={direction}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{
+                x: { type: "spring", stiffness: 500, damping: 35 },
+                opacity: { duration: 0.12 },
+                scale: { duration: 0.12 },
+              }}
+            >
+              <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
         {/* Prev / Next — never keep focus */}
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-6 flex items-center justify-between w-full max-w-md">
         <button
           type="button"
           tabIndex={-1}
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={prev}
-          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
+          className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-5 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition select-none cursor-pointer"
           aria-label="Previous"
           title="Previous (←)"
         >
-          ← Previous
+          ← Prev
         </button>
         
-        <span className="text-sm text-[var(--muted-foreground)]">
+        <span className="text-sm text-[var(--muted-foreground)] px-4">
           {i + 1} / {total}
         </span>
         
@@ -97,7 +142,7 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
           onPointerDown={(e) => e.preventDefault()}
           onMouseUp={(e) => e.currentTarget.blur()}
           onClick={next}
-          className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer"
+          className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-5 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition select-none cursor-pointer"
           aria-label="Next"
           title="Next (→)"
         >
@@ -224,12 +269,8 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
         >
           {/* Counter-rotate content to fix mirroring */}
           <div className="w-full h-full flex flex-col" style={{ transform: "rotateY(180deg)" }}>
-            <div className="mb-4 inline-block self-start px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
-              <span className="text-sm font-semibold text-green-600 dark:text-green-400">Answer</span>
-            </div>
-
             {/* ANSWER: centered and prominent */}
-            <div className="flex-1 flex flex-col justify-center items-center text-center mb-6 overflow-y-auto">
+            <div className="flex-1 flex flex-col justify-center items-center text-center overflow-y-auto">
               <MathJax dynamic>
                 <p className="text-xl sm:text-2xl font-semibold text-[var(--foreground)] leading-relaxed whitespace-pre-wrap max-w-2xl">
                   {answer}

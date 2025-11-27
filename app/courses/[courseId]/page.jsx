@@ -260,6 +260,7 @@ export default function CoursePage() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [expandedLessons, setExpandedLessons] = useState(new Set());
+  const [collapsedModules, setCollapsedModules] = useState(new Set()); // Track collapsed modules
   const [selectedContentType, setSelectedContentType] = useState(null); // { lessonId, type }
   const [currentViewingItem, setCurrentViewingItem] = useState(null); // Current flashcard or video being viewed
   const [secondsRemaining, setSecondsRemaining] = useState(null); // Countdown timer
@@ -304,33 +305,58 @@ export default function CoursePage() {
     return () => clearInterval(intervalId);
   }, [secondsRemaining]);
 
-  // Send PATCH request on page unload
+  // Use ref to track current secondsRemaining for beforeunload without re-running effect
+  const secondsRemainingRef = useRef(secondsRemaining);
+  useEffect(() => {
+    secondsRemainingRef.current = secondsRemaining;
+  }, [secondsRemaining]);
+
+  // Send PATCH request on page unload and every 5 minutes
   useEffect(() => {
     if (!userId || !courseId || initialSeconds === null) return;
 
-    const handleBeforeUnload = async () => {
-      if (secondsRemaining === null) return;
+    const saveProgress = async () => {
+      if (secondsRemainingRef.current === null) return;
+      
+      try {
+        await fetch(`/api/courses/${courseId}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            seconds_to_complete: secondsRemainingRef.current
+          })
+        });
+      } catch (e) {
+        console.error('Failed to save timer progress:', e);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      if (secondsRemainingRef.current === null) return;
       
       // Use sendBeacon for reliable delivery during page unload
       const payload = {
         userId,
-        seconds_to_complete: secondsRemaining
+        seconds_to_complete: secondsRemainingRef.current
       };
       
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
       navigator.sendBeacon(`/api/courses/${courseId}/settings`, blob);
     };
 
+    // Save every 5 minutes
+    const intervalId = setInterval(saveProgress, 5 * 60 * 1000);
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Also send on component unmount
-      if (secondsRemaining !== null) {
-        handleBeforeUnload();
-      }
+      // Send on component unmount (navigation away)
+      handleBeforeUnload();
     };
-  }, [userId, courseId, secondsRemaining, initialSeconds]);
+  }, [userId, courseId, initialSeconds]);
 
   // Track viewport for responsive adjustments
   useEffect(() => {
@@ -384,16 +410,22 @@ export default function CoursePage() {
     (async () => {
       try {
         // Fetch course metadata first to get the course name and seconds_to_complete
-        const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(courseId)}`;
+        // Use same pattern as dashboard - fetch all courses and find the one we need
+        const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}`;
         const courseMetaRes = await fetch(courseMetaUrl);
         if (courseMetaRes.ok) {
-          const courseMeta = await courseMetaRes.json();
-          if (!aborted && courseMeta?.name) {
-            setCourseName(courseMeta.name);
-          }
-          if (!aborted && typeof courseMeta?.seconds_to_complete === 'number') {
-            setSecondsRemaining(courseMeta.seconds_to_complete);
-            setInitialSeconds(courseMeta.seconds_to_complete);
+          const body = await courseMetaRes.json();
+          const courses = Array.isArray(body?.courses) ? body.courses : [];
+          const courseMeta = courses.find(c => c.id === courseId);
+          
+          if (!aborted && courseMeta) {
+            const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
+            if (title) setCourseName(title);
+            
+            if (typeof courseMeta.seconds_to_complete === 'number') {
+              setSecondsRemaining(courseMeta.seconds_to_complete);
+              setInitialSeconds(courseMeta.seconds_to_complete);
+            }
           }
         }
         
@@ -549,6 +581,28 @@ export default function CoursePage() {
     await refetchStudyPlan();
   }, [refetchStudyPlan]);
 
+  // Check if content for a lesson is currently loading
+  const isLessonContentLoading = (lessonId) => {
+    const cacheKeys = Object.keys(contentCache);
+    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
+    if (lessonCacheKey) {
+      const cached = contentCache[lessonCacheKey];
+      return cached?.status === "loading";
+    }
+    return false;
+  };
+
+  // Check if content for a lesson has been loaded
+  const isLessonContentLoaded = (lessonId) => {
+    const cacheKeys = Object.keys(contentCache);
+    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
+    if (lessonCacheKey) {
+      const cached = contentCache[lessonCacheKey];
+      return cached?.status === "loaded";
+    }
+    return false;
+  };
+
   // Get available content types from cached data
   const getAvailableContentTypes = (lessonId) => {
     const types = [];
@@ -577,6 +631,21 @@ export default function CoursePage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors flex">
+      {/* Enhanced animated background */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+        {/* Primary gradient orbs - static, no animation */}
+        <div className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 blur-3xl" />
+        <div className="absolute top-1/3 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-[var(--primary)]/15 to-transparent blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 h-[450px] w-[450px] rounded-full bg-gradient-to-t from-[var(--primary)]/10 to-transparent blur-3xl" />
+        <div className="absolute top-1/2 right-1/3 h-[300px] w-[300px] rounded-full bg-gradient-to-bl from-[var(--info)]/10 to-transparent blur-3xl" />
+        
+        {/* Mesh gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
+        
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+      </div>
+
       {canRenderSidebar && (
         <motion.button
           type="button"
@@ -594,6 +663,57 @@ export default function CoursePage() {
           {sidebarOpen ? "Hide" : "Show"} Sidebar
         </motion.button>
       )}
+
+      {/* Countdown Timer */}
+      {secondsRemaining !== null && (
+        <div 
+          className="fixed top-4 z-50 flex items-center gap-2 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 px-3 py-2 shadow-xl backdrop-blur-xl group"
+          style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
+        >
+          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10">
+            <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-0.5">
+            {(() => {
+              const h = Math.floor(secondsRemaining / 3600);
+              const m = Math.floor((secondsRemaining % 3600) / 60);
+              const s = secondsRemaining % 60;
+              return (
+                <>
+                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
+                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">m</span>
+                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-[var(--muted-foreground)]">s</span>
+                </>
+              );
+            })()}
+          </div>
+          {/* Add time buttons - appear on hover */}
+          <div className="flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => setSecondsRemaining(prev => (prev || 0) + 15 * 60)}
+              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white/10 hover:bg-[var(--primary)]/20 hover:text-[var(--primary)] text-[var(--muted-foreground)] transition-colors"
+              title="Add 15 minutes"
+            >
+              +15m
+            </button>
+            <button
+              type="button"
+              onClick={() => setSecondsRemaining(prev => (prev || 0) + 60 * 60)}
+              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white/10 hover:bg-[var(--primary)]/20 hover:text-[var(--primary)] text-[var(--muted-foreground)] transition-colors"
+              title="Add 1 hour"
+            >
+              +1h
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       {canRenderSidebar && (
         <>
@@ -607,7 +727,7 @@ export default function CoursePage() {
           
           {/* Sidebar container */}
           <aside
-            className={`fixed left-0 top-0 h-screen bg-[var(--surface-1)] border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
+            className={`fixed left-0 top-0 h-screen backdrop-blur-xl bg-[var(--surface-1)]/80 border-r border-white/10 dark:border-white/5 shadow-2xl transition-transform duration-200 z-40 flex flex-col ${
               isMobile
                 ? sidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -615,11 +735,11 @@ export default function CoursePage() {
             style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
           >
             {/* Sidebar header */}
-            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+            <div className="p-4 border-b border-white/10 dark:border-white/5 flex items-center justify-between backdrop-blur-sm">
               <button
                 type="button"
                 onClick={() => router.push('/dashboard')}
-                className="btn btn-ghost btn-sm text-xs text-[var(--muted-foreground)] gap-1 px-2"
+                className="btn btn-ghost btn-sm text-xs text-[var(--muted-foreground)] gap-1 px-2 hover:text-[var(--primary)] transition-colors"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -640,200 +760,88 @@ export default function CoursePage() {
             </div>
 
             {/* Course title */}
-            <div className="p-4 border-b border-[var(--border)]">
+            <div className="p-4 border-b border-white/10 dark:border-white/5">
               <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
                 Course
               </p>
-              <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              <h2 className="text-sm font-semibold text-[var(--foreground)] bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text">
                 {courseName || "Study Plan"}
               </h2>
             </div>
 
             {/* Modules and lessons navigation */}
-            <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-              {studyPlan.modules?.map((module, moduleIdx) => (
-                <div key={moduleIdx}>
-                  <div className="mb-3 px-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">
-                        {moduleIdx + 1}
+            <nav className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              {studyPlan.modules?.map((module, moduleIdx) => {
+                const isCollapsed = collapsedModules.has(moduleIdx);
+                return (
+                  <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-white/5 dark:bg-black/10 border border-white/10 dark:border-white/5">
+                    {/* Module header - clickable to collapse/expand */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newCollapsed = new Set(collapsedModules);
+                        if (isCollapsed) {
+                          newCollapsed.delete(moduleIdx);
+                        } else {
+                          newCollapsed.add(moduleIdx);
+                        }
+                        setCollapsedModules(newCollapsed);
+                      }}
+                      className="w-full p-3 flex items-center justify-between hover:bg-white/5 dark:hover:bg-white/5 rounded-t-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/70 text-white text-xs font-bold shadow-lg shadow-[var(--primary)]/20">
+                          {moduleIdx + 1}
+                        </div>
+                        <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-[var(--primary)] text-left">
+                          {module.title}
+                        </h3>
                       </div>
-                      <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-[var(--primary)] opacity-80">
-                        {module.title}
-                      </h3>
-                    </div>
-                  </div>
-                  
-                  {/* Lessons */}
-                  <div className="space-y-1">
-                    {module.lessons?.map((lesson, lessonIdx) => (
-                      <div key={lesson.id || lessonIdx}>
-                        {/* Lesson button */}
-                        <button
-                          type="button"
-                          onClick={() => handleLessonClick(lesson)}
-                          disabled={false}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between group ${
-                            false
-                              ? "opacity-50 cursor-not-allowed"
-                              : expandedLessons.has(lesson.id) || selectedLesson?.id === lesson.id
-                              ? "border-b-2 border-[var(--primary)] cursor-pointer"
-                              : "hover:bg-[var(--surface-2)] cursor-pointer"
-                          }`}
-                        >
-                          <span className="flex-1 truncate">{lesson.title}</span>
-                          {false ? (
-                            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                          ) : (
-                            <svg 
-                              className={`w-3 h-3 flex-shrink-0 transition-transform ${
-                                expandedLessons.has(lesson.id) ? "rotate-90" : ""
-                              }`} 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Content types dropdown with Framer Motion animation */}
-                        <AnimatePresence mode="wait">
-                          {expandedLessons.has(lesson.id) && (
-                            <motion.div
-                              key={`dropdown-${lesson.id}`}
-                              initial={{ 
-                                opacity: 0,
-                                height: 0,
-                                scaleY: 0.8,
-                                originY: 0
-                              }}
-                              animate={{ 
-                                opacity: 1,
-                                height: "auto",
-                                scaleY: 1,
-                                transition: {
-                                  height: {
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 25,
-                                    mass: 0.8
-                                  },
-                                  opacity: {
-                                    duration: 0.2,
-                                    ease: "easeOut"
-                                  },
-                                  scaleY: {
-                                    type: "spring",
-                                    stiffness: 400,
-                                    damping: 28
-                                  }
-                                }
-                              }}
-                              exit={{ 
-                                opacity: 0,
-                                height: 0,
-                                scaleY: 0.8,
-                                transition: {
-                                  height: {
-                                    type: "spring",
-                                    stiffness: 400,
-                                    damping: 30
-                                  },
-                                  opacity: {
-                                    duration: 0.15,
-                                    ease: "easeIn"
-                                  },
-                                  scaleY: {
-                                    duration: 0.2,
-                                    ease: "easeIn"
-                                  }
-                                }
-                              }}
-                              className="ml-4 mt-1 mb-2 overflow-hidden border-l-2 border-[var(--border)] pl-2"
-                            >
-                              <motion.div 
-                                className="space-y-0.5"
-                                initial="hidden"
-                                animate="visible"
-                                exit="hidden"
-                                variants={{
-                                  visible: {
-                                    transition: {
-                                      staggerChildren: 0.06,
-                                      delayChildren: 0.08
-                                    }
-                                  },
-                                  hidden: {
-                                    transition: {
-                                      staggerChildren: 0.03,
-                                      staggerDirection: -1
-                                    }
-                                  }
-                                }}
-                              >
-                                {getAvailableContentTypes(lesson.id).map((contentType, index) => (
-                                  <motion.button
-                                    key={contentType.value}
-                                    type="button"
-                                    onClick={() => handleContentTypeClick(lesson, contentType.value)}
-                                    variants={{
-                                      hidden: { 
-                                        opacity: 0,
-                                        x: -12,
-                                        scale: 0.92
-                                      },
-                                      visible: { 
-                                        opacity: 1,
-                                        x: 0,
-                                        scale: 1,
-                                        transition: {
-                                          type: "spring",
-                                          stiffness: 350,
-                                          damping: 25,
-                                          mass: 0.6
-                                        }
-                                      }
-                                    }}
-                                    whileHover={{ 
-                                      x: 4,
-                                      scale: 1.02,
-                                      transition: {
-                                        type: "spring",
-                                        stiffness: 400,
-                                        damping: 20
-                                      }
-                                    }}
-                                    whileTap={{ 
-                                      scale: 0.96,
-                                      transition: {
-                                        type: "spring",
-                                        stiffness: 500,
-                                        damping: 25
-                                      }
-                                    }}
-                                    className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${
-                                      selectedContentType?.lessonId === lesson.id && 
-                                      selectedContentType?.type === contentType.value
-                                        ? "bg-[var(--primary)] text-[var(--primary-contrast)]"
-                                        : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)]"
-                                    }`}
-                                  >
-                                    {contentType.label}
-                                  </motion.button>
-                                ))}
-                              </motion.div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                      <svg 
+                        className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {/* Lessons - shown when module is not collapsed */}
+                    {!isCollapsed && (
+                      <div className="px-3 pb-3 space-y-1">
+                        {module.lessons?.map((lesson, lessonIdx) => (
+                          <button
+                            key={lesson.id || lessonIdx}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLesson(lesson);
+                              // Auto-select first available content type
+                              const availableTypes = getAvailableContentTypes(lesson.id);
+                              if (availableTypes.length > 0) {
+                                setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
+                              }
+                              setViewMode("topic");
+                              setCurrentViewingItem(null);
+                              fetchLessonContent(lesson.id, ['reading']);
+                            }}
+                            className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
+                              selectedLesson?.id === lesson.id
+                                ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
+                                : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
+                            }`}
+                          >
+                            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
+                              {lessonIdx + 1}
+                            </span>
+                            <span className="flex-1 truncate">{lesson.title}</span>
+                          </button>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </nav>
 
             {/* Resize handle (desktop only) */}
@@ -854,25 +862,37 @@ export default function CoursePage() {
           marginRight: isMobile ? 0 : `${chatBotWidth}px` 
         }}
       >
-        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8">
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8 z-10">
           {/* Loading State */}
           {loading && (
-            <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-              Loading your study plan…
+            <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl px-8 py-16 text-center shadow-2xl">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+              <p className="text-sm text-[var(--muted-foreground)]">Loading your study plan…</p>
             </div>
           )}
 
           {/* Error State */}
           {!loading && error && (
-            <div className="card rounded-[28px] border border-red-500/30 bg-red-500/10 px-6 py-6 text-sm text-red-200">
-              {error}
+            <div className="backdrop-blur-xl bg-red-500/10 border border-red-500/30 rounded-3xl px-6 py-8 text-center shadow-2xl">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="text-sm text-red-300">{error}</p>
             </div>
           )}
 
           {/* Empty State */}
           {!loading && !error && !studyPlan && (
-            <div className="card rounded-[28px] px-8 py-10 text-center text-sm text-[var(--muted-foreground)]">
-              Study plan is not available yet. Please try refreshing in a moment.
+            <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl px-8 py-16 text-center shadow-2xl">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <p className="text-sm text-[var(--muted-foreground)]">Study plan is not available yet.</p>
+              <p className="text-xs text-[var(--muted-foreground)]/70 mt-1">Please try refreshing in a moment.</p>
             </div>
           )}
 
@@ -882,12 +902,17 @@ export default function CoursePage() {
               {/* Course Statistics Overview */}
               {studyPlan.modules && (
                 <section>
-                  <h2 className="mb-4 text-lg font-semibold">Course Overview</h2>
+                  <h2 className="mb-6 text-xl font-bold bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text text-transparent">Course Overview</h2>
                   
                   {/* Main Statistics Grid */}
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-6">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
                     {/* Total Lessons */}
-                    <div className="card rounded-2xl px-4 py-6 text-center">
+                    <div className="group backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl px-4 py-6 text-center shadow-xl hover:shadow-2xl hover:border-[var(--primary)]/30 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
                       <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
                         Total Lessons
                       </p>
@@ -897,7 +922,12 @@ export default function CoursePage() {
                     </div>
 
                     {/* Total Time */}
-                    <div className="card rounded-2xl px-4 py-6 text-center">
+                    <div className="group backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl px-4 py-6 text-center shadow-xl hover:shadow-2xl hover:border-[var(--primary)]/30 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-gradient-to-br from-[var(--info)]/30 to-[var(--info)]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <svg className="w-5 h-5 text-[var(--info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
                       <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
                         Total Time
                       </p>
@@ -910,7 +940,12 @@ export default function CoursePage() {
                     </div>
 
                     {/* Modules */}
-                    <div className="card rounded-2xl px-4 py-6 text-center">
+                    <div className="group backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl px-4 py-6 text-center shadow-xl hover:shadow-2xl hover:border-[var(--primary)]/30 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-gradient-to-br from-[var(--success)]/30 to-[var(--success)]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <svg className="w-5 h-5 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
                       <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
                         Modules
                       </p>
@@ -921,7 +956,7 @@ export default function CoursePage() {
                   </div>
 
                   {/* Study Time Breakdown by Content Type */}
-                  <h3 className="mb-3 text-base font-semibold">Time by Content Type</h3>
+                  <h3 className="mb-4 text-base font-semibold text-[var(--foreground)]">Time by Content Type</h3>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     {(() => {
                       const allLessons = studyPlan.modules.flatMap(m => m.lessons || []);
@@ -931,8 +966,16 @@ export default function CoursePage() {
                         return acc;
                       }, {});
                       
-                      return Object.entries(timeByType).map(([type, minutes]) => (
-                        <div key={type} className="card rounded-2xl px-4 py-6 text-center">
+                      const colors = ['from-purple-500/30 to-purple-500/10', 'from-blue-500/30 to-blue-500/10', 'from-emerald-500/30 to-emerald-500/10', 'from-amber-500/30 to-amber-500/10'];
+                      const textColors = ['text-purple-400', 'text-blue-400', 'text-emerald-400', 'text-amber-400'];
+                      
+                      return Object.entries(timeByType).map(([type, minutes], idx) => (
+                        <div key={type} className="group backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl px-4 py-6 text-center shadow-xl hover:shadow-2xl hover:border-[var(--primary)]/30 transition-all duration-300 hover:-translate-y-1">
+                          <div className={`w-10 h-10 mx-auto mb-3 rounded-xl bg-gradient-to-br ${colors[idx % colors.length]} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                            <svg className={`w-5 h-5 ${textColors[idx % textColors.length]}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                          </div>
                           <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
                             {prettyFormat(type)}
                           </p>
@@ -955,24 +998,145 @@ export default function CoursePage() {
           {!loading && !error && studyPlan && viewMode === "topic" && selectedLesson && selectedContentType && (
             <>
               {/* Content Stream */}
-              <section className="space-y-6">
-                {/* Use the extracted ItemContent component and pass necessary props */}
-                <ItemContent 
-                  fmt={selectedContentType.type} 
-                  id={selectedLesson.id}
-                  userId={userId}
-                  courseId={courseId}
-                  contentCache={contentCache}
-                  setContentCache={setContentCache}
-                  handleCardChange={handleCardChange}
-                  setCurrentViewingItem={setCurrentViewingItem}
-                  onQuizQuestionChange={setChatQuizContext}
-                  handleQuizCompleted={refetchStudyPlan}
-                />
+              <section className="space-y-6 pb-24">
+                {isLessonContentLoading(selectedLesson.id) ? (
+                  /* Loading Skeleton for Content */
+                  <div className="animate-pulse space-y-6">
+                    {/* Content type title skeleton */}
+                    <div className="h-8 w-48 bg-white/10 rounded-lg" />
+                    
+                    {/* Main content area skeleton */}
+                    <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 p-6 space-y-4">
+                      <div className="h-6 w-3/4 bg-white/10 rounded" />
+                      <div className="h-4 w-full bg-white/10 rounded" />
+                      <div className="h-4 w-5/6 bg-white/10 rounded" />
+                      <div className="h-4 w-4/5 bg-white/10 rounded" />
+                      <div className="h-32 w-full bg-white/10 rounded-lg mt-4" />
+                      <div className="h-4 w-2/3 bg-white/10 rounded" />
+                      <div className="h-4 w-3/4 bg-white/10 rounded" />
+                    </div>
+                    
+                    {/* Secondary content block skeleton */}
+                    <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 p-6 space-y-4">
+                      <div className="h-5 w-1/2 bg-white/10 rounded" />
+                      <div className="h-4 w-full bg-white/10 rounded" />
+                      <div className="h-4 w-4/5 bg-white/10 rounded" />
+                    </div>
+                  </div>
+                ) : (
+                  /* Use the extracted ItemContent component and pass necessary props */
+                  <ItemContent 
+                    fmt={selectedContentType.type} 
+                    id={selectedLesson.id}
+                    userId={userId}
+                    courseId={courseId}
+                    contentCache={contentCache}
+                    setContentCache={setContentCache}
+                    handleCardChange={handleCardChange}
+                    setCurrentViewingItem={setCurrentViewingItem}
+                    onQuizQuestionChange={setChatQuizContext}
+                    handleQuizCompleted={refetchStudyPlan}
+                  />
+                )}
               </section>
             </>
           )}
         </div>
+
+        {/* Bottom Navigation Bar for Content Types */}
+        {viewMode === "topic" && selectedLesson && (
+          <div 
+            className="fixed bottom-0 left-0 right-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-white/10 dark:border-white/5 shadow-2xl"
+            style={{ 
+              marginLeft: !isMobile ? `${sidebarOffset}px` : 0,
+              marginRight: isMobile ? 0 : `${chatBotWidth}px` 
+            }}
+          >
+            <div className="max-w-5xl mx-auto px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                {/* Previous Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const types = getAvailableContentTypes(selectedLesson.id);
+                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                    if (currentIdx > 0) {
+                      const prevType = types[currentIdx - 1];
+                      setSelectedContentType({ lessonId: selectedLesson.id, type: prevType.value });
+                      fetchLessonContent(selectedLesson.id, [prevType.value]);
+                    }
+                  }}
+                  disabled={isLessonContentLoading(selectedLesson.id) || (() => {
+                    const types = getAvailableContentTypes(selectedLesson.id);
+                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                    return currentIdx <= 0;
+                  })()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 dark:bg-white/5 border border-white/10 text-sm font-medium transition-all hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span className="hidden sm:inline">Previous</span>
+                </button>
+
+                {/* Content Type Tabs - Show skeleton while loading */}
+                <div className="flex-1 flex items-center justify-center gap-1 overflow-x-auto custom-scrollbar">
+                  {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
+                    // Loading skeleton for content type tabs
+                    <>
+                      <div className="h-9 w-20 rounded-lg bg-white/10 animate-pulse" />
+                      <div className="h-9 w-24 rounded-lg bg-white/10 animate-pulse" />
+                      <div className="h-9 w-16 rounded-lg bg-white/10 animate-pulse" />
+                    </>
+                  ) : (
+                    getAvailableContentTypes(selectedLesson.id).map((contentType) => (
+                      <button
+                        key={contentType.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
+                          fetchLessonContent(selectedLesson.id, [contentType.value]);
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                          selectedContentType?.type === contentType.value
+                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg shadow-[var(--primary)]/20"
+                            : "bg-white/10 dark:bg-white/5 border border-white/10 hover:bg-white/20"
+                        }`}
+                      >
+                        {contentType.label}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Next Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const types = getAvailableContentTypes(selectedLesson.id);
+                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                    if (currentIdx < types.length - 1) {
+                      const nextType = types[currentIdx + 1];
+                      setSelectedContentType({ lessonId: selectedLesson.id, type: nextType.value });
+                      fetchLessonContent(selectedLesson.id, [nextType.value]);
+                    }
+                  }}
+                  disabled={isLessonContentLoading(selectedLesson.id) || (() => {
+                    const types = getAvailableContentTypes(selectedLesson.id);
+                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                    return currentIdx >= types.length - 1;
+                  })()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 dark:bg-white/5 border border-white/10 text-sm font-medium transition-all hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       <ChatBot 

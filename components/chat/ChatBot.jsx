@@ -1241,7 +1241,7 @@ Instructions:
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
       <div 
-        className={`flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 ${isPopped ? 'cursor-move' : ''}`}
+        className={`flex items-center justify-between border-b border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : ''}`}
         onMouseDown={isPopped ? handleDragStart : undefined}
       >
         <div className="flex items-center gap-3">
@@ -1304,7 +1304,7 @@ Instructions:
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Chat History */}
         {isSidebarOpen && (
-          <div className="w-56 border-r border-[var(--border)] bg-[var(--surface-1)] overflow-y-auto flex-shrink-0">
+          <div className="w-56 border-r border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar">
             <div className="p-3 space-y-2">
               <button
                 onClick={createNewChat}
@@ -1387,7 +1387,7 @@ Instructions:
           {/* Messages */}
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+            className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar"
           >
             {currentChat?.messages.length === 0 && (
               <div className="flex h-full items-center justify-center">
@@ -1541,7 +1541,7 @@ Instructions:
 
           {/* Edit Mode Banner */}
           {editingMessageId && (
-            <div className="border-t border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 flex items-center justify-between">
+            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2 flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1560,7 +1560,7 @@ Instructions:
 
           {/* Selected Text Banner */}
           {selectedText && !editingMessageId && (
-            <div className="border-t border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 flex items-center justify-between">
+            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2 flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -1579,7 +1579,7 @@ Instructions:
 
           {/* Attached Files */}
           {attachedFiles.length > 0 && (
-            <div className="border-t border-[var(--border)] bg-[var(--surface-1)] px-4 py-2">
+            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2">
               <div className="flex flex-wrap gap-2">
                 {attachedFiles.map(file => (
                   <div
@@ -1606,7 +1606,7 @@ Instructions:
           )}
 
           {/* Input Area */}
-          <div className="border-t border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
+          <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3">
             <form className="flex items-center gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
               <input
                 ref={fileInputRef}
@@ -1741,7 +1741,7 @@ Instructions:
   if (isPopped) {
     return (
       <div
-        className="fixed z-50 shadow-2xl rounded-xl overflow-hidden border border-[var(--border)]"
+        className="fixed z-50 shadow-2xl rounded-xl overflow-hidden border border-white/10 dark:border-white/5 backdrop-blur-xl"
         style={{
           left: `${poppedPosition.x}px`,
           top: `${poppedPosition.y}px`,
@@ -1774,7 +1774,7 @@ Instructions:
           aria-hidden="true"
         />
         <div
-          className="fixed left-0 right-0 bottom-0 z-50 h-[70vh] shadow-2xl border-t border-[var(--border)] rounded-t-xl overflow-hidden"
+          className="fixed left-0 right-0 bottom-0 z-50 h-[70vh] shadow-2xl border-t border-white/10 dark:border-white/5 rounded-t-xl overflow-hidden backdrop-blur-xl"
         >
           {chatContent}
         </div>
@@ -1784,7 +1784,7 @@ Instructions:
 
   return (
     <div
-      className="fixed right-0 top-0 z-40 h-screen shadow-2xl border-l border-[var(--border)]"
+      className="fixed right-0 top-0 z-40 h-screen shadow-2xl border-l border-white/10 dark:border-white/5 backdrop-blur-xl"
       style={{ width: `${width}px` }}
     >
       {chatContent}
