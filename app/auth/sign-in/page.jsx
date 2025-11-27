@@ -39,13 +39,27 @@ export default async function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="card rounded-lg border border-[var(--border)] p-8 shadow-lg">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">Sign In</h1>
-            <p className="text-[var(--muted-foreground)]">
-              Welcome back to Kogno
+    <div className="relative min-h-screen flex items-center justify-center bg-[var(--background)] px-4 py-12 overflow-hidden">
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/15 to-transparent blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-[var(--primary)]/10 to-transparent blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+            Kogno
+          </Link>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/80 backdrop-blur-xl p-8 shadow-2xl">
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-bold mb-2">Welcome back</h1>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Sign in to continue learning
             </p>
           </div>
 
@@ -53,10 +67,10 @@ export default async function SignInPage() {
             <SignInForm />
           </Suspense>
 
-          <div className="mt-6 text-center">
+          <div className="mt-8 pt-6 border-t border-white/10 dark:border-white/5 text-center">
             <p className="text-sm text-[var(--muted-foreground)]">
               Don't have an account?{" "}
-              <Link href="/auth/create-account" className="font-medium text-[var(--primary)] hover:underline">
+              <Link href="/auth/create-account" className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors">
                 Sign up
               </Link>
             </p>

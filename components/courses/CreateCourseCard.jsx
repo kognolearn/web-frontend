@@ -22,7 +22,7 @@ export default function CreateCourseCard() {
           Create New Course
         </span>
         <span className="relative mt-1 text-xs uppercase text-[var(--muted-foreground)]">
-          Generate study plan
+          Build study plan
         </span>
       </div>
     </Link>

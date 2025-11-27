@@ -133,7 +133,7 @@ export default function CreateCourseModal({ onClose }) {
               disabled={loading}
               className="flex-1 btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Creating..." : "Generate Course"}
+              {loading ? "Creating..." : "Create Course"}
             </button>
           </div>
         </form>

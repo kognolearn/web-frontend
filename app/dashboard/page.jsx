@@ -129,13 +129,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Welcome header - simplified */}
-        <header className="space-y-2">
-          <h1 className="text-3xl font-bold sm:text-4xl">
-            Welcome back, {displayName}
-          </h1>
-          <p className="text-[var(--muted-foreground)]">
-            {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
-          </p>
+        <header>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold sm:text-4xl">
+              Welcome back, {displayName}
+            </h1>
+            <p className="text-[var(--muted-foreground)]">
+              {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
+            </p>
+          </div>
         </header>
         {/* Courses section */}
         <main className="space-y-6">
@@ -150,6 +152,20 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {/* Create Course Card - always first */}
+              <Link 
+                href="/courses/create" 
+                className="group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
+              >
+                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
+                  <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <span className="font-semibold text-[var(--foreground)]">Create New Course</span>
+                <span className="text-sm text-[var(--muted-foreground)] mt-1">Build your study plan</span>
+              </Link>
+              
               {courses.map((course) => {
                 const courseTitle =
                   course?.title ||

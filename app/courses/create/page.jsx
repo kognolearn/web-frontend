@@ -476,13 +476,13 @@ function CreateCoursePageContent() {
   const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
     if (!userId) {
-      setTopicsError("You need to be signed in to generate topics.");
+      setTopicsError("You need to be signed in to build topics.");
       return;
     }
 
     const trimmedTitle = courseTitle.trim();
     if (!trimmedTitle) {
-      setTopicsError("Provide a course title before generating topics.");
+      setTopicsError("Provide a course title before building topics.");
       return;
     }
 
@@ -526,7 +526,7 @@ function CreateCoursePageContent() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.success === false) {
-        throw new Error(data?.error || "Failed to generate topics.");
+        throw new Error(data?.error || "Failed to build topics.");
       }
 
       console.log("Backend response:", JSON.stringify(data, null, 2));
@@ -882,13 +882,13 @@ function CreateCoursePageContent() {
     const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
     if (allSubtopics.length === 0) {
       console.log("[CreateCourse] EARLY RETURN: no subtopics");
-      setCourseGenerationError("Generate or add at least one topic before generating the course.");
+      setCourseGenerationError("Add at least one topic before creating the course.");
       return;
     }
 
     if (!userId) {
       console.log("[CreateCourse] EARLY RETURN: no userId");
-      setCourseGenerationError("You need to be signed in to generate your course.");
+      setCourseGenerationError("You need to be signed in to create your course.");
       return;
     }
 
@@ -896,7 +896,7 @@ function CreateCoursePageContent() {
 
     if (!className) {
       console.log("[CreateCourse] EARLY RETURN: no className");
-      setCourseGenerationError("Provide a course title before generating the course.");
+      setCourseGenerationError("Provide a course title before creating the course.");
       return;
     }
 
@@ -906,7 +906,7 @@ function CreateCoursePageContent() {
 
     if (cleanTopics.length === 0) {
       console.log("[CreateCourse] EARLY RETURN: cleanTopics empty");
-      setCourseGenerationError("Your topic list is empty. Please add topics before generating the course.");
+      setCourseGenerationError("Your topic list is empty. Please add topics before creating the course.");
       return;
     }
 
@@ -944,7 +944,7 @@ function CreateCoursePageContent() {
 
     if (!grokDraft.topics.length) {
       console.log("[CreateCourse] EARLY RETURN: grokDraft.topics empty");
-      setCourseGenerationError("Topics are missing identifiers. Please regenerate and try again.");
+      setCourseGenerationError("Topics are missing identifiers. Please rebuild and try again.");
       return;
     }
 
@@ -957,7 +957,7 @@ function CreateCoursePageContent() {
 
     if (Object.keys(userConfidenceMap).length === 0) {
       console.log("[CreateCourse] EARLY RETURN: userConfidenceMap empty");
-      setCourseGenerationError("Unable to map topic confidence. Please regenerate your topics.");
+      setCourseGenerationError("Unable to map topic confidence. Please rebuild your topics.");
       return;
     }
 
@@ -1049,7 +1049,7 @@ function CreateCoursePageContent() {
       const body = await response.json().catch(() => ({}));
       console.log("[CreateCourse] Response body:", body);
       if (!response.ok) {
-        throw new Error(body?.error || "Failed to generate course. Please try again.");
+        throw new Error(body?.error || "Failed to create course. Please try again.");
       }
 
       const resolvedCourseId = resolveCourseId(body) || courseId;
@@ -1070,9 +1070,9 @@ function CreateCoursePageContent() {
     } catch (error) {
       console.log("[CreateCourse] ERROR:", error);
       if (error?.name === "AbortError") {
-        setCourseGenerationError("Course generation timed out after 30 minutes. Please try again.");
+        setCourseGenerationError("Course creation timed out after 30 minutes. Please try again.");
       } else {
-        setCourseGenerationError(error.message || "Unexpected error generating course.");
+        setCourseGenerationError(error.message || "Unexpected error creating course.");
       }
     } finally {
       try {
@@ -1169,7 +1169,7 @@ function CreateCoursePageContent() {
   const steps = [
     { number: 1, title: "Course Details", description: "Basic information" },
     { number: 2, title: "Course Materials", description: "Syllabus & resources" },
-    { number: 3, title: "Generate Topics", description: "AI-powered topics" },
+    { number: 3, title: "Build Topics", description: "Custom topic list" },
   ];
 
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
@@ -1186,7 +1186,7 @@ function CreateCoursePageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/95 px-4 backdrop-blur-sm">
           <div className="card max-w-md w-full rounded-2xl px-6 py-8 text-center shadow-2xl">
             <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
-            <h2 className="mt-5 text-lg font-bold text-[var(--foreground)]">Generating your course</h2>
+            <h2 className="mt-5 text-lg font-bold text-[var(--foreground)]">Building your course</h2>
             <p className="mt-2 text-xs text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
             <p className="mt-3 text-[10px] text-[var(--muted-foreground)]">
               Creating a personalized learning plan tailored to your goals.
@@ -1610,8 +1610,8 @@ function CreateCoursePageContent() {
                 <div ref={topNavCallback} className="pb-5 border-b border-[var(--border)]">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
-                      <h2 className="text-xl font-bold mb-1">Generate Study Topics</h2>
-                      <p className="text-sm text-[var(--muted-foreground)]">Let AI create a personalized topic list for your course</p>
+                      <h2 className="text-xl font-bold mb-1">Build Study Topics</h2>
+                      <p className="text-sm text-[var(--muted-foreground)]">Create a personalized topic list for your course</p>
                     </div>
                     {/* Top buttons removed */}
                   </div>
@@ -1624,9 +1624,9 @@ function CreateCoursePageContent() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-bold mb-1.5">Ready to Generate Topics</h3>
+                  <h3 className="text-base font-bold mb-1.5">Ready to Build Topics</h3>
                   <p className="text-xs text-[var(--muted-foreground)] mb-5 max-w-md mx-auto">
-                    AI will analyze your course details and create a comprehensive topic list
+                    We'll analyze your course details and create a comprehensive topic list
                   </p>
                   <button
                     type="button"
@@ -1637,7 +1637,7 @@ function CreateCoursePageContent() {
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Generate Topics
+                    Build Topics
                   </button>
                 </div>
               )}
