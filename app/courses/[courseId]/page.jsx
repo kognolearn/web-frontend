@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase/client";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
+import ReadingRenderer from "@/components/content/ReadingRenderer";
 
 // Utility functions moved outside
 const normalizeFormat = (fmt) => {
@@ -205,9 +206,7 @@ function ItemContent({
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-[var(--foreground)]">Reading</span>
           </div>
-          <div className="prose prose-sm max-w-none text-[var(--foreground)]">
-            <div dangerouslySetInnerHTML={{ __html: latexContent }} />
-          </div>
+          <ReadingRenderer content={latexContent} />
         </article>
       );
     }
@@ -216,17 +215,16 @@ function ItemContent({
     }
     case "mini_quiz":
     case "practice_exam": {
-      // Pass the data directly to Quiz component which handles normalization
-  return (
-    <Quiz 
-      questions={data?.questions || data} 
-      onQuestionChange={onQuizQuestionChange}
-      onQuizCompleted={handleQuizCompleted}
-      userId={userId}
-      courseId={courseId}
-      lessonId={id}
-    />
-  );
+      return (
+        <Quiz 
+          questions={data?.questions || data} 
+          onQuestionChange={onQuizQuestionChange}
+          onQuizCompleted={handleQuizCompleted}
+          userId={userId}
+          courseId={courseId}
+          lessonId={id}
+        />
+      );
     }
     default:
       return (

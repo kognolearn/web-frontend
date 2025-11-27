@@ -4,7 +4,7 @@
 import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 
-const mjxConfig = {
+export const mjxConfig = {
   loader: { load: ["input/tex", "output/svg"] },
   tex: { 
     inlineMath: [["$", "$"], ["\\(", "\\)"]],
