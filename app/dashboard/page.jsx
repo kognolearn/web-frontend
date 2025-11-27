@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
+import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 export default function DashboardPage() {
@@ -12,6 +13,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [courseToDelete, setCourseToDelete] = useState(null);
   const { mounted } = useTheme();
 
   const loadCourses = useCallback(async (userId) => {
@@ -36,7 +38,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadUserAndCourses = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         router.push("/auth/create-account");
         return;
@@ -65,6 +67,21 @@ export default function DashboardPage() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/");
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!user?.id || !courseToDelete) return;
+
+    const res = await fetch(`/api/courses?userId=${user.id}&courseId=${courseToDelete.id}`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
+      setCourseToDelete(null);
+    } else {
+      throw new Error("Failed to delete course");
+    }
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
@@ -103,10 +120,10 @@ export default function DashboardPage() {
         <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-[var(--primary)]/15 to-transparent blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
         <div className="absolute -bottom-20 right-1/3 h-[350px] w-[350px] rounded-full bg-gradient-to-t from-[var(--primary)]/10 to-transparent blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
-        
+
         {/* Mesh gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
-        
+
         {/* Subtle grid pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
       </div>
@@ -153,8 +170,8 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {/* Create Course Card - always first */}
-              <Link 
-                href="/courses/create" 
+              <Link
+                href="/courses/create"
                 className="group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
               >
                 <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
@@ -165,7 +182,7 @@ export default function DashboardPage() {
                 <span className="font-semibold text-[var(--foreground)]">Create New Course</span>
                 <span className="text-sm text-[var(--muted-foreground)] mt-1">Build your study plan</span>
               </Link>
-              
+
               {courses.map((course) => {
                 const courseTitle =
                   course?.title ||
@@ -180,6 +197,7 @@ export default function DashboardPage() {
                     courseName=""
                     courseId={course.id}
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
+                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
                 );
               })}
@@ -187,6 +205,13 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+
+      <DeleteCourseModal
+        isOpen={!!courseToDelete}
+        course={courseToDelete}
+        onClose={() => setCourseToDelete(null)}
+        onConfirm={handleDeleteCourse}
+      />
     </div>
   );
 }
