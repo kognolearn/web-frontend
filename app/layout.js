@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
+import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
 
 
@@ -32,10 +33,12 @@ export default function RootLayout({ children }) {
       <body className={`${nunito.variable} antialiased`}>
         <MathJaxContext config={mathJaxConfig}>
           <ThemeProvider>
-            <SupabaseSessionProvider />
-            {/* Persistent theme toggle (shown only when logged in) */}
-            <ThemeToggle />
-            {children}
+            <OnboardingProvider>
+              <SupabaseSessionProvider />
+              {/* Persistent theme toggle (shown only when logged in) */}
+              <ThemeToggle />
+              {children}
+            </OnboardingProvider>
           </ThemeProvider>
         </MathJaxContext>
       </body>
