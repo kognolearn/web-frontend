@@ -666,16 +666,34 @@ export default function CoursePage() {
       {/* Enhanced animated background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
         {/* Primary gradient orbs - static, no animation */}
-        <div className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 blur-3xl" />
-        <div className="absolute top-1/3 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-[var(--primary)]/15 to-transparent blur-3xl" />
-        <div className="absolute -bottom-40 right-1/4 h-[450px] w-[450px] rounded-full bg-gradient-to-t from-[var(--primary)]/10 to-transparent blur-3xl" />
-        <div className="absolute top-1/2 right-1/3 h-[300px] w-[300px] rounded-full bg-gradient-to-bl from-[var(--info)]/10 to-transparent blur-3xl" />
+        <div 
+          className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full blur-3xl" 
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)` }}
+        />
+        <div 
+          className="absolute top-1/3 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }}
+        />
+        <div 
+          className="absolute -bottom-40 right-1/4 h-[450px] w-[450px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+        />
+        <div 
+          className="absolute top-1/2 right-1/3 h-[300px] w-[300px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(107, 154, 184, calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+        />
         
         {/* Mesh gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
         
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+        {/* Subtle grid pattern - uses theme-aware grid color */}
+        <div 
+          className="absolute inset-0"
+          style={{ 
+            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+            backgroundSize: '50px 50px'
+          }}
+        />
       </div>
 
       {canRenderSidebar && (
