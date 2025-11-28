@@ -65,8 +65,13 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
 
   if (!total) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] text-center text-sm text-[var(--muted-foreground)]">
-        No flashcards available.
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
+          <svg className="w-8 h-8 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <p className="text-[var(--muted-foreground)]">No flashcards available.</p>
       </div>
     );
   }
@@ -76,9 +81,9 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
   // Swipe animation variants
   const slideVariants = {
     enter: (dir) => ({
-      x: dir > 0 ? 300 : -300,
+      x: dir > 0 ? 200 : -200,
       opacity: 0,
-      scale: 0.9,
+      scale: 0.95,
     }),
     center: {
       x: 0,
@@ -86,9 +91,9 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
       scale: 1,
     },
     exit: (dir) => ({
-      x: dir > 0 ? -300 : 300,
+      x: dir > 0 ? -200 : 200,
       opacity: 0,
-      scale: 0.9,
+      scale: 0.95,
     }),
   };
 
@@ -96,7 +101,45 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
     <>
       <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
-      <div className="mx-auto w-full max-w-5xl flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="mx-auto w-full max-w-3xl flex flex-col items-center justify-center min-h-[50vh] py-8">
+        {/* Progress indicator */}
+        <div className="w-full mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-[var(--foreground)]">
+              Card {i + 1} of {total}
+            </span>
+            <span className="text-xs text-[var(--muted-foreground)]">
+              Press Space to flip
+            </span>
+          </div>
+          <div className="h-1 bg-[var(--surface-2)] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-[var(--primary)] rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${((i + 1) / total) * 100}%` }}
+            />
+          </div>
+          {/* Card dots */}
+          <div className="flex items-center justify-center gap-1.5 mt-4">
+            {cards.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setDirection(idx > i ? 1 : -1);
+                  setI(idx);
+                }}
+                className={`w-2 h-2 rounded-full transition-all duration-200 cursor-pointer ${
+                  idx === i 
+                    ? "bg-[var(--primary)] ring-2 ring-[var(--primary)] ring-offset-2 ring-offset-[var(--background)]" 
+                    : "bg-[var(--surface-2)] hover:bg-[var(--primary)]/50"
+                } hover:scale-125`}
+                aria-label={`Go to card ${idx + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Card */}
         <div className="w-full relative overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
@@ -107,9 +150,9 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
               animate="center"
               exit="exit"
               transition={{
-                x: { type: "spring", stiffness: 500, damping: 35 },
-                opacity: { duration: 0.12 },
-                scale: { duration: 0.12 },
+                x: { type: "spring", stiffness: 400, damping: 30 },
+                opacity: { duration: 0.15 },
+                scale: { duration: 0.15 },
               }}
             >
               <FlipCard ref={cardApiRef} num={num} tuple={tuple} />
@@ -117,37 +160,52 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
           </AnimatePresence>
         </div>
 
-        {/* Prev / Next — never keep focus */}
-        <div className="mt-6 flex items-center justify-between w-full max-w-md">
-        <button
-          type="button"
-          tabIndex={-1}
-          onPointerDown={(e) => e.preventDefault()}
-          onMouseUp={(e) => e.currentTarget.blur()}
-          onClick={prev}
-          className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-5 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition select-none cursor-pointer"
-          aria-label="Previous"
-          title="Previous (←)"
-        >
-          ← Prev
-        </button>
-        
-        <span className="text-sm text-[var(--muted-foreground)] px-4">
-          {i + 1} / {total}
-        </span>
-        
-        <button
-          type="button"
-          tabIndex={-1}
-          onPointerDown={(e) => e.preventDefault()}
-          onMouseUp={(e) => e.currentTarget.blur()}
-          onClick={next}
-          className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-5 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition select-none cursor-pointer"
-          aria-label="Next"
-          title="Next (→)"
-        >
-          Next →
-        </button>
+        {/* Navigation */}
+        <div className="mt-8 flex items-center justify-between w-full max-w-md">
+          <button
+            type="button"
+            tabIndex={-1}
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseUp={(e) => e.currentTarget.blur()}
+            onClick={prev}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
+            aria-label="Previous"
+            title="Previous (←)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Previous
+          </button>
+          
+          <button
+            type="button"
+            tabIndex={-1}
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseUp={(e) => e.currentTarget.blur()}
+            onClick={() => cardApiRef.current?.flip?.()}
+            className="px-6 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm select-none cursor-pointer"
+            aria-label="Flip card"
+            title="Flip (Space)"
+          >
+            Flip Card
+          </button>
+          
+          <button
+            type="button"
+            tabIndex={-1}
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseUp={(e) => e.currentTarget.blur()}
+            onClick={next}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
+            aria-label="Next"
+            title="Next (→)"
+          >
+            Next
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       </div>
     </>
@@ -186,8 +244,8 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
   // Spring configuration for smooth, organic flip
   const springConfig = {
     type: "spring",
-    stiffness: 260,
-    damping: 20,
+    stiffness: 300,
+    damping: 25,
     mass: 0.8
   };
 
@@ -200,7 +258,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
       style={{ perspective: "1200px" }}
     >
       <motion.div
-        className="relative h-[24rem] sm:h-[26rem] w-full rounded-2xl shadow-lg overflow-hidden"
+        className="relative h-[20rem] sm:h-[22rem] w-full rounded-2xl overflow-hidden"
         style={{
           transformStyle: "preserve-3d",
           cursor: isAnimating ? "default" : "pointer",
@@ -214,45 +272,52 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
       >
         {/* Front face - Question */}
         <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 p-8 flex flex-col justify-center items-center"
+          className="absolute inset-0 bg-gradient-to-br from-[var(--primary)] via-[var(--primary)] to-[var(--primary)]/80 p-6 sm:p-8 flex flex-col border border-[var(--primary)]/20 rounded-2xl shadow-lg"
           style={{
             backfaceVisibility: "hidden",
             WebkitBackfaceVisibility: "hidden",
           }}
           animate={{
             opacity: showBack ? 0 : 1,
-            scale: showBack ? 0.9 : 1,
+            scale: showBack ? 0.95 : 1,
           }}
           transition={{
-            opacity: { duration: 0.2, delay: showBack ? 0 : 0.15 },
+            opacity: { duration: 0.15, delay: showBack ? 0 : 0.1 },
             scale: springConfig,
           }}
         >
-          <div className="w-full max-w-2xl text-center">
-            <div className="mb-6 inline-block px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-sm">
-              <span className="text-sm font-semibold text-white/90">Question {num}</span>
+          <div className="w-full h-full flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm">
+                <span className="text-xs font-semibold text-white/90">Card {num}</span>
+              </div>
+              <div className="text-white/60">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
             </div>
 
-            <div className="flex-1 flex items-center justify-center mb-8">
+            {/* Question content */}
+            <div className="flex-1 flex items-center justify-center overflow-auto">
               <MathJax dynamic>
-                <p className="text-2xl sm:text-3xl font-bold text-white leading-relaxed whitespace-pre-wrap">
+                <p className="text-xl sm:text-2xl font-semibold text-white leading-relaxed whitespace-pre-wrap text-center">
                   {question}
                 </p>
               </MathJax>
             </div>
 
-            <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-              </svg>
-              <span>Click or press Space to reveal answer</span>
+            {/* Footer hint */}
+            <div className="flex items-center justify-center gap-2 text-white/50 text-xs pt-4">
+              <span>Click to reveal answer</span>
             </div>
           </div>
         </motion.div>
 
         {/* Back face - Answer (counter-rotated to fix mirroring) */}
         <motion.div
-          className="absolute inset-0 bg-[var(--surface-2)] p-8 flex flex-col"
+          className="absolute inset-0 bg-[var(--surface-1)] p-6 sm:p-8 flex flex-col border border-[var(--border)] rounded-2xl shadow-lg"
           style={{
             backfaceVisibility: "hidden",
             WebkitBackfaceVisibility: "hidden",
@@ -260,33 +325,46 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
           }}
           animate={{
             opacity: showBack ? 1 : 0,
-            scale: showBack ? 1 : 0.9,
+            scale: showBack ? 1 : 0.95,
           }}
           transition={{
-            opacity: { duration: 0.2, delay: showBack ? 0.15 : 0 },
+            opacity: { duration: 0.15, delay: showBack ? 0.1 : 0 },
             scale: springConfig,
           }}
         >
           {/* Counter-rotate content to fix mirroring */}
           <div className="w-full h-full flex flex-col" style={{ transform: "rotateY(180deg)" }}>
-            {/* ANSWER: centered and prominent */}
-            <div className="flex-1 flex flex-col justify-center items-center text-center overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Answer</span>
+              </div>
+              <div className="text-emerald-500">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Answer content */}
+            <div className="flex-1 flex flex-col justify-center items-center overflow-auto">
               <MathJax dynamic>
-                <p className="text-xl sm:text-2xl font-semibold text-[var(--foreground)] leading-relaxed whitespace-pre-wrap max-w-2xl">
+                <p className="text-lg sm:text-xl font-medium text-[var(--foreground)] leading-relaxed whitespace-pre-wrap text-center">
                   {answer}
                 </p>
               </MathJax>
             </div>
 
-            {/* EXPLANATION: styled as a callout */}
+            {/* Explanation callout */}
             {explanation && (
-              <div className="mt-auto p-4 rounded-xl bg-[var(--primary)]/5 border border-[var(--primary)]/10">
-                <div className="flex items-start gap-2">
-                  <svg className="w-5 h-5 text-[var(--primary)] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <div className="text-xs font-semibold text-[var(--primary)] mb-1">Explanation</div>
+              <div className="mt-4 p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <MathJax dynamic>
                       <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
                         {explanation}
@@ -297,11 +375,9 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
               </div>
             )}
 
-            <div className="mt-4 flex items-center justify-center gap-2 text-[var(--muted-foreground)] text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-              </svg>
-              <span>Click or press Space to flip back</span>
+            {/* Footer hint */}
+            <div className="flex items-center justify-center gap-2 text-[var(--muted-foreground)] text-xs pt-4">
+              <span>Click to see question</span>
             </div>
           </div>
         </motion.div>

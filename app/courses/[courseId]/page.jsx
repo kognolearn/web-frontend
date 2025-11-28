@@ -202,11 +202,22 @@ function ItemContent({
       const latexContent = data?.body || data?.reading || "";
       
       return (
-        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-[var(--foreground)]">Reading</span>
+        <article className="rounded-[28px] bg-[var(--surface-1)] border border-[var(--border)] shadow-sm overflow-hidden">
+          {/* Reading header */}
+          <div className="px-6 py-4 sm:px-8 border-b border-[var(--border)] bg-[var(--surface-2)]/30">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--primary)]/10">
+                <svg className="w-4 h-4 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <span className="text-sm font-semibold text-[var(--foreground)]">Reading</span>
+            </div>
           </div>
-          <ReadingRenderer content={latexContent} />
+          {/* Reading content */}
+          <div className="px-6 py-6 sm:px-8 sm:py-8">
+            <ReadingRenderer content={latexContent} />
+          </div>
         </article>
       );
     }

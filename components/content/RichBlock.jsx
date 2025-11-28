@@ -2,18 +2,7 @@
 "use client";
 
 import React from "react";
-import { MathJax, MathJaxContext } from "better-react-mathjax";
-
-export const mjxConfig = {
-  loader: { load: ["input/tex", "output/svg"] },
-  tex: { 
-    inlineMath: [["$", "$"], ["\\(", "\\)"]],
-    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-    processEscapes: true,
-    processEnvironments: true
-  },
-  svg: { fontCache: "global" }
-};
+import { MathJax } from "better-react-mathjax";
 
 /**
  * Props:
@@ -69,7 +58,7 @@ export default function RichBlock({
     !!scrollY;
 
   return (
-    <MathJaxContext version={3} config={mjxConfig}>
+    <>
       {/* Scale MathJax SVG to container width */}
       <style jsx global>{`.mjx-container svg { max-width: 100%; height: auto; }`}</style>
 
@@ -82,6 +71,6 @@ export default function RichBlock({
           Inner
         )}
       </div>
-    </MathJaxContext>
+    </>
   );
 }

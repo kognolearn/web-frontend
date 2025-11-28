@@ -555,31 +555,99 @@ export default function Quiz({
     }
   }, [currentQuestion?.id, currentIndex, revealed, selectedId, isSubmitted, onQuestionChange]);
 
+  // Calculate progress stats for review mode
+  const progressStats = useMemo(() => {
+    if (!isSubmitted) return null;
+    let correct = 0;
+    let answered = 0;
+    normalizedQuestions.forEach((q) => {
+      const userResponse = responses[q.id];
+      if (userResponse) {
+        answered++;
+        const selectedOpt = q.options.find((opt) => opt.id === userResponse);
+        if (selectedOpt?.correct) correct++;
+      }
+    });
+    return { correct, answered, total: questionCount };
+  }, [isSubmitted, normalizedQuestions, responses, questionCount]);
+
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-3xl">
       {questionCount === 0 ? (
-        <div className="text-center text-sm text-[var(--muted-foreground)]">No questions available.</div>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
+            <svg className="w-8 h-8 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="text-[var(--muted-foreground)]">No questions available.</p>
+        </div>
       ) : (
         <>
-          <div className="mb-6">
-            <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-              <span>Question {currentIndex + 1}</span>
-              <span>
-                {currentIndex + 1} of {questionCount}
+          {/* Progress bar */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                Question {currentIndex + 1} of {questionCount}
               </span>
+              {isSubmitted && progressStats && (
+                <span className="text-sm font-medium text-emerald-500">
+                  {progressStats.correct}/{progressStats.total} correct
+                </span>
+              )}
             </div>
-            <div id={questionLabelId}>
+            <div className="h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[var(--primary)] rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${((currentIndex + 1) / questionCount) * 100}%` }}
+              />
+            </div>
+            {/* Question dots */}
+            <div className="flex items-center justify-center gap-1.5 mt-4">
+              {normalizedQuestions.map((q, idx) => {
+                const isAnswered = !!responses[q.id];
+                const isCurrent = idx === currentIndex;
+                let dotColor = "bg-[var(--surface-2)]";
+                
+                if (isSubmitted) {
+                  const userResponse = responses[q.id];
+                  const selectedOpt = q.options.find((opt) => opt.id === userResponse);
+                  if (selectedOpt?.correct) dotColor = "bg-emerald-500";
+                  else if (userResponse) dotColor = "bg-rose-500";
+                } else if (isAnswered) {
+                  dotColor = "bg-[var(--primary)]";
+                }
+                
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`w-2 h-2 rounded-full transition-all duration-200 ${dotColor} ${
+                      isCurrent ? "ring-2 ring-[var(--primary)] ring-offset-2 ring-offset-[var(--background)]" : ""
+                    } hover:scale-125 cursor-pointer`}
+                    aria-label={`Go to question ${idx + 1}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Question */}
+          <div className="mb-8">
+            <div id={questionLabelId} className="text-lg font-medium text-[var(--foreground)] leading-relaxed">
               <RichBlock block={currentQuestion.block} maxWidth="100%" />
             </div>
           </div>
 
+          {/* Options */}
           <div role="radiogroup" aria-labelledby={questionLabelId} className="space-y-3">
             {currentQuestion.options.length === 0 ? (
-              <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-4 text-center text-sm text-[var(--muted-foreground)]">
+              <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--muted-foreground)]">
                 No options available.
               </div>
             ) : (
-              currentQuestion.options.map((opt) => {
+              currentQuestion.options.map((opt, optIndex) => {
                 const isSelected = selectedId === opt.id;
                 const showState = revealed && anyCorrect;
                 let status = null;
@@ -589,40 +657,24 @@ export default function Quiz({
                   else if (isSelected) status = "incorrect";
                 }
 
-                const baseClass =
-                  "relative flex w-full items-start gap-4 rounded-2xl border px-4 py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 cursor-pointer";
-                const idleClass =
-                  "border-[var(--border-muted)] bg-[var(--surface-1)] hover:border-primary/60 hover:bg-primary/5";
-                const selectedClass = "border-primary bg-primary/10 shadow";
-                const correctClass = "border-emerald-400 bg-emerald-500/10";
-                const incorrectClass = "border-rose-400 bg-rose-500/10";
-
-                let optionClass = baseClass;
-                if (status === "correct") optionClass += ` ${correctClass}`;
-                else if (status === "incorrect") optionClass += ` ${incorrectClass}`;
-                else if (isSelected) optionClass += ` ${selectedClass}`;
-                else optionClass += ` ${idleClass}`;
-
-                const badgeBase =
-                  "mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition";
-                const badgeIdle = "border-[var(--border-muted)] bg-[var(--surface-1)] text-[var(--muted-foreground)]";
-                const badgeSelected = "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]";
-                const badgeCorrect = "border-emerald-400 bg-emerald-400 text-[var(--surface-1)]";
-                const badgeIncorrect = "border-rose-400 bg-rose-400 text-[var(--surface-1)]";
-
-                let badgeClass = badgeBase;
-                if (status === "correct") badgeClass += ` ${badgeCorrect}`;
-                else if (status === "incorrect") badgeClass += ` ${badgeIncorrect}`;
-                else if (isSelected) badgeClass += ` ${badgeSelected}`;
-                else badgeClass += ` ${badgeIdle}`;
-
                 return (
                   <div
                     key={opt.id}
                     role="radio"
                     aria-checked={isSelected}
                     tabIndex={0}
-                    className={optionClass}
+                    className={`
+                      group relative flex w-full items-start gap-4 rounded-xl border p-4 
+                      transition-all duration-200 focus:outline-none cursor-pointer
+                      ${status === "correct" 
+                        ? "border-emerald-500/50 bg-emerald-500/10" 
+                        : status === "incorrect" 
+                        ? "border-rose-500/50 bg-rose-500/10" 
+                        : isSelected 
+                        ? "border-[var(--primary)] bg-[var(--primary)]/5 shadow-sm" 
+                        : "border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-2)]/50"
+                      }
+                    `}
                     onClick={() => handleSelect(opt.id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -631,60 +683,98 @@ export default function Quiz({
                       }
                     }}
                   >
-                    <div className={badgeClass}>{opt.label}</div>
-
-                    <div className="flex-1 text-left">
-                      <RichBlock block={opt.block} maxWidth="100%" />
-
-                      {showState && opt.feedback ? (
-                        <div className="mt-3 text-sm text-[var(--muted-foreground)]">
-                          <RichBlock block={opt.feedback} maxWidth="100%" />
-                        </div>
-                      ) : null}
+                    {/* Option letter badge */}
+                    <div className={`
+                      flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition-all duration-200
+                      ${status === "correct" 
+                        ? "bg-emerald-500 text-white" 
+                        : status === "incorrect" 
+                        ? "bg-rose-500 text-white" 
+                        : isSelected 
+                        ? "bg-[var(--primary)] text-white" 
+                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] group-hover:bg-[var(--primary)]/10 group-hover:text-[var(--primary)]"
+                      }
+                    `}>
+                      {opt.label}
                     </div>
 
-                    {status === "correct" ? (
-                      <span className="ml-4 mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-                        Correct
-                      </span>
-                    ) : null}
+                    {/* Option content */}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="text-[var(--foreground)]">
+                        <RichBlock block={opt.block} maxWidth="100%" />
+                      </div>
 
-                    {status === "incorrect" ? (
-                      <span className="ml-4 mt-1 text-xs font-semibold uppercase tracking-wide text-rose-300">
-                        Try again
-                      </span>
-                    ) : null}
+                      {showState && opt.feedback && (
+                        <div className="mt-3 pt-3 border-t border-[var(--border)] text-sm text-[var(--muted-foreground)]">
+                          <RichBlock block={opt.feedback} maxWidth="100%" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status indicator */}
+                    {status === "correct" && (
+                      <div className="flex items-center gap-1.5 text-emerald-500">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+
+                    {status === "incorrect" && (
+                      <div className="flex items-center gap-1.5 text-rose-500">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
                 );
               })
             )}
           </div>
 
-          {showExplanation ? (
-            <div className="mt-6 rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-4">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Explanation
+          {/* Explanation panel */}
+          {showExplanation && (
+            <div className="mt-6 rounded-xl bg-[var(--primary)]/5 border border-[var(--primary)]/10 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)] mb-2">
+                    Explanation
+                  </div>
+                  <div className="text-sm text-[var(--foreground)] leading-relaxed">
+                    <RichBlock block={explanationBlock} maxWidth="100%" />
+                  </div>
+                </div>
               </div>
-              <RichBlock block={explanationBlock} maxWidth="100%" />
             </div>
-          ) : null}
+          )}
 
-          {questionCount > 0 ? (
-            <div className="mt-6 flex items-center justify-between">
+          {/* Navigation */}
+          {questionCount > 0 && (
+            <div className="mt-8 flex items-center justify-between gap-4">
               <button
                 type="button"
-                className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 onClick={() => handleNavigate(-1)}
                 onPointerDown={(e) => e.currentTarget.blur()}
                 tabIndex={-1}
                 disabled={currentIndex === 0}
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
                 Previous
               </button>
+              
               {currentIndex === questionCount - 1 && !isSubmitted ? (
                 <button
                   type="button"
-                  className="rounded-full bg-emerald-500 px-6 py-2 text-sm font-semibold text-white hover:opacity-90 transition shadow-sm select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-emerald-500 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   onClick={handleSubmit}
                   onPointerDown={(e) => e.currentTarget.blur()}
                   tabIndex={-1}
@@ -699,23 +789,31 @@ export default function Quiz({
                       Submitting...
                     </>
                   ) : (
-                    'Submit Quiz'
+                    <>
+                      Submit Quiz
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </>
                   )}
                 </button>
               ) : (
                 <button
                   type="button"
-                  className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:opacity-90 transition shadow-sm select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   onClick={() => handleNavigate(1)}
                   onPointerDown={(e) => e.currentTarget.blur()}
                   tabIndex={-1}
                   disabled={currentIndex === questionCount - 1}
                 >
                   Next
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
               )}
             </div>
-          ) : null}
+          )}
         </>
       )}
     </div>
