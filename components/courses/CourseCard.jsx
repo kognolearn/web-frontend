@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
-export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, onDelete }) {
+export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete }) {
   const router = useRouter();
 
   const handleDeleteClick = (e) => {
@@ -11,6 +11,8 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const openCourse = (e) => {
+    // Don't navigate if course is still building
+    if (status === 'pending') return;
     // Prevent clicks from nested interactive elements if any
     if (e) {
       e.stopPropagation();
@@ -29,6 +31,77 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const isCompleted = !secondsToComplete || secondsToComplete <= 0;
+  const isPending = status === 'pending';
+  const needsAttention = status === 'needs_attention';
+
+  // Pending/Building state - show a special loading card
+  if (isPending) {
+    return (
+      <div
+        role="button"
+        tabIndex={-1}
+        aria-label={`Course ${courseCode} is being built`}
+        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg"
+      >
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/5 via-transparent to-[var(--primary)]/10 animate-pulse" />
+        
+        {/* Shimmer effect */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -inset-full top-0 block w-1/2 h-full bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-x-12 animate-shimmer" />
+        </div>
+
+        {/* Top section */}
+        <div className="relative z-10 flex items-start justify-between mb-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--primary)]/10">
+            {/* Animated loading spinner */}
+            <svg className="w-5 h-5 text-[var(--primary)] animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Building
+          </span>
+        </div>
+
+        {/* Title */}
+        <div className="relative z-10 flex-1">
+          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug">
+            {courseCode}
+          </h3>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1.5 animate-pulse">
+            Creating your personalized course...
+          </p>
+        </div>
+
+        {/* Bottom section with progress indicator */}
+        <div className="relative z-10 pt-3 border-t border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
+              <div className="h-full w-1/3 bg-[var(--primary)] rounded-full animate-pulse" style={{ animation: 'pulse 1.5s ease-in-out infinite, moveProgress 2s ease-in-out infinite' }} />
+            </div>
+            <span className="text-xs text-[var(--muted-foreground)]">Processing</span>
+          </div>
+        </div>
+
+        <style jsx>{`
+          @keyframes moveProgress {
+            0%, 100% { width: 20%; margin-left: 0; }
+            50% { width: 40%; margin-left: 30%; }
+          }
+          @keyframes shimmer {
+            0% { transform: translateX(-100%) skewX(-12deg); }
+            100% { transform: translateX(200%) skewX(-12deg); }
+          }
+          .animate-shimmer {
+            animation: shimmer 2.5s infinite;
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -60,8 +133,14 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           </svg>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium px-2 py-1 rounded-full ${isCompleted ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-[var(--primary)]/10 text-[var(--primary)]'}`}>
-            {isCompleted ? 'Complete' : 'In Progress'}
+          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+            needsAttention 
+              ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+              : isCompleted 
+              ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
+              : 'bg-[var(--primary)]/10 text-[var(--primary)]'
+          }`}>
+            {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
           </span>
           <button
             onClick={handleDeleteClick}
@@ -80,6 +159,11 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 group-hover:text-[var(--primary)] transition-colors duration-200 leading-snug">
           {courseCode}
         </h3>
+        {needsAttention && (
+          <p className="text-xs text-rose-500 mt-1">
+            There was an issue generating this course
+          </p>
+        )}
       </div>
 
       {/* Bottom section with time and action */}

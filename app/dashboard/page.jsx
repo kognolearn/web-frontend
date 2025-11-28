@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [courseToDelete, setCourseToDelete] = useState(null);
   const { mounted } = useTheme();
+  const pollingRef = useRef(null);
 
   const loadCourses = useCallback(async (userId) => {
     try {
@@ -26,11 +27,47 @@ export default function DashboardPage() {
         const body = await res.json();
         const items = Array.isArray(body?.courses) ? body.courses : [];
         setCourses(items);
+        return items;
       }
     } catch (err) {
       console.error("Error fetching courses from API:", err);
       setCourses([]);
     }
+    return [];
+  }, []);
+
+  // Poll for pending courses to check their status
+  const startPollingForPendingCourses = useCallback((userId, courseList) => {
+    // Clear any existing polling
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    // Check if there are any pending courses
+    const hasPendingCourses = courseList.some(c => c.status === 'pending');
+    
+    if (!hasPendingCourses) return;
+
+    // Poll every 5 seconds for pending courses
+    pollingRef.current = setInterval(async () => {
+      const updatedCourses = await loadCourses(userId);
+      const stillPending = updatedCourses.some(c => c.status === 'pending');
+      
+      if (!stillPending && pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }, 5000);
+  }, [loadCourses]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
   }, []);
 
   // Course deletion handled via the course details page if needed
@@ -45,24 +82,29 @@ export default function DashboardPage() {
       }
 
       setUser(user);
-      await loadCourses(user.id);
+      const courseList = await loadCourses(user.id);
+
+      // Start polling if there are pending courses
+      startPollingForPendingCourses(user.id, courseList);
 
       setLoading(false);
     };
 
     loadUserAndCourses();
-  }, [router, loadCourses]);
+  }, [router, loadCourses, startPollingForPendingCourses]);
 
   // Listen for course updates triggered elsewhere (e.g., CreateCourseCard/Modal)
   useEffect(() => {
     if (!user?.id) return;
-    const handler = () => {
+    const handler = async () => {
       setLoading(true);
-      loadCourses(user.id).finally(() => setLoading(false));
+      const courseList = await loadCourses(user.id);
+      startPollingForPendingCourses(user.id, courseList);
+      setLoading(false);
     };
     window.addEventListener("courses:updated", handler);
     return () => window.removeEventListener("courses:updated", handler);
-  }, [user, loadCourses]);
+  }, [user, loadCourses, startPollingForPendingCourses]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -90,20 +132,64 @@ export default function DashboardPage() {
   if (loading || !mounted) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-12 sm:px-6 lg:px-8">
-          {/* Header skeleton */}
-          <div className="card rounded-[28px] px-8 py-10 animate-pulse">
-            <div className="h-8 w-2/5 rounded bg-[var(--surface-muted)]" />
-            <div className="mt-4 h-5 w-3/5 rounded bg-[var(--surface-muted)]" />
+        {/* Background effects */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 blur-3xl" />
+          <div className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-[var(--primary)]/10 to-transparent blur-3xl" />
+        </div>
+
+        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+          {/* Top bar skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="h-8 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+            <div className="h-9 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
           </div>
+
+          {/* Welcome header skeleton */}
+          <header className="space-y-2">
+            <div className="h-9 w-64 sm:w-80 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+            <div className="h-5 w-48 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+          </header>
 
           {/* Grid skeleton */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="card rounded-2xl p-6 animate-pulse">
-                <div className="h-5 w-4/5 rounded bg-[var(--surface-muted)]" />
-                <div className="mt-3 h-4 w-2/3 rounded bg-[var(--surface-muted)]" />
-                <div className="mt-5 h-10 w-full rounded-xl bg-[var(--surface-muted)]" />
+            {/* Create course card skeleton */}
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center animate-pulse">
+              <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] mb-3" />
+              <div className="h-5 w-32 rounded bg-[var(--surface-2)] mb-2" />
+              <div className="h-4 w-28 rounded bg-[var(--surface-2)]" />
+            </div>
+
+            {/* Course card skeletons */}
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div 
+                key={i} 
+                className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg animate-pulse"
+                style={{ animationDelay: `${i * 100}ms` }}
+              >
+                {/* Top section */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--surface-2)]" />
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-20 rounded-full bg-[var(--surface-2)]" />
+                    <div className="w-7 h-7 rounded-full bg-[var(--surface-2)]" />
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 w-4/5 rounded bg-[var(--surface-2)]" />
+                  <div className="h-4 w-3/5 rounded bg-[var(--surface-2)]" />
+                </div>
+
+                {/* Bottom section */}
+                <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
+                    <div className="h-4 w-12 rounded bg-[var(--surface-2)]" />
+                  </div>
+                  <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
+                </div>
               </div>
             ))}
           </div>
@@ -197,6 +283,7 @@ export default function DashboardPage() {
                     courseName=""
                     courseId={course.id}
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
+                    status={course.status}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
                 );

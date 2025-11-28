@@ -1026,23 +1026,17 @@ function CreateCoursePageContent() {
         }
       }
 
-      setCourseGenerationMessage("Coordinating your learning journey…");
+      setCourseGenerationMessage("Creating course…");
       
       // Calculate seconds_to_complete from studyHours and studyMinutes
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
       payload.seconds_to_complete = secondsToComplete;
       
-      // Server will enforce a 30 minute timeout for long-running course generation
-      // Client-side AbortController to cancel request after 30 minutes
-      const controller = new AbortController();
-      const timeoutMs = 30 * 60 * 1000; // 30 minutes
-      const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
       console.log("[CreateCourse] About to fetch /api/courses");
       const response = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: controller.signal,
       });
       console.log("[CreateCourse] Fetch completed, response.ok:", response.ok);
 
@@ -1052,32 +1046,17 @@ function CreateCoursePageContent() {
         throw new Error(body?.error || "Failed to create course. Please try again.");
       }
 
-      const resolvedCourseId = resolveCourseId(body) || courseId;
-      console.log("[CreateCourse] resolvedCourseId:", resolvedCourseId);
-      setCourseGenerationMessage("Finalizing and saving to your dashboard…");
-
+      // Course created successfully - redirect to dashboard immediately
+      // The course will show as "pending" and the dashboard will poll for updates
       try {
         window.dispatchEvent(new Event("courses:updated"));
       } catch {}
 
-      if (resolvedCourseId) {
-        console.log("[CreateCourse] Navigating to course page");
-        router.push(`/courses/${encodeURIComponent(resolvedCourseId)}`);
-      } else {
-        console.log("[CreateCourse] Navigating to dashboard");
-        router.push("/dashboard");
-      }
+      // Always go to dashboard - the course card will show loading state
+      router.push("/dashboard");
     } catch (error) {
       console.log("[CreateCourse] ERROR:", error);
-      if (error?.name === "AbortError") {
-        setCourseGenerationError("Course creation timed out after 30 minutes. Please try again.");
-      } else {
-        setCourseGenerationError(error.message || "Unexpected error creating course.");
-      }
-    } finally {
-      try {
-        clearTimeout(timeoutHandle);
-      } catch {}
+      setCourseGenerationError(error.message || "Unexpected error creating course.");
       setCourseGenerating(false);
     }
   }, [
@@ -1181,19 +1160,6 @@ function CreateCoursePageContent() {
         <div className="absolute top-0 right-1/4 h-96 w-96 rounded-full bg-[var(--primary)]/5 blur-3xl"></div>
         <div className="absolute bottom-0 left-1/4 h-96 w-96 rounded-full bg-[var(--primary)]/5 blur-3xl"></div>
       </div>
-
-      {courseGenerating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--background)]/95 px-4 backdrop-blur-sm">
-          <div className="card max-w-md w-full rounded-2xl px-6 py-8 text-center shadow-2xl">
-            <div className="mx-auto h-14 w-14 rounded-full border-4 border-[var(--surface-muted)] border-t-[var(--primary)] animate-spin" aria-hidden="true" />
-            <h2 className="mt-5 text-lg font-bold text-[var(--foreground)]">Building your course</h2>
-            <p className="mt-2 text-xs text-[var(--muted-foreground)] animate-pulse">{courseGenerationMessage}</p>
-            <p className="mt-3 text-[10px] text-[var(--muted-foreground)]">
-              Creating a personalized learning plan tailored to your goals.
-            </p>
-          </div>
-        </div>
-      )}
 
       <div className={`relative mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${totalSubtopics > 0 && currentStep === 3 ? "max-w-[90rem]" : "max-w-5xl"}`}>
         {/* Header */}
@@ -1753,6 +1719,7 @@ function CreateCoursePageContent() {
                   type="button"
                   onClick={() => setCurrentStep(2)}
                   className="btn btn-outline btn-sm"
+                  disabled={courseGenerating}
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
@@ -1763,12 +1730,24 @@ function CreateCoursePageContent() {
                   type="button"
                   onClick={handleGenerateCourse}
                   disabled={!canProceedFromStep3 || courseGenerating}
-                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  {courseGenerating ? "Creating..." : "Create Course"}
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  {courseGenerating ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      Create Course
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -1783,7 +1762,8 @@ function CreateCoursePageContent() {
         {/* Back / Cancel Button */}
         <button
             onClick={handleFloatingBack}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-1)] text-[var(--muted-foreground)] shadow-lg transition hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            disabled={courseGenerating}
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-1)] text-[var(--muted-foreground)] shadow-lg transition hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] disabled:opacity-50"
             aria-label="Back"
         >
             {/* X Icon */}
@@ -1797,7 +1777,13 @@ function CreateCoursePageContent() {
             className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)] text-white shadow-lg transition hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={isOnFinalStep ? "Create Course" : "Next"}
         >
-            {isOnFinalStep ? (
+            {courseGenerating ? (
+              // Spinner for creating
+              <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : isOnFinalStep ? (
               // Check Icon for final step
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

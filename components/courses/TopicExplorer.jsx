@@ -2,7 +2,6 @@ import {
   moduleConfidenceOptions, 
   moduleConfidencePresets, 
   importanceScoreToTag, 
-  formatStudyTime, 
   NEW_EXCEPTION_SCORE, 
   CONFIDENT_EXCEPTION_SCORE, 
   SOMEWHAT_KNOW_SCORE, 
@@ -208,14 +207,6 @@ export default function TopicExplorer({
                         
                         <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--muted-foreground)] mb-4">
                             <span>{selectedModule.subtopics.length} lessons</span>
-                            {(() => {
-                                const totalMin = selectedModule.subtopics.reduce(
-                                    (sum, st) => sum + (Number.isFinite(st.estimatedStudyTimeMinutes) ? st.estimatedStudyTimeMinutes : 0),
-                                    0
-                                );
-                                const formattedTime = formatStudyTime(totalMin);
-                                return formattedTime ? <span>• {formattedTime}</span> : null;
-                            })()}
                             {selectedModule.likelyOnExam && (
                                 <span className="inline-flex items-center rounded-full bg-[var(--success)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--success)]">
                                     Likely on Exam
