@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { InfoTooltip } from "@/components/ui/Tooltip";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 export default function EditCourseModal({ 
   isOpen, 
@@ -110,14 +112,29 @@ export default function EditCourseModal({
 
             {/* Content */}
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-4">
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Describe what you'd like to change or add to the course. Our AI will process your request and update the course structure accordingly.
+              {/* Onboarding tooltip for first-time users */}
+              <OnboardingTooltip
+                id="edit-modal-intro"
+                content="Describe any changes you'd like to make to your course in natural language. For example: 'Add more practice problems' or 'Focus less on theory'. Our AI will update your course accordingly!"
+                position="bottom"
+                pointerPosition="center"
+                delay={300}
+                priority={10}
+                showCondition={isOpen}
+              >
+                <div />
+              </OnboardingTooltip>
+
+              <p className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
+                <span>Describe what you'd like to change or add to the course. Our AI will process your request and update the course structure accordingly.</span>
+                <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, including more examples, or restructuring modules. Our AI will interpret your request and make appropriate modifications." position="left" />
               </p>
 
               {/* Text Input */}
               <div>
-                <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)]">
+                <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)] flex items-center gap-1.5">
                   Modification Request
+                  <InfoTooltip content="Be specific about what you want changed. For example: 'Add more practice problems for derivatives' or 'Remove the section on advanced recursion since I already know it well'." position="right" />
                 </label>
                 <textarea
                   value={modificationText}

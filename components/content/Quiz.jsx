@@ -3,6 +3,8 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
+import Tooltip from "@/components/ui/Tooltip";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 function normalizeRichBlock(value) {
   const block = toRichBlock(value);
@@ -585,7 +587,15 @@ export default function Quiz({
       ) : (
         <>
           {/* Progress bar */}
-          <div className="mb-8">
+          <OnboardingTooltip
+            id="quiz-progress"
+            content="Click on any dot to jump to that question. The bar shows your progress through the quiz. Once you've answered all questions, click 'Submit Quiz' to see your results and explanations!"
+            position="bottom"
+            pointerPosition="center"
+            delay={600}
+            priority={12}
+          >
+            <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-[var(--foreground)]">
                 Question {currentIndex + 1} of {questionCount}
@@ -632,6 +642,7 @@ export default function Quiz({
               })}
             </div>
           </div>
+          </OnboardingTooltip>
 
           {/* Question */}
           <div className="mb-8">
@@ -757,60 +768,66 @@ export default function Quiz({
           {/* Navigation */}
           {questionCount > 0 && (
             <div className="mt-8 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                onClick={() => handleNavigate(-1)}
-                onPointerDown={(e) => e.currentTarget.blur()}
-                tabIndex={-1}
-                disabled={currentIndex === 0}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Previous
-              </button>
+              <Tooltip text="Go to previous question" position="top">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  onClick={() => handleNavigate(-1)}
+                  onPointerDown={(e) => e.currentTarget.blur()}
+                  tabIndex={-1}
+                  disabled={currentIndex === 0}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Previous
+                </button>
+              </Tooltip>
               
               {currentIndex === questionCount - 1 && !isSubmitted ? (
-                <button
-                  type="button"
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-emerald-500 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  onClick={handleSubmit}
-                  onPointerDown={(e) => e.currentTarget.blur()}
-                  tabIndex={-1}
-                  disabled={isSubmitting || questionCount === 0}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      Submit Quiz
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </>
-                  )}
-                </button>
+                <Tooltip text="Submit all answers to see your results" position="top">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-emerald-500 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    onClick={handleSubmit}
+                    onPointerDown={(e) => e.currentTarget.blur()}
+                    tabIndex={-1}
+                    disabled={isSubmitting || questionCount === 0}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        Submit Quiz
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </Tooltip>
               ) : (
-                <button
-                  type="button"
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  onClick={() => handleNavigate(1)}
-                  onPointerDown={(e) => e.currentTarget.blur()}
-                  tabIndex={-1}
-                  disabled={currentIndex === questionCount - 1}
-                >
-                  Next
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                <Tooltip text="Go to next question" position="top">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    onClick={() => handleNavigate(1)}
+                    onPointerDown={(e) => e.currentTarget.blur()}
+                    tabIndex={-1}
+                    disabled={currentIndex === questionCount - 1}
+                  >
+                    Next
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </Tooltip>
               )}
             </div>
           )}

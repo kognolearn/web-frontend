@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { InfoTooltip } from "@/components/ui/Tooltip";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 export default function CourseSettingsModal({ 
   isOpen, 
@@ -97,13 +99,29 @@ export default function CourseSettingsModal({
 
             {/* Content */}
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-6">
+              {/* Onboarding tooltip for first-time users */}
+              <OnboardingTooltip
+                id="settings-modal-intro"
+                content="This is where you can manage your study time. Use the quick buttons to add or subtract time, or set a custom duration. Your progress is automatically saved!"
+                position="bottom"
+                pointerPosition="center"
+                delay={300}
+                priority={9}
+                showCondition={isOpen}
+              >
+                <div />
+              </OnboardingTooltip>
+
               {/* Timer Controls Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-sm font-semibold text-[var(--foreground)]">Timer Controls</h3>
+                  <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                    Timer Controls
+                    <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
+                  </h3>
                 </div>
 
                 {/* Current Timer Display */}
@@ -116,7 +134,10 @@ export default function CourseSettingsModal({
 
                 {/* Quick Adjust Buttons */}
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)]">Quick Adjust</label>
+                  <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)] flex items-center gap-1.5">
+                    Quick Adjust
+                    <InfoTooltip content="Click to instantly add or subtract time from your study session." position="right" />
+                  </label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <button
                       type="button"
@@ -151,7 +172,10 @@ export default function CourseSettingsModal({
 
                 {/* Custom Time Input */}
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)]">Set Custom Time</label>
+                  <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)] flex items-center gap-1.5">
+                    Set Custom Time
+                    <InfoTooltip content="Enter a specific amount of time to set as your remaining study time. This replaces the current timer value." position="right" />
+                  </label>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <input
