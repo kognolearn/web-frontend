@@ -31,6 +31,10 @@
   --primary-hover: #92b591;
   --primary-active: #668865;
 
+  /* grid pattern */
+  --grid-color: rgba(123, 163, 122, 0.04);
+  --grid-glow-opacity: 0.2;
+
   /* feedback */
   --success: #7ba37a;
   --warning: #c9965f;
@@ -57,6 +61,10 @@ html.theme-light {
   --primary-contrast: #ffffff;
   --primary-hover: #8fb18e; /* slightly lighter on light bg */
   --primary-active: #668865;
+
+  /* grid pattern - stronger for light mode */
+  --grid-color: rgba(61, 82, 56, 0.08);
+  --grid-glow-opacity: 0.15;
 }
 
 html.theme-dark {
@@ -73,6 +81,10 @@ html.theme-dark {
   --primary-contrast: #ffffff;
   --primary-hover: #92b591; /* slightly lighter on dark bg */
   --primary-active: #668865;
+
+  /* grid pattern */
+  --grid-color: rgba(123, 163, 122, 0.04);
+  --grid-glow-opacity: 0.2;
 }
 
 /* Base */
