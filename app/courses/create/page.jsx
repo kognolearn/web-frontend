@@ -72,11 +72,13 @@ function toIsoDate(dateString) {
   return `${dateString}T00:00:00.000Z`;
 }
 
-function formatExamStructure({ hasExamMaterials, examFormat, examNotes }) {
-  if (!hasExamMaterials) return undefined;
+function formatExamStructure({ hasExamMaterials, examNotes }) {
+  // Build a content-focused summary to describe what is likely to be on the exam.
+  // If the user has uploaded practice tests, include a small marker so downstream systems know files were attached.
+  if (!hasExamMaterials && !(examNotes && examNotes.trim())) return undefined;
   const segments = [];
-  if (examFormat) segments.push(`Preferred exam format: ${examFormat.toUpperCase()}`);
-  if (examNotes?.trim()) segments.push(examNotes.trim());
+  if (examNotes?.trim()) segments.push(`Topics likely on the exam:\n\n${examNotes.trim()}`);
+  if (hasExamMaterials) segments.push("User uploaded practice exams or past tests.");
   if (segments.length === 0) return undefined;
   return segments.join("\n\n");
 }
@@ -98,22 +100,22 @@ function fileToBase64(file) {
   });
 }
 
-async function buildFilePayload(files) {
+async function buildFilePayload(files, { contentKey = "base64", includeSize = true } = {}) {
   if (!files?.length) return [];
-  const items = await Promise.all(
-    files.map(async (file) => ({
-      name: file.name,
-      base64: await fileToBase64(file),
-      type: file.type || "application/octet-stream",
-    }))
+  return Promise.all(
+    files.map(async (file) => {
+      const encoded = await fileToBase64(file);
+      const payload = {
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        [contentKey]: encoded,
+      };
+      if (includeSize && typeof file.size === "number") {
+        payload.size = file.size;
+      }
+      return payload;
+    })
   );
-  return items.map((item, index) => {
-    const sourceFile = files[index];
-    if (typeof sourceFile?.size === "number") {
-      return { ...item, size: sourceFile.size };
-    }
-    return item;
-  });
 }
 
 function toDateInputValue(date) {
@@ -297,7 +299,6 @@ function CreateCoursePageContent() {
   const [syllabusFiles, setSyllabusFiles] = useState([]);
 
   const [hasExamMaterials, setHasExamMaterials] = useState(false);
-  const [examFormat, setExamFormat] = useState("pdf");
   const [examNotes, setExamNotes] = useState("");
   const [examFiles, setExamFiles] = useState([]);
   const [confirmedNoExamDetails, setConfirmedNoExamDetails] = useState(false);
@@ -504,7 +505,7 @@ function CreateCoursePageContent() {
       syllabusText: syllabusText.trim() || "Not provided.",
     };
 
-    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes });
+    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
     if (examFormatDetails) {
       payload.examFormatDetails = examFormatDetails;
     }
@@ -648,7 +649,6 @@ function CreateCoursePageContent() {
     collegeName,
     courseTitle,
     examFiles,
-    examFormat,
     examNotes,
     hasExamMaterials,
     syllabusFiles,
@@ -961,10 +961,25 @@ function CreateCoursePageContent() {
       return;
     }
 
+    let navigationTriggered = false;
+    const redirectToDashboard = () => {
+      if (navigationTriggered) return;
+      navigationTriggered = true;
+      try {
+        window.dispatchEvent(new Event("courses:updated"));
+      } catch {}
+      router.push("/dashboard");
+    };
+
+    const safeSetCourseGenerationMessage = (message) => {
+      if (navigationTriggered) return;
+      setCourseGenerationMessage(message);
+    };
+
     console.log("[CreateCourse] All checks passed, setting courseGenerating=true");
     setCourseGenerating(true);
     setCourseGenerationError("");
-    setCourseGenerationMessage("Locking in your topic roadmap…");
+    safeSetCourseGenerationMessage("Locking in your topic roadmap…");
 
     try {
       const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
@@ -972,9 +987,10 @@ function CreateCoursePageContent() {
       const syllabusTextPayload = trimmedSyllabusText || "Not provided.";
       const examDetailsPayload = examDetailsProvided
         ? {
-            type: examFormat,
+            // Indicate whether user provided files or just textual topics
+            type: examFiles.length > 0 ? "files" : "notes",
             notes: examNotes?.trim() || "Not provided.",
-            has_exam_materials: true,
+            has_exam_materials: examFiles.length > 0,
             sample_exam_file_names: examFiles.map((file) => file.name),
           }
         : { notes: "Not provided.", has_exam_materials: false };
@@ -1005,28 +1021,30 @@ function CreateCoursePageContent() {
 
       payload.exam_details = examDetailsPayload;
 
+      redirectToDashboard();
+
       if (syllabusFiles.length > 0) {
-        setCourseGenerationMessage("Encoding syllabus materials…");
+        safeSetCourseGenerationMessage("Encoding syllabus materials…");
         const syllabusPayload = await buildFilePayload(syllabusFiles);
         if (syllabusPayload.length > 0) {
           payload.syllabusFiles = syllabusPayload;
         }
       }
 
-      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examFormat, examNotes: examNotes?.trim() || "Not provided." });
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes: examNotes?.trim() || "Not provided." });
       if (examFormatDetails) {
         payload.examFormatDetails = examFormatDetails;
       }
 
       if (examFiles.length > 0) {
-        setCourseGenerationMessage("Packaging exam references…");
-        const examPayload = await buildFilePayload(examFiles);
+        safeSetCourseGenerationMessage("Packaging exam references…");
+        const examPayload = await buildFilePayload(examFiles, { contentKey: "content", includeSize: false });
         if (examPayload.length > 0) {
           payload.examFiles = examPayload;
         }
       }
 
-      setCourseGenerationMessage("Creating course…");
+      safeSetCourseGenerationMessage("Creating course…");
       
       // Calculate seconds_to_complete from studyHours and studyMinutes
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
@@ -1051,13 +1069,12 @@ function CreateCoursePageContent() {
       try {
         window.dispatchEvent(new Event("courses:updated"));
       } catch {}
-
-      // Always go to dashboard - the course card will show loading state
-      router.push("/dashboard");
     } catch (error) {
       console.log("[CreateCourse] ERROR:", error);
-      setCourseGenerationError(error.message || "Unexpected error creating course.");
-      setCourseGenerating(false);
+      if (!navigationTriggered) {
+        setCourseGenerationError(error.message || "Unexpected error creating course.");
+        setCourseGenerating(false);
+      }
     }
   }, [
     overviewTopics,
@@ -1068,7 +1085,6 @@ function CreateCoursePageContent() {
     syllabusText,
     syllabusFiles,
     hasExamMaterials,
-    examFormat,
     examNotes,
     examFiles,
     examDetailsProvided,
@@ -1446,88 +1462,108 @@ function CreateCoursePageContent() {
                   </div>
                 </div>
 
-                {/* Exam Materials Section */}
+                {/* Practice Exams Upload Section */}
+                <div className="rounded-lg border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
+                  <div className="mb-3">
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        <h3 className="font-semibold text-sm">Practice Exams & Past Tests</h3>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary)]/20 font-semibold" style={{color: 'var(--primary)'}}>Highly Recommended</span>
+                    </div>
+                    <p className="text-xs text-[var(--muted-foreground)]">Upload practice exams, past tests, or sample questions here. This helps us generate study materials that closely match the topics and question styles on your exam.</p>
+                  </div>
+
+                  <div>
+                    <input
+                      id={examInputId}
+                      type="file"
+                      multiple
+                      accept={syllabusFileTypes}
+                      onChange={handleExamFileChange}
+                      className="sr-only"
+                    />
+                    <label
+                      htmlFor={examInputId}
+                      className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--primary)]/40 bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--primary)]/10"
+                    >
+                      <svg className="h-10 w-10 text-[var(--primary)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <p className="text-sm font-medium text-[var(--foreground)] mb-1">Upload Practice Exams</p>
+                      <p className="text-xs text-[var(--muted-foreground)] text-center">Past exams, practice tests, sample questions, or old midterms/finals</p>
+                      <p className="text-[10px] text-[var(--muted-foreground)] mt-1">PDF, DOC, DOCX, PPT, PPTX, or TXT</p>
+                    </label>
+                    
+                    {examFiles.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-[var(--primary)] mb-2">{examFiles.length} practice exam{examFiles.length !== 1 ? 's' : ''} uploaded</p>
+                        <div className="space-y-2">
+                          {examFiles.map((file) => (
+                            <div key={file.name} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--primary)]/30 bg-[var(--surface-1)] px-3 py-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                <svg className="h-4 w-4 text-[var(--primary)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[var(--foreground)] truncate">{file.name}</p>
+                                  <p className="text-xs text-[var(--muted-foreground)]">{(file.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveExamFile(file.name)}
+                                className="flex-shrink-0 p-1 rounded-full transition-colors"
+                                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                                style={{color: 'var(--muted-foreground)'}}
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Exam Details Section (Notes Only) */}
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
                   <div className="mb-3">
                     <div className="flex items-start justify-between mb-1">
-                      <h3 className="font-semibold text-sm">Exam Details</h3>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--info)]/20 font-semibold" style={{color: 'var(--info)'}}>Recommended</span>
+                      <h3 className="font-semibold text-sm">Exam Content & Topics</h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--info)]/20 font-semibold" style={{color: 'var(--info)'}}>Optional</span>
                     </div>
-                    <p className="text-xs text-[var(--muted-foreground)]">Share exam details to create better practice problems and study material</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">Describe the topics or chapters likely to be on the exam. <span className="font-medium">You can directly upload posts from your professor here and we'll filter through and figure out what's important</span>.</p>
                   </div>
 
-                  <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-semibold mb-2">Upload Sample Exams</label>
-                        <input
-                          id={examInputId}
-                          type="file"
-                          multiple
-                          accept={syllabusFileTypes}
-                          onChange={handleExamFileChange}
-                          className="sr-only"
-                        />
-                        <label
-                          htmlFor={examInputId}
-                          className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--surface-2)]/50"
-                        >
-                          <svg className="h-8 w-8 text-[var(--muted-foreground)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p className="text-sm font-medium text-[var(--foreground)] mb-1">Click to upload or drag and drop</p>
-                          <p className="text-xs text-[var(--muted-foreground)]">Past Exams, Practice Tests, or Study Guides</p>
-                        </label>
-                        
-                        {examFiles.length > 0 && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">{examFiles.length} file{examFiles.length !== 1 ? 's' : ''} uploaded</p>
-                            <div className="space-y-2">
-                              {examFiles.map((file) => (
-                                <div key={file.name} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5">
-                                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                    <svg className="h-4 w-4 text-[var(--info)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-[var(--foreground)] truncate">{file.name}</p>
-                                      <p className="text-xs text-[var(--muted-foreground)]">{(file.size / 1024).toFixed(1)} KB</p>
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveExamFile(file.name)}
-                                    className="flex-shrink-0 p-1 rounded-full transition-colors"
-                                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
-                                    style={{color: 'var(--muted-foreground)'}}
-                                  >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold mb-1.5">Additional Notes</label>
-                        <textarea
-                          rows={3}
-                          value={examNotes}
-                          onChange={(event) => setExamNotes(event.target.value)}
-                          placeholder="Share timing, scoring, or question style preferences..."
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none overflow-y-auto"
-                          style={{ minHeight: '4.5rem', maxHeight: '10rem' }}
-                          onInput={(e) => {
-                            e.target.style.height = 'auto';
-                            e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
-                          }}
-                        />
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5">Notes about your exam</label>
+                    <textarea
+                      rows={3}
+                      value={examNotes}
+                      onChange={(event) => setExamNotes(event.target.value)}
+                      placeholder="E.g., 'Ch 1-4: probability & statistics; Ch 5: linear regression; hypothesis testing; optimization methods'"
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none overflow-y-auto"
+                      style={{ minHeight: '4.5rem', maxHeight: '10rem' }}
+                      onInput={(e) => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                      }}
+                    />
+                    <p className="text-[10px] text-[var(--muted-foreground)] mt-1.5 flex items-center gap-1">
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      To upload practice tests or past exams, use the "Practice Exams & Past Tests" section above
+                    </p>
+                  </div>
                 </div>
               </div>
 
