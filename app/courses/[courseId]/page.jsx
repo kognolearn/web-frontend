@@ -389,22 +389,31 @@ export default function CoursePage() {
                 }}
                 onClick={() => setActiveTabId(tab.id)}
                 className={`
-                  group relative flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-medium cursor-grab active:cursor-grabbing min-w-[100px] max-w-[240px] flex-1 select-none
+                  group relative flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-medium cursor-grab active:cursor-grabbing min-w-[100px] max-w-[240px] flex-1 select-none overflow-hidden
                   ${activeTabId === tab.id 
-                    ? "bg-gradient-to-b from-[var(--primary)] to-[var(--primary-active)] text-white shadow-md" 
+                    ? "backdrop-blur-xl bg-[var(--primary)]/90 text-white" 
                     : "bg-[var(--surface-muted)] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
                   }
                   ${draggingTabId === tab.id ? "shadow-2xl" : ""}
                 `}
                 style={activeTabId === tab.id ? {
-                  backgroundImage: 'linear-gradient(to bottom, var(--primary), var(--primary-active)), linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.05) 100%)',
-                  backgroundBlendMode: 'normal, overlay',
-                  boxShadow: '0 2px 8px rgba(123, 163, 122, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)'
+                  backgroundImage: 'linear-gradient(135deg, rgba(123, 163, 122, 0.95) 0%, rgba(100, 140, 100, 0.85) 50%, rgba(123, 163, 122, 0.9) 100%)',
+                  boxShadow: '0 4px 16px rgba(123, 163, 122, 0.35), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.1)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderBottom: 'none'
                 } : {}}
               >
+                {/* Glass morphism overlay for active tab */}
+                {activeTabId === tab.id && (
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/5 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/10 pointer-events-none" />
+                  </>
+                )}
+                
                 {/* Tab Icon */}
                 <motion.span 
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 relative z-10"
                   animate={{ 
                     rotate: draggingTabId === tab.id && isDraggingToDock ? [0, -10, 10, 0] : 0 
                   }}
@@ -421,14 +430,14 @@ export default function CoursePage() {
                   )}
                 </motion.span>
                 
-                <span className="truncate flex-1">{tab.title}</span>
+                <span className="truncate flex-1 relative z-10">{tab.title}</span>
                 
                 {/* Close Button */}
                 {(tabs.length > 1 && (tab.type !== 'course' || tabs.filter(t => t.type === 'course').length > 1)) && (
                   <button
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => closeTab(e, tab.id)}
-                    className={`opacity-0 group-hover:opacity-100 p-0.5 rounded-full transition-all ${
+                    className={`opacity-0 group-hover:opacity-100 p-0.5 rounded-full transition-all relative z-10 ${
                       activeTabId === tab.id 
                         ? "hover:bg-white/20" 
                         : "hover:bg-[var(--surface-muted)]"
