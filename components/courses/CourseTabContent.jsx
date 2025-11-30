@@ -747,20 +747,20 @@ export default function CourseTabContent({
                       }}
                       className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
                         isSelected
-                          ? "bg-amber-500/15 border-amber-500/30 shadow-lg shadow-amber-500/10"
-                          : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30"
+                          ? "bg-[var(--primary)]/15 border-[var(--primary)]/30 shadow-lg shadow-[var(--primary)]/10"
+                          : "bg-[var(--primary)]/5 border-[var(--primary)]/20 hover:bg-[var(--primary)]/10 hover:border-[var(--primary)]/30"
                       }`}
                     >
-                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500/20 text-amber-500 flex-shrink-0">
+                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] flex-shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
                       <div className="flex-1 text-left min-w-0">
-                        <h3 className="text-sm font-semibold text-amber-500 truncate">
+                        <h3 className="text-sm font-semibold text-[var(--primary)] truncate">
                           {exam.title}
                         </h3>
-                        <p className="text-xs text-amber-500/70">
+                        <p className="text-xs text-[var(--primary)]/70">
                           {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
                         </p>
                       </div>
@@ -960,7 +960,7 @@ export default function CourseTabContent({
                         return acc;
                       }, {});
                       
-                      const colors = ['from-purple-500/30 to-purple-500/10', 'from-blue-500/30 to-blue-500/10', 'from-emerald-500/30 to-emerald-500/10', 'from-amber-500/30 to-amber-500/10'];
+                      const colors = ['from-purple-500/30 to-purple-500/10', 'from-blue-500/30 to-blue-500/10', 'from-emerald-500/30 to-emerald-500/10', 'from-[var(--primary)]/30 to-[var(--primary)]/10'];
                       const textColors = ['text-purple-400', 'text-blue-400', 'text-emerald-400', 'text-amber-400'];
                       
                       return Object.entries(timeByType).map(([type, minutes], idx) => (
@@ -996,10 +996,10 @@ export default function CourseTabContent({
               <section className="space-y-6 pb-24">
                 {selectedLesson.type === 'practice_exam' ? (
                   <div className="space-y-6">
-                    <div className="backdrop-blur-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-2xl p-6 shadow-xl">
+                    <div className="backdrop-blur-xl bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary-active)]/5 border border-[var(--primary)]/20 rounded-2xl p-6 shadow-xl">
                       <div className="flex items-start gap-4">
-                        <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="w-14 h-14 rounded-xl bg-[var(--primary)]/20 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </div>
@@ -1113,7 +1113,7 @@ export default function CourseTabContent({
                                 href={currentExamState.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-semibold shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 hover:scale-[1.02] transition-all flex items-center gap-2"
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1131,7 +1131,7 @@ export default function CourseTabContent({
                               </p>
                               <button
                                 type="button"
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-semibold shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 hover:scale-[1.02] transition-all flex items-center gap-2"
                                 onClick={() => generateExam(examType, lessonTitles)}
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
