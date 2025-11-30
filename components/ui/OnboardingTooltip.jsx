@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOnboarding } from "./OnboardingProvider";
 
@@ -15,6 +15,8 @@ import { useOnboarding } from "./OnboardingProvider";
  * - Supports different positions and pointer directions
  * - Queue-based: only one tooltip shows at a time across the entire app
  * - Priority-based: lower priority numbers show first
+ * - Auto-dismiss: tooltips automatically dismiss after a timeout to show the next one
+ * - Viewport-aware: automatically adjusts position to stay on screen
  */
 export default function OnboardingTooltip({
   id,
@@ -27,6 +29,7 @@ export default function OnboardingTooltip({
   showCondition = true, // Additional condition to control visibility
   className = "",
   maxWidth, // Optional - will auto-size if not provided
+  autoDismissAfter = 16000, // Auto-dismiss after this many ms (null to disable)
 }) {
   const { 
     hasSeenTooltip, 
@@ -39,8 +42,61 @@ export default function OnboardingTooltip({
   } = useOnboarding();
   
   const [hasRequested, setHasRequested] = useState(false);
+  const [adjustedPosition, setAdjustedPosition] = useState(position);
+  const [adjustedPointerPosition, setAdjustedPointerPosition] = useState(pointerPosition);
   const timeoutRef = useRef(null);
+  const autoDismissRef = useRef(null);
   const mountedRef = useRef(true);
+  const containerRef = useRef(null);
+  const tooltipRef = useRef(null);
+
+  // Check viewport bounds and adjust position if needed
+  const checkBounds = useCallback(() => {
+    if (!containerRef.current || !tooltipRef.current) return;
+    
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const padding = 12; // Minimum distance from viewport edge
+    
+    let newPosition = position;
+    let newPointerPosition = pointerPosition;
+    
+    // Check if tooltip goes off screen and adjust
+    if (position === "top" && tooltipRect.top < padding) {
+      newPosition = "bottom";
+    } else if (position === "bottom" && tooltipRect.bottom > window.innerHeight - padding) {
+      newPosition = "top";
+    } else if (position === "left" && tooltipRect.left < padding) {
+      newPosition = "right";
+    } else if (position === "right" && tooltipRect.right > window.innerWidth - padding) {
+      newPosition = "left";
+    }
+    
+    // For top/bottom positions, also check horizontal overflow
+    if (newPosition === "top" || newPosition === "bottom") {
+      if (tooltipRect.left < padding) {
+        newPointerPosition = "left";
+      } else if (tooltipRect.right > window.innerWidth - padding) {
+        newPointerPosition = "right";
+      }
+    }
+    
+    // For left/right positions, check vertical overflow
+    if (newPosition === "left" || newPosition === "right") {
+      if (tooltipRect.top < padding) {
+        newPointerPosition = "top";
+      } else if (tooltipRect.bottom > window.innerHeight - padding) {
+        newPointerPosition = "bottom";
+      }
+    }
+    
+    if (newPosition !== adjustedPosition) {
+      setAdjustedPosition(newPosition);
+    }
+    if (newPointerPosition !== adjustedPointerPosition) {
+      setAdjustedPointerPosition(newPointerPosition);
+    }
+  }, [position, pointerPosition, adjustedPosition, adjustedPointerPosition]);
 
   // Request to show tooltip after delay if conditions are met
   useEffect(() => {
@@ -64,15 +120,46 @@ export default function OnboardingTooltip({
     };
   }, [isLoaded, isNewUser, hasSeenTooltip, id, showCondition, delay, priority, requestTooltip, releaseTooltip]);
 
-  const handleDismiss = (e) => {
-    e?.stopPropagation();
-    dismissTooltip(id);
-  };
+  // Auto-dismiss tooltip after timeout when it becomes visible
+  useEffect(() => {
+    if (activeTooltip === id && autoDismissAfter && autoDismissAfter > 0) {
+      autoDismissRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          dismissTooltip(id);
+        }
+      }, autoDismissAfter);
+    }
+
+    return () => {
+      if (autoDismissRef.current) {
+        clearTimeout(autoDismissRef.current);
+        autoDismissRef.current = null;
+      }
+    };
+  }, [activeTooltip, id, autoDismissAfter, dismissTooltip]);
 
   // Only show if this tooltip is the active one
   const isVisible = activeTooltip === id;
 
-  // Position and pointer styles
+  // Check bounds when tooltip becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      // Reset to original positions first
+      setAdjustedPosition(position);
+      setAdjustedPointerPosition(pointerPosition);
+      // Then check bounds after a short delay to let the tooltip render
+      const timer = setTimeout(checkBounds, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, position, pointerPosition, checkBounds]);
+
+  const handleDismiss = (e) => {
+    e?.stopPropagation();
+    if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+    dismissTooltip(id);
+  };
+
+  // Position and pointer styles - use adjusted values
   const getPositionStyles = () => {
     const basePositions = {
       top: "bottom-full mb-3",
@@ -105,11 +192,11 @@ export default function OnboardingTooltip({
       },
     };
 
-    return `${basePositions[position]} ${alignments[position]?.[pointerPosition] || ""}`;
+    return `${basePositions[adjustedPosition]} ${alignments[adjustedPosition]?.[adjustedPointerPosition] || ""}`;
   };
 
   const getPointerStyles = () => {
-    // Pointer (triangle) positioning
+    // Pointer (triangle) positioning - use adjusted values
     const pointerBase = "absolute w-0 h-0";
     
     // Border colors for the pastel blue theme
@@ -139,7 +226,7 @@ export default function OnboardingTooltip({
       },
     };
 
-    return pointerPositions[position]?.[pointerPosition] || "";
+    return pointerPositions[adjustedPosition]?.[adjustedPointerPosition] || "";
   };
 
   const getAnimationVariants = () => {
@@ -151,19 +238,23 @@ export default function OnboardingTooltip({
     };
 
     return {
-      initial: { opacity: 0, scale: 0.95, ...directions[position] },
+      initial: { opacity: 0, scale: 0.95, ...directions[adjustedPosition] },
       animate: { opacity: 1, scale: 1, x: 0, y: 0 },
-      exit: { opacity: 0, scale: 0.95, ...directions[position] },
+      exit: { opacity: 0, scale: 0.95, ...directions[adjustedPosition] },
     };
   };
 
+  // Check if wrapper should be fixed positioned (for fixed children like FABs)
+  const isFixedPosition = className?.includes('fixed');
+  
   return (
-    <div className={`relative inline-flex ${className}`}>
+    <div ref={containerRef} className={`${isFixedPosition ? '' : 'relative'} inline-flex ${className}`}>
       {children}
       
       <AnimatePresence>
         {isVisible && (
           <motion.div
+            ref={tooltipRef}
             {...getAnimationVariants()}
             transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
             className={`absolute z-[100] ${getPositionStyles()}`}

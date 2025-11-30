@@ -69,11 +69,11 @@ export default function CourseSettingsModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", duration: 0.3 }}
-            className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl"
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--border)] bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl overflow-visible"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
                   <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,7 +89,7 @@ export default function CourseSettingsModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl p-2 transition-colors hover:bg-white/10"
+                className="rounded-xl p-2 transition-colors hover:bg-[var(--surface-muted)]"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -99,33 +99,30 @@ export default function CourseSettingsModal({
 
             {/* Content */}
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-6">
-              {/* Onboarding tooltip for first-time users */}
-              <OnboardingTooltip
-                id="settings-modal-intro"
-                content="This is where you can manage your study time. Use the quick buttons to add or subtract time, or set a custom duration. Your progress is automatically saved!"
-                position="bottom"
-                pointerPosition="center"
-                delay={300}
-                priority={9}
-                showCondition={isOpen}
-              >
-                <div />
-              </OnboardingTooltip>
-
               {/* Timer Controls Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                    Timer Controls
-                    <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
-                  </h3>
+                  <OnboardingTooltip
+                    id="settings-modal-intro"
+                    content="This is where you can manage your study time. Use the quick buttons to add or subtract time, or set a custom duration. Your progress is automatically saved!"
+                    position="bottom"
+                    pointerPosition="left"
+                    delay={300}
+                    priority={9}
+                    showCondition={isOpen}
+                  >
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                      Timer Controls
+                      <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
+                    </h3>
+                  </OnboardingTooltip>
                 </div>
 
                 {/* Current Timer Display */}
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[var(--muted-foreground)]">Current time remaining:</span>
                     <span className="text-lg font-bold text-[var(--foreground)]">{formatTime(currentSeconds)}</span>
@@ -142,28 +139,28 @@ export default function CourseSettingsModal({
                     <button
                       type="button"
                       onClick={() => handleTimerAdjust(-60 * 60)}
-                      className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
                     >
                       <span className="block text-lg">−1h</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTimerAdjust(-15 * 60)}
-                      className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
                     >
                       <span className="block text-lg">−15m</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTimerAdjust(15 * 60)}
-                      className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
                     >
                       <span className="block text-lg">+15m</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTimerAdjust(60 * 60)}
-                      className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
                     >
                       <span className="block text-lg">+1h</span>
                     </button>
@@ -184,7 +181,7 @@ export default function CourseSettingsModal({
                         placeholder="Hours"
                         value={customHours}
                         onChange={(e) => setCustomHours(e.target.value)}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
                       />
                     </div>
                     <div className="flex-1">
@@ -195,7 +192,7 @@ export default function CourseSettingsModal({
                         placeholder="Minutes"
                         value={customMinutes}
                         onChange={(e) => setCustomMinutes(e.target.value)}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
                       />
                     </div>
                     <button

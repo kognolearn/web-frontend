@@ -42,7 +42,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         role="button"
         tabIndex={-1}
         aria-label={`Course ${courseCode} is being built`}
-        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-amber-500/30 dark:border-amber-400/20 shadow-lg shadow-amber-500/5"
+        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-[var(--surface-1)] border border-amber-500/30 shadow-lg shadow-amber-500/5"
       >
         {/* Animated gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-amber-500/10" />
@@ -101,7 +101,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         }
       }}
       aria-label={`Open course ${courseCode}`}
-      className="relative rounded-2xl p-5 h-44 flex flex-col cursor-pointer overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg"
+      className="relative rounded-2xl p-5 h-44 flex flex-col cursor-pointer overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg"
     >
       {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/10 via-transparent to-[var(--primary)]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
@@ -156,7 +156,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
       </div>
 
       {/* Bottom section with time and action */}
-      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-white/10">
+      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-[var(--border)]">
         <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
