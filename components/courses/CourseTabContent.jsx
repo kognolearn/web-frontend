@@ -279,6 +279,82 @@ export default function CourseTabContent({
   const [collapsedModules, setCollapsedModules] = useState(new Set());
   const [selectedContentType, setSelectedContentType] = useState(null);
   const [currentViewingItem, setCurrentViewingItem] = useState(null);
+  
+  // Practice exam state
+  const [examState, setExamState] = useState({}); // { [examType]: { status, url, error } }
+
+  // Check if exam already exists (doesn't generate)
+  const checkExamExists = useCallback(async (examType) => {
+    if (!userId || !courseId) return;
+    
+    const key = examType;
+    
+    setExamState(prev => {
+      // Skip if already checked or in progress
+      if (prev[key]?.status) return prev;
+      return { ...prev, [key]: { status: 'checking', url: null, error: null } };
+    });
+    
+    try {
+      const fetchRes = await fetch(
+        `/api/courses/${courseId}/exams/${examType}?userId=${userId}`
+      );
+      
+      if (fetchRes.ok) {
+        const data = await fetchRes.json();
+        setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: data.url, error: null } }));
+      } else if (fetchRes.status === 404) {
+        // Exam doesn't exist yet - show build option
+        setExamState(prev => ({ ...prev, [key]: { status: 'not-built', url: null, error: null } }));
+      } else {
+        const errData = await fetchRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to check exam (${fetchRes.status})`);
+      }
+    } catch (e) {
+      setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
+    }
+  }, [userId, courseId]);
+
+  // Generate exam (only called when user clicks build)
+  const generateExam = useCallback(async (examType, lessonTitles) => {
+    if (!userId || !courseId) return;
+    
+    const key = examType;
+    setExamState(prev => ({ ...prev, [key]: { status: 'generating', url: null, error: null } }));
+    
+    try {
+      const generateRes = await fetch(
+        `/api/courses/${courseId}/exams/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            lessons: lessonTitles,
+            type: examType
+          })
+        }
+      );
+      
+      if (!generateRes.ok) {
+        const errData = await generateRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to generate exam (${generateRes.status})`);
+      }
+      
+      const genData = await generateRes.json();
+      setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: genData.url, error: null } }));
+    } catch (e) {
+      setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
+    }
+  }, [userId, courseId]);
+
+  // Auto-check exam existence when practice exam is selected
+  useEffect(() => {
+    if (selectedLesson?.type === 'practice_exam' && userId && courseId) {
+      const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
+      checkExamExists(examType);
+    }
+  }, [selectedLesson, userId, courseId, checkExamExists]);
 
   // Auto-select first lesson if available and not already selected
   useEffect(() => {
@@ -988,21 +1064,102 @@ export default function CourseTabContent({
                       </div>
                     </div>
 
-                    <div className="flex justify-center pt-4">
-                      <button
-                        type="button"
-                        className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
-                        onClick={() => {
-                          alert('Exam functionality coming soon!');
-                        }}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Start Exam
-                      </button>
-                    </div>
+                    {/* Exam Actions */}
+                    {(() => {
+                      const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
+                      const currentExamState = examState[examType] || {};
+                      const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
+                      const precedingLessonIds = selectedLesson.preceding_lessons || [];
+                      const lessonTitles = precedingLessonIds.map(id => allLessons.find(l => l.id === id)?.title).filter(Boolean);
+                      
+                      return (
+                        <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl p-6 shadow-lg">
+                          {/* Error State */}
+                          {currentExamState.status === 'error' && (
+                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                              <p className="font-medium">Failed to load exam</p>
+                              <p className="text-xs mt-1 opacity-80">{currentExamState.error}</p>
+                            </div>
+                          )}
+                          
+                          {/* Checking State */}
+                          {currentExamState.status === 'checking' && (
+                            <div className="flex flex-col items-center justify-center py-8">
+                              <div className="w-12 h-12 mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+                              <p className="text-sm text-[var(--muted-foreground)]">Checking for existing exam...</p>
+                            </div>
+                          )}
+                          
+                          {/* Generating State */}
+                          {currentExamState.status === 'generating' && (
+                            <div className="flex flex-col items-center justify-center py-8">
+                              <div className="w-12 h-12 mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+                              <p className="text-sm text-[var(--muted-foreground)]">
+                                Generating your practice exam... This may take a minute.
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Ready State - Show Download */}
+                          {currentExamState.status === 'ready' && currentExamState.url && (
+                            <div className="flex flex-col items-center justify-center py-4">
+                              <div className="w-16 h-16 mb-4 rounded-xl bg-[var(--success)]/20 flex items-center justify-center">
+                                <svg className="w-8 h-8 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <p className="text-sm text-[var(--foreground)] font-medium mb-4">Your practice exam is ready!</p>
+                              <a
+                                href={currentExamState.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Download Exam PDF
+                              </a>
+                            </div>
+                          )}
+                          
+                          {/* Not Built State - Show Build Button */}
+                          {currentExamState.status === 'not-built' && (
+                            <div className="flex flex-col items-center justify-center py-4">
+                              <p className="text-sm text-[var(--muted-foreground)] mb-4 text-center">
+                                Create a practice exam covering all the lessons listed above.
+                              </p>
+                              <button
+                                type="button"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                                onClick={() => generateExam(examType, lessonTitles)}
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Build Practice Exam
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* Retry on Error */}
+                          {currentExamState.status === 'error' && (
+                            <div className="flex justify-center pt-2">
+                              <button
+                                type="button"
+                                className="px-6 py-2 rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--surface-3)] transition-colors"
+                                onClick={() => {
+                                  // Reset state and re-check
+                                  setExamState(prev => ({ ...prev, [examType]: null }));
+                                }}
+                              >
+                                Try Again
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : isLessonContentLoading(selectedLesson.id) ? (
                   <div className="animate-pulse space-y-6">

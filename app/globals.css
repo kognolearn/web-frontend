@@ -48,19 +48,31 @@
 }
 
 html.theme-light {
-  --background: #f5f3ef; /* warm cream */
-  --surface-1: #ffffff;
-  --surface-2: #faf8f5;
-  --surface-muted: #f0ede8;
-  --border: #ddd8d0;
-  --foreground: #2d3a29;
-  --muted-foreground: #708068;
-  --muted-foreground-strong: #3d4a38;
+  --background: #ffffff; /* pure white background */
+  --surface-1: #f8f9fa;
+  --surface-2: #e9ecef;
+  --surface-muted: #dee2e6;
+  --border: #adb5bd;
+  --foreground: #212529;
+  --muted-foreground: #495057;
+  --muted-foreground-strong: #343a40;
 
-  --primary: #7ba37a;
+  --primary: #43a047; /* medium green - balanced */
+  --primary-rgb: 67, 160, 71;
   --primary-contrast: #ffffff;
-  --primary-hover: #8fb18e; /* slightly lighter on light bg */
-  --primary-active: #668865;
+  --primary-hover: #4caf50;
+  --primary-active: #388e3c;
+
+  /* feedback - adjusted for light mode contrast */
+  --success: #43a047;
+  --warning: #e65100;
+  --danger: #c62828;
+  --info: #1565c0;
+
+  /* softer shadows for light mode */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 
   /* grid pattern - stronger for light mode */
   --grid-color: rgba(61, 82, 56, 0.08);
