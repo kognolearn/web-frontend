@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 import {
   defaultTopicRating,
@@ -1384,7 +1385,16 @@ function CreateCoursePageContent() {
                 {/* Syllabus Section */}
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
                   <div className="mb-4">
-                    <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
+                    <OnboardingTooltip
+                      id="create-syllabus-section"
+                      content="Upload your course syllabus or paste the content here. This helps us understand your course structure and create relevant study materials tailored to your curriculum."
+                      position="right"
+                      pointerPosition="top"
+                      delay={800}
+                      priority={2}
+                    >
+                      <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
+                    </OnboardingTooltip>
                     <p className="text-xs text-[var(--muted-foreground)]">Share course objectives</p>
                   </div>
                   
@@ -1466,13 +1476,17 @@ function CreateCoursePageContent() {
                 <div className="rounded-lg border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
                   <div className="mb-3">
                     <div className="flex items-start justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        <h3 className="font-semibold text-sm">Practice Exams & Past Tests</h3>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary)]/20 font-semibold" style={{color: 'var(--primary)'}}>Highly Recommended</span>
+                      <OnboardingTooltip
+                        id="create-exam-section"
+                        content="Upload past exams, practice tests, or describe your exam format. This is highly recommended — it helps us create practice problems that match your actual test style and focus on the right topics."
+                        position="right"
+                        pointerPosition="top"
+                        delay={1000}
+                        priority={3}
+                      >
+                        <h3 className="font-semibold text-sm">Exam Details</h3>
+                      </OnboardingTooltip>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--info)]/20 font-semibold" style={{color: 'var(--info)'}}>Recommended</span>
                     </div>
                     <p className="text-xs text-[var(--muted-foreground)]">Upload practice exams, past tests, or sample questions here. This helps us generate study materials that closely match the topics and question styles on your exam.</p>
                   </div>
@@ -1708,7 +1722,16 @@ function CreateCoursePageContent() {
                 >
                   <div className="flex items-center justify-between mb-4 flex-shrink-0">
                     <div>
-                      <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
+                      <OnboardingTooltip
+                        id="create-topics-step"
+                        content="These are your personalized study topics! Use the confidence buttons (🆕 New, 😊 Somewhat familiar, 🎯 Confident) to tell us how well you know each module. This helps us prioritize what you need to learn most."
+                        position="bottom"
+                        pointerPosition="left"
+                        delay={500}
+                        priority={4}
+                      >
+                        <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
+                      </OnboardingTooltip>
                       <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                         Review and customize your learning path
                       </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 // System prompt to guide the assistant's behavior
 const SYSTEM_PROMPT = `You are Kogno, the in‑course teaching assistant for a single learner.
@@ -1222,18 +1223,27 @@ Instructions:
 
   if (!isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        type="button"
-        aria-label="Open ChatBot"
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 btn btn-primary btn-fab"
-        style={{ position: "fixed" }}
-        title="Open ChatBot"
+      <OnboardingTooltip
+        id="chatbot-intro"
+        content="Meet Kogno, your AI study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
+        position="left"
+        pointerPosition="bottom"
+        delay={1500}
+        priority={20}
       >
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-        </svg>
-      </button>
+        <button
+          onClick={() => setIsOpen(true)}
+          type="button"
+          aria-label="Open ChatBot"
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 btn btn-primary btn-fab"
+          style={{ position: "fixed" }}
+          title="Open ChatBot"
+        >
+          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+        </button>
+      </OnboardingTooltip>
     );
   }
 
