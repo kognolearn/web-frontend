@@ -280,11 +280,12 @@ export default function DashboardPage() {
                 pointerPosition="center"
                 delay={800}
                 priority={1}
+                className="w-full"
               >
-                <Tooltip content="Create a new personalized course with AI-generated study materials tailored to your syllabus and exam" position="bottom" delay={500}>
+                <Tooltip content="Create a new personalized course with AI-generated study materials tailored to your syllabus and exam" position="bottom" delay={500} className="w-full">
                   <Link
                     href="/courses/create"
-                    className="group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
+                    className="block w-full group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
                   >
                     <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
                       <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
