@@ -48,7 +48,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         
         {/* Shimmer effect */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -inset-full top-0 block w-1/2 h-full bg-gradient-to-r from-transparent via-amber-500/5 to-transparent transform -skew-x-12 animate-[shimmer_2.5s_ease-in-out_infinite]" />
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-amber-500/5 to-transparent transform -skew-x-12 animate-[shimmer_2.5s_linear_infinite]" style={{ width: '50%' }} />
         </div>
 
         {/* Top section */}
@@ -78,22 +78,10 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           </p>
         </div>
 
-        {/* Bottom section with animated progress bar */}
-        <div className="relative z-10 pt-3 border-t border-white/10">
-          <div className="h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full animate-[progressSlide_2s_ease-in-out_infinite]" />
-          </div>
-        </div>
-
         <style jsx>{`
           @keyframes shimmer {
             0% { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(200%) skewX(-12deg); }
-          }
-          @keyframes progressSlide {
-            0% { width: 15%; margin-left: 0; }
-            50% { width: 45%; margin-left: 30%; }
-            100% { width: 15%; margin-left: 85%; }
+            100% { transform: translateX(300%) skewX(-12deg); }
           }
         `}</style>
       </div>

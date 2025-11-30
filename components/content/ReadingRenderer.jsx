@@ -35,8 +35,8 @@ function parseContent(content) {
       continue;
     }
     
-    // Question block (starts with "Question:" or "**Question:**")
-    if (/^(\*\*)?Question:?\*?\*?/i.test(trimmed)) {
+    // Question block (starts with "Question:" or "**Question:**" or "**Check Your Understanding**")
+    if (/^(\*\*)?Question:?\*?\*?/i.test(trimmed) || /^\*\*Check Your Understanding\*\*/i.test(trimmed)) {
       const questionBlock = parseQuestionBlock(lines, i);
       if (questionBlock) {
         blocks.push(questionBlock);
@@ -216,7 +216,8 @@ function parseContent(content) {
         /^\d+\.\s+/.test(nextTrimmed) ||
         nextTrimmed.startsWith("```") ||
         nextTrimmed.startsWith("$$") ||
-        /^(\*\*)?Question:?\*?\*?/i.test(nextTrimmed)
+        /^(\*\*)?Question:?\*?\*?/i.test(nextTrimmed) ||
+        /^\*\*Check Your Understanding\*\*/i.test(nextTrimmed)
       ) {
         break;
       }
@@ -235,54 +236,80 @@ function parseContent(content) {
 
 /**
  * Parse a question block with options and answer reveal
+ * Supports formats:
+ * 1. "Question: ..." with options A., B., C., D.
+ * 2. "**Check Your Understanding**" followed by question text and options
  */
 function parseQuestionBlock(lines, startIdx) {
   const firstLine = lines[startIdx];
-  let questionText = firstLine.replace(/^(\*\*)?Question:?\*?\*?\s*/i, "").trim();
+  let questionText = "";
+  let i = startIdx;
   
-  let i = startIdx + 1;
+  // Check if this is the "Check Your Understanding" format
+  const isCheckFormat = /^\*\*Check Your Understanding\*\*/i.test(firstLine.trim());
+  
+  if (isCheckFormat) {
+    // Skip the header line
+    i++;
+    // Skip empty lines after header
+    while (i < lines.length && !lines[i].trim()) {
+      i++;
+    }
+    // Collect question text until we hit options
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      if (!line) {
+        i++;
+        continue;
+      }
+      // Check for option pattern: "- A.", "- A. A.", etc.
+      if (/^[-*]\s*[A-D][.)]/i.test(line)) {
+        break;
+      }
+      questionText += (questionText ? " " : "") + line;
+      i++;
+    }
+  } else {
+    // Original "Question:" format
+    questionText = firstLine.replace(/^(\*\*)?Question:?\*?\*?\s*/i, "").trim();
+    i = startIdx + 1;
+    
+    // Collect question text until we hit options
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      if (!line) {
+        i++;
+        continue;
+      }
+      // Check for option pattern: "A.", "A)", "- A.", "* A.", etc.
+      if (/^[-*]?\s*[A-D][.)]\s+/i.test(line)) {
+        break;
+      }
+      questionText += " " + line;
+      i++;
+    }
+  }
+  
   const options = [];
   let correctIndex = -1;
   let explanation = "";
   
-  // Collect question text until we hit options
+  // Collect options - format: "- A. Option text" or "A. Option text"
+  // Single letter only (no duplicate like "- A. A.")
   while (i < lines.length) {
     const line = lines[i].trim();
     if (!line) {
       i++;
       continue;
     }
-    // Check for option pattern: "A.", "A)", "- A.", "* A.", etc.
-    if (/^[-*]?\s*[A-D][.)]\s+/i.test(line)) {
-      break;
-    }
-    questionText += " " + line;
-    i++;
-  }
-  
-  // Collect options - handle both "A. text" and "- A. text" formats
-  // Also handle duplicate letter format like "- A. A. text"
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    if (!line) {
-      i++;
-      continue;
-    }
-    // Match options: "- A. A. text", "- A. text", "A. text", "A) text"
-    // Handle duplicate letter format: "- A. A. Exploring..." -> label "A", text "Exploring..."
-    const optionMatchDuplicate = line.match(/^[-*]?\s*([A-D])[.)]\s+[A-D][.)]\s+(.+)$/i);
-    const optionMatchSimple = line.match(/^[-*]?\s*([A-D])[.)]\s+(.+)$/i);
+    // Match options: "- A. text", "A. text", "A) text", "* A. text"
+    // Single letter format only: "- A. Option text here"
+    const optionMatch = line.match(/^[-*]?\s*([A-D])[.)]\s+(.+)$/i);
     
-    if (optionMatchDuplicate) {
+    if (optionMatch) {
       options.push({
-        label: optionMatchDuplicate[1].toUpperCase(),
-        text: optionMatchDuplicate[2],
-      });
-      i++;
-    } else if (optionMatchSimple) {
-      options.push({
-        label: optionMatchSimple[1].toUpperCase(),
-        text: optionMatchSimple[2],
+        label: optionMatch[1].toUpperCase(),
+        text: optionMatch[2],
       });
       i++;
     } else if (/^<details>|^<summary>|Show Answer/i.test(line)) {
@@ -305,7 +332,7 @@ function parseQuestionBlock(lines, startIdx) {
         explanation = explMatch[1].trim();
       }
       i++;
-    } else if (line.startsWith("---") || /^#{1,6}\s/.test(line) || /^(\*\*)?Question:?\*?\*?/i.test(line)) {
+    } else if (line.startsWith("---") || /^#{1,6}\s/.test(line) || /^(\*\*)?Question:?\*?\*?/i.test(line) || /^\*\*Check Your Understanding\*\*/i.test(line)) {
       // Hit new section, stop parsing
       break;
     } else {
@@ -340,7 +367,7 @@ function parseQuestionBlock(lines, startIdx) {
       }
       
       // Stop if we hit a new major section
-      if (line.startsWith("---") && j > startIdx + 5) {
+      if ((line.startsWith("---") || /^#{1,6}\s/.test(line)) && j > startIdx + 5) {
         break;
       }
     }

@@ -186,7 +186,6 @@ function ItemContent({
                   </div>
                   <div className="mt-3">
                     <p className="text-base font-semibold">{vid.title}</p>
-                    <p className="text-sm text-[var(--muted-foreground)] mt-1">{vid.duration_min} min</p>
                     {vid.summary && (
                       <p className="text-sm text-[var(--muted-foreground)] mt-2">{vid.summary}</p>
                     )}
@@ -782,6 +781,51 @@ export default function CoursePage() {
             <nav className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
               {studyPlan.modules?.map((module, moduleIdx) => {
                 const isCollapsed = collapsedModules.has(moduleIdx);
+                const isPracticeExamModule = module.is_practice_exam_module;
+                
+                // Practice exam modules render as a single clickable item
+                if (isPracticeExamModule && module.exam) {
+                  const exam = module.exam;
+                  const isSelected = selectedLesson?.id === exam.id;
+                  return (
+                    <button
+                      key={moduleIdx}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLesson({ ...exam, type: 'practice_exam' });
+                        setSelectedContentType({ lessonId: exam.id, type: 'practice_exam' });
+                        setViewMode("topic");
+                        setCurrentViewingItem(null);
+                      }}
+                      className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
+                        isSelected
+                          ? "bg-amber-500/15 border-amber-500/30 shadow-lg shadow-amber-500/10"
+                          : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500/20 text-amber-500 flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-left min-w-0">
+                        <h3 className="text-sm font-semibold text-amber-500 truncate">
+                          {exam.title}
+                        </h3>
+                        <p className="text-xs text-amber-500/70">
+                          {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
+                        </p>
+                      </div>
+                      {exam.status === 'completed' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 font-medium">
+                          Done
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                
+                // Regular content modules with lessons
                 return (
                   <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-white/5 dark:bg-black/10 border border-white/10 dark:border-white/5">
                     {/* Module header - clickable to collapse/expand */}
@@ -820,54 +864,31 @@ export default function CoursePage() {
                     {!isCollapsed && (
                       <div className="px-3 pb-3 space-y-1">
                         {module.lessons?.map((lesson, lessonIdx) => {
-                          const isPracticeExam = lesson.type === 'practice_exam';
                           return (
                             <button
                               key={lesson.id || lessonIdx}
                               type="button"
                               onClick={() => {
                                 setSelectedLesson(lesson);
-                                if (isPracticeExam) {
-                                  // For practice exams, set a special content type
-                                  setSelectedContentType({ lessonId: lesson.id, type: 'practice_exam' });
-                                } else {
-                                  // Auto-select first available content type
-                                  const availableTypes = getAvailableContentTypes(lesson.id);
-                                  if (availableTypes.length > 0) {
-                                    setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
-                                  }
-                                  fetchLessonContent(lesson.id, ['reading']);
+                                // Auto-select first available content type
+                                const availableTypes = getAvailableContentTypes(lesson.id);
+                                if (availableTypes.length > 0) {
+                                  setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
                                 }
+                                fetchLessonContent(lesson.id, ['reading']);
                                 setViewMode("topic");
                                 setCurrentViewingItem(null);
                               }}
                               className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
                                 selectedLesson?.id === lesson.id
-                                  ? isPracticeExam
-                                    ? "bg-amber-500/15 text-amber-500 font-medium shadow-sm"
-                                    : "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                  : isPracticeExam
-                                    ? "hover:bg-amber-500/10 text-amber-500/80 border border-amber-500/20"
-                                    : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
+                                  ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
+                                  : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
                               }`}
                             >
-                              {isPracticeExam ? (
-                                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-amber-500/20 text-amber-500">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                </span>
-                              ) : (
-                                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
-                                  {lessonIdx + 1}
-                                </span>
-                              )}
+                              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
+                                {lessonIdx + 1}
+                              </span>
                               <span className="flex-1 truncate">{lesson.title}</span>
-                              {isPracticeExam && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-medium">
-                                  {lesson.duration}m
-                                </span>
-                              )}
                             </button>
                           );
                         })}
@@ -1065,8 +1086,8 @@ export default function CoursePage() {
                       </div>
                       <div className="divide-y divide-white/5">
                         {(() => {
-                          // Get all lessons from studyPlan to map IDs to titles
-                          const allLessons = studyPlan.modules?.flatMap(m => m.lessons || []) || [];
+                          // Get all lessons from studyPlan (excluding practice exam modules)
+                          const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
                           const precedingLessonIds = selectedLesson.preceding_lessons || [];
                           
                           if (precedingLessonIds.length === 0) {

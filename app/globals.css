@@ -433,7 +433,7 @@ select:focus {
 }
 
 .animate-shine {
-  animation: shine 1.5s ease-in-out;
+  animation: shine 1.5s ease-in-out infinite;
 }
 
 /* Placeholder support for contentEditable inputs (used by ChatBot) */
