@@ -712,8 +712,8 @@ export default function CourseTabContent({
                       }}
                       className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/70 text-white text-xs font-bold shadow-lg shadow-[var(--primary)]/20">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 text-white text-[11px] font-semibold shadow-md shadow-[var(--primary)]/25 tabular-nums">
                           {moduleIdx + 1}
                         </div>
                         <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-[var(--primary)] text-left">
@@ -747,13 +747,17 @@ export default function CourseTabContent({
                                 setViewMode("topic");
                                 setCurrentViewingItem(null);
                               }}
-                              className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
+                              className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
                                 selectedLesson?.id === lesson.id
                                   ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
                                   : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
                               }`}
                             >
-                              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
+                              <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
+                                selectedLesson?.id === lesson.id
+                                  ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                                  : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
+                              }`}>
                                 {lessonIdx + 1}
                               </span>
                               <span className="flex-1 truncate">{lesson.title}</span>
