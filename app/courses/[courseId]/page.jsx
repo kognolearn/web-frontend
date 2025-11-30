@@ -9,6 +9,7 @@ import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
 import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 export default function CoursePage() {
   const { courseId } = useParams();
@@ -294,7 +295,7 @@ export default function CoursePage() {
     <div className="flex flex-col h-screen bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
       {/* Tab Bar */}
       <div 
-        className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 ${
+        className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
           isExternalChatHovering 
             ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[inset_0_-2px_8px_rgba(123,163,122,0.2)]' 
             : 'border-[var(--border)]'
@@ -432,6 +433,7 @@ export default function CoursePage() {
                         ? "hover:bg-white/20" 
                         : "hover:bg-[var(--surface-muted)]"
                     }`}
+                    title="Close tab"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -445,24 +447,42 @@ export default function CoursePage() {
           
           {/* Add Tab Buttons */}
           <div className="flex items-center gap-1 px-2 flex-shrink-0">
-            <button
-              onClick={() => addTab('course')}
-              className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-              title="New Course Tab"
+            <OnboardingTooltip
+              id="tab-add-course"
+              content="Open a new course view to browse different lessons side by side."
+              position="bottom"
+              pointerPosition="right"
+              delay={1000}
+              priority={15}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-            </button>
-            <button
-              onClick={() => addTab('chat')}
-              className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-              title="New Chat Tab"
+              <button
+                onClick={() => addTab('course')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Course Tab"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </button>
+            </OnboardingTooltip>
+            <OnboardingTooltip
+              id="tab-add-chat"
+              content="Open a new AI chat tab to ask questions while studying."
+              position="bottom"
+              pointerPosition="right"
+              delay={1200}
+              priority={16}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </button>
+              <button
+                onClick={() => addTab('chat')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Chat Tab"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
+            </OnboardingTooltip>
           </div>
       </div>
 

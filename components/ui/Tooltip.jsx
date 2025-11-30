@@ -75,7 +75,7 @@ export default function Tooltip({ children, content, text, position = "top", cla
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className={`absolute z-50 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] shadow-lg whitespace-nowrap pointer-events-none ${positionClasses[adjustedPosition]}`}
+            className={`absolute z-[100] px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] shadow-lg whitespace-nowrap pointer-events-none ${positionClasses[adjustedPosition]}`}
           >
             {tooltipText}
           </motion.div>
@@ -170,7 +170,7 @@ export function InfoTooltip({ content, position = "top", size = "sm" }) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className={`absolute z-50 w-64 px-3 py-2 text-xs rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] shadow-lg ${positionClasses[adjustedPosition]}`}
+            className={`absolute z-[100] w-64 px-3 py-2 text-xs rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] shadow-lg ${positionClasses[adjustedPosition]}`}
           >
             {content}
           </motion.div>
