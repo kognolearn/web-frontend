@@ -836,7 +836,7 @@ export default function CoursePage() {
                   id="course-edit-button"
                   content="Want to modify your course? Click here to request changes — add topics, adjust difficulty, include more examples, or restructure modules using natural language."
                   position="bottom"
-                  pointerPosition="right"
+                  pointerPosition="left"
                   delay={800}
                   priority={7}
                 >
@@ -994,7 +994,7 @@ export default function CoursePage() {
           marginRight: isMobile ? 0 : `${chatBotWidth}px` 
         }}
       >
-        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-8 sm:px-6 lg:px-8 z-10">
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-16 sm:px-6 lg:px-8 z-10">
           {/* Loading State */}
           {loading && (
             <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl px-8 py-16 text-center shadow-2xl">

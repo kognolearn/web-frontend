@@ -1230,13 +1230,13 @@ Instructions:
         pointerPosition="bottom"
         delay={1500}
         priority={20}
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50"
       >
         <button
           onClick={() => setIsOpen(true)}
           type="button"
           aria-label="Open ChatBot"
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 btn btn-primary btn-fab"
-          style={{ position: "fixed" }}
+          className="btn btn-primary btn-fab"
           title="Open ChatBot"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
