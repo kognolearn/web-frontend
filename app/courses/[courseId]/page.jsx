@@ -273,6 +273,63 @@ export default function CoursePage() {
   const [currentViewingItem, setCurrentViewingItem] = useState(null); // Current flashcard or video being viewed
   const [secondsRemaining, setSecondsRemaining] = useState(null); // Countdown timer
   const [initialSeconds, setInitialSeconds] = useState(null); // Initial time value for tracking changes
+  
+  // Practice exam state
+  const [examState, setExamState] = useState({}); // { [examType]: { status, url, error } }
+
+  // Fetch or generate practice exam
+  const fetchOrGenerateExam = useCallback(async (examType, lessonTitles) => {
+    if (!userId || !courseId) return;
+    
+    const key = examType; // 'midterm' or 'final'
+    setExamState(prev => ({ ...prev, [key]: { status: 'loading', url: null, error: null } }));
+    
+    try {
+      // First try to fetch existing exam via local API proxy
+      const fetchRes = await fetch(
+        `/api/courses/${courseId}/exams/${examType}?userId=${userId}`
+      );
+      
+      if (fetchRes.ok) {
+        const data = await fetchRes.json();
+        setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: data.url, error: null } }));
+        return;
+      }
+      
+      if (fetchRes.status === 404) {
+        // Exam not generated yet, generate it
+        setExamState(prev => ({ ...prev, [key]: { status: 'creating', url: null, error: null } }));
+        
+        const generateRes = await fetch(
+          `/api/courses/${courseId}/exams/generate`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              lessons: lessonTitles,
+              type: examType
+            })
+          }
+        );
+        
+        if (!generateRes.ok) {
+          const errData = await generateRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed to generate exam (${generateRes.status})`);
+        }
+        
+        const genData = await generateRes.json();
+        setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: genData.url, error: null } }));
+        return;
+      }
+      
+      // Other error
+      const errData = await fetchRes.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch exam (${fetchRes.status})`);
+    } catch (e) {
+      setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
+    }
+  }, [userId, courseId]);
 
   useEffect(() => {
     let mounted = true;
@@ -799,25 +856,25 @@ export default function CoursePage() {
                       }}
                       className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
                         isSelected
-                          ? "bg-amber-500/15 border-amber-500/30 shadow-lg shadow-amber-500/10"
-                          : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30"
+                          ? "bg-[var(--primary)]/15 border-[var(--primary)]/30 shadow-lg shadow-[var(--primary)]/10"
+                          : "bg-[var(--primary)]/5 border-[var(--primary)]/20 hover:bg-[var(--primary)]/10 hover:border-[var(--primary)]/30"
                       }`}
                     >
-                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500/20 text-amber-500 flex-shrink-0">
+                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] flex-shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
                       <div className="flex-1 text-left min-w-0">
-                        <h3 className="text-sm font-semibold text-amber-500 truncate">
+                        <h3 className="text-sm font-semibold text-[var(--primary)] truncate">
                           {exam.title}
                         </h3>
-                        <p className="text-xs text-amber-500/70">
+                        <p className="text-xs text-[var(--primary)]/70">
                           {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
                         </p>
                       </div>
                       {exam.status === 'completed' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 font-medium">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)] font-medium">
                           Done
                         </span>
                       )}
@@ -1056,96 +1113,159 @@ export default function CoursePage() {
               <section className="space-y-6 pb-24">
                 {/* Practice Exam View */}
                 {selectedLesson.type === 'practice_exam' ? (
-                  <div className="space-y-6">
-                    {/* Exam Header */}
-                    <div className="backdrop-blur-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-2xl p-6 shadow-xl">
-                      <div className="flex items-start gap-4">
-                        <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
+                  (() => {
+                    // Determine exam type from title
+                    const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
+                    const currentExamState = examState[examType] || {};
+                    const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
+                    const precedingLessonIds = selectedLesson.preceding_lessons || [];
+                    const lessonTitles = precedingLessonIds.map(id => allLessons.find(l => l.id === id)?.title).filter(Boolean);
+                    
+                    return (
+                      <div className="space-y-6">
+                        {/* Exam Header */}
+                        <div className="backdrop-blur-xl bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-2xl p-6 shadow-xl">
+                          <div className="flex items-start gap-4">
+                            <div className="w-14 h-14 rounded-xl bg-[var(--primary)]/20 flex items-center justify-center flex-shrink-0">
+                              <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">{selectedLesson.title}</h2>
+                              <p className="text-sm text-[var(--muted-foreground)]">
+                                This exam covers {precedingLessonIds.length} lessons • Estimated time: {selectedLesson.duration} minutes
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">{selectedLesson.title}</h2>
-                          <p className="text-sm text-[var(--muted-foreground)]">
-                            This exam covers {selectedLesson.preceding_lessons?.length || 0} lessons • Estimated time: {selectedLesson.duration} minutes
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Lessons Covered */}
-                    <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-white/5">
-                        <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
-                          <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                          Lessons Covered in This Exam
-                        </h3>
-                      </div>
-                      <div className="divide-y divide-white/5">
-                        {(() => {
-                          // Get all lessons from studyPlan (excluding practice exam modules)
-                          const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
-                          const precedingLessonIds = selectedLesson.preceding_lessons || [];
-                          
-                          if (precedingLessonIds.length === 0) {
-                            return (
+                        {/* Lessons Covered */}
+                        <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                          <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-white/5">
+                            <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
+                              <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              Lessons Covered in This Exam
+                            </h3>
+                          </div>
+                          <div className="divide-y divide-white/5">
+                            {precedingLessonIds.length === 0 ? (
                               <div className="px-6 py-8 text-center text-sm text-[var(--muted-foreground)]">
                                 No lessons specified for this exam yet.
                               </div>
-                            );
-                          }
-                          
-                          return precedingLessonIds.map((lessonId, idx) => {
-                            const lesson = allLessons.find(l => l.id === lessonId);
-                            return (
-                              <div
-                                key={lessonId}
-                                className="px-6 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
-                              >
-                                <span className="w-6 h-6 flex items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-medium text-[var(--primary)]">
-                                  {idx + 1}
-                                </span>
-                                <span className="flex-1 text-sm text-[var(--foreground)]">
-                                  {lesson?.title || `Lesson ${lessonId.slice(0, 8)}...`}
-                                </span>
-                                {lesson?.type && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[var(--muted-foreground)] capitalize">
-                                    {lesson.type}
-                                  </span>
-                                )}
-                                {lesson?.duration && (
-                                  <span className="text-xs text-[var(--muted-foreground)]">
-                                    {lesson.duration}m
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    </div>
+                            ) : (
+                              precedingLessonIds.map((lessonId, idx) => {
+                                const lesson = allLessons.find(l => l.id === lessonId);
+                                return (
+                                  <div
+                                    key={lessonId}
+                                    className="px-6 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+                                  >
+                                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-medium text-[var(--primary)]">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="flex-1 text-sm text-[var(--foreground)]">
+                                      {lesson?.title || `Lesson ${lessonId.slice(0, 8)}...`}
+                                    </span>
+                                    {lesson?.type && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[var(--muted-foreground)] capitalize">
+                                        {lesson.type}
+                                      </span>
+                                    )}
+                                    {lesson?.duration && (
+                                      <span className="text-xs text-[var(--muted-foreground)]">
+                                        {lesson.duration}m
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
 
-                    {/* Start Exam Button */}
-                    <div className="flex justify-center pt-4">
-                      <button
-                        type="button"
-                        className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
-                        onClick={() => {
-                          // TODO: Navigate to actual exam taking interface
-                          alert('Exam functionality coming soon!');
-                        }}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Start Exam
-                      </button>
-                    </div>
-                  </div>
+                        {/* Exam Actions */}
+                        <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl p-6 shadow-xl">
+                          {/* Error State */}
+                          {currentExamState.status === 'error' && (
+                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                              <p className="font-medium">Failed to load exam</p>
+                              <p className="text-xs mt-1 opacity-80">{currentExamState.error}</p>
+                            </div>
+                          )}
+                          
+                          {/* Loading/Generating State */}
+                          {(currentExamState.status === 'loading' || currentExamState.status === 'generating') && (
+                            <div className="flex flex-col items-center justify-center py-8">
+                              <div className="w-12 h-12 mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+                              <p className="text-sm text-[var(--muted-foreground)]">
+                                {currentExamState.status === 'generating' 
+                                  ? 'Generating your practice exam... This may take a minute.'
+                                  : 'Loading exam...'}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Ready State - Show Download */}
+                          {currentExamState.status === 'ready' && currentExamState.url && (
+                            <div className="flex flex-col items-center justify-center py-4">
+                              <div className="w-16 h-16 mb-4 rounded-xl bg-[var(--success)]/20 flex items-center justify-center">
+                                <svg className="w-8 h-8 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <p className="text-sm text-[var(--foreground)] font-medium mb-4">Your practice exam is ready!</p>
+                              <a
+                                href={currentExamState.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-semibold shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Download Exam PDF
+                              </a>
+                            </div>
+                          )}
+                          
+                          {/* Initial State - Create Button */}
+                          {!currentExamState.status && (
+                            <div className="flex flex-col items-center justify-center py-4">
+                              <p className="text-sm text-[var(--muted-foreground)] mb-4 text-center">
+                                Create a practice exam covering all the lessons listed above.
+                              </p>
+                              <button
+                                type="button"
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-semibold shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                                onClick={() => fetchOrGenerateExam(examType, lessonTitles)}
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Create Practice Exam
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* Retry on Error */}
+                          {currentExamState.status === 'error' && (
+                            <div className="flex justify-center pt-2">
+                              <button
+                                type="button"
+                                className="px-6 py-2 rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--surface-3)] transition-colors"
+                                onClick={() => fetchOrGenerateExam(examType, lessonTitles)}
+                              >
+                                Try Again
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : isLessonContentLoading(selectedLesson.id) ? (
                   /* Loading Skeleton for Content */
                   <div className="animate-pulse space-y-6">
