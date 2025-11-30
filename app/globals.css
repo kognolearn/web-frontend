@@ -60,7 +60,6 @@ html.theme-light {
   --primary: #43a047; /* medium green - balanced */
   --primary-rgb: 67, 160, 71;
   --primary-contrast: #ffffff;
-<<<<<<< HEAD
   --primary-hover: #4caf50;
   --primary-active: #388e3c;
 
@@ -74,14 +73,10 @@ html.theme-light {
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-=======
-  --primary-hover: #8fb18e; /* slightly lighter on light bg */
-  --primary-active: #668865;
 
   /* grid pattern - stronger for light mode */
   --grid-color: rgba(61, 82, 56, 0.08);
   --grid-glow-opacity: 0.15;
->>>>>>> 567932ebb455481282f641952465db2d21db7a40
 }
 
 html.theme-dark {
