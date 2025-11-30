@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 // System prompt to guide the assistant's behavior
@@ -293,7 +295,7 @@ const buildSanitizedHistory = (messages) => {
   return trimmed.map(sanitizeMessageForApi);
 };
 
-export default function ChatBot({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab }) {
+const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, mode = "docked", isActive = true }, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isPopped, setIsPopped] = useState(false);
   const [width, setWidth] = useState(350); // Default width when docked
@@ -304,9 +306,27 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
+  const [isCompactDrag, setIsCompactDrag] = useState(false);
   
   // Chat state
   const [chats, setChats] = useState([{ id: 1, name: "New Chat", messages: [] }]);
+
+  useImperativeHandle(ref, () => ({
+    open: (options) => {
+      setIsOpen(true);
+      if (options?.mode === 'popped') {
+        setIsPopped(true);
+        if (typeof options.x === 'number' && typeof options.y === 'number') {
+          setPoppedPosition({ x: options.x, y: options.y });
+        }
+      } else if (options?.mode === 'docked') {
+        setIsPopped(false);
+      }
+    },
+    close: () => setIsOpen(false),
+    toggle: () => setIsOpen(prev => !prev),
+    isOpen: isOpen
+  }));
   const [currentChatId, setCurrentChatId] = useState(1);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -357,6 +377,13 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
       onWidthChange(isOpen && !isPopped && !isMobile ? width : 0);
     }
   }, [isOpen, isPopped, width, isMobile, onWidthChange]);
+
+  // Auto-open in full mode
+  useEffect(() => {
+    if (mode === "full") {
+      setIsOpen(true);
+    }
+  }, [mode]);
 
   // Determine whether to use contentEditable input to defeat autofill prompts
   const useContentEditable =
@@ -547,14 +574,39 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     if (!isDragging || !isPopped) return;
 
     const handleMouseMove = (e) => {
-      setPoppedPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y
-      });
+      // Visual feedback when dragging over tab bar area (top 50px)
+      if (e.clientY < 50) {
+        setIsCompactDrag(true);
+        document.body.style.cursor = 'copy';
+        // Center the compact pill on the cursor
+        setPoppedPosition({
+          x: e.clientX - 100, // Half of compact width (200px)
+          y: e.clientY - 20   // Half of compact height (40px)
+        });
+      } else {
+        setIsCompactDrag(false);
+        document.body.style.cursor = 'move';
+        setPoppedPosition({
+          x: e.clientX - dragOffset.x,
+          y: e.clientY - dragOffset.y
+        });
+      }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
       setIsDragging(false);
+      setIsCompactDrag(false);
+      document.body.style.cursor = '';
+      
+      // If dropped on tab bar (top 50px), convert to tab
+      if (e.clientY < 50 && onOpenInTab) {
+        onOpenInTab({
+          title: currentChat?.name || "New Chat",
+          chatId: `tab-${Date.now()}`,
+          messages: currentChat?.messages || [],
+        });
+        setIsOpen(false);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -563,8 +615,9 @@ export default function ChatBot({ pageContext = {}, useContentEditableInput, onW
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
     };
-  }, [isDragging, isPopped, dragOffset]);
+  }, [isDragging, isPopped, dragOffset, onOpenInTab, currentChat]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -1221,38 +1274,502 @@ Instructions:
     });
   };
 
-  if (!isOpen) {
-    return (
-      <OnboardingTooltip
-        id="chatbot-intro"
-        content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
-        position="left"
-        pointerPosition="bottom"
-        delay={1500}
-        priority={20}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50"
+  const floatingButton = (
+    <OnboardingTooltip
+      id="chatbot-intro"
+      content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
+      position="left"
+      pointerPosition="bottom"
+      delay={1500}
+      priority={20}
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50"
+    >
+      <button
+        onClick={() => setIsOpen(true)}
+        type="button"
+        aria-label="Open ChatBot"
+        className="btn btn-primary btn-fab"
+        title="Open ChatBot"
       >
-        <button
-          onClick={() => setIsOpen(true)}
-          type="button"
-          aria-label="Open ChatBot"
-          className="btn btn-primary btn-fab"
-          title="Open ChatBot"
-        >
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        </button>
-      </OnboardingTooltip>
-    );
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+        </svg>
+      </button>
+    </OnboardingTooltip>
+  );
+
+  if (!isOpen) {
+    return floatingButton;
   }
+
+  const sidebarListContent = (
+    <div className="p-3 space-y-2">
+      <button
+        onClick={createNewChat}
+        type="button"
+        className="w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
+      >
+        + New Chat
+      </button>
+      <div className="space-y-1">
+        {chats.filter(chat => chat.messages.length > 0 || chat.id === currentChatId).map(chat => (
+          <div
+            key={chat.id}
+            className={`group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+              chat.id === currentChatId
+                ? 'bg-[var(--surface-2)] text-[var(--foreground)]'
+                : 'text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]/50'
+            }`}
+          >
+            {renamingChatId === chat.id ? (
+              <div className="flex-1 flex items-center gap-1">
+                <input
+                  type="text"
+                  value={renamingValue}
+                  onChange={(e) => setRenamingValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      saveRenameChat();
+                    } else if (e.key === 'Escape') {
+                      cancelRenameChat();
+                    }
+                  }}
+                  onBlur={saveRenameChat}
+                  autoFocus
+                  className="flex-1 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                />
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => setCurrentChatId(chat.id)}
+                  type="button"
+                  className="flex-1 text-left truncate"
+                  title={chat.name}
+                >
+                  {chat.name}
+                </button>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => startRenameChat(chat.id, chat.name)}
+                    type="button"
+                    className="p-1 hover:text-[var(--primary)] transition-colors"
+                    title="Rename chat"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => deleteChat(chat.id)}
+                    type="button"
+                    className="p-1 hover:text-[var(--danger)] transition-colors"
+                    title="Delete chat"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const mainChatArea = (
+    <div className="flex flex-1 flex-col overflow-hidden h-full relative">
+      {/* Messages */}
+      <div
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto custom-scrollbar"
+      >
+        <div className="mx-auto max-w-3xl px-4 py-6 space-y-6 min-h-full flex flex-col">
+          {currentChat?.messages.length === 0 && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center space-y-3">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-[var(--primary)]/10 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </div>
+                <p className="text-xl text-[var(--muted-foreground)]">Start a conversation</p>
+                <p className="text-xs text-[var(--muted-foreground)] font-medium">
+                  Chat history will not be saved
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {currentChat?.messages.map((message) => {
+            // Get the currently displayed version of this message
+            const versionIndex = messageVersions[message.id] ?? (message.versions?.length - 1 ?? 0);
+            const displayVersion = message.versions?.[versionIndex] ?? message;
+            const hasMultipleVersions = message.versions && message.versions.length > 1;
+
+            return (
+              <div
+                key={message.id}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  data-chat-message="true"
+                  className={`group relative max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 ${
+                    message.role === 'user'
+                      ? 'bg-[var(--primary)] text-[var(--primary-contrast)]'
+                      : message.isError
+                      ? 'bg-[var(--danger)]/10 text-[var(--danger)]'
+                      : 'bg-[var(--surface-2)] text-[var(--foreground)]'
+                  }`}
+                >
+                  {displayVersion.files && displayVersion.files.length > 0 && (
+                    <div className="mb-1.5 space-y-0.5">
+                      {displayVersion.files.map(file => (
+                        <div key={file.id} className="text-xs opacity-70 flex items-center gap-1">
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                          </svg>
+                          {file.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                    {displayVersion.content}
+                  </div>
+                  
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] opacity-50">
+                        {new Date(displayVersion.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {hasMultipleVersions && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => switchMessageVersion(message.id, -1)}
+                            type="button"
+                            className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                            title="Previous version"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </button>
+                          <span className="text-[10px] opacity-50">
+                            {versionIndex + 1}/{message.versions.length}
+                          </span>
+                          <button
+                            onClick={() => switchMessageVersion(message.id, 1)}
+                            type="button"
+                            className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                            title="Next version"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      {message.role === 'user' && (
+                        <button
+                          onClick={() => startEdit(message)}
+                          type="button"
+                          className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                          title="Edit and resubmit"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
+                      {message.role === 'assistant' && (
+                        <button
+                          onClick={() => retryMessage(message.id)}
+                          type="button"
+                          className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                          title="Retry response"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => copyToClipboard(displayVersion.content)}
+                        type="button"
+                        className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
+                        title="Copy message"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          
+          {isLoading && (
+            <div className="flex justify-start">
+              <div 
+                data-chat-message="true"
+                className="max-w-[85%] md:max-w-[75%] rounded-2xl bg-[var(--surface-2)] px-4 py-3" 
+                role="status" 
+                aria-live="polite"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                  <span className="text-xs text-[var(--muted-foreground)]">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Mode Banner */}
+      {editingMessageId && (
+        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+          <div className="mx-auto max-w-3xl px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Editing message</span>
+            </div>
+            <button
+              onClick={cancelEdit}
+              type="button"
+              className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Text Banner */}
+      {selectedText && !editingMessageId && (
+        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+          <div className="mx-auto max-w-3xl px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <span className="truncate max-w-xs">&ldquo;{selectedText}&rdquo;</span>
+            </div>
+            <button
+              onClick={() => setSelectedText("")}
+              type="button"
+              className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Attached Files */}
+      {attachedFiles.length > 0 && (
+        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <div className="flex flex-wrap gap-2">
+              {attachedFiles.map(file => (
+                <div
+                  key={file.id}
+                  className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-1.5 text-xs"
+                >
+                  <svg className="h-3 w-3 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <span className="truncate max-w-[120px]">{file.name}</span>
+                  <button
+                    onClick={() => removeAttachedFile(file.id)}
+                    type="button"
+                    className="text-[var(--muted-foreground)] hover:text-[var(--danger)] transition-colors"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input Area */}
+      <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+        <div className="mx-auto max-w-3xl px-4 py-3">
+          <form className="flex items-center gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFileAttachment(Array.from(e.target.files || []))}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              type="button"
+              aria-label="Attach files"
+              className="flex-shrink-0 rounded-lg p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+              title="Attach files"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+            </button>
+            
+            {/* Autofill traps to discourage Chrome/iOS password suggestions */}
+            <div aria-hidden="true" style={{ position: 'absolute', top: '-9999px', left: '-9999px', height: 0, width: 0, overflow: 'hidden' }}>
+              <input type="text" name="email" autoComplete="email" tabIndex={-1} />
+              <input type="text" name="username" autoComplete="username" tabIndex={-1} />
+              <input type="password" name="password" autoComplete="current-password" tabIndex={-1} />
+              <input type="password" name="new-password" autoComplete="new-password" tabIndex={-1} />
+            </div>
+            
+            <div className="flex-1">
+              {useContentEditable ? (
+                <div
+                  ref={inputRef}
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label={editingMessageId ? "Edit your message" : "Chat message"}
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder={editingMessageId ? "Edit your message..." : "Ask me anything..."}
+                  onInput={(e) => {
+                    const text = e.currentTarget.textContent || "";
+                    if (editingMessageId) {
+                      setEditingContent(text);
+                    } else {
+                      setInput(text);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (editingMessageId) {
+                        saveEdit();
+                      } else {
+                        sendMessage();
+                      }
+                    }
+                  }}
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  className="w-full rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
+                  style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}
+                />
+              ) : (
+                <textarea
+                  ref={inputRef}
+                  value={editingMessageId ? editingContent : input}
+                  onChange={(e) => editingMessageId ? setEditingContent(e.target.value) : setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (editingMessageId) {
+                        saveEdit();
+                      } else {
+                        sendMessage();
+                      }
+                    }
+                  }}
+                  placeholder={editingMessageId ? "Edit your message..." : "Ask me anything..."}
+                  name="chat-message"
+                  autoComplete="nope"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  inputMode="text"
+                  className="w-full resize-none rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
+                  rows={1}
+                  style={{
+                    maxHeight: '120px',
+                    minHeight: '40px',
+                    height: 'auto',
+                  }}
+                  onInput={(e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                  }}
+                />
+              )}
+            </div>
+            
+            <button
+              onClick={() => editingMessageId ? saveEdit() : sendMessage()}
+              disabled={editingMessageId ? !editingContent.trim() : !input.trim() && attachedFiles.length === 0}
+              type={editingMessageId ? "button" : "submit"}
+              className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              title={editingMessageId ? "Save and resubmit" : "Send message"}
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {editingMessageId ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                )}
+              </svg>
+            </button>
+          </form>
+          <div className="mt-2 text-[10px] text-[var(--muted-foreground)] text-center">
+            Press Enter to send • Shift+Enter for new line
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const chatContent = (
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
       <div 
-        className={`flex items-center justify-between border-b border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : ''}`}
+        className={`flex items-center justify-between border-b border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseDown={isPopped ? handleDragStart : undefined}
+        onDoubleClick={() => {
+          if (isPopped) {
+            setIsPopped(false);
+          }
+        }}
+        draggable={!isPopped}
+        onDragStart={(e) => {
+          if (!isPopped) {
+            e.dataTransfer.setData('application/x-chat-tab', 'true');
+            e.dataTransfer.effectAllowed = 'move';
+          }
+        }}
+        onDragEnd={(e) => {
+          if (!isPopped && e.dataTransfer.dropEffect === 'move') {
+            if (onClose) {
+              onClose();
+            } else {
+              setIsOpen(false);
+            }
+          }
+        }}
       >
         <div className="flex items-center gap-3">
           <button
@@ -1317,7 +1834,13 @@ Instructions:
             </svg>
           </button>
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={() => {
+              if (onClose) {
+                onClose();
+              } else {
+                setIsOpen(false);
+              }
+            }}
             type="button"
             aria-label="Close"
             className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
@@ -1334,463 +1857,164 @@ Instructions:
         {/* Sidebar - Chat History */}
         {isSidebarOpen && (
           <div className="w-56 border-r border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar">
-            <div className="p-3 space-y-2">
-              <button
-                onClick={createNewChat}
-                type="button"
-                className="w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
-              >
-                + New Chat
-              </button>
-              <div className="space-y-1">
-                {chats.filter(chat => chat.messages.length > 0 || chat.id === currentChatId).map(chat => (
-                  <div
-                    key={chat.id}
-                    className={`group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
-                      chat.id === currentChatId
-                        ? 'bg-[var(--surface-2)] text-[var(--foreground)]'
-                        : 'text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]/50'
-                    }`}
-                  >
-                    {renamingChatId === chat.id ? (
-                      <div className="flex-1 flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={renamingValue}
-                          onChange={(e) => setRenamingValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              saveRenameChat();
-                            } else if (e.key === 'Escape') {
-                              cancelRenameChat();
-                            }
-                          }}
-                          onBlur={saveRenameChat}
-                          autoFocus
-                          className="flex-1 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setCurrentChatId(chat.id)}
-                          type="button"
-                          className="flex-1 text-left truncate"
-                          title={chat.name}
-                        >
-                          {chat.name}
-                        </button>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => startRenameChat(chat.id, chat.name)}
-                            type="button"
-                            className="p-1 hover:text-[var(--primary)] transition-colors"
-                            title="Rename chat"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => deleteChat(chat.id)}
-                            type="button"
-                            className="p-1 hover:text-[var(--danger)] transition-colors"
-                            title="Delete chat"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            {sidebarListContent}
           </div>
         )}
 
         {/* Main Chat Area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Messages */}
-          <div
-            ref={chatContainerRef}
-            className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar"
-          >
-            {currentChat?.messages.length === 0 && (
-              <div className="flex h-full items-center justify-center">
-                <div className="text-center space-y-3">
-                  <div className="mx-auto w-16 h-16 rounded-2xl bg-[var(--primary)]/10 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                    </svg>
-                  </div>
-                  <p className="text-xl text-[var(--muted-foreground)]">Start a conversation</p>
-                  <p className="text-xs text-[var(--muted-foreground)] font-medium">
-                    Chat history will not be saved
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {currentChat?.messages.map((message) => {
-              // Get the currently displayed version of this message
-              const versionIndex = messageVersions[message.id] ?? (message.versions?.length - 1 ?? 0);
-              const displayVersion = message.versions?.[versionIndex] ?? message;
-              const hasMultipleVersions = message.versions && message.versions.length > 1;
-
-              return (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    data-chat-message="true"
-                    className={`group relative max-w-[80%] rounded-xl px-3 py-2 ${
-                      message.role === 'user'
-                        ? 'bg-[var(--primary)] text-[var(--primary-contrast)]'
-                        : message.isError
-                        ? 'bg-[var(--danger)]/10 text-[var(--danger)]'
-                        : 'bg-[var(--surface-2)] text-[var(--foreground)]'
-                    }`}
-                  >
-                    {displayVersion.files && displayVersion.files.length > 0 && (
-                      <div className="mb-1.5 space-y-0.5">
-                        {displayVersion.files.map(file => (
-                          <div key={file.id} className="text-xs opacity-70 flex items-center gap-1">
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                            </svg>
-                            {file.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                      {displayVersion.content}
-                    </div>
-                    
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] opacity-50">
-                          {new Date(displayVersion.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {hasMultipleVersions && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => switchMessageVersion(message.id, -1)}
-                              type="button"
-                              className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                              title="Previous version"
-                            >
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                              </svg>
-                            </button>
-                            <span className="text-[10px] opacity-50">
-                              {versionIndex + 1}/{message.versions.length}
-                            </span>
-                            <button
-                              onClick={() => switchMessageVersion(message.id, 1)}
-                              type="button"
-                              className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                              title="Next version"
-                            >
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        {message.role === 'user' && (
-                          <button
-                            onClick={() => startEdit(message)}
-                            type="button"
-                            className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                            title="Edit and resubmit"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                        )}
-                        {message.role === 'assistant' && (
-                          <button
-                            onClick={() => retryMessage(message.id)}
-                            type="button"
-                            className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                            title="Retry response"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => copyToClipboard(displayVersion.content)}
-                          type="button"
-                          className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                          title="Copy message"
-                        >
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            
-            {isLoading && (
-              <div className="flex justify-start">
-                <div 
-                  data-chat-message="true"
-                  className="max-w-[80%] rounded-xl bg-[var(--surface-2)] px-3 py-2" 
-                  role="status" 
-                  aria-live="polite"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                    <span className="text-xs text-[var(--muted-foreground)]">Thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Edit Mode Banner */}
-          {editingMessageId && (
-            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Editing message</span>
-              </div>
-              <button
-                onClick={cancelEdit}
-                type="button"
-                className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {/* Selected Text Banner */}
-          {selectedText && !editingMessageId && (
-            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                </svg>
-                <span className="truncate max-w-xs">&ldquo;{selectedText}&rdquo;</span>
-              </div>
-              <button
-                onClick={() => setSelectedText("")}
-                type="button"
-                className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-          )}
-
-          {/* Attached Files */}
-          {attachedFiles.length > 0 && (
-            <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-2">
-              <div className="flex flex-wrap gap-2">
-                {attachedFiles.map(file => (
-                  <div
-                    key={file.id}
-                    className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-1.5 text-xs"
-                  >
-                    <svg className="h-3 w-3 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <span className="truncate max-w-[120px]">{file.name}</span>
-                    <button
-                      onClick={() => removeAttachedFile(file.id)}
-                      type="button"
-                      className="text-[var(--muted-foreground)] hover:text-[var(--danger)] transition-colors"
-                    >
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3">
-            <form className="flex items-center gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => handleFileAttachment(Array.from(e.target.files || []))}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-                aria-label="Attach files"
-                className="flex-shrink-0 rounded-lg p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
-                title="Attach files"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-              </button>
-              
-              {/* Autofill traps to discourage Chrome/iOS password suggestions */}
-              <div aria-hidden="true" style={{ position: 'absolute', top: '-9999px', left: '-9999px', height: 0, width: 0, overflow: 'hidden' }}>
-                <input type="text" name="email" autoComplete="email" tabIndex={-1} />
-                <input type="text" name="username" autoComplete="username" tabIndex={-1} />
-                <input type="password" name="password" autoComplete="current-password" tabIndex={-1} />
-                <input type="password" name="new-password" autoComplete="new-password" tabIndex={-1} />
-              </div>
-              
-              <div className="flex-1">
-                {useContentEditable ? (
-                  <div
-                    ref={inputRef}
-                    role="textbox"
-                    aria-multiline="true"
-                    aria-label={editingMessageId ? "Edit your message" : "Chat message"}
-                    contentEditable
-                    suppressContentEditableWarning
-                    data-placeholder={editingMessageId ? "Edit your message..." : "Ask me anything..."}
-                    onInput={(e) => {
-                      const text = e.currentTarget.textContent || "";
-                      if (editingMessageId) {
-                        setEditingContent(text);
-                      } else {
-                        setInput(text);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        if (editingMessageId) {
-                          saveEdit();
-                        } else {
-                          sendMessage();
-                        }
-                      }
-                    }}
-                    data-form-type="other"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    inputMode="text"
-                    className="w-full rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
-                    style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}
-                  />
-                ) : (
-                  <textarea
-                    ref={inputRef}
-                    value={editingMessageId ? editingContent : input}
-                    onChange={(e) => editingMessageId ? setEditingContent(e.target.value) : setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        if (editingMessageId) {
-                          saveEdit();
-                        } else {
-                          sendMessage();
-                        }
-                      }
-                    }}
-                    placeholder={editingMessageId ? "Edit your message..." : "Ask me anything..."}
-                    name="chat-message"
-                    autoComplete="nope"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                    data-form-type="other"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    inputMode="text"
-                    className="w-full resize-none rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
-                    rows={1}
-                    style={{
-                      maxHeight: '120px',
-                      minHeight: '40px',
-                      height: 'auto',
-                    }}
-                    onInput={(e) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                    }}
-                  />
-                )}
-              </div>
-              
-              <button
-                onClick={() => editingMessageId ? saveEdit() : sendMessage()}
-                disabled={editingMessageId ? !editingContent.trim() : !input.trim() && attachedFiles.length === 0}
-                type={editingMessageId ? "button" : "submit"}
-                className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                title={editingMessageId ? "Save and resubmit" : "Send message"}
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  {editingMessageId ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                  )}
-                </svg>
-              </button>
-            </form>
-            <div className="mt-2 text-[10px] text-[var(--muted-foreground)] text-center">
-              Press Enter to send • Shift+Enter for new line
-            </div>
-          </div>
-        </div>
+        {mainChatArea}
       </div>
     </div>
   );
 
-  if (isPopped) {
+  if (mode === "full") {
+    const sidebarWidth = 300;
     return (
-      <div
-        className="fixed z-50 shadow-2xl rounded-xl overflow-hidden border border-white/10 dark:border-white/5 backdrop-blur-xl"
-        style={{
-          left: `${poppedPosition.x}px`,
-          top: `${poppedPosition.y}px`,
-          width: `${poppedSize.width}px`,
-          height: `${poppedSize.height}px`,
-        }}
-      >
-        {chatContent}
-        
-        {/* Resize handles for all 8 directions */}
-        <div className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
-        <div className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
-        <div className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
-        <div className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize" onMouseDown={(e) => handleResizeStart(e, 'se')} />
-        <div className="absolute top-0 left-3 right-3 h-1 cursor-n-resize" onMouseDown={(e) => handleResizeStart(e, 'n')} />
-        <div className="absolute bottom-0 left-3 right-3 h-1 cursor-s-resize" onMouseDown={(e) => handleResizeStart(e, 's')} />
-        <div className="absolute left-0 top-3 bottom-3 w-1 cursor-w-resize" onMouseDown={(e) => handleResizeStart(e, 'w')} />
-        <div className="absolute right-0 top-3 bottom-3 w-1 cursor-e-resize" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+      <div className="relative w-full h-full flex overflow-hidden bg-[var(--background)]">
+        {/* Floating Sidebar Toggle */}
+        <motion.button
+          type="button"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="absolute left-0 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:bg-[var(--surface-2)]"
+          animate={{ x: isSidebarOpen ? sidebarWidth + 16 : 16 }}
+          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          initial={false}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          {isSidebarOpen ? "Hide" : "Show"} Sidebar
+        </motion.button>
+
+        {/* Top Right Controls */}
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+          {/* New Chat Button */}
+          <OnboardingTooltip
+            id="chat-new-button"
+            content="Start a new conversation with Kogno."
+            position="bottom"
+            pointerPosition="right"
+            delay={800}
+            priority={5}
+          >
+            <button
+              type="button"
+              onClick={createNewChat}
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10 hover:border-[var(--primary)]/50 text-[var(--foreground)]"
+              title="New Chat"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </OnboardingTooltip>
+
+          {/* Close Button */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
+              title="Close Tab"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <aside
+          className={`absolute left-0 top-0 h-full backdrop-blur-xl bg-[var(--surface-1)]/95 border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          style={{ width: `${sidebarWidth}px` }}
+        >
+          <div className="p-4 border-b border-white/10 dark:border-white/5 flex items-center justify-between backdrop-blur-sm">
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">Chat History</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {sidebarListContent}
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main
+          className="flex-1 h-full transition-all duration-200 pt-16"
+          style={{ marginLeft: isSidebarOpen ? `${sidebarWidth}px` : 0 }}
+        >
+          {mainChatArea}
+        </main>
       </div>
     );
+  }
+
+  if (isPopped) {
+    const content = (
+      <>
+        {/* Persistent button to restore/toggle if needed */}
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[100]">
+          <button
+            onClick={() => setIsOpen(false)}
+            type="button"
+            aria-label="Minimize ChatBot"
+            className="btn btn-primary btn-fab opacity-50 hover:opacity-100 transition-opacity"
+            title="Minimize ChatBot"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          className={`fixed z-[100] shadow-2xl rounded-xl overflow-hidden border border-white/10 dark:border-white/5 backdrop-blur-xl ${isCompactDrag ? 'pointer-events-none ring-2 ring-[var(--primary)]' : ''}`}
+          style={{
+            left: `${poppedPosition.x}px`,
+            top: `${poppedPosition.y}px`,
+            width: isCompactDrag ? '200px' : `${poppedSize.width}px`,
+            height: isCompactDrag ? '40px' : `${poppedSize.height}px`,
+            transition: isCompactDrag ? 'none' : 'width 0.2s, height 0.2s',
+          }}
+        >
+          {isCompactDrag ? (
+            <div className="w-full h-full flex items-center justify-center bg-[var(--surface-1)] text-[var(--foreground)] font-medium text-sm gap-2">
+              <svg className="h-4 w-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              <span>{currentChat?.name || "ChatBot"}</span>
+            </div>
+          ) : (
+            <>
+              {chatContent}
+              
+              {/* Resize handles for all 8 directions */}
+              <div className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+              <div className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+              <div className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+              <div className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+              <div className="absolute top-0 left-3 right-3 h-1 cursor-n-resize" onMouseDown={(e) => handleResizeStart(e, 'n')} />
+              <div className="absolute bottom-0 left-3 right-3 h-1 cursor-s-resize" onMouseDown={(e) => handleResizeStart(e, 's')} />
+              <div className="absolute left-0 top-3 bottom-3 w-1 cursor-w-resize" onMouseDown={(e) => handleResizeStart(e, 'w')} />
+              <div className="absolute right-0 top-3 bottom-3 w-1 cursor-e-resize" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+            </>
+          )}
+        </div>
+      </>
+    );
+
+    if (typeof document !== 'undefined') {
+      return createPortal(
+        <div style={{ display: isActive ? 'block' : 'none' }}>
+          {content}
+        </div>,
+        document.body
+      );
+    }
+    return content;
   }
 
   // Docked mode: desktop right sidebar, mobile bottom sheet overlay
@@ -1813,7 +2037,7 @@ Instructions:
 
   return (
     <div
-      className="fixed right-0 top-0 z-40 h-screen shadow-2xl border-l border-white/10 dark:border-white/5 backdrop-blur-xl"
+      className="absolute right-0 top-0 z-40 h-full shadow-2xl border-l border-white/10 dark:border-white/5 backdrop-blur-xl"
       style={{ width: `${width}px` }}
     >
       {chatContent}
@@ -1825,7 +2049,9 @@ Instructions:
       />
     </div>
   );
-}
+});
+
+export default ChatBot;
 
 // ---- Client utilities for API payloads ----
 
