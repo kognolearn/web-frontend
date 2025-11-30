@@ -1724,7 +1724,7 @@ function CreateCoursePageContent() {
                     <div>
                       <OnboardingTooltip
                         id="create-topics-step"
-                        content="These are your personalized study topics! Use the confidence buttons (🆕 New, 😊 Somewhat familiar, 🎯 Confident) to tell us how well you know each module. This helps us prioritize what you need to learn most."
+                        content="These are your personalized study topics! Use the confidence buttons (Unfamiliar, Still Learning, Confident) to tell us how well you know each module. This helps us prioritize what you need to learn most."
                         position="bottom"
                         pointerPosition="left"
                         delay={500}

@@ -221,9 +221,9 @@ export default function TopicExplorer({
                             content={
                                 <div className="space-y-2">
                                     <p><strong>Rate your familiarity with each module:</strong></p>
-                                    <p>🆕 <strong>New to me</strong> — Never learned this before</p>
-                                    <p>😊 <strong>Somewhat familiar</strong> — I know some of this</p>
-                                    <p>🎯 <strong>Confident</strong> — I know this well already</p>
+                                    <p><strong>Unfamiliar</strong> — Never learned this before</p>
+                                    <p><strong>Still Learning</strong> — I know some of this</p>
+                                    <p><strong>Confident</strong> — I know this well already</p>
                                     <p className="pt-1 text-xs opacity-80">This helps us prioritize what you need to study most!</p>
                                 </div>
                             }

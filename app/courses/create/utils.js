@@ -13,7 +13,6 @@ export const moduleConfidenceOptions = [
   {
     id: "new",
     label: "Unfamiliar",
-    emoji: "🌱",
     baseScore: 0.1,
     badgeClass: "bg-[#FFE4E6] text-[#BE123C] dark:bg-[#4C1D25] dark:text-[#FDA4AF]",
     buttonClass: "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-700",
@@ -23,7 +22,6 @@ export const moduleConfidenceOptions = [
   {
     id: "somewhat",
     label: "Still Learning",
-    emoji: "🪴",
     baseScore: 0.5,
     badgeClass: "bg-[#FEF9C3] text-[#A16207] dark:bg-[#422006] dark:text-[#FDE047]",
     buttonClass: "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-700",
@@ -33,7 +31,6 @@ export const moduleConfidenceOptions = [
   {
     id: "confident",
     label: "Confident",
-    emoji: "🌳",
     baseScore: 0.9,
     badgeClass: "bg-[#D1FAE5] text-[#047857] dark:bg-[#064E3B] dark:text-[#6EE7B7]",
     buttonClass: "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-700",
