@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Tooltip from "@/components/ui/Tooltip";
 
 export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete }) {
   const router = useRouter();
@@ -118,24 +119,27 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           </svg>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-            needsAttention 
-              ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
-              : isCompleted 
-              ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
-              : 'bg-[var(--primary)]/10 text-[var(--primary)]'
-          }`}>
-            {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
-          </span>
-          <button
-            onClick={handleDeleteClick}
-            className="p-1.5 rounded-full hover:bg-red-500/10 text-[var(--muted-foreground)] hover:text-red-500 transition-colors z-20"
-            title="Delete Course"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
+          <Tooltip content={needsAttention ? 'Course generation encountered an issue' : isCompleted ? 'You\'ve finished this course!' : 'Time remaining to complete this course'} position="bottom">
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+              needsAttention 
+                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                : isCompleted 
+                ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
+                : 'bg-[var(--primary)]/10 text-[var(--primary)]'
+            }`}>
+              {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
+            </span>
+          </Tooltip>
+          <Tooltip content="Delete this course" position="bottom">
+            <button
+              onClick={handleDeleteClick}
+              className="p-1.5 rounded-full hover:bg-red-500/10 text-[var(--muted-foreground)] hover:text-red-500 transition-colors z-20"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </Tooltip>
         </div>
       </div>
 

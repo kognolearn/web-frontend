@@ -4,6 +4,8 @@ import React, {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
+import Tooltip from "@/components/ui/Tooltip";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
 export default function FlashcardDeck({ data = {}, onCardChange }) {
@@ -161,52 +163,64 @@ export default function FlashcardDeck({ data = {}, onCardChange }) {
         </div>
 
         {/* Navigation */}
-        <div className="mt-8 flex items-center justify-between w-full max-w-md">
-          <button
-            type="button"
-            tabIndex={-1}
-            onPointerDown={(e) => e.preventDefault()}
-            onMouseUp={(e) => e.currentTarget.blur()}
-            onClick={prev}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
-            aria-label="Previous"
-            title="Previous (←)"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous
-          </button>
+        <OnboardingTooltip
+          id="flashcard-navigation"
+          content="Use keyboard shortcuts for faster navigation! Press ← → arrow keys to move between cards, and Space or Enter to flip. Click 'Flip Card' to reveal the answer."
+          position="top"
+          pointerPosition="center"
+          delay={600}
+          priority={11}
+        >
+          <div className="mt-8 flex items-center justify-between w-full max-w-md">
+          <Tooltip text="Use ← arrow key to go back" position="bottom">
+            <button
+              type="button"
+              tabIndex={-1}
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseUp={(e) => e.currentTarget.blur()}
+              onClick={prev}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
+              aria-label="Previous"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
+            </button>
+          </Tooltip>
           
-          <button
-            type="button"
-            tabIndex={-1}
-            onPointerDown={(e) => e.preventDefault()}
-            onMouseUp={(e) => e.currentTarget.blur()}
-            onClick={() => cardApiRef.current?.flip?.()}
-            className="px-6 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm select-none cursor-pointer"
-            aria-label="Flip card"
-            title="Flip (Space)"
-          >
-            Flip Card
-          </button>
+          <Tooltip text="Press Space or Enter to flip the card" position="bottom">
+            <button
+              type="button"
+              tabIndex={-1}
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseUp={(e) => e.currentTarget.blur()}
+              onClick={() => cardApiRef.current?.flip?.()}
+              className="px-6 py-2.5 rounded-lg bg-[var(--primary)] text-sm font-semibold text-white hover:opacity-90 transition-colors shadow-sm select-none cursor-pointer"
+              aria-label="Flip card"
+            >
+              Flip Card
+            </button>
+          </Tooltip>
           
-          <button
-            type="button"
-            tabIndex={-1}
-            onPointerDown={(e) => e.preventDefault()}
-            onMouseUp={(e) => e.currentTarget.blur()}
-            onClick={next}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
-            aria-label="Next"
-            title="Next (→)"
-          >
-            Next
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          <Tooltip text="Use → arrow key to advance" position="bottom">
+            <button
+              type="button"
+              tabIndex={-1}
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseUp={(e) => e.currentTarget.blur()}
+              onClick={next}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors select-none cursor-pointer"
+              aria-label="Next"
+            >
+              Next
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </Tooltip>
         </div>
+        </OnboardingTooltip>
       </div>
     </>
   );

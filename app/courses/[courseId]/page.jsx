@@ -8,6 +8,9 @@ import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
+import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
+import EditCourseModal from "@/components/courses/EditCourseModal";
+import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 
 // Utility functions moved outside
 const normalizeFormat = (fmt) => {
@@ -557,6 +560,25 @@ export default function CoursePage() {
 
 
 
+  const handleTimerUpdate = useCallback(async (newSeconds) => {
+    if (!userId || !courseId) return;
+    
+    setSecondsRemaining(newSeconds);
+    
+    try {
+      await fetch(`/api/courses/${courseId}/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          seconds_to_complete: newSeconds
+        })
+      });
+    } catch (e) {
+      console.error('Failed to update timer:', e);
+    }
+  }, [userId, courseId]);
+
   const handleLessonClick = (lesson) => {
     // Toggle expanded state
     const newExpanded = new Set(expandedLessons);
@@ -699,16 +721,34 @@ export default function CoursePage() {
       {/* Enhanced animated background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
         {/* Primary gradient orbs - static, no animation */}
-        <div className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 blur-3xl" />
-        <div className="absolute top-1/3 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-[var(--primary)]/15 to-transparent blur-3xl" />
-        <div className="absolute -bottom-40 right-1/4 h-[450px] w-[450px] rounded-full bg-gradient-to-t from-[var(--primary)]/10 to-transparent blur-3xl" />
-        <div className="absolute top-1/2 right-1/3 h-[300px] w-[300px] rounded-full bg-gradient-to-bl from-[var(--info)]/10 to-transparent blur-3xl" />
+        <div 
+          className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full blur-3xl" 
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)` }}
+        />
+        <div 
+          className="absolute top-1/3 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }}
+        />
+        <div 
+          className="absolute -bottom-40 right-1/4 h-[450px] w-[450px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+        />
+        <div 
+          className="absolute top-1/2 right-1/3 h-[300px] w-[300px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(107, 154, 184, calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+        />
         
         {/* Mesh gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
         
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+        {/* Subtle grid pattern - uses theme-aware grid color */}
+        <div 
+          className="absolute inset-0"
+          style={{ 
+            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+            backgroundSize: '50px 50px'
+          }}
+        />
       </div>
 
       {canRenderSidebar && (
@@ -732,50 +772,53 @@ export default function CoursePage() {
       {/* Countdown Timer */}
       {secondsRemaining !== null && (
         <div 
-          className="fixed top-4 z-50 flex items-center gap-2 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 px-3 py-2 shadow-xl backdrop-blur-xl group"
+          className="fixed top-4 z-50 flex items-center gap-2"
           style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
         >
-          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10">
-            <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          {/* Timer Display */}
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 px-3 py-2 shadow-xl backdrop-blur-xl group">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10">
+              <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex items-baseline gap-0.5">
+              {(() => {
+                const h = Math.floor(secondsRemaining / 3600);
+                const m = Math.floor((secondsRemaining % 3600) / 60);
+                return (
+                  <>
+                    <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
+                    <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
+                    <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                    <span className="text-[10px] text-[var(--muted-foreground)]">m</span>
+                  </>
+                );
+              })()}
+            </div>
           </div>
-          <div className="flex items-baseline gap-0.5">
-            {(() => {
-              const h = Math.floor(secondsRemaining / 3600);
-              const m = Math.floor((secondsRemaining % 3600) / 60);
-              const s = secondsRemaining % 60;
-              return (
-                <>
-                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
-                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">m</span>
-                  <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-[var(--muted-foreground)]">s</span>
-                </>
-              );
-            })()}
-          </div>
-          {/* Add time buttons - appear on hover */}
-          <div className="flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          
+          {/* Settings Button */}
+          <OnboardingTooltip
+            id="course-settings-button"
+            content="Click here to adjust your study time. You can add or subtract time, or set a custom study duration for this course."
+            position="bottom"
+            pointerPosition="right"
+            delay={800}
+            priority={5}
+          >
             <button
               type="button"
-              onClick={() => setSecondsRemaining(prev => (prev || 0) + 15 * 60)}
-              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white/10 hover:bg-[var(--primary)]/20 hover:text-[var(--primary)] text-[var(--muted-foreground)] transition-colors"
-              title="Add 15 minutes"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+              title="Course Settings"
             >
-              +15m
+              <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
             </button>
-            <button
-              type="button"
-              onClick={() => setSecondsRemaining(prev => (prev || 0) + 60 * 60)}
-              className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-white/10 hover:bg-[var(--primary)]/20 hover:text-[var(--primary)] text-[var(--muted-foreground)] transition-colors"
-              title="Add 1 hour"
-            >
-              +1h
-            </button>
-          </div>
+          </OnboardingTooltip>
         </div>
       )}
 
@@ -826,12 +869,44 @@ export default function CoursePage() {
 
             {/* Course title */}
             <div className="p-4 border-b border-white/10 dark:border-white/5">
-              <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
-                Course
-              </p>
-              <h2 className="text-sm font-semibold text-[var(--foreground)] bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text">
-                {courseName || "Study Plan"}
-              </h2>
+              <div className="flex items-center justify-between gap-2">
+                <OnboardingTooltip
+                  id="course-sidebar-nav"
+                  content="This is your course navigation. Click on any lesson to view its content. Modules can be collapsed or expanded by clicking on them."
+                  position="right"
+                  pointerPosition="top"
+                  delay={800}
+                  priority={6}
+                >
+                  <div>
+                    <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
+                      Course
+                    </p>
+                    <h2 className="text-sm font-semibold text-[var(--foreground)] bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text">
+                      {courseName || "Study Plan"}
+                    </h2>
+                  </div>
+                </OnboardingTooltip>
+                <OnboardingTooltip
+                  id="course-edit-button"
+                  content="Want to modify your course? Click here to request changes — add topics, adjust difficulty, include more examples, or restructure modules using natural language."
+                  position="bottom"
+                  pointerPosition="right"
+                  delay={800}
+                  priority={7}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsEditCourseModalOpen(true)}
+                    className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors group"
+                    title="Edit Course"
+                  >
+                    <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </OnboardingTooltip>
+              </div>
             </div>
 
             {/* Modules and lessons navigation */}
@@ -1320,7 +1395,16 @@ export default function CoursePage() {
             }}
           >
             <div className="max-w-5xl mx-auto px-4 py-3">
-              <div className="flex items-center justify-between gap-4">
+              {/* Onboarding tooltip for content type navigation */}
+              <OnboardingTooltip
+                id="course-content-types"
+                content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
+                position="top"
+                pointerPosition="center"
+                delay={800}
+                priority={8}
+              >
+                <div className="flex items-center justify-between gap-4">
                 {/* Previous Button */}
                 <button
                   type="button"
@@ -1401,6 +1485,7 @@ export default function CoursePage() {
                   </svg>
                 </button>
               </div>
+              </OnboardingTooltip>
             </div>
           </div>
         )}
@@ -1466,6 +1551,24 @@ export default function CoursePage() {
           quizContext: chatQuizContext
         }}
         onWidthChange={setChatBotWidth}
+      />
+
+      {/* Course Settings Modal */}
+      <CourseSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        currentSeconds={secondsRemaining}
+        onTimerUpdate={handleTimerUpdate}
+        courseName={courseName}
+      />
+
+      {/* Edit Course Modal */}
+      <EditCourseModal
+        isOpen={isEditCourseModalOpen}
+        onClose={() => setIsEditCourseModalOpen(false)}
+        courseId={courseId}
+        userId={userId}
+        courseName={courseName}
       />
     </div>
   );

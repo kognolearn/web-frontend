@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import Tooltip from "@/components/ui/Tooltip";
+import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -203,15 +205,30 @@ export default function DashboardPage() {
       {/* Enhanced animated background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {/* Primary gradient orbs */}
-        <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-[var(--primary)]/15 to-transparent blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-        <div className="absolute -bottom-20 right-1/3 h-[350px] w-[350px] rounded-full bg-gradient-to-t from-[var(--primary)]/10 to-transparent blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
+        <div 
+          className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl animate-pulse" 
+          style={{ animationDuration: '8s', background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)` }} 
+        />
+        <div 
+          className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full blur-3xl animate-pulse" 
+          style={{ animationDuration: '10s', animationDelay: '2s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }} 
+        />
+        <div 
+          className="absolute -bottom-20 right-1/3 h-[350px] w-[350px] rounded-full blur-3xl animate-pulse" 
+          style={{ animationDuration: '12s', animationDelay: '4s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }} 
+        />
 
         {/* Mesh gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
 
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(var(--primary-rgb),0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
+        {/* Subtle grid pattern - uses theme-aware grid color */}
+        <div 
+          className="absolute inset-0"
+          style={{ 
+            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+            backgroundSize: '60px 60px'
+          }}
+        />
       </div>
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
@@ -256,18 +273,29 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {/* Create Course Card - always first */}
-              <Link
-                href="/courses/create"
-                className="group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
+              <OnboardingTooltip
+                id="dashboard-create-course"
+                content="Click here to create a new course! Upload your syllabus, set your study time, and we'll generate a personalized learning plan with readings, flashcards, and quizzes."
+                position="bottom"
+                pointerPosition="center"
+                delay={800}
+                priority={1}
               >
-                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
-                  <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <span className="font-semibold text-[var(--foreground)]">Create New Course</span>
-                <span className="text-sm text-[var(--muted-foreground)] mt-1">Build your study plan</span>
-              </Link>
+                <Tooltip content="Create a new personalized course with AI-generated study materials tailored to your syllabus and exam" position="bottom" delay={500}>
+                  <Link
+                    href="/courses/create"
+                    className="group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
+                  >
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
+                      <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    <span className="font-semibold text-[var(--foreground)]">Create New Course</span>
+                    <span className="text-sm text-[var(--muted-foreground)] mt-1">Build your study plan</span>
+                  </Link>
+                </Tooltip>
+              </OnboardingTooltip>
 
               {courses.map((course) => {
                 const courseTitle =
