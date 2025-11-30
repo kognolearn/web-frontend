@@ -111,7 +111,7 @@ export default function EditCourseModal({
             </div>
 
             {/* Content */}
-            <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-4">
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto overflow-x-visible p-6 pt-4 space-y-4">
               {/* Onboarding tooltip for first-time users */}
               <OnboardingTooltip
                 id="edit-modal-intro"
@@ -122,13 +122,11 @@ export default function EditCourseModal({
                 priority={10}
                 showCondition={isOpen}
               >
-                <div />
+                <p className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
+                  <span>Describe what you'd like to change or add to the course. We'll process your request and update the course structure accordingly.</span>
+                  <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, including more examples, or restructuring modules. We'll interpret your request and make appropriate modifications." position="bottom" />
+                </p>
               </OnboardingTooltip>
-
-              <p className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
-                <span>Describe what you'd like to change or add to the course. We'll process your request and update the course structure accordingly.</span>
-                <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, including more examples, or restructuring modules. We'll interpret your request and make appropriate modifications." position="left" />
-              </p>
 
               {/* Text Input */}
               <div>
