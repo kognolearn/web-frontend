@@ -1412,17 +1412,18 @@ Instructions:
             return (
               <div
                 key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`group flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
               >
+                {/* Message Bubble */}
                 <div
                   data-chat-message="true"
-                  className={`group relative max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 ${
+                  className={`relative max-w-[85%] md:max-w-[75%] ${
                     message.role === 'user'
-                      ? 'bg-[var(--primary)] text-[var(--primary-contrast)]'
+                      ? 'bg-gradient-to-br from-[var(--primary)] to-[var(--primary-active)] text-white rounded-2xl rounded-br-md shadow-md'
                       : message.isError
-                      ? 'bg-[var(--danger)]/10 text-[var(--danger)]'
-                      : 'bg-[var(--surface-2)] text-[var(--foreground)]'
-                  }`}
+                      ? 'bg-red-500/10 border border-red-500/20 text-[var(--danger)] rounded-2xl rounded-bl-md'
+                      : 'bg-[var(--surface-1)] border border-[var(--border)] text-[var(--foreground)] rounded-2xl rounded-bl-md shadow-sm'
+                  } px-4 py-3`}
                 >
                   {displayVersion.files && displayVersion.files.length > 0 && (
                     <div className="mb-1.5 space-y-0.5">
@@ -1437,79 +1438,80 @@ Instructions:
                     </div>
                   )}
                   
-                  <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                  <div className="text-[14px] whitespace-pre-wrap break-words leading-[1.6]">
                     {displayVersion.content}
                   </div>
+                </div>
+
+                {/* Actions & Timestamp - Below the bubble */}
+                <div className={`flex items-center gap-2 mt-1.5 px-1 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <span className="text-[10px] text-[var(--muted-foreground)]">
+                    {new Date(displayVersion.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                   
-                  <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] opacity-50">
-                        {new Date(displayVersion.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {hasMultipleVersions && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => switchMessageVersion(message.id, -1)}
-                            type="button"
-                            className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                            title="Previous version"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                            </svg>
-                          </button>
-                          <span className="text-[10px] opacity-50">
-                            {versionIndex + 1}/{message.versions.length}
-                          </span>
-                          <button
-                            onClick={() => switchMessageVersion(message.id, 1)}
-                            type="button"
-                            className="rounded p-0.5 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                            title="Next version"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                  {hasMultipleVersions && (
                     <div className="flex items-center gap-0.5">
-                      {message.role === 'user' && (
-                        <button
-                          onClick={() => startEdit(message)}
-                          type="button"
-                          className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                          title="Edit and resubmit"
-                        >
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                      )}
-                      {message.role === 'assistant' && (
-                        <button
-                          onClick={() => retryMessage(message.id)}
-                          type="button"
-                          className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                          title="Retry response"
-                        >
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        </button>
-                      )}
                       <button
-                        onClick={() => copyToClipboard(displayVersion.content)}
+                        onClick={() => switchMessageVersion(message.id, -1)}
                         type="button"
-                        className="rounded p-1 hover:bg-black/10 transition-colors opacity-60 hover:opacity-100"
-                        title="Copy message"
+                        className="rounded p-0.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                        title="Previous version"
                       >
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <span className="text-[10px] text-[var(--muted-foreground)]">
+                        {versionIndex + 1}/{message.versions.length}
+                      </span>
+                      <button
+                        onClick={() => switchMessageVersion(message.id, 1)}
+                        type="button"
+                        className="rounded p-0.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                        title="Next version"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
                     </div>
+                  )}
+                  
+                  <div className="flex items-center gap-0.5">
+                    {message.role === 'user' && (
+                      <button
+                        onClick={() => startEdit(message)}
+                        type="button"
+                        className="rounded p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                        title="Edit and resubmit"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
+                    {message.role === 'assistant' && (
+                      <button
+                        onClick={() => retryMessage(message.id)}
+                        type="button"
+                        className="rounded p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                        title="Retry response"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => copyToClipboard(displayVersion.content)}
+                      type="button"
+                      className="rounded p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                      title="Copy message"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1520,7 +1522,7 @@ Instructions:
             <div className="flex justify-start">
               <div 
                 data-chat-message="true"
-                className="max-w-[85%] md:max-w-[75%] rounded-2xl bg-[var(--surface-2)] px-4 py-3" 
+                className="max-w-[85%] md:max-w-[75%] rounded-2xl rounded-bl-md bg-[var(--surface-1)] border border-[var(--border)] px-4 py-3 shadow-sm" 
                 role="status" 
                 aria-live="polite"
               >
@@ -1540,7 +1542,7 @@ Instructions:
 
       {/* Edit Mode Banner */}
       {editingMessageId && (
-        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+        <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
           <div className="mx-auto max-w-3xl px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1561,7 +1563,7 @@ Instructions:
 
       {/* Selected Text Banner */}
       {selectedText && !editingMessageId && (
-        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+        <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
           <div className="mx-auto max-w-3xl px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1582,7 +1584,7 @@ Instructions:
 
       {/* Attached Files */}
       {attachedFiles.length > 0 && (
-        <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+        <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
           <div className="mx-auto max-w-3xl px-4 py-2">
             <div className="flex flex-wrap gap-2">
               {attachedFiles.map(file => (
@@ -1611,7 +1613,7 @@ Instructions:
       )}
 
       {/* Input Area */}
-      <div className="border-t border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80">
+      <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
         <div className="mx-auto max-w-3xl px-4 py-3">
           <form className="flex items-center gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
             <input
@@ -1747,7 +1749,7 @@ Instructions:
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
       <div 
-        className={`flex items-center justify-between border-b border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
+        className={`flex items-center justify-between border-b border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseDown={isPopped ? handleDragStart : undefined}
         onDoubleClick={() => {
           if (isPopped) {
@@ -1856,7 +1858,7 @@ Instructions:
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Chat History */}
         {isSidebarOpen && (
-          <div className="w-56 border-r border-white/10 dark:border-white/5 backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar">
+          <div className="w-56 border-r border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar">
             {sidebarListContent}
           </div>
         )}
@@ -1875,12 +1877,11 @@ Instructions:
         <motion.button
           type="button"
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute left-0 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:bg-[var(--surface-2)]"
+          className="absolute left-0 top-4 z-50 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
           animate={{ x: isSidebarOpen ? sidebarWidth + 16 : 16 }}
-          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           initial={false}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          title={isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -1902,7 +1903,7 @@ Instructions:
             <button
               type="button"
               onClick={createNewChat}
-              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10 hover:border-[var(--primary)]/50 text-[var(--foreground)]"
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
               title="New Chat"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1916,7 +1917,7 @@ Instructions:
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
               title="Close Tab"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1933,7 +1934,7 @@ Instructions:
           }`}
           style={{ width: `${sidebarWidth}px` }}
         >
-          <div className="p-4 border-b border-white/10 dark:border-white/5 flex items-center justify-between backdrop-blur-sm">
+          <div className="p-4 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
             <h2 className="text-sm font-semibold text-[var(--foreground)]">Chat History</h2>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -1943,7 +1944,7 @@ Instructions:
 
         {/* Main Content */}
         <main
-          className="flex-1 h-full transition-all duration-200 pt-16"
+          className="flex-1 h-full transition-all duration-200 pt-20"
           style={{ marginLeft: isSidebarOpen ? `${sidebarWidth}px` : 0 }}
         >
           {mainChatArea}
@@ -1971,21 +1972,25 @@ Instructions:
         </div>
 
         <div
-          className={`fixed z-[100] shadow-2xl rounded-xl overflow-hidden border border-white/10 dark:border-white/5 backdrop-blur-xl ${isCompactDrag ? 'pointer-events-none ring-2 ring-[var(--primary)]' : ''}`}
+          className={`fixed z-[100] shadow-2xl rounded-xl overflow-hidden border border-[var(--border)] backdrop-blur-xl ${isCompactDrag ? 'pointer-events-none' : ''}`}
           style={{
             left: `${poppedPosition.x}px`,
             top: `${poppedPosition.y}px`,
             width: isCompactDrag ? '200px' : `${poppedSize.width}px`,
-            height: isCompactDrag ? '40px' : `${poppedSize.height}px`,
-            transition: isCompactDrag ? 'none' : 'width 0.2s, height 0.2s',
+            height: isCompactDrag ? '44px' : `${poppedSize.height}px`,
+            transition: isDragging ? 'width 0.15s ease-out, height 0.15s ease-out, box-shadow 0.15s ease-out' : 'width 0.2s, height 0.2s',
+            boxShadow: isCompactDrag 
+              ? '0 8px 32px rgba(0,0,0,0.4), 0 0 0 2px var(--primary), 0 0 20px rgba(123, 163, 122, 0.3)' 
+              : '0 25px 50px -12px rgba(0,0,0,0.25)',
+            transform: isCompactDrag ? 'scale(1.05)' : 'scale(1)',
           }}
         >
           {isCompactDrag ? (
-            <div className="w-full h-full flex items-center justify-center bg-[var(--surface-1)] text-[var(--foreground)] font-medium text-sm gap-2">
-              <svg className="h-4 w-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-medium text-sm gap-2 animate-pulse">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </svg>
-              <span>{currentChat?.name || "ChatBot"}</span>
+              <span>Drop to create tab</span>
             </div>
           ) : (
             <>
@@ -2027,7 +2032,7 @@ Instructions:
           aria-hidden="true"
         />
         <div
-          className="fixed left-0 right-0 bottom-0 z-50 h-[70vh] shadow-2xl border-t border-white/10 dark:border-white/5 rounded-t-xl overflow-hidden backdrop-blur-xl"
+          className="fixed left-0 right-0 bottom-0 z-50 h-[70vh] shadow-2xl border-t border-[var(--border)] rounded-t-xl overflow-hidden backdrop-blur-xl"
         >
           {chatContent}
         </div>
@@ -2037,7 +2042,7 @@ Instructions:
 
   return (
     <div
-      className="absolute right-0 top-0 z-40 h-full shadow-2xl border-l border-white/10 dark:border-white/5 backdrop-blur-xl"
+      className="absolute right-0 top-0 z-40 h-full shadow-2xl border-l border-[var(--border)] backdrop-blur-xl"
       style={{ width: `${width}px` }}
     >
       {chatContent}

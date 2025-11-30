@@ -166,7 +166,7 @@ export default function DashboardPage() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div 
                 key={i} 
-                className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg animate-pulse"
+                className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg animate-pulse"
                 style={{ animationDelay: `${i * 100}ms` }}
               >
                 {/* Top section */}
@@ -185,7 +185,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Bottom section */}
-                <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
                   <div className="flex items-center gap-1.5">
                     <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
                     <div className="h-4 w-12 rounded bg-[var(--surface-2)]" />

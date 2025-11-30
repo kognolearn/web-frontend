@@ -485,12 +485,11 @@ export default function CourseTabContent({
         <motion.button
           type="button"
           onClick={toggleSidebar}
-          className="absolute left-0 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-sm transition-colors hover:bg-[var(--surface-2)]"
+          className="absolute left-0 top-4 z-50 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
           animate={{ x: sidebarOffset + 16 }}
-          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           initial={false}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          title={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -516,7 +515,7 @@ export default function CourseTabContent({
           <button
             type="button"
             onClick={() => setIsSettingsModalOpen(true)}
-            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10 hover:border-[var(--primary)]/50"
+            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
             title="Course Settings"
           >
             <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -528,7 +527,7 @@ export default function CourseTabContent({
 
         {/* Timer Display */}
         {secondsRemaining !== null && (
-          <div className="flex items-center gap-2 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 px-3 py-2 shadow-xl backdrop-blur-xl group">
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-3 py-2 shadow-lg backdrop-blur-xl group">
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10">
               <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -556,7 +555,7 @@ export default function CourseTabContent({
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/90 shadow-xl backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
+            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
             title="Close Tab"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -584,7 +583,7 @@ export default function CourseTabContent({
             }`}
             style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
           >
-            <div className="p-4 border-b border-white/10 dark:border-white/5 flex items-center justify-between backdrop-blur-sm">
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
               <button
                 type="button"
                 onClick={() => router.push('/dashboard')}
@@ -608,7 +607,7 @@ export default function CourseTabContent({
               )}
             </div>
 
-            <div className="p-4 border-b border-white/10 dark:border-white/5">
+            <div className="p-4 border-b border-[var(--border)]">
               <div className="flex items-center justify-between gap-2">
                 <OnboardingTooltip
                   id="course-sidebar-nav"
@@ -641,7 +640,7 @@ export default function CourseTabContent({
                   <button
                     type="button"
                     onClick={() => setIsEditCourseModalOpen(true)}
-                    className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors group"
+                    className="flex-shrink-0 p-2 rounded-lg hover:bg-[var(--surface-muted)] transition-colors group"
                     title="Edit Course"
                   >
                     <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -699,7 +698,7 @@ export default function CourseTabContent({
                 }
                 
                 return (
-                  <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-white/5 dark:bg-black/10 border border-white/10 dark:border-white/5">
+                  <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-[var(--surface-2)]/50 border border-[var(--border)]">
                     <button
                       type="button"
                       onClick={() => {
@@ -711,7 +710,7 @@ export default function CourseTabContent({
                         }
                         setCollapsedModules(newCollapsed);
                       }}
-                      className={`w-full p-3 flex items-center justify-between hover:bg-white/5 dark:hover:bg-white/5 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
+                      className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
                     >
                       <div className="flex items-center gap-2">
                         <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/70 text-white text-xs font-bold shadow-lg shadow-[var(--primary)]/20">
@@ -751,7 +750,7 @@ export default function CourseTabContent({
                               className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
                                 selectedLesson?.id === lesson.id
                                   ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                  : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
+                                  : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
                               }`}
                             >
                               <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
@@ -787,9 +786,9 @@ export default function CourseTabContent({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-16 sm:px-6 lg:px-8 z-10">
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-20 sm:px-6 lg:px-8 z-10">
           {loading && (
-            <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl px-8 py-16 text-center shadow-2xl">
+            <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-3xl px-8 py-16 text-center shadow-lg">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
               <p className="text-sm text-[var(--muted-foreground)]">Loading your study plan…</p>
             </div>
@@ -807,7 +806,7 @@ export default function CourseTabContent({
           )}
 
           {!loading && !error && !studyPlan && (
-            <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl px-8 py-16 text-center shadow-2xl">
+            <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-3xl px-8 py-16 text-center shadow-lg">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
                 <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -825,8 +824,8 @@ export default function CourseTabContent({
                   <h2 className="mb-6 text-xl font-bold bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text text-transparent">Course Overview</h2>
                   
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-                    <div className="group relative bg-[var(--surface-2)] border border-white/10 rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-1)] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
                         <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
@@ -839,8 +838,8 @@ export default function CourseTabContent({
                       </p>
                     </div>
 
-                    <div className="group relative bg-[var(--surface-2)] border border-white/10 rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-1)] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
                         <svg className="w-5 h-5 text-[var(--info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -856,8 +855,8 @@ export default function CourseTabContent({
                       </p>
                     </div>
 
-                    <div className="group relative bg-[var(--surface-2)] border border-white/10 rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-1)] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
                         <svg className="w-5 h-5 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
@@ -887,9 +886,9 @@ export default function CourseTabContent({
                       return Object.entries(timeByType).map(([type, minutes], idx) => (
                         <div 
                           key={type} 
-                          className="group relative bg-[var(--surface-2)] border border-white/10 rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1"
+                          className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1"
                         >
-                          <div className={`w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-1)] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                          <div className={`w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform`}>
                             <svg className={`w-5 h-5 ${textColors[idx % textColors.length]}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
@@ -933,8 +932,8 @@ export default function CourseTabContent({
                       </div>
                     </div>
 
-                    <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-white/5">
+                    <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-lg">
+                      <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--surface-2)]/30">
                         <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
                           <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -942,7 +941,7 @@ export default function CourseTabContent({
                           Lessons Covered in This Exam
                         </h3>
                       </div>
-                      <div className="divide-y divide-white/5">
+                      <div className="divide-y divide-[var(--border)]">
                         {(() => {
                           const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
                           const precedingLessonIds = selectedLesson.preceding_lessons || [];
@@ -960,7 +959,7 @@ export default function CourseTabContent({
                             return (
                               <div
                                 key={lessonId}
-                                className="px-6 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+                                className="px-6 py-3 flex items-center gap-3 hover:bg-[var(--surface-2)]/50 transition-colors"
                               >
                                 <span className="w-6 h-6 flex items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-medium text-[var(--primary)]">
                                   {idx + 1}
@@ -1003,20 +1002,20 @@ export default function CourseTabContent({
                   </div>
                 ) : isLessonContentLoading(selectedLesson.id) ? (
                   <div className="animate-pulse space-y-6">
-                    <div className="h-8 w-48 bg-white/10 rounded-lg" />
-                    <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 p-6 space-y-4">
-                      <div className="h-6 w-3/4 bg-white/10 rounded" />
-                      <div className="h-4 w-full bg-white/10 rounded" />
-                      <div className="h-4 w-5/6 bg-white/10 rounded" />
-                      <div className="h-4 w-4/5 bg-white/10 rounded" />
-                      <div className="h-32 w-full bg-white/10 rounded-lg mt-4" />
-                      <div className="h-4 w-2/3 bg-white/10 rounded" />
-                      <div className="h-4 w-3/4 bg-white/10 rounded" />
+                    <div className="h-8 w-48 bg-[var(--surface-muted)] rounded-lg" />
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-6 space-y-4">
+                      <div className="h-6 w-3/4 bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-full bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-5/6 bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-4/5 bg-[var(--surface-muted)] rounded" />
+                      <div className="h-32 w-full bg-[var(--surface-muted)] rounded-lg mt-4" />
+                      <div className="h-4 w-2/3 bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-3/4 bg-[var(--surface-muted)] rounded" />
                     </div>
-                    <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 p-6 space-y-4">
-                      <div className="h-5 w-1/2 bg-white/10 rounded" />
-                      <div className="h-4 w-full bg-white/10 rounded" />
-                      <div className="h-4 w-4/5 bg-white/10 rounded" />
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-6 space-y-4">
+                      <div className="h-5 w-1/2 bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-full bg-[var(--surface-muted)] rounded" />
+                      <div className="h-4 w-4/5 bg-[var(--surface-muted)] rounded" />
                     </div>
                   </div>
                 ) : (
@@ -1040,13 +1039,13 @@ export default function CourseTabContent({
 
         {viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' && (
           <div 
-            className="fixed bottom-0 left-0 right-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-white/10 dark:border-white/5 shadow-2xl"
+            className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
             style={{ 
-              marginLeft: !isMobile ? `${sidebarOffset}px` : 0,
-              marginRight: isMobile ? 0 : `${chatBotWidth}px` 
+              left: !isMobile ? `${sidebarOffset}px` : 0,
+              right: isMobile ? 0 : `${chatBotWidth}px` 
             }}
           >
-            <div className="max-w-5xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-center px-4 py-3">
               <OnboardingTooltip
                 id="course-content-types"
                 content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
@@ -1055,7 +1054,7 @@ export default function CourseTabContent({
                 delay={800}
                 priority={8}
               >
-                <div className="flex items-center justify-center gap-4">
+                <div className="flex items-center gap-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -1072,7 +1071,7 @@ export default function CourseTabContent({
                     const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
                     return currentIdx <= 0;
                   })()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 dark:bg-white/5 border border-white/10 text-sm font-medium transition-all hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1083,9 +1082,9 @@ export default function CourseTabContent({
                 <div className="flex items-center justify-center gap-1 overflow-x-auto custom-scrollbar">
                   {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
                     <>
-                      <div className="h-9 w-20 rounded-lg bg-white/10 animate-pulse" />
-                      <div className="h-9 w-24 rounded-lg bg-white/10 animate-pulse" />
-                      <div className="h-9 w-16 rounded-lg bg-white/10 animate-pulse" />
+                      <div className="h-9 w-20 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="h-9 w-24 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="h-9 w-16 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
                     </>
                   ) : (
                     getAvailableContentTypes(selectedLesson.id).map((contentType) => (
@@ -1099,7 +1098,7 @@ export default function CourseTabContent({
                         className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
                           selectedContentType?.type === contentType.value
                             ? "bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg shadow-[var(--primary)]/20"
-                            : "bg-white/10 dark:bg-white/5 border border-white/10 hover:bg-white/20"
+                            : "bg-[var(--surface-2)] border border-[var(--border)] hover:bg-[var(--surface-muted)]"
                         }`}
                       >
                         {contentType.label}
@@ -1124,7 +1123,7 @@ export default function CourseTabContent({
                     const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
                     return currentIdx >= types.length - 1;
                   })()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 dark:bg-white/5 border border-white/10 text-sm font-medium transition-all hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <span className="hidden sm:inline">Next</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
