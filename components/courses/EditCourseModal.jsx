@@ -115,7 +115,7 @@ export default function EditCourseModal({
               {/* Onboarding tooltip for first-time users */}
               <OnboardingTooltip
                 id="edit-modal-intro"
-                content="Describe any changes you'd like to make to your course in natural language. For example: 'Add more practice problems' or 'Focus less on theory'. Our AI will update your course accordingly!"
+                content="Describe any changes you'd like to make to your course in natural language. For example: 'Add more practice problems' or 'Focus less on theory'. We'll update your course accordingly!"
                 position="bottom"
                 pointerPosition="center"
                 delay={300}
@@ -126,8 +126,8 @@ export default function EditCourseModal({
               </OnboardingTooltip>
 
               <p className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
-                <span>Describe what you'd like to change or add to the course. Our AI will process your request and update the course structure accordingly.</span>
-                <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, including more examples, or restructuring modules. Our AI will interpret your request and make appropriate modifications." position="left" />
+                <span>Describe what you'd like to change or add to the course. We'll process your request and update the course structure accordingly.</span>
+                <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, including more examples, or restructuring modules. We'll interpret your request and make appropriate modifications." position="left" />
               </p>
 
               {/* Text Input */}

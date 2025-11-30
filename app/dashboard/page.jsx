@@ -282,7 +282,7 @@ export default function DashboardPage() {
                 priority={1}
                 className="w-full"
               >
-                <Tooltip content="Create a new personalized course with AI-generated study materials tailored to your syllabus and exam" position="bottom" delay={500} className="w-full">
+                <Tooltip content="Create a new personalized course with study materials tailored to your syllabus and exam" position="bottom" delay={500} className="w-full">
                   <Link
                     href="/courses/create"
                     className="block w-full group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"

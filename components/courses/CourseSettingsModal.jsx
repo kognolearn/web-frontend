@@ -69,7 +69,7 @@ export default function CourseSettingsModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", duration: 0.3 }}
-            className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl"
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl overflow-visible"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -99,29 +99,26 @@ export default function CourseSettingsModal({
 
             {/* Content */}
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-6">
-              {/* Onboarding tooltip for first-time users */}
-              <OnboardingTooltip
-                id="settings-modal-intro"
-                content="This is where you can manage your study time. Use the quick buttons to add or subtract time, or set a custom duration. Your progress is automatically saved!"
-                position="bottom"
-                pointerPosition="center"
-                delay={300}
-                priority={9}
-                showCondition={isOpen}
-              >
-                <div />
-              </OnboardingTooltip>
-
               {/* Timer Controls Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                    Timer Controls
-                    <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
-                  </h3>
+                  <OnboardingTooltip
+                    id="settings-modal-intro"
+                    content="This is where you can manage your study time. Use the quick buttons to add or subtract time, or set a custom duration. Your progress is automatically saved!"
+                    position="bottom"
+                    pointerPosition="left"
+                    delay={300}
+                    priority={9}
+                    showCondition={isOpen}
+                  >
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                      Timer Controls
+                      <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
+                    </h3>
+                  </OnboardingTooltip>
                 </div>
 
                 {/* Current Timer Display */}

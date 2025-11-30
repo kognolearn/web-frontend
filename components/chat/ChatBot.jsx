@@ -293,7 +293,7 @@ const buildSanitizedHistory = (messages) => {
   return trimmed.map(sanitizeMessageForApi);
 };
 
-export default function ChatBot({ pageContext = {}, useContentEditableInput, onWidthChange }) {
+export default function ChatBot({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPopped, setIsPopped] = useState(false);
   const [width, setWidth] = useState(350); // Default width when docked
@@ -1225,7 +1225,7 @@ Instructions:
     return (
       <OnboardingTooltip
         id="chatbot-intro"
-        content="Meet Kogno, your AI study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
+        content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
         position="left"
         pointerPosition="bottom"
         delay={1500}
@@ -1282,6 +1282,25 @@ Instructions:
           </h2>
         </div>
         <div className="no-drag flex items-center gap-2">
+          {onOpenInTab && (
+            <button
+              onClick={() => {
+                onOpenInTab({
+                  title: currentChat?.name || "New Chat",
+                  chatId: `tab-${Date.now()}`,
+                  messages: currentChat?.messages || [],
+                });
+              }}
+              type="button"
+              aria-label="Open in new tab"
+              className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+              title="Open in new tab"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => setIsPopped(!isPopped)}
             type="button"
