@@ -276,19 +276,25 @@ export default function CoursePage() {
   const [currentViewingItem, setCurrentViewingItem] = useState(null); // Current flashcard or video being viewed
   const [secondsRemaining, setSecondsRemaining] = useState(null); // Countdown timer
   const [initialSeconds, setInitialSeconds] = useState(null); // Initial time value for tracking changes
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
   
   // Practice exam state
   const [examState, setExamState] = useState({}); // { [examType]: { status, url, error } }
 
-  // Fetch or generate practice exam
-  const fetchOrGenerateExam = useCallback(async (examType, lessonTitles) => {
+  // Check if exam already exists (doesn't generate)
+  const checkExamExists = useCallback(async (examType) => {
     if (!userId || !courseId) return;
     
-    const key = examType; // 'midterm' or 'final'
-    setExamState(prev => ({ ...prev, [key]: { status: 'loading', url: null, error: null } }));
+    const key = examType;
+    
+    setExamState(prev => {
+      // Skip if already checked or in progress
+      if (prev[key]?.status) return prev;
+      return { ...prev, [key]: { status: 'checking', url: null, error: null } };
+    });
     
     try {
-      // First try to fetch existing exam via local API proxy
       const fetchRes = await fetch(
         `/api/courses/${courseId}/exams/${examType}?userId=${userId}`
       );
@@ -296,43 +302,58 @@ export default function CoursePage() {
       if (fetchRes.ok) {
         const data = await fetchRes.json();
         setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: data.url, error: null } }));
-        return;
+      } else if (fetchRes.status === 404) {
+        // Exam doesn't exist yet - show build option
+        setExamState(prev => ({ ...prev, [key]: { status: 'not-built', url: null, error: null } }));
+      } else {
+        const errData = await fetchRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to check exam (${fetchRes.status})`);
       }
-      
-      if (fetchRes.status === 404) {
-        // Exam not generated yet, generate it
-        setExamState(prev => ({ ...prev, [key]: { status: 'creating', url: null, error: null } }));
-        
-        const generateRes = await fetch(
-          `/api/courses/${courseId}/exams/generate`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              lessons: lessonTitles,
-              type: examType
-            })
-          }
-        );
-        
-        if (!generateRes.ok) {
-          const errData = await generateRes.json().catch(() => ({}));
-          throw new Error(errData.error || `Failed to generate exam (${generateRes.status})`);
-        }
-        
-        const genData = await generateRes.json();
-        setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: genData.url, error: null } }));
-        return;
-      }
-      
-      // Other error
-      const errData = await fetchRes.json().catch(() => ({}));
-      throw new Error(errData.error || `Failed to fetch exam (${fetchRes.status})`);
     } catch (e) {
       setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
     }
   }, [userId, courseId]);
+
+  // Generate exam (only called when user clicks build)
+  const generateExam = useCallback(async (examType, lessonTitles) => {
+    if (!userId || !courseId) return;
+    
+    const key = examType;
+    setExamState(prev => ({ ...prev, [key]: { status: 'generating', url: null, error: null } }));
+    
+    try {
+      const generateRes = await fetch(
+        `/api/courses/${courseId}/exams/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            lessons: lessonTitles,
+            type: examType
+          })
+        }
+      );
+      
+      if (!generateRes.ok) {
+        const errData = await generateRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to generate exam (${generateRes.status})`);
+      }
+      
+      const genData = await generateRes.json();
+      setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: genData.url, error: null } }));
+    } catch (e) {
+      setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
+    }
+  }, [userId, courseId]);
+
+  // Auto-check exam existence when practice exam is selected
+  useEffect(() => {
+    if (selectedLesson?.type === 'practice_exam' && userId && courseId) {
+      const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
+      checkExamExists(examType);
+    }
+  }, [selectedLesson, userId, courseId, checkExamExists]);
 
   useEffect(() => {
     let mounted = true;
@@ -1271,14 +1292,20 @@ export default function CoursePage() {
                             </div>
                           )}
                           
-                          {/* Loading/Generating State */}
-                          {(currentExamState.status === 'loading' || currentExamState.status === 'generating') && (
+                          {/* Checking State */}
+                          {currentExamState.status === 'checking' && (
+                            <div className="flex flex-col items-center justify-center py-8">
+                              <div className="w-12 h-12 mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+                              <p className="text-sm text-[var(--muted-foreground)]">Checking for existing exam...</p>
+                            </div>
+                          )}
+                          
+                          {/* Generating State */}
+                          {currentExamState.status === 'generating' && (
                             <div className="flex flex-col items-center justify-center py-8">
                               <div className="w-12 h-12 mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
                               <p className="text-sm text-[var(--muted-foreground)]">
-                                {currentExamState.status === 'generating' 
-                                  ? 'Generating your practice exam... This may take a minute.'
-                                  : 'Loading exam...'}
+                                Generating your practice exam... This may take a minute.
                               </p>
                             </div>
                           )}
@@ -1306,8 +1333,8 @@ export default function CoursePage() {
                             </div>
                           )}
                           
-                          {/* Initial State - Create Button */}
-                          {!currentExamState.status && (
+                          {/* Not Built State - Show Build Button */}
+                          {currentExamState.status === 'not-built' && (
                             <div className="flex flex-col items-center justify-center py-4">
                               <p className="text-sm text-[var(--muted-foreground)] mb-4 text-center">
                                 Create a practice exam covering all the lessons listed above.
@@ -1315,12 +1342,12 @@ export default function CoursePage() {
                               <button
                                 type="button"
                                 className="px-8 py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-semibold shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 hover:scale-[1.02] transition-all flex items-center gap-2"
-                                onClick={() => fetchOrGenerateExam(examType, lessonTitles)}
+                                onClick={() => generateExam(examType, lessonTitles)}
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                Create Practice Exam
+                                Build Practice Exam
                               </button>
                             </div>
                           )}
@@ -1331,7 +1358,10 @@ export default function CoursePage() {
                               <button
                                 type="button"
                                 className="px-6 py-2 rounded-lg bg-[var(--surface-2)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--surface-3)] transition-colors"
-                                onClick={() => fetchOrGenerateExam(examType, lessonTitles)}
+                                onClick={() => {
+                                  // Reset state and re-check
+                                  setExamState(prev => ({ ...prev, [examType]: null }));
+                                }}
                               >
                                 Try Again
                               </button>
