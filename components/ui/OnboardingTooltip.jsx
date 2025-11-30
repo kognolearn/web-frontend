@@ -15,6 +15,7 @@ import { useOnboarding } from "./OnboardingProvider";
  * - Supports different positions and pointer directions
  * - Queue-based: only one tooltip shows at a time across the entire app
  * - Priority-based: lower priority numbers show first
+ * - Auto-dismiss: tooltips automatically dismiss after a timeout to show the next one
  */
 export default function OnboardingTooltip({
   id,
@@ -27,6 +28,7 @@ export default function OnboardingTooltip({
   showCondition = true, // Additional condition to control visibility
   className = "",
   maxWidth, // Optional - will auto-size if not provided
+  autoDismissAfter = 8000, // Auto-dismiss after this many ms (null to disable)
 }) {
   const { 
     hasSeenTooltip, 
@@ -40,6 +42,7 @@ export default function OnboardingTooltip({
   
   const [hasRequested, setHasRequested] = useState(false);
   const timeoutRef = useRef(null);
+  const autoDismissRef = useRef(null);
   const mountedRef = useRef(true);
 
   // Request to show tooltip after delay if conditions are met
@@ -64,8 +67,27 @@ export default function OnboardingTooltip({
     };
   }, [isLoaded, isNewUser, hasSeenTooltip, id, showCondition, delay, priority, requestTooltip, releaseTooltip]);
 
+  // Auto-dismiss tooltip after timeout when it becomes visible
+  useEffect(() => {
+    if (activeTooltip === id && autoDismissAfter && autoDismissAfter > 0) {
+      autoDismissRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          dismissTooltip(id);
+        }
+      }, autoDismissAfter);
+    }
+
+    return () => {
+      if (autoDismissRef.current) {
+        clearTimeout(autoDismissRef.current);
+        autoDismissRef.current = null;
+      }
+    };
+  }, [activeTooltip, id, autoDismissAfter, dismissTooltip]);
+
   const handleDismiss = (e) => {
     e?.stopPropagation();
+    if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
     dismissTooltip(id);
   };
 
