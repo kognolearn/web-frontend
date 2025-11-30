@@ -189,7 +189,6 @@ function ItemContent({
                   </div>
                   <div className="mt-3">
                     <p className="text-base font-semibold">{vid.title}</p>
-                    <p className="text-sm text-[var(--muted-foreground)] mt-1">{vid.duration_min} min</p>
                     {vid.summary && (
                       <p className="text-sm text-[var(--muted-foreground)] mt-2">{vid.summary}</p>
                     )}
@@ -859,6 +858,51 @@ export default function CoursePage() {
             <nav className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
               {studyPlan.modules?.map((module, moduleIdx) => {
                 const isCollapsed = collapsedModules.has(moduleIdx);
+                const isPracticeExamModule = module.is_practice_exam_module;
+                
+                // Practice exam modules render as a single clickable item
+                if (isPracticeExamModule && module.exam) {
+                  const exam = module.exam;
+                  const isSelected = selectedLesson?.id === exam.id;
+                  return (
+                    <button
+                      key={moduleIdx}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLesson({ ...exam, type: 'practice_exam' });
+                        setSelectedContentType({ lessonId: exam.id, type: 'practice_exam' });
+                        setViewMode("topic");
+                        setCurrentViewingItem(null);
+                      }}
+                      className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
+                        isSelected
+                          ? "bg-amber-500/15 border-amber-500/30 shadow-lg shadow-amber-500/10"
+                          : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500/20 text-amber-500 flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-left min-w-0">
+                        <h3 className="text-sm font-semibold text-amber-500 truncate">
+                          {exam.title}
+                        </h3>
+                        <p className="text-xs text-amber-500/70">
+                          {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
+                        </p>
+                      </div>
+                      {exam.status === 'completed' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 font-medium">
+                          Done
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                
+                // Regular content modules with lessons
                 return (
                   <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-white/5 dark:bg-black/10 border border-white/10 dark:border-white/5">
                     {/* Module header - clickable to collapse/expand */}
@@ -896,33 +940,35 @@ export default function CoursePage() {
                     {/* Lessons - shown when module is not collapsed */}
                     {!isCollapsed && (
                       <div className="px-3 pb-3 space-y-1">
-                        {module.lessons?.map((lesson, lessonIdx) => (
-                          <button
-                            key={lesson.id || lessonIdx}
-                            type="button"
-                            onClick={() => {
-                              setSelectedLesson(lesson);
-                              // Auto-select first available content type
-                              const availableTypes = getAvailableContentTypes(lesson.id);
-                              if (availableTypes.length > 0) {
-                                setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
-                              }
-                              setViewMode("topic");
-                              setCurrentViewingItem(null);
-                              fetchLessonContent(lesson.id, ['reading']);
-                            }}
-                            className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
-                              selectedLesson?.id === lesson.id
-                                ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
-                            }`}
-                          >
-                            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
-                              {lessonIdx + 1}
-                            </span>
-                            <span className="flex-1 truncate">{lesson.title}</span>
-                          </button>
-                        ))}
+                        {module.lessons?.map((lesson, lessonIdx) => {
+                          return (
+                            <button
+                              key={lesson.id || lessonIdx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedLesson(lesson);
+                                // Auto-select first available content type
+                                const availableTypes = getAvailableContentTypes(lesson.id);
+                                if (availableTypes.length > 0) {
+                                  setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
+                                }
+                                fetchLessonContent(lesson.id, ['reading']);
+                                setViewMode("topic");
+                                setCurrentViewingItem(null);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2 rounded-lg ${
+                                selectedLesson?.id === lesson.id
+                                  ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
+                                  : "hover:bg-white/10 dark:hover:bg-white/5 text-[var(--foreground)]"
+                              }`}
+                            >
+                              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--muted-foreground)]">
+                                {lessonIdx + 1}
+                              </span>
+                              <span className="flex-1 truncate">{lesson.title}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1085,7 +1131,99 @@ export default function CoursePage() {
             <>
               {/* Content Stream */}
               <section className="space-y-6 pb-24">
-                {isLessonContentLoading(selectedLesson.id) ? (
+                {/* Practice Exam View */}
+                {selectedLesson.type === 'practice_exam' ? (
+                  <div className="space-y-6">
+                    {/* Exam Header */}
+                    <div className="backdrop-blur-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-2xl p-6 shadow-xl">
+                      <div className="flex items-start gap-4">
+                        <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">{selectedLesson.title}</h2>
+                          <p className="text-sm text-[var(--muted-foreground)]">
+                            This exam covers {selectedLesson.preceding_lessons?.length || 0} lessons • Estimated time: {selectedLesson.duration} minutes
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lessons Covered */}
+                    <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                      <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-white/5">
+                        <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
+                          <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          Lessons Covered in This Exam
+                        </h3>
+                      </div>
+                      <div className="divide-y divide-white/5">
+                        {(() => {
+                          // Get all lessons from studyPlan (excluding practice exam modules)
+                          const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
+                          const precedingLessonIds = selectedLesson.preceding_lessons || [];
+                          
+                          if (precedingLessonIds.length === 0) {
+                            return (
+                              <div className="px-6 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                                No lessons specified for this exam yet.
+                              </div>
+                            );
+                          }
+                          
+                          return precedingLessonIds.map((lessonId, idx) => {
+                            const lesson = allLessons.find(l => l.id === lessonId);
+                            return (
+                              <div
+                                key={lessonId}
+                                className="px-6 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+                              >
+                                <span className="w-6 h-6 flex items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-medium text-[var(--primary)]">
+                                  {idx + 1}
+                                </span>
+                                <span className="flex-1 text-sm text-[var(--foreground)]">
+                                  {lesson?.title || `Lesson ${lessonId.slice(0, 8)}...`}
+                                </span>
+                                {lesson?.type && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[var(--muted-foreground)] capitalize">
+                                    {lesson.type}
+                                  </span>
+                                )}
+                                {lesson?.duration && (
+                                  <span className="text-xs text-[var(--muted-foreground)]">
+                                    {lesson.duration}m
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Start Exam Button */}
+                    <div className="flex justify-center pt-4">
+                      <button
+                        type="button"
+                        className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all flex items-center gap-2"
+                        onClick={() => {
+                          // TODO: Navigate to actual exam taking interface
+                          alert('Exam functionality coming soon!');
+                        }}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Start Exam
+                      </button>
+                    </div>
+                  </div>
+                ) : isLessonContentLoading(selectedLesson.id) ? (
                   /* Loading Skeleton for Content */
                   <div className="animate-pulse space-y-6">
                     {/* Content type title skeleton */}
@@ -1129,8 +1267,8 @@ export default function CoursePage() {
           )}
         </div>
 
-        {/* Bottom Navigation Bar for Content Types */}
-        {viewMode === "topic" && selectedLesson && (
+        {/* Bottom Navigation Bar for Content Types - Hidden for practice exams */}
+        {viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' && (
           <div 
             className="fixed bottom-0 left-0 right-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-white/10 dark:border-white/5 shadow-2xl"
             style={{ 

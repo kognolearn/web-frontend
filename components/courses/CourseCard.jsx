@@ -42,29 +42,31 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         role="button"
         tabIndex={-1}
         aria-label={`Course ${courseCode} is being built`}
-        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg"
+        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-amber-500/30 dark:border-amber-400/20 shadow-lg shadow-amber-500/5"
       >
         {/* Animated gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/5 via-transparent to-[var(--primary)]/10 animate-pulse" />
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-amber-500/10" />
         
         {/* Shimmer effect */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -inset-full top-0 block w-1/2 h-full bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-x-12 animate-shimmer" />
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-amber-500/5 to-transparent transform -skew-x-12 animate-[shimmer_2.5s_linear_infinite]" style={{ width: '50%' }} />
         </div>
 
         {/* Top section */}
         <div className="relative z-10 flex items-start justify-between mb-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--primary)]/10">
-            {/* Animated loading spinner */}
-            <svg className="w-5 h-5 text-[var(--primary)] animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10">
+            {/* Animated building icon */}
+            <svg className="w-5 h-5 text-amber-500 dark:text-amber-400 animate-[pulse_2s_ease-in-out_infinite]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
             </svg>
           </div>
-          <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Building
-          </span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/20">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Building</span>
+          </div>
         </div>
 
         {/* Title */}
@@ -72,32 +74,15 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug">
             {courseCode}
           </h3>
-          <p className="text-xs text-[var(--muted-foreground)] mt-1.5 animate-pulse">
+          <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
             Creating your personalized course...
           </p>
         </div>
 
-        {/* Bottom section with progress indicator */}
-        <div className="relative z-10 pt-3 border-t border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
-              <div className="h-full w-1/3 bg-[var(--primary)] rounded-full animate-pulse" style={{ animation: 'pulse 1.5s ease-in-out infinite, moveProgress 2s ease-in-out infinite' }} />
-            </div>
-            <span className="text-xs text-[var(--muted-foreground)]">Processing</span>
-          </div>
-        </div>
-
         <style jsx>{`
-          @keyframes moveProgress {
-            0%, 100% { width: 20%; margin-left: 0; }
-            50% { width: 40%; margin-left: 30%; }
-          }
           @keyframes shimmer {
             0% { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(200%) skewX(-12deg); }
-          }
-          .animate-shimmer {
-            animation: shimmer 2.5s infinite;
+            100% { transform: translateX(300%) skewX(-12deg); }
           }
         `}</style>
       </div>

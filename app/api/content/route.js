@@ -90,15 +90,15 @@ export async function GET(request) {
         body: contentPayload.reading || '',
         
         // Video data
-        ...(contentPayload.video && {
-          videos: [{
-            url: contentPayload.video.videoId 
-              ? `https://www.youtube.com/watch?v=${contentPayload.video.videoId}`
-              : contentPayload.video.url || '',
-            title: contentPayload.video.title || lesson.title,
+        ...(Array.isArray(contentPayload.video) && contentPayload.video.length > 0 && {
+          videos: contentPayload.video.map(v => ({
+            url: v.videoId 
+              ? `https://www.youtube.com/watch?v=${v.videoId}`
+              : v.url || '',
+            title: v.title || lesson.title,
             duration_min: lesson.estimated_minutes || 0,
-            summary: contentPayload.video.description || '',
-          }]
+            summary: v.description || '',
+          }))
         }),
         
         // Flashcards
