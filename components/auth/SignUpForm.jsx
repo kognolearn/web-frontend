@@ -47,9 +47,9 @@ export default function SignUpForm() {
         return;
       }
 
-      // If sign up is successful, redirect to confirmation page
+      // If sign up is successful, redirect to dashboard
       if (data.user) {
-        router.push(`/auth/confirm-email?email=${encodeURIComponent(formData.email)}`);
+        router.push("/dashboard");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
