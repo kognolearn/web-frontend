@@ -2015,7 +2015,8 @@ export default function CourseTabContent({
                 delay={800}
                 priority={8}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                {/* Previous Button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -2032,42 +2033,51 @@ export default function CourseTabContent({
                     const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
                     return currentIdx <= 0;
                   })()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  <span className="hidden sm:inline">Previous</span>
                 </button>
 
-                <div className="flex items-center justify-center gap-1 overflow-x-auto custom-scrollbar">
+                {/* Step indicator dots */}
+                <div className="flex items-center gap-2 px-3">
                   {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
                     <>
-                      <div className="h-9 w-20 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="h-9 w-24 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="h-9 w-16 rounded-lg bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
                     </>
                   ) : (
-                    getAvailableContentTypes(selectedLesson.id).map((contentType) => (
-                      <button
-                        key={contentType.value}
-                        type="button"
-                        onClick={() => {
-                          setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
-                          fetchLessonContent(selectedLesson.id, [contentType.value]);
-                        }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-                          selectedContentType?.type === contentType.value
-                            ? "bg-[var(--primary)] text-[var(--primary-contrast)] shadow-lg shadow-[var(--primary)]/20"
-                            : "bg-[var(--surface-2)] border border-[var(--border)] hover:bg-[var(--surface-muted)]"
-                        }`}
-                      >
-                        {contentType.label}
-                      </button>
-                    ))
+                    getAvailableContentTypes(selectedLesson.id).map((contentType, idx) => {
+                      const types = getAvailableContentTypes(selectedLesson.id);
+                      const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                      const isActive = selectedContentType?.type === contentType.value;
+                      const isPast = idx < currentIdx;
+                      
+                      return (
+                        <button
+                          key={contentType.value}
+                          type="button"
+                          onClick={() => {
+                            setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
+                            fetchLessonContent(selectedLesson.id, [contentType.value]);
+                          }}
+                          title={contentType.label}
+                          className={`rounded-full transition-all duration-300 ${
+                            isActive
+                              ? 'w-8 h-3 bg-[var(--primary)] shadow-lg shadow-[var(--primary)]/30'
+                              : isPast
+                                ? 'w-3 h-3 bg-[var(--primary)]/50 hover:bg-[var(--primary)]/70'
+                                : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
+                          }`}
+                        />
+                      );
+                    })
                   )}
                 </div>
 
+                {/* Next Button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -2084,10 +2094,9 @@ export default function CourseTabContent({
                     const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
                     return currentIdx >= types.length - 1;
                   })()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  <span className="hidden sm:inline">Next</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -2107,7 +2116,7 @@ export default function CourseTabContent({
             }}
           >
             <div className="flex items-center justify-center px-4 py-3">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {(() => {
                   const payload = selectedReviewModule.content_payload || {};
                   const availableTypes = [];
@@ -2121,6 +2130,7 @@ export default function CourseTabContent({
                   
                   return (
                     <>
+                      {/* Previous Button */}
                       <button
                         type="button"
                         onClick={() => {
@@ -2129,31 +2139,38 @@ export default function CourseTabContent({
                           }
                         }}
                         disabled={currentIdx <= 0}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                        <span className="hidden sm:inline">Previous</span>
                       </button>
 
-                      <div className="flex items-center justify-center gap-1 overflow-x-auto custom-scrollbar">
-                        {availableTypes.map((contentType) => (
-                          <button
-                            key={contentType.value}
-                            type="button"
-                            onClick={() => setReviewModuleContentType(contentType.value)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-                              reviewModuleContentType === contentType.value
-                                ? "bg-[var(--warning)] text-white shadow-lg shadow-[var(--warning)]/20"
-                                : "bg-[var(--surface-2)] border border-[var(--border)] hover:bg-[var(--surface-muted)]"
-                            }`}
-                          >
-                            {contentType.label}
-                          </button>
-                        ))}
+                      {/* Step indicator dots */}
+                      <div className="flex items-center gap-2 px-3">
+                        {availableTypes.map((contentType, idx) => {
+                          const isActive = reviewModuleContentType === contentType.value;
+                          const isPast = idx < currentIdx;
+                          
+                          return (
+                            <button
+                              key={contentType.value}
+                              type="button"
+                              onClick={() => setReviewModuleContentType(contentType.value)}
+                              title={contentType.label}
+                              className={`rounded-full transition-all duration-300 ${
+                                isActive
+                                  ? 'w-8 h-3 bg-[var(--warning)] shadow-lg shadow-[var(--warning)]/30'
+                                  : isPast
+                                    ? 'w-3 h-3 bg-[var(--warning)]/50 hover:bg-[var(--warning)]/70'
+                                    : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
+                              }`}
+                            />
+                          );
+                        })}
                       </div>
 
+                      {/* Next Button */}
                       <button
                         type="button"
                         onClick={() => {
@@ -2162,10 +2179,9 @@ export default function CourseTabContent({
                           }
                         }}
                         disabled={currentIdx >= availableTypes.length - 1}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm font-medium transition-all hover:bg-[var(--surface-muted)] disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        <span className="hidden sm:inline">Next</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
