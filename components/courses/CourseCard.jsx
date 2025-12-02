@@ -11,6 +11,11 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     if (onDelete) onDelete();
   };
 
+  const handleReviewClick = (e) => {
+    e.stopPropagation();
+    router.push(`/courses/${courseId}/review`);
+  };
+
   const openCourse = (e) => {
     // Don't navigate if course is still building
     if (status === 'pending') return;
@@ -111,7 +116,6 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         <div className="absolute -inset-full top-0 block w-1/2 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 group-hover:animate-shine" />
       </div>
 
-      {/* Top section with icon and status */}
       <div className="relative z-10 flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 transition-colors">
           <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,6 +133,16 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
             }`}>
               {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
             </span>
+          </Tooltip>
+          <Tooltip content="Review flashcards and questions" position="bottom">
+            <button
+              onClick={handleReviewClick}
+              className="p-1.5 rounded-full hover:bg-[var(--primary)]/10 text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors z-20"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           </Tooltip>
           <Tooltip content="Delete this course" position="bottom">
             <button

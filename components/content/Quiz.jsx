@@ -85,6 +85,95 @@ function extractPlainTextFromBlock(block) {
   return collectPlainText(block.content ?? block).replace(/\s+/g, " ").trim();
 }
 
+function extractBraceSegment(str, startIndex) {
+  if (str[startIndex] !== "{") return null;
+  let depth = 0;
+  for (let i = startIndex; i < str.length; i++) {
+    const char = str[i];
+    if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) {
+        return {
+          segment: str.slice(startIndex, i + 1),
+          nextIndex: i + 1,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function splitInlineLatexSegments(str) {
+  if (typeof str !== "string" || !str.includes("\\")) return null;
+
+  const segments = [];
+  let hasMath = false;
+  let cursor = 0;
+  let textStart = 0;
+
+  const flushText = (endIndex) => {
+    if (endIndex > textStart) {
+      segments.push({ type: "text", value: str.slice(textStart, endIndex) });
+    }
+  };
+
+  while (cursor < str.length) {
+    if (str[cursor] === "\\") {
+      let cmdEnd = cursor + 1;
+      while (cmdEnd < str.length && /[A-Za-z]/.test(str[cmdEnd])) {
+        cmdEnd++;
+      }
+
+      if (cmdEnd === cursor + 1) { // lone backslash, treat as text
+        cursor++;
+        continue;
+      }
+
+      flushText(cursor);
+
+      let latex = str.slice(cursor, cmdEnd);
+      let scanIndex = cmdEnd;
+
+      // Capture consecutive braced groups (e.g., \frac{a}{b})
+      while (scanIndex < str.length && str[scanIndex] === "{") {
+        const brace = extractBraceSegment(str, scanIndex);
+        if (!brace) break;
+        latex += brace.segment;
+        scanIndex = brace.nextIndex;
+      }
+
+      // Capture superscripts/subscripts like ^2 or _{n}
+      while (scanIndex < str.length && (str[scanIndex] === "^" || str[scanIndex] === "_")) {
+        const symbol = str[scanIndex];
+        let nextIndex = scanIndex + 1;
+        if (str[nextIndex] === "{") {
+          const brace = extractBraceSegment(str, nextIndex);
+          if (!brace) break;
+          latex += symbol + brace.segment;
+          nextIndex = brace.nextIndex;
+        } else {
+          latex += str.slice(scanIndex, Math.min(str.length, scanIndex + 2));
+          nextIndex = Math.min(str.length, scanIndex + 2);
+        }
+        scanIndex = nextIndex;
+      }
+
+      segments.push({ type: "math", value: latex });
+      hasMath = true;
+      cursor = scanIndex;
+      textStart = scanIndex;
+      continue;
+    }
+
+    cursor++;
+  }
+
+  flushText(str.length);
+
+  return hasMath ? segments : null;
+}
+
 function normalizeTextValue(value) {
   if (typeof value !== "string") return "";
   return value.replace(/\s+/g, " ").trim().toLowerCase();

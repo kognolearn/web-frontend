@@ -2,6 +2,7 @@ import { Nunito } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
@@ -37,6 +38,8 @@ export default function RootLayout({ children }) {
               <SupabaseSessionProvider />
               {/* Persistent theme toggle (shown only when logged in) */}
               <ThemeToggle />
+              {/* Feedback widget (shown only when logged in) */}
+              <FeedbackWidget />
               {children}
             </OnboardingProvider>
           </ThemeProvider>

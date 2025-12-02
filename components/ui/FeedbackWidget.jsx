@@ -1,0 +1,287 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/lib/supabase/client";
+
+const FEEDBACK_TYPES = [
+  { id: "bug", label: "Bug Report", icon: "🐛", description: "Something isn't working" },
+  { id: "feature", label: "Feature Request", icon: "💡", description: "Suggest an improvement" },
+  { id: "content", label: "Content Issue", icon: "📚", description: "Problem with course material" },
+  { id: "other", label: "Other", icon: "💬", description: "General feedback" },
+];
+
+export default function FeedbackWidget() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  const [selectedType, setSelectedType] = useState(null);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState(null);
+  const pathname = usePathname();
+  const panelRef = useRef(null);
+
+  // Get current context from URL
+  const getContext = () => {
+    const context = {
+      url: typeof window !== "undefined" ? window.location.href : "",
+      pathname,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Extract courseId if on a course page
+    const courseMatch = pathname.match(/\/courses\/([^\/]+)/);
+    if (courseMatch) {
+      context.courseId = courseMatch[1];
+    }
+
+    // Check if on review page
+    if (pathname.includes("/review")) {
+      context.page = "review";
+    } else if (pathname.includes("/dashboard")) {
+      context.page = "dashboard";
+    } else if (courseMatch) {
+      context.page = "course";
+    }
+
+    // Get viewport info
+    if (typeof window !== "undefined") {
+      context.viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+      context.userAgent = navigator.userAgent;
+    }
+
+    return context;
+  };
+
+  useEffect(() => {
+    setMounted(true);
+    
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    checkUser();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => sub?.subscription?.unsubscribe?.();
+  }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  // Reset form when closing
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeout(() => {
+        setSelectedType(null);
+        setMessage("");
+        setError(null);
+        setSubmitted(false);
+      }, 300);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async () => {
+    if (!selectedType || !message.trim() || !user) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const payload = {
+        userId: user.id,
+        userEmail: user.email,
+        type: selectedType,
+        message: message.trim(),
+        context: getContext(),
+      };
+
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to submit feedback");
+      }
+
+      setSubmitted(true);
+      setTimeout(() => setIsOpen(false), 2000);
+    } catch (err) {
+      setError("Failed to submit feedback. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!mounted || !user) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50" ref={panelRef}>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-14 right-0 w-80 sm:w-96 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--border)]">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-[var(--foreground)]">Send Feedback</h3>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1 rounded-lg hover:bg-[var(--surface-muted)] text-[var(--muted-foreground)] transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              {submitted ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex flex-col items-center justify-center py-8 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="font-medium text-[var(--foreground)]">Thank you!</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Your feedback has been submitted.</p>
+                </motion.div>
+              ) : (
+                <>
+                  {/* Type Selection */}
+                  <div className="mb-4">
+                    <label className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-2 block">
+                      Feedback Type
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {FEEDBACK_TYPES.map((type) => (
+                        <button
+                          key={type.id}
+                          onClick={() => setSelectedType(type.id)}
+                          className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${
+                            selectedType === type.id
+                              ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                              : "border-[var(--border)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-2)]"
+                          }`}
+                        >
+                          <span className="text-lg">{type.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[var(--foreground)] truncate">{type.label}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="mb-4">
+                    <label className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-2 block">
+                      Your Feedback
+                    </label>
+                    <textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="Describe your feedback in detail..."
+                      rows={4}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 outline-none resize-none text-sm transition-all"
+                    />
+                  </div>
+
+                  {/* Context Info */}
+                  <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-4 h-4 text-[var(--muted-foreground)] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        We'll include your current page context to help us understand the issue better.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Error */}
+                  {error && (
+                    <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-sm text-rose-600 dark:text-rose-400">
+                      {error}
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!selectedType || !message.trim() || submitting}
+                    className="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Submitting...
+                      </span>
+                    ) : (
+                      "Submit Feedback"
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Trigger Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`btn btn-ghost btn-icon transition-all duration-300 ${
+          isOpen ? "rotate-45 bg-[var(--surface-2)]" : ""
+        }`}
+        aria-label="Send feedback"
+        aria-expanded={isOpen}
+      >
+        {isOpen ? (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
