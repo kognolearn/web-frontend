@@ -14,8 +14,8 @@ const nunito = Nunito({
 });
 
 export const metadata = {
-  title: "Ed-Startup",
-  description: "Study for Everything.",
+  title: "Kogno",
+  description: "Learn Smarter, Not Harder",
 };
 
 const mathJaxConfig = {
