@@ -410,6 +410,8 @@ function InlineContent({ text }) {
       const codeMatch = remaining.match(/`([^`]+)`/);
       // Links [text](url)
       const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      // Line breaks <br>, <br/>, <br />
+      const brMatch = remaining.match(/<br\s*\/?>/i);
       
       // Find earliest match
       const matches = [
@@ -418,6 +420,7 @@ function InlineContent({ text }) {
         italicMatch && { type: "italic", match: italicMatch, idx: italicMatch.index },
         codeMatch && { type: "code", match: codeMatch, idx: codeMatch.index },
         linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index },
+        brMatch && { type: "br", match: brMatch, idx: brMatch.index },
       ].filter(Boolean);
       
       if (matches.length === 0) {
@@ -449,6 +452,9 @@ function InlineContent({ text }) {
           break;
         case "link":
           result.push({ type: "link", text: m[1], url: m[2], key: key++ });
+          break;
+        case "br":
+          result.push({ type: "br", key: key++ });
           break;
       }
       
@@ -491,6 +497,8 @@ function InlineContent({ text }) {
                 {part.text}
               </a>
             );
+          case "br":
+            return <br key={part.key} />;
           default:
             return null;
         }
