@@ -608,6 +608,8 @@ export default function CoursePage() {
         courseId={courseId}
         userId={userId}
         courseName={courseName}
+        studyPlan={studyPlan}
+        onRefetch={refetchStudyPlan}
       />
 
       {/* Hidden Drag Preview Source (for setDragImage) */}
