@@ -19,17 +19,21 @@ export async function POST(request, { params }) {
     const formData = await request.formData();
     
     const userId = formData.get("userId");
-    const examType = formData.get("type"); // midterm or final
-    const file = formData.get("file");
+    const examType = formData.get("exam_type"); // midterm or final
+    const examNumber = formData.get("exam_number"); // exam number (1, 2, etc.)
+    const file = formData.get("input_pdf");
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
     }
     if (!examType || !["midterm", "final"].includes(examType)) {
-      return NextResponse.json({ error: "type must be 'midterm' or 'final'" }, { status: 400 });
+      return NextResponse.json({ error: "exam_type must be 'midterm' or 'final'" }, { status: 400 });
+    }
+    if (!examNumber) {
+      return NextResponse.json({ error: "exam_number is required" }, { status: 400 });
     }
     if (!file) {
-      return NextResponse.json({ error: "file is required" }, { status: 400 });
+      return NextResponse.json({ error: "input_pdf file is required" }, { status: 400 });
     }
 
     // Get file details
@@ -110,7 +114,8 @@ export async function POST(request, { params }) {
     // Create form data for backend
     const backendFormData = new FormData();
     backendFormData.append("userId", userId);
-    backendFormData.append("exam_tag", examType);
+    backendFormData.append("exam_type", examType);
+    backendFormData.append("exam_number", examNumber);
     backendFormData.append("input_pdf", new Blob([fileBuffer], { type: finalMimeType }), finalFileName);
 
     const url = new URL(`/courses/${courseId}/grade-exam`, BASE_URL);

@@ -5,6 +5,57 @@ import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { saveQuizSubmission, getQuizProgress, isQuizCompleted } from "@/utils/lessonProgress";
+
+/**
+ * Seeded random number generator for consistent shuffling per question
+ * Uses a simple mulberry32 algorithm
+ */
+function seededRandom(seed) {
+  let t = seed + 0x6D2B79F5;
+  t = Math.imul(t ^ t >>> 15, t | 1);
+  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+
+/**
+ * Create a deterministic seed from a string (question ID + lesson context)
+ */
+function stringToSeed(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Shuffle an array with a seeded random, returning the shuffled array and index mapping
+ * Returns { shuffled, originalToShuffled, shuffledToOriginal }
+ */
+function shuffleWithMapping(array, seed) {
+  const indices = array.map((_, i) => i);
+  const shuffledIndices = [...indices];
+  
+  // Fisher-Yates shuffle with seeded random
+  for (let i = shuffledIndices.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+  }
+  
+  const shuffled = shuffledIndices.map(i => array[i]);
+  const originalToShuffled = {};
+  const shuffledToOriginal = {};
+  
+  shuffledIndices.forEach((originalIdx, shuffledIdx) => {
+    originalToShuffled[originalIdx] = shuffledIdx;
+    shuffledToOriginal[shuffledIdx] = originalIdx;
+  });
+  
+  return { shuffled, originalToShuffled, shuffledToOriginal };
+}
 
 function normalizeRichBlock(value) {
   const block = toRichBlock(value);
@@ -346,6 +397,30 @@ export default function Quiz({
     return [];
   }, [questions, question, options]);
 
+  // Create shuffled options for each question (only if not already submitted)
+  // The shuffle is deterministic based on question ID + courseId + lessonId
+  const shuffledQuestionsData = useMemo(() => {
+    return normalizedQuestions.map((q) => {
+      const seedString = `${q.id}-${courseId || ''}-${lessonId || ''}`;
+      const seed = stringToSeed(seedString);
+      const { shuffled, originalToShuffled, shuffledToOriginal } = shuffleWithMapping(q.options, seed);
+      
+      // Reassign labels (A, B, C, D) to shuffled options
+      const shuffledWithLabels = shuffled.map((opt, idx) => ({
+        ...opt,
+        label: String.fromCharCode("A".charCodeAt(0) + idx),
+        originalIndex: shuffledToOriginal[idx],
+      }));
+      
+      return {
+        ...q,
+        shuffledOptions: shuffledWithLabels,
+        originalToShuffled,
+        shuffledToOriginal,
+      };
+    });
+  }, [normalizedQuestions, courseId, lessonId]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [responses, setResponses] = useState({});
   const [revealedByQuestion, setRevealedByQuestion] = useState({});
@@ -356,7 +431,19 @@ export default function Quiz({
   const lastNotificationRef = useRef(null);
 
   const currentQuestion = normalizedQuestions[currentIndex] ?? null;
+  const currentShuffledData = shuffledQuestionsData[currentIndex] ?? null;
   const questionCount = normalizedQuestions.length;
+  
+  // Use shuffled options when quiz not submitted, original when submitted (for review)
+  const displayOptions = useMemo(() => {
+    if (!currentQuestion) return [];
+    if (isSubmitted) {
+      // When submitted, show original order for consistent review
+      return currentQuestion.options;
+    }
+    // Before submission, show shuffled options
+    return currentShuffledData?.shuffledOptions || currentQuestion.options;
+  }, [currentQuestion, currentShuffledData, isSubmitted]);
 
   const questionsSignature = useMemo(() => {
     if (normalizedQuestions.length === 0) return "__empty__";
@@ -381,7 +468,27 @@ export default function Quiz({
     setIsSubmitted(false);
     setIsSubmitting(false);
     lastNotificationRef.current = null;
-  }, [questionsSignature]);
+    
+    // Restore quiz state from localStorage if already submitted
+    if (courseId && lessonId) {
+      const savedProgress = getQuizProgress(courseId, lessonId);
+      if (savedProgress.submitted && savedProgress.answers) {
+        // Restore responses - map from our storage format to the responses format
+        const restoredResponses = {};
+        Object.entries(savedProgress.answers).forEach(([questionId, answer]) => {
+          restoredResponses[questionId] = answer.selectedOptionId;
+        });
+        setResponses(restoredResponses);
+        setIsSubmitted(true);
+        // Mark all questions as revealed
+        const revealed = {};
+        Object.keys(savedProgress.answers).forEach(questionId => {
+          revealed[questionId] = true;
+        });
+        setRevealedByQuestion(revealed);
+      }
+    }
+  }, [questionsSignature, courseId, lessonId]);
 
   useEffect(() => {
     setCurrentIndex((prev) => {
@@ -430,6 +537,7 @@ export default function Quiz({
     // Calculate score first
     let correctCount = 0;
     let totalCount = 0;
+    const quizAnswers = {};
 
     normalizedQuestions.forEach((question) => {
       if (!question?.id || !Array.isArray(question.options)) return;
@@ -439,17 +547,30 @@ export default function Quiz({
       if (!userResponseId) return;
 
       const selectedOption = question.options.find((opt) => opt.id === userResponseId);
-      if (selectedOption?.correct) {
+      const isCorrect = selectedOption?.correct || false;
+      
+      quizAnswers[question.id] = {
+        selectedOptionId: userResponseId,
+        isCorrect
+      };
+      
+      if (isCorrect) {
         correctCount++;
       }
     });
+
+    const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
+
+    // Save quiz submission to localStorage
+    if (courseId && lessonId) {
+      saveQuizSubmission(courseId, lessonId, quizAnswers, familiarityScore, totalCount);
+    }
 
     // Update progress if tracking info is available
     if (userId && courseId && lessonId) {
       try {
         const allCorrect = totalCount > 0 && correctCount === totalCount;
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
-        const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
 
         const response = await fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
           method: 'PATCH',
@@ -472,6 +593,11 @@ export default function Quiz({
       } catch (error) {
         console.error('Failed to update quiz progress:', error);
       }
+    } else if (typeof onQuizCompleted === 'function') {
+      // Still notify parent even if not updating server
+      const allCorrect = totalCount > 0 && correctCount === totalCount;
+      const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
+      onQuizCompleted({ masteryStatus, familiarityScore });
     }
 
     // Now reveal answers
@@ -552,10 +678,10 @@ export default function Quiz({
       // Re-add fields that were excluded from the comparison key if needed
       onQuestionChange({
         ...payload,
-        optionLabels: currentQuestion.options.map((o) => o.label).slice(0, 10),
+        optionLabels: displayOptions.map((o) => o.label).slice(0, 10),
       });
     }
-  }, [currentQuestion?.id, currentIndex, revealed, selectedId, isSubmitted, onQuestionChange]);
+  }, [currentQuestion?.id, currentIndex, revealed, selectedId, isSubmitted, onQuestionChange, displayOptions]);
 
   // Calculate progress stats for review mode
   const progressStats = useMemo(() => {
@@ -653,12 +779,12 @@ export default function Quiz({
 
           {/* Options */}
           <div role="radiogroup" aria-labelledby={questionLabelId} className="space-y-3">
-            {currentQuestion.options.length === 0 ? (
+            {displayOptions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--muted-foreground)]">
                 No options available.
               </div>
             ) : (
-              currentQuestion.options.map((opt, optIndex) => {
+              displayOptions.map((opt, optIndex) => {
                 const isSelected = selectedId === opt.id;
                 const showState = revealed && anyCorrect;
                 let status = null;

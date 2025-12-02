@@ -1,7 +1,57 @@
 "use client";
 
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { MathJax } from "better-react-mathjax";
+import { 
+  markReadingQuestionAnswered, 
+  setReadingTotalQuestions, 
+  getReadingProgress 
+} from "@/utils/lessonProgress";
+
+/**
+ * Seeded random number generator for consistent shuffling per question
+ */
+function seededRandom(seed) {
+  let t = seed + 0x6D2B79F5;
+  t = Math.imul(t ^ t >>> 15, t | 1);
+  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+
+/**
+ * Create a deterministic seed from a string
+ */
+function stringToSeed(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Shuffle an array with a seeded random, returning the shuffled array and original index mapping
+ */
+function shuffleWithMapping(array, seed) {
+  const indices = array.map((_, i) => i);
+  const shuffledIndices = [...indices];
+  
+  for (let i = shuffledIndices.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+  }
+  
+  const shuffled = shuffledIndices.map(i => array[i]);
+  const shuffledToOriginal = {};
+  
+  shuffledIndices.forEach((originalIdx, shuffledIdx) => {
+    shuffledToOriginal[shuffledIdx] = originalIdx;
+  });
+  
+  return { shuffled, shuffledToOriginal };
+}
 
 /**
  * Parse content string into structured blocks for rendering
@@ -510,9 +560,44 @@ function InlineContent({ text }) {
 /**
  * Interactive question component with answer reveal
  */
-function QuestionBlock({ question, options, correctIndex, explanation }) {
+function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, onAnswered }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  
+  // Create shuffled options with deterministic seed based on question context
+  const { shuffledOptions, shuffledToOriginal, originalCorrectInShuffled } = useMemo(() => {
+    const seedString = `reading-q${questionIndex}-${courseId || ''}-${lessonId || ''}`;
+    const seed = stringToSeed(seedString);
+    const { shuffled, shuffledToOriginal } = shuffleWithMapping(options, seed);
+    
+    // Find where the original correct answer ended up in shuffled array
+    let originalCorrectInShuffled = -1;
+    Object.entries(shuffledToOriginal).forEach(([shuffledIdx, originalIdx]) => {
+      if (originalIdx === correctIndex) {
+        originalCorrectInShuffled = parseInt(shuffledIdx, 10);
+      }
+    });
+    
+    // Reassign labels (A, B, C, D) to shuffled options
+    const shuffledWithLabels = shuffled.map((opt, idx) => ({
+      ...opt,
+      label: String.fromCharCode("A".charCodeAt(0) + idx),
+    }));
+    
+    return { shuffledOptions: shuffledWithLabels, shuffledToOriginal, originalCorrectInShuffled };
+  }, [options, correctIndex, questionIndex, courseId, lessonId]);
+  
+  // Load saved answer state from localStorage
+  useEffect(() => {
+    if (courseId && lessonId && questionIndex !== undefined) {
+      const progress = getReadingProgress(courseId, lessonId);
+      const savedAnswer = progress?.questionsAnswered?.[questionIndex];
+      if (savedAnswer?.answered) {
+        // Restore the submitted state
+        setSubmitted(true);
+      }
+    }
+  }, [courseId, lessonId, questionIndex]);
   
   const handleSelect = useCallback((idx) => {
     if (!submitted) {
@@ -521,13 +606,26 @@ function QuestionBlock({ question, options, correctIndex, explanation }) {
   }, [submitted]);
   
   const handleSubmit = useCallback(() => {
-    if (selectedIdx !== null) {
+    if (selectedIdx !== null && !submitted) {
       setSubmitted(true);
+      // Check if selected shuffled index maps to the original correct index
+      const isCorrect = selectedIdx === originalCorrectInShuffled;
+      
+      // Save to localStorage
+      if (courseId && lessonId && questionIndex !== undefined) {
+        markReadingQuestionAnswered(courseId, lessonId, questionIndex, isCorrect);
+      }
+      
+      // Notify parent of answer
+      if (onAnswered) {
+        onAnswered({ questionIndex, isCorrect });
+      }
     }
-  }, [selectedIdx]);
+  }, [selectedIdx, submitted, originalCorrectInShuffled, courseId, lessonId, questionIndex, onAnswered]);
 
-  const isCorrect = submitted && selectedIdx === correctIndex;
-  const isIncorrect = submitted && selectedIdx !== correctIndex;
+  // Use shuffled correct index for display
+  const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
+  const isIncorrect = submitted && selectedIdx !== originalCorrectInShuffled;
   
   return (
     <div className="my-8 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
@@ -550,9 +648,9 @@ function QuestionBlock({ question, options, correctIndex, explanation }) {
       
       {/* Options */}
       <div className="p-4 space-y-2">
-        {options.map((option, idx) => {
+        {shuffledOptions.map((option, idx) => {
           const isSelected = selectedIdx === idx;
-          const isCorrectOption = correctIndex === idx;
+          const isCorrectOption = idx === originalCorrectInShuffled;
           const showAsCorrect = submitted && isCorrectOption;
           const showAsIncorrect = submitted && isSelected && !isCorrectOption;
           
@@ -683,8 +781,54 @@ function QuestionBlock({ question, options, correctIndex, explanation }) {
 /**
  * Main ReadingRenderer component
  */
-export default function ReadingRenderer({ content }) {
+export default function ReadingRenderer({ content, courseId, lessonId, onReadingCompleted }) {
   const blocks = useMemo(() => parseContent(content), [content]);
+  
+  // Count question blocks
+  const questionCount = useMemo(() => {
+    return blocks.filter(block => block.type === "question").length;
+  }, [blocks]);
+  
+  // Track answered questions
+  const [answeredCount, setAnsweredCount] = useState(0);
+  
+  // Initialize total questions on mount and restore answered count from localStorage
+  useEffect(() => {
+    if (courseId && lessonId) {
+      // Set total questions
+      setReadingTotalQuestions(courseId, lessonId, questionCount);
+      
+      // Restore answered count from localStorage
+      const progress = getReadingProgress(courseId, lessonId);
+      const savedAnsweredCount = Object.keys(progress?.questionsAnswered || {}).length;
+      setAnsweredCount(savedAnsweredCount);
+      
+      // Check if already completed
+      if (questionCount > 0 && savedAnsweredCount >= questionCount && onReadingCompleted) {
+        onReadingCompleted();
+      } else if (questionCount === 0 && onReadingCompleted) {
+        // No questions, reading is automatically completed when viewed
+        onReadingCompleted();
+      }
+    }
+  }, [courseId, lessonId, questionCount, onReadingCompleted]);
+  
+  const handleQuestionAnswered = useCallback(({ questionIndex, isCorrect }) => {
+    setAnsweredCount(prev => {
+      const newCount = prev + 1;
+      // Check if all questions are now answered
+      if (newCount >= questionCount && courseId && lessonId) {
+        setReadingTotalQuestions(courseId, lessonId, questionCount);
+        if (onReadingCompleted) {
+          onReadingCompleted();
+        }
+      }
+      return newCount;
+    });
+  }, [questionCount, courseId, lessonId, onReadingCompleted]);
+  
+  // Track question index for each question block
+  let questionIndex = 0;
   
   return (
     <>
@@ -810,6 +954,7 @@ export default function ReadingRenderer({ content }) {
                 );
                 
               case "question":
+                const currentQuestionIndex = questionIndex++;
                 return (
                   <QuestionBlock
                     key={idx}
@@ -817,6 +962,10 @@ export default function ReadingRenderer({ content }) {
                     options={block.options}
                     correctIndex={block.correctIndex}
                     explanation={block.explanation}
+                    questionIndex={currentQuestionIndex}
+                    courseId={courseId}
+                    lessonId={lessonId}
+                    onAnswered={handleQuestionAnswered}
                   />
                 );
                 

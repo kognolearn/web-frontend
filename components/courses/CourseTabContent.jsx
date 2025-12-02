@@ -8,6 +8,13 @@ import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
+import { 
+  isContentTypeCompleted, 
+  getLessonCompletionStatus, 
+  markVideoViewed,
+  getQuizScore,
+  determineMasteryStatus
+} from "@/utils/lessonProgress";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -38,7 +45,10 @@ function ItemContent({
   setCurrentViewingItem,
   handleCardChange,
   onQuizQuestionChange,
-  handleQuizCompleted
+  handleQuizCompleted,
+  onReadingCompleted,
+  onFlashcardsCompleted,
+  onVideoViewed
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
@@ -117,8 +127,12 @@ function ItemContent({
         summary: videos[0].summary,
         total: videos.length
       });
+      // Mark video as viewed when video content is loaded
+      if (onVideoViewed) {
+        onVideoViewed();
+      }
     }
-  }, [cachedEnvelope.format, cachedPayload?.videos, fmt, normFmt, setCurrentViewingItem]);
+  }, [cachedEnvelope.format, cachedPayload?.videos, fmt, normFmt, setCurrentViewingItem, onVideoViewed]);
 
   if (!normFmt || !id) {
     return <div className="text-xs text-red-600">Missing format or id.</div>;
@@ -187,10 +201,25 @@ function ItemContent({
     }
     case "reading": {
       const latexContent = data?.body || data?.reading || "";
-      return <ReadingRenderer content={latexContent} />;
+      return (
+        <ReadingRenderer 
+          content={latexContent} 
+          courseId={courseId}
+          lessonId={id}
+          onReadingCompleted={onReadingCompleted}
+        />
+      );
     }
     case "flashcards": {
-      return <FlashcardDeck data={flashcardData} onCardChange={handleCardChange} />;
+      return (
+        <FlashcardDeck 
+          data={flashcardData} 
+          onCardChange={handleCardChange}
+          courseId={courseId}
+          lessonId={id}
+          onFlashcardsCompleted={onFlashcardsCompleted}
+        />
+      );
     }
     case "mini_quiz": {
       return (
@@ -316,8 +345,16 @@ export default function CourseTabContent({
   const [selectedContentType, setSelectedContentType] = useState(null);
   const [currentViewingItem, setCurrentViewingItem] = useState(null);
   
-  // Practice exam state - persisted across navigation
-  const [examState, setExamState] = useState({}); // { [examType]: { status, url, error, gradeResult, topicsToImprove, topicFeedback, reviewModuleStatus } }
+  // Content type completion tracking
+  const [contentCompletionStatus, setContentCompletionStatus] = useState({});
+  // Force re-render counter for completion status updates
+  const [completionUpdateKey, setCompletionUpdateKey] = useState(0);
+  // Lesson/module completion celebration state
+  const [completionCelebration, setCompletionCelebration] = useState(null); // { type: 'lesson'|'module', title, status }
+  const celebrationTimeoutRef = useRef(null);
+  
+  // Practice exam state - fetched from API
+  const [examState, setExamState] = useState({}); // { [examType]: { status, exams: [...], selectedExamNumber, error } }
   const examStateRef = useRef({}); // Ref to track latest exam state for callbacks
   const fileInputRef = useRef(null);
   const gradeAbortRef = useRef(null); // AbortController for grading requests
@@ -334,55 +371,18 @@ export default function CourseTabContent({
     examStateRef.current = examState;
   }, [examState]);
 
-  // Load exam state and topics from localStorage on mount
+  // Cleanup on unmount
+  // Cleanup on unmount
   useEffect(() => {
-    if (!courseId) return;
-    try {
-      const savedState = localStorage.getItem(`examState_${courseId}`);
-      if (savedState) {
-        const parsed = JSON.parse(savedState);
-        // Restore state but keep generating status if it was in progress
-        setExamState(prev => {
-          const merged = { ...parsed };
-          // If there's an active generating state in memory, preserve it
-          Object.keys(prev).forEach(key => {
-            if (prev[key]?.status === 'generating' || prev[key]?.status === 'grading') {
-              merged[key] = prev[key];
-            }
-          });
-          return merged;
-        });
-      }
-    } catch (e) {
-      console.error('Failed to load exam state from localStorage:', e);
-    }
-    
-    // Cleanup on unmount
     return () => {
       if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
       if (gradeAbortRef.current) gradeAbortRef.current.abort();
+      if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
     };
-  }, [courseId]);
+  }, []);
 
-  // Persist exam state to localStorage whenever it changes
-  useEffect(() => {
-    if (!courseId) return;
-    try {
-      // Don't persist transient states like 'checking'
-      const stateToPersist = {};
-      Object.entries(examState).forEach(([key, value]) => {
-        if (value && ['ready', 'not-built', 'graded', 'generating', 'grading'].includes(value.status)) {
-          stateToPersist[key] = value;
-        }
-      });
-      localStorage.setItem(`examState_${courseId}`, JSON.stringify(stateToPersist));
-    } catch (e) {
-      console.error('Failed to save exam state to localStorage:', e);
-    }
-  }, [examState, courseId]);
-
-  // Check if exam already exists (doesn't generate)
-  const checkExamExists = useCallback(async (examType) => {
+  // Fetch list of exams from API
+  const fetchExamList = useCallback(async (examType) => {
     if (!userId || !courseId) return;
     
     const key = `${courseId}:${examType}`;
@@ -393,21 +393,17 @@ export default function CourseTabContent({
 
     // Check current state using REF to avoid stale closures
     const currentStatus = examStateRef.current[examType]?.status;
-    if (currentStatus && ['generating', 'grading', 'ready', 'graded', 'checking', 'not-built', 'error', 'grade-error'].includes(currentStatus)) {
-      return; // Don't re-check if already in a meaningful state
+    if (currentStatus && ['generating', 'grading', 'loading'].includes(currentStatus)) {
+      return; // Don't re-fetch if already in a transient state
     }
     
     globalExamFetching.add(key);
     globalExamChecked.add(key);
 
-    setExamState(prev => {
-      // Double-check in setter to handle race conditions
-      const prevStatus = prev[examType]?.status;
-      if (prevStatus && ['generating', 'grading', 'ready', 'graded', 'checking', 'not-built', 'error', 'grade-error'].includes(prevStatus)) {
-        return prev;
-      }
-      return { ...prev, [examType]: { status: 'checking', url: null, error: null } };
-    });
+    setExamState(prev => ({
+      ...prev,
+      [examType]: { ...prev[examType], status: 'loading', error: null }
+    }));
     
     try {
       const fetchRes = await fetch(
@@ -416,37 +412,47 @@ export default function CourseTabContent({
       
       if (fetchRes.ok) {
         const data = await fetchRes.json();
+        const exams = data.exams || [];
         setExamState(prev => {
           // Preserve generating/grading states
           if (['generating', 'grading'].includes(prev[examType]?.status)) return prev;
-          return { ...prev, [examType]: { ...prev[examType], status: 'ready', url: data.url, error: null } };
-        });
-      } else if (fetchRes.status === 404) {
-        // Exam doesn't exist yet - show build option (don't retry)
-        setExamState(prev => {
-          if (['generating', 'grading'].includes(prev[examType]?.status)) return prev;
-          return { ...prev, [examType]: { status: 'not-built', url: null, error: null } };
+          
+          const selectedExamNumber = prev[examType]?.selectedExamNumber || (exams.length > 0 ? exams[exams.length - 1].number : null);
+          return {
+            ...prev,
+            [examType]: {
+              status: 'ready',
+              exams,
+              selectedExamNumber,
+              error: null
+            }
+          };
         });
       } else {
         const errData = await fetchRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Failed to check exam (${fetchRes.status})`);
+        throw new Error(errData.error || `Failed to fetch exams (${fetchRes.status})`);
       }
     } catch (e) {
       setExamState(prev => {
         if (['generating', 'grading'].includes(prev[examType]?.status)) return prev;
-        return { ...prev, [examType]: { status: 'error', url: null, error: e.message } };
+        return {
+          ...prev,
+          [examType]: { status: 'error', exams: [], selectedExamNumber: null, error: e.message }
+        };
       });
     } finally {
       globalExamFetching.delete(key);
     }
-  }, [userId, courseId]); // Stable dependencies
+  }, [userId, courseId]);
 
-  // Generate exam (only called when user clicks build)
+  // Generate exam (only called when user clicks create)
   const generateExam = useCallback(async (examType, lessonTitles) => {
     if (!userId || !courseId) return;
     
-    const key = examType;
-    setExamState(prev => ({ ...prev, [key]: { status: 'generating', url: null, error: null } }));
+    setExamState(prev => ({
+      ...prev,
+      [examType]: { ...prev[examType], status: 'generating', error: null }
+    }));
     
     try {
       const generateRes = await fetch(
@@ -468,17 +474,37 @@ export default function CourseTabContent({
       }
       
       const genData = await generateRes.json();
-      setExamState(prev => ({ ...prev, [key]: { status: 'ready', url: genData.url, error: null } }));
+      
+      // Add the new exam to the list and select it
+      setExamState(prev => {
+        const existingExams = prev[examType]?.exams || [];
+        const newExam = {
+          name: genData.name,
+          url: genData.url,
+          number: genData.number,
+          grade: null
+        };
+        return {
+          ...prev,
+          [examType]: {
+            status: 'ready',
+            exams: [...existingExams, newExam],
+            selectedExamNumber: genData.number,
+            error: null
+          }
+        };
+      });
     } catch (e) {
-      setExamState(prev => ({ ...prev, [key]: { status: 'error', url: null, error: e.message } }));
+      setExamState(prev => ({
+        ...prev,
+        [examType]: { ...prev[examType], status: 'error', error: e.message }
+      }));
     }
   }, [userId, courseId]);
 
   // Grade exam (upload completed exam for grading)
-  const gradeExam = useCallback(async (examType, file) => {
-    if (!userId || !courseId || !file) return;
-    
-    const key = examType;
+  const gradeExam = useCallback(async (examType, examNumber, file) => {
+    if (!userId || !courseId || !file || !examNumber) return;
     
     // Clear any existing timeout/abort
     if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
@@ -488,25 +514,26 @@ export default function CourseTabContent({
     const abortController = new AbortController();
     gradeAbortRef.current = abortController;
     
-    setExamState(prev => ({ 
-      ...prev, 
-      [key]: { ...prev[key], status: 'grading', gradeResult: null, topicsToImprove: null } 
+    setExamState(prev => ({
+      ...prev,
+      [examType]: { ...prev[examType], status: 'grading', error: null }
     }));
     
     // Set 2-minute timeout
     gradeTimeoutRef.current = setTimeout(() => {
       abortController.abort();
-      setExamState(prev => ({ 
-        ...prev, 
-        [key]: { ...prev[key], status: 'ready', error: null, gradeResult: null, topicsToImprove: null } 
+      setExamState(prev => ({
+        ...prev,
+        [examType]: { ...prev[examType], status: 'ready', error: null }
       }));
     }, 2 * 60 * 1000); // 2 minutes
     
     try {
       const formData = new FormData();
       formData.append('userId', userId);
-      formData.append('type', examType);
-      formData.append('file', file);
+      formData.append('exam_type', examType);
+      formData.append('exam_number', String(examNumber));
+      formData.append('input_pdf', file);
       
       const gradeRes = await fetch(
         `/api/courses/${courseId}/exams/grade`,
@@ -526,19 +553,34 @@ export default function CourseTabContent({
       }
       
       const gradeData = await gradeRes.json();
-      // Support both old and new response formats
-      const topicsToImprove = gradeData.topic_list?.filter(t => t.grade < 3) || gradeData.topics_to_improve || gradeData.topicsToImprove || [];
       
-      setExamState(prev => ({ 
-        ...prev, 
-        [key]: { 
-          ...prev[key], 
-          status: 'graded', 
-          gradeResult: gradeData,
-          topicsToImprove,
-          topicFeedback: {} // Track user agree/disagree on topics
-        } 
-      }));
+      // Update the exam in the list with grade data
+      setExamState(prev => {
+        const exams = (prev[examType]?.exams || []).map(exam => {
+          if (exam.number === examNumber) {
+            return {
+              ...exam,
+              grade: {
+                score: gradeData.overall_score,
+                feedback: gradeData.overall_feedback,
+                topic_grades: gradeData.topic_list || [],
+                created_at: new Date().toISOString()
+              }
+            };
+          }
+          return exam;
+        });
+        
+        return {
+          ...prev,
+          [examType]: {
+            ...prev[examType],
+            status: 'ready',
+            exams,
+            error: null
+          }
+        };
+      });
     } catch (e) {
       // Clear timeout on error
       if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
@@ -546,18 +588,18 @@ export default function CourseTabContent({
       // Don't show error if aborted (timeout or manual cancel)
       if (e.name === 'AbortError') return;
       
-      setExamState(prev => ({ 
-        ...prev, 
-        [key]: { ...prev[key], status: 'grade-error', error: e.message } 
+      setExamState(prev => ({
+        ...prev,
+        [examType]: { ...prev[examType], status: 'error', error: e.message }
       }));
     }
   }, [userId, courseId]);
 
   // Handle file input change for grading
-  const handleGradeFileSelect = useCallback((examType) => (e) => {
+  const handleGradeFileSelect = useCallback((examType, examNumber) => (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      gradeExam(examType, file);
+      gradeExam(examType, examNumber, file);
     }
     // Reset input so same file can be selected again
     if (fileInputRef.current) {
@@ -565,11 +607,11 @@ export default function CourseTabContent({
     }
   }, [gradeExam]);
 
-  // Auto-check exam existence when practice exam is selected
+  // Auto-fetch exam list when practice exam is selected
   useEffect(() => {
     if (selectedLesson?.type === 'practice_exam' && userId && courseId) {
       const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
-      checkExamExists(examType);
+      fetchExamList(examType);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLesson?.type, selectedLesson?.title, userId, courseId]);
@@ -774,7 +816,70 @@ export default function CourseTabContent({
     await refetchStudyPlan();
   }, [refetchStudyPlan]);
 
-  const isLessonContentLoading = (lessonId) => {
+  // Content completion handlers
+  const refreshCompletionStatus = useCallback(() => {
+    setCompletionUpdateKey(prev => prev + 1);
+  }, []);
+
+  const handleReadingCompleted = useCallback(() => {
+    if (selectedLesson?.id && courseId) {
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:reading`]: true
+      }));
+      refreshCompletionStatus();
+    }
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
+
+  const handleFlashcardsCompleted = useCallback(() => {
+    if (selectedLesson?.id && courseId) {
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:flashcards`]: true
+      }));
+      refreshCompletionStatus();
+    }
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
+
+  const handleVideoViewed = useCallback(() => {
+    if (selectedLesson?.id && courseId) {
+      markVideoViewed(courseId, selectedLesson.id);
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:video`]: true
+      }));
+      refreshCompletionStatus();
+    }
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
+
+  const handleQuizContentCompleted = useCallback(async (result) => {
+    if (selectedLesson?.id && courseId) {
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:mini_quiz`]: true
+      }));
+      refreshCompletionStatus();
+      // Also update the study plan
+      await refetchStudyPlan();
+    }
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus, refetchStudyPlan]);
+
+  // Check if a content type is completed for a lesson
+  const isContentCompleted = useCallback((lessonId, contentType) => {
+    // Check from local state first (for immediate updates)
+    const stateKey = `${lessonId}:${contentType}`;
+    if (contentCompletionStatus[stateKey]) return true;
+    
+    // Then check from localStorage
+    if (courseId && lessonId) {
+      return isContentTypeCompleted(courseId, lessonId, contentType);
+    }
+    return false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, contentCompletionStatus, completionUpdateKey]);
+
+  // Helper functions for checking lesson content status
+  const isLessonContentLoading = useCallback((lessonId) => {
     const cacheKeys = Object.keys(contentCache);
     const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
     if (lessonCacheKey) {
@@ -782,9 +887,9 @@ export default function CourseTabContent({
       return cached?.status === "loading";
     }
     return false;
-  };
+  }, [contentCache]);
 
-  const isLessonContentLoaded = (lessonId) => {
+  const isLessonContentLoaded = useCallback((lessonId) => {
     const cacheKeys = Object.keys(contentCache);
     const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
     if (lessonCacheKey) {
@@ -792,9 +897,9 @@ export default function CourseTabContent({
       return cached?.status === "loaded";
     }
     return false;
-  };
+  }, [contentCache]);
 
-  const getAvailableContentTypes = (lessonId) => {
+  const getAvailableContentTypes = useCallback((lessonId) => {
     const types = [];
     const cacheKeys = Object.keys(contentCache);
     const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
@@ -806,15 +911,132 @@ export default function CourseTabContent({
         if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
         if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
         if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
-        // Practice problems hidden for now
-        // if (data.practice_exam && data.practice_exam.length > 0) types.push({ label: "Practice Problems", value: "practice_exam" });
       }
     }
     if (types.length === 0) {
       types.push({ label: "Reading", value: "reading" });
     }
     return types;
-  };
+  }, [contentCache]);
+
+  // Helper to get lesson data from studyPlan by ID
+  const getLessonFromStudyPlan = useCallback((lessonId) => {
+    if (!studyPlan?.modules) return null;
+    for (const module of studyPlan.modules) {
+      const lesson = module.lessons?.find(l => l.id === lessonId);
+      if (lesson) return lesson;
+    }
+    return null;
+  }, [studyPlan]);
+
+  // Check if all content types for a lesson are completed
+  const isLessonFullyCompleted = useCallback((lessonId) => {
+    // First check if the lesson has a status or mastery_status from the backend (not pending = completed)
+    const lesson = getLessonFromStudyPlan(lessonId);
+    // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
+    const lessonStatus = lesson?.status || lesson?.mastery_status;
+    if (lessonStatus && lessonStatus !== 'pending') {
+      return true;
+    }
+    
+    // If content is loaded, check localStorage for completion
+    if (isLessonContentLoaded(lessonId)) {
+      const availableTypes = getAvailableContentTypes(lessonId);
+      if (availableTypes.length > 0) {
+        return availableTypes.every(type => isContentCompleted(lessonId, type.value));
+      }
+    }
+    
+    return false;
+  }, [getLessonFromStudyPlan, isLessonContentLoaded, getAvailableContentTypes, isContentCompleted]);
+
+  // Get the mastery status of a lesson (for display purposes)
+  const getLessonMasteryStatus = useCallback((lessonId) => {
+    const lesson = getLessonFromStudyPlan(lessonId);
+    // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
+    return lesson?.status || lesson?.mastery_status || 'pending';
+  }, [getLessonFromStudyPlan]);
+
+  // Check if all lessons in a module are completed
+  const isModuleCompleted = useCallback((module) => {
+    const lessons = module?.lessons || [];
+    if (lessons.length === 0) return false;
+    
+    return lessons.every(lesson => {
+      // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
+      const lessonStatus = lesson.status || lesson.mastery_status;
+      if (lessonStatus && lessonStatus !== 'pending') {
+        return true;
+      }
+      // Fall back to checking via isLessonFullyCompleted
+      return isLessonFullyCompleted(lesson.id);
+    });
+  }, [isLessonFullyCompleted]);
+
+  // Effect to update lesson status when all content is completed
+  const lessonCompletionUpdatedRef = useRef(new Set());
+  
+  useEffect(() => {
+    if (!selectedLesson?.id || !courseId || !userId) return;
+    
+    const lessonId = selectedLesson.id;
+    const updateKey = `${lessonId}:${completionUpdateKey}`;
+    
+    // Skip if we've already checked this lesson at this update key
+    if (lessonCompletionUpdatedRef.current.has(updateKey)) return;
+    
+    // Check if lesson content is loaded first
+    if (!isLessonContentLoaded(lessonId)) return;
+    
+    // Check if all content types are completed
+    const availableTypes = getAvailableContentTypes(lessonId);
+    if (availableTypes.length === 0) return;
+    
+    const allCompleted = availableTypes.every(type => isContentCompleted(lessonId, type.value));
+    
+    if (allCompleted) {
+      // Mark as checked to prevent duplicate API calls
+      lessonCompletionUpdatedRef.current.add(updateKey);
+      
+      // Get quiz score for determining mastery
+      const quizScore = getQuizScore(courseId, lessonId);
+      const masteryStatus = determineMasteryStatus(quizScore);
+      const familiarityScore = quizScore !== null ? quizScore : 1; // Default to 1 if no quiz
+      
+      // Update lesson status via API
+      (async () => {
+        try {
+          const response = await fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              mastery_status: masteryStatus,
+              familiarity_score: familiarityScore,
+            }),
+          });
+          
+          if (response.ok) {
+            // Show celebration banner
+            if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+            setCompletionCelebration({
+              type: 'lesson',
+              title: selectedLesson.title,
+              status: masteryStatus,
+            });
+            celebrationTimeoutRef.current = setTimeout(() => {
+              setCompletionCelebration(null);
+            }, 5000); // Auto-dismiss after 5 seconds
+            
+            // Refresh the study plan to get updated lesson status
+            await refetchStudyPlan();
+          }
+        } catch (error) {
+          console.error('Failed to update lesson progress:', error);
+        }
+      })();
+    }
+  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, completionUpdateKey, isLessonContentLoaded, getAvailableContentTypes, isContentCompleted, refetchStudyPlan]);
 
   const handleDragOver = (e) => {
     if (e.dataTransfer.types.includes('application/x-chat-tab-id')) {
@@ -1135,40 +1357,69 @@ export default function CourseTabContent({
                 
                 return (
                   <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-[var(--surface-2)]/50 border border-[var(--border)]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newCollapsed = new Set(collapsedModules);
-                        if (isCollapsed) {
-                          newCollapsed.delete(moduleIdx);
-                        } else {
-                          newCollapsed.add(moduleIdx);
-                        }
-                        setCollapsedModules(newCollapsed);
-                      }}
-                      className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 text-white text-[11px] font-semibold shadow-md shadow-[var(--primary)]/25 tabular-nums">
-                          {moduleIdx + 1}
-                        </div>
-                        <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-[var(--primary)] text-left">
-                          {module.title}
-                        </h3>
-                      </div>
-                      <svg 
-                        className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
+                    {(() => {
+                      const moduleCompleted = isModuleCompleted(module);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCollapsed = new Set(collapsedModules);
+                            if (isCollapsed) {
+                              newCollapsed.delete(moduleIdx);
+                            } else {
+                              newCollapsed.add(moduleIdx);
+                            }
+                            setCollapsedModules(newCollapsed);
+                          }}
+                          className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            {/* Module number badge - shows checkmark if all lessons completed */}
+                            <div className={`flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums ${
+                              moduleCompleted 
+                                ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
+                                : 'bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25'
+                            }`}>
+                              {moduleCompleted ? (
+                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                moduleIdx + 1
+                              )}
+                            </div>
+                            <h3 className={`text-xs uppercase tracking-[0.15em] font-semibold text-left ${
+                              moduleCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--primary)]'
+                            }`}>
+                              {module.title}
+                            </h3>
+                            {moduleCompleted && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium">
+                                Complete
+                              </span>
+                            )}
+                          </div>
+                          <svg 
+                            className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      );
+                    })()}
                     
                     {!isCollapsed && (
                       <div className="px-3 pb-3 space-y-1">
                         {module.lessons?.map((lesson, lessonIdx) => {
+                          const lessonCompleted = isLessonFullyCompleted(lesson.id);
+                          // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
+                          const lessonStatus = lesson.status || lesson.mastery_status || getLessonMasteryStatus(lesson.id);
+                          // Show completion UI if status is anything other than 'pending'
+                          const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
+                          
                           return (
                             <button
                               key={lesson.id || lessonIdx}
@@ -1187,17 +1438,40 @@ export default function CourseTabContent({
                               className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
                                 selectedLesson?.id === lesson.id
                                   ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                  : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
+                                  : showCompleted
+                                    ? "bg-emerald-500/5 hover:bg-emerald-500/10 text-[var(--foreground)]"
+                                    : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
                               }`}
                             >
+                              {/* Lesson number badge - shows checkmark if completed */}
                               <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
-                                selectedLesson?.id === lesson.id
-                                  ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                                  : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
+                                showCompleted
+                                  ? "bg-emerald-500 text-white"
+                                  : selectedLesson?.id === lesson.id
+                                    ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                                    : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
                               }`}>
-                                {lessonIdx + 1}
+                                {showCompleted ? (
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  lessonIdx + 1
+                                )}
                               </span>
-                              <span className="flex-1 truncate">{lesson.title}</span>
+                              <span className={`flex-1 truncate ${
+                                showCompleted
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : ''
+                              }`}>
+                                {lesson.title}
+                              </span>
+                              {/* Completion indicator badge */}
+                              {showCompleted && (
+                                <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium">
+                                  Complete
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -1227,6 +1501,51 @@ export default function CourseTabContent({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
+        {/* Completion celebration banner */}
+        {completionCelebration && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-lg border backdrop-blur-xl ${
+              completionCelebration.status === 'mastered' 
+                ? 'bg-emerald-500/90 border-emerald-400/50 text-white'
+                : 'bg-amber-500/90 border-amber-400/50 text-white'
+            }`}>
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                completionCelebration.status === 'mastered' 
+                  ? 'bg-white/20' 
+                  : 'bg-white/20'
+              }`}>
+                {completionCelebration.status === 'mastered' ? (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">
+                  {completionCelebration.status === 'mastered' ? '🎉 Lesson Mastered!' : '⭐ Lesson Complete!'}
+                </p>
+                <p className="text-xs opacity-90 truncate">
+                  {completionCelebration.title}
+                  {completionCelebration.status === 'needs_review' && ' - Review recommended'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompletionCelebration(null)}
+                className="flex-shrink-0 p-1 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-20 sm:px-6 lg:px-8 z-10">
           {loading && (
             <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-3xl px-8 py-16 text-center shadow-lg">
@@ -1443,6 +1762,10 @@ export default function CourseTabContent({
                   (() => {
                     const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
                     const currentExamState = examState[examType] || {};
+                    const exams = currentExamState.exams || [];
+                    const selectedExamNumber = currentExamState.selectedExamNumber;
+                    const selectedExam = exams.find(e => e.number === selectedExamNumber) || exams[exams.length - 1];
+                    
                     const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
                     const precedingLessonIds = selectedLesson.preceding_lessons || [];
                     const lessonTitles = precedingLessonIds.map(id => allLessons.find(l => l.id === id)?.title).filter(Boolean);
@@ -1454,12 +1777,12 @@ export default function CourseTabContent({
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf"
                         className="hidden"
-                        onChange={handleGradeFileSelect(examType)}
+                        onChange={handleGradeFileSelect(examType, selectedExam?.number)}
                       />
                     );
                     
                     // Loading states (checking, generating, grading)
-                    if (['checking', 'generating', 'grading'].includes(currentExamState.status)) {
+                    if (['loading', 'generating', 'grading'].includes(currentExamState.status)) {
                       return (
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                           {fileInput}
@@ -1468,7 +1791,7 @@ export default function CourseTabContent({
                             <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-[var(--primary)] animate-spin" />
                           </div>
                           <p className="mt-6 text-lg font-medium text-[var(--foreground)]">
-                            {currentExamState.status === 'checking' && 'Loading exam...'}
+                            {currentExamState.status === 'loading' && 'Loading exams...'}
                             {currentExamState.status === 'generating' && 'Generating your exam...'}
                             {currentExamState.status === 'grading' && 'Grading your submission...'}
                           </p>
@@ -1481,7 +1804,7 @@ export default function CourseTabContent({
                     }
                     
                     // Error state
-                    if (currentExamState.status === 'error' || currentExamState.status === 'grade-error') {
+                    if (currentExamState.status === 'error') {
                       return (
                         <div className="flex flex-col items-center justify-center min-h-[40vh]">
                           {fileInput}
@@ -1491,7 +1814,7 @@ export default function CourseTabContent({
                             </svg>
                           </div>
                           <p className="text-lg font-medium text-[var(--foreground)] mb-2">
-                            {currentExamState.status === 'grade-error' ? 'Grading Failed' : 'Something went wrong'}
+                            Something went wrong
                           </p>
                           <p className="text-sm text-[var(--muted-foreground)] mb-6 text-center max-w-md">
                             {currentExamState.error}
@@ -1501,12 +1824,8 @@ export default function CourseTabContent({
                             onClick={() => {
                               const key = `${courseId}:${examType}`;
                               globalExamChecked.delete(key); // Allow retry
-                              if (currentExamState.status === 'grade-error') {
-                                setExamState(prev => ({ ...prev, [examType]: { ...prev[examType], status: 'ready', error: null } }));
-                              } else {
-                                setExamState(prev => ({ ...prev, [examType]: null }));
-                                checkExamExists(examType);
-                              }
+                              setExamState(prev => ({ ...prev, [examType]: null }));
+                              fetchExamList(examType);
                             }}
                             className="px-6 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-muted)] transition-all"
                           >
@@ -1516,8 +1835,8 @@ export default function CourseTabContent({
                       );
                     }
                     
-                    // Not built state - show generate button
-                    if (currentExamState.status === 'not-built' || !currentExamState.status) {
+                    // Empty state (no exams yet)
+                    if (exams.length === 0) {
                       return (
                         <div className="flex flex-col items-center justify-center min-h-[50vh]">
                           {fileInput}
@@ -1540,64 +1859,64 @@ export default function CourseTabContent({
                             </svg>
                             Generate Practice Exam
                           </button>
-                          
-                          {/* Refresh button to recheck */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const key = `${courseId}:${examType}`;
-                              globalExamChecked.delete(key);
-                              setExamState(prev => ({ ...prev, [examType]: null }));
-                              checkExamExists(examType);
-                            }}
-                            className="mt-4 px-4 py-2 rounded-xl text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            Refresh
-                          </button>
-                          
-                          {/* Collapsible lessons preview */}
-                          {lessonTitles.length > 0 && (
-                            <details className="mt-8 w-full max-w-lg">
-                              <summary className="cursor-pointer text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                                View {lessonTitles.length} lessons covered
-                              </summary>
-                              <div className="mt-3 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
-                                <div className="space-y-2">
-                                  {lessonTitles.map((title, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                      <span className="w-5 h-5 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-xs">{idx + 1}</span>
-                                      {title}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </details>
-                          )}
                         </div>
                       );
                     }
                     
-                    // Ready or Graded state - show PDF viewer
-                    if ((currentExamState.status === 'ready' || currentExamState.status === 'graded') && currentExamState.url) {
-                      return (
-                        <div className="space-y-4">
-                          {fileInput}
+                    // Exam View with Tabs
+                    return (
+                      <div className="space-y-6">
+                        {fileInput}
+                        
+                        {/* Header */}
+                        <div className="flex flex-col gap-4">
+                          <div>
+                            <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedLesson.title}</h2>
+                            <p className="text-sm text-[var(--muted-foreground)]">
+                              {selectedLesson.duration} min • {lessonTitles.length} lessons
+                            </p>
+                          </div>
                           
-                          {/* Header with title and actions */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--border)]">
-                            <div>
-                              <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedLesson.title}</h2>
-                              <p className="text-sm text-[var(--muted-foreground)]">
-                                {selectedLesson.duration} min • {lessonTitles.length} lessons
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
+                          {/* Tabs */}
+                          <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+                            {exams.map((exam) => (
+                              <button
+                                key={exam.number}
+                                onClick={() => setExamState(prev => ({
+                                  ...prev,
+                                  [examType]: { ...prev[examType], selectedExamNumber: exam.number }
+                                }))}
+                                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                                  selectedExam?.number === exam.number
+                                    ? 'bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/20'
+                                    : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
+                                }`}
+                              >
+                                Exam {exam.number}
+                                {exam.grade && (
+                                  <span className="ml-2 px-1.5 py-0.5 rounded bg-white/20 text-xs">
+                                    {exam.grade.score}%
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                            
+                            <button
+                              onClick={() => generateExam(examType, lessonTitles)}
+                              className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-xl border border-dashed border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors"
+                              title="Generate New Exam"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {selectedExam && (
+                          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Actions Bar */}
+                            <div className="flex justify-end">
                               <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
@@ -1606,360 +1925,131 @@ export default function CourseTabContent({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                 </svg>
-                                {currentExamState.status === 'graded' ? 'Grade Again' : 'Submit for Grading'}
+                                {selectedExam.grade ? 'Grade Again' : 'Submit for Grading'}
                               </button>
                             </div>
-                          </div>
-                          
-                          {/* Grading results if available */}
-                          {currentExamState.status === 'graded' && currentExamState.gradeResult && (
-                            <div className="space-y-6">
-                              {/* Overall Score Card */}
-                              <div className="rounded-2xl bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)] border border-[var(--border)] p-6 shadow-lg">
-                                <div className="flex flex-col md:flex-row md:items-center gap-6">
-                                  {/* Score Circle */}
-                                  <div className="flex-shrink-0 flex flex-col items-center">
-                                    <div className="relative w-28 h-28">
-                                      <svg className="w-28 h-28 transform -rotate-90" viewBox="0 0 100 100">
-                                        <circle
-                                          cx="50"
-                                          cy="50"
-                                          r="42"
-                                          fill="none"
-                                          stroke="var(--surface-muted)"
-                                          strokeWidth="8"
-                                        />
-                                        <circle
-                                          cx="50"
-                                          cy="50"
-                                          r="42"
-                                          fill="none"
-                                          stroke={currentExamState.gradeResult.overall_score >= 70 ? 'var(--success)' : currentExamState.gradeResult.overall_score >= 50 ? 'var(--warning)' : 'var(--danger)'}
-                                          strokeWidth="8"
-                                          strokeLinecap="round"
-                                          strokeDasharray={`${(currentExamState.gradeResult.overall_score / 100) * 264} 264`}
-                                        />
-                                      </svg>
-                                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span className="text-3xl font-bold text-[var(--foreground)]">
-                                          {currentExamState.gradeResult.overall_score}
+
+                            {/* Grading Results */}
+                            {selectedExam.grade && (
+                              <div className="space-y-6">
+                                {/* Overall Score Card */}
+                                <div className="rounded-2xl bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)] border border-[var(--border)] p-6 shadow-lg">
+                                  <div className="flex flex-col md:flex-row md:items-center gap-6">
+                                    {/* Score Circle */}
+                                    <div className="flex-shrink-0 flex flex-col items-center">
+                                      <div className="relative w-28 h-28">
+                                        <svg className="w-28 h-28 transform -rotate-90" viewBox="0 0 100 100">
+                                          <circle
+                                            cx="50"
+                                            cy="50"
+                                            r="42"
+                                            fill="none"
+                                            stroke="var(--surface-muted)"
+                                            strokeWidth="8"
+                                          />
+                                          <circle
+                                            cx="50"
+                                            cy="50"
+                                            r="42"
+                                            fill="none"
+                                            stroke={selectedExam.grade.score >= 70 ? 'var(--success)' : selectedExam.grade.score >= 50 ? 'var(--warning)' : 'var(--danger)'}
+                                            strokeWidth="8"
+                                            strokeLinecap="round"
+                                            strokeDasharray={`${(selectedExam.grade.score / 100) * 264} 264`}
+                                          />
+                                        </svg>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                          <span className="text-3xl font-bold text-[var(--foreground)]">
+                                            {selectedExam.grade.score}
+                                          </span>
+                                          <span className="text-xs text-[var(--muted-foreground)]">/ 100</span>
+                                        </div>
+                                      </div>
+                                      <p className="mt-2 text-sm font-medium text-[var(--foreground)]">Overall Score</p>
+                                    </div>
+                                    
+                                    {/* Overall Feedback */}
+                                    {selectedExam.grade.feedback && (
+                                      <div className="flex-1 md:border-l md:border-[var(--border)] md:pl-6">
+                                        <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2 flex items-center gap-2">
+                                          <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          </svg>
+                                          Summary
+                                        </h3>
+                                        <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
+                                          {selectedExam.grade.feedback}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Topic Breakdown */}
+                                {selectedExam.grade.topic_grades && selectedExam.grade.topic_grades.length > 0 && (
+                                  <div className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] overflow-hidden shadow-lg">
+                                    <div className="px-6 py-4 border-b border-[var(--border)] bg-gradient-to-r from-[var(--primary)]/5 to-transparent">
+                                      <div className="flex items-center justify-between">
+                                        <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
+                                          <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                          </svg>
+                                          Topic Breakdown
+                                        </h3>
+                                        <span className="text-xs text-[var(--muted-foreground)] bg-[var(--surface-2)] px-2 py-1 rounded-full">
+                                          {selectedExam.grade.topic_grades.length} topics
                                         </span>
-                                        <span className="text-xs text-[var(--muted-foreground)]">/ 100</span>
                                       </div>
                                     </div>
-                                    <p className="mt-2 text-sm font-medium text-[var(--foreground)]">Overall Score</p>
-                                  </div>
-                                  
-                                  {/* Overall Feedback */}
-                                  {currentExamState.gradeResult.overall_feedback && (
-                                    <div className="flex-1 md:border-l md:border-[var(--border)] md:pl-6">
-                                      <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2 flex items-center gap-2">
-                                        <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Summary
-                                      </h3>
-                                      <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                                        {currentExamState.gradeResult.overall_feedback}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Topic Breakdown */}
-                              {currentExamState.gradeResult.topic_list && currentExamState.gradeResult.topic_list.length > 0 && (
-                                <div className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] overflow-hidden shadow-lg">
-                                  <div className="px-6 py-4 border-b border-[var(--border)] bg-gradient-to-r from-[var(--primary)]/5 to-transparent">
-                                    <div className="flex items-center justify-between">
-                                      <h3 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
-                                        <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                                        </svg>
-                                        Topic Breakdown
-                                      </h3>
-                                      <span className="text-xs text-[var(--muted-foreground)] bg-[var(--surface-2)] px-2 py-1 rounded-full">
-                                        {currentExamState.gradeResult.topic_list.length} topics
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                                      Your feedback helps us build a personalized review module for you
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="divide-y divide-[var(--border)]">
-                                    {currentExamState.gradeResult.topic_list.map((topic, idx) => {
-                                      const userFeedback = currentExamState.topicFeedback?.[idx];
-                                      const gradeColor = topic.grade === 3 ? 'var(--success)' : topic.grade === 2 ? 'var(--warning)' : 'var(--danger)';
-                                      const gradeLabel = topic.grade === 3 ? 'Excellent' : topic.grade === 2 ? 'Partial' : 'Needs Work';
-                                      const gradeBg = topic.grade === 3 ? 'bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400' : topic.grade === 2 ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400' : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400';
-                                      
-                                      return (
-                                        <div key={idx} className="px-6 py-4 hover:bg-[var(--surface-2)]/50 transition-colors">
-                                          <div className="flex items-start gap-4">
-                                            {/* Grade indicator */}
-                                            <div className="flex-shrink-0 mt-0.5">
-                                              <div 
-                                                className={`w-10 h-10 rounded-xl flex items-center justify-center border ${gradeBg}`}
-                                              >
-                                                <span className="text-lg font-bold">{topic.grade}</span>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Topic info */}
-                                            <div className="flex-1 min-w-0">
-                                              <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="text-sm font-semibold text-[var(--foreground)]">{topic.topic}</h4>
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${gradeBg}`}>
-                                                  {gradeLabel}
-                                                </span>
-                                              </div>
-                                              <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                                                {topic.explanation}
-                                              </p>
-                                              
-                                              {/* Feedback buttons */}
-                                              <div className="mt-3 flex flex-wrap items-center gap-2">
-                                                <span className="text-xs text-[var(--muted-foreground)] mr-1">Do you agree with this assessment?</span>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setExamState(prev => ({
-                                                      ...prev,
-                                                      [examType]: {
-                                                        ...prev[examType],
-                                                        topicFeedback: {
-                                                          ...prev[examType]?.topicFeedback,
-                                                          [idx]: { type: 'agree' }
-                                                        }
-                                                      }
-                                                    }));
-                                                  }}
-                                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                                    !userFeedback || userFeedback?.type === 'agree'
-                                                      ? 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30'
-                                                      : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] border border-transparent'
-                                                  }`}
-                                                >
-                                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                                                  </svg>
-                                                  Agree
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setExamState(prev => ({
-                                                      ...prev,
-                                                      [examType]: {
-                                                        ...prev[examType],
-                                                        topicFeedback: {
-                                                          ...prev[examType]?.topicFeedback,
-                                                          [idx]: { type: 'disagree', confidence: null, reason: '' }
-                                                        }
-                                                      }
-                                                    }));
-                                                  }}
-                                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                                    userFeedback?.type === 'disagree'
-                                                      ? 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30'
-                                                      : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] border border-transparent'
-                                                  }`}
-                                                >
-                                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.095c.5 0 .905-.405.905-.905 0-.714.211-1.412.608-2.006L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
-                                                  </svg>
-                                                  Disagree
-                                                </button>
-                                              </div>
-                                              
-                                              {/* Disagree expanded options */}
-                                              {userFeedback?.type === 'disagree' && (
-                                                <div className="mt-3 p-4 rounded-xl bg-[var(--surface-2)]/50 border border-[var(--border)] space-y-4">
-                                                  {/* Confidence selector */}
-                                                  <div>
-                                                    <label className="text-xs font-medium text-[var(--foreground)] mb-2 block">
-                                                      How confident are you in this topic?
-                                                    </label>
-                                                    <div className="flex flex-wrap gap-2">
-                                                      {[
-                                                        { value: 1, label: 'Not confident', color: 'bg-red-500/20 border-red-500/30 text-red-600 dark:text-red-400' },
-                                                        { value: 2, label: 'Somewhat confident', color: 'bg-yellow-500/20 border-yellow-500/30 text-yellow-600 dark:text-yellow-400' },
-                                                        { value: 3, label: 'Very confident', color: 'bg-green-500/20 border-green-500/30 text-green-600 dark:text-green-400' }
-                                                      ].map(option => (
-                                                        <button
-                                                          key={option.value}
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setExamState(prev => ({
-                                                              ...prev,
-                                                              [examType]: {
-                                                                ...prev[examType],
-                                                                topicFeedback: {
-                                                                  ...prev[examType]?.topicFeedback,
-                                                                  [idx]: { ...userFeedback, confidence: option.value }
-                                                                }
-                                                              }
-                                                            }));
-                                                          }}
-                                                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                                                            userFeedback.confidence === option.value
-                                                              ? option.color
-                                                              : 'bg-[var(--surface-1)] border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]'
-                                                          }`}
-                                                        >
-                                                          {option.label}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                  
-                                                  {/* Reason input */}
-                                                  <div>
-                                                    <label className="text-xs font-medium text-[var(--foreground)] mb-2 block">
-                                                      Why do you disagree? <span className="text-[var(--muted-foreground)] font-normal">(optional)</span>
-                                                    </label>
-                                                    <textarea
-                                                      value={userFeedback.reason || ''}
-                                                      onChange={(e) => {
-                                                        setExamState(prev => ({
-                                                          ...prev,
-                                                          [examType]: {
-                                                            ...prev[examType],
-                                                            topicFeedback: {
-                                                              ...prev[examType]?.topicFeedback,
-                                                              [idx]: { ...userFeedback, reason: e.target.value }
-                                                            }
-                                                          }
-                                                        }));
-                                                      }}
-                                                      placeholder="e.g., I made a small calculation error but understand the concept well..."
-                                                      rows={2}
-                                                      className="w-full px-3 py-2 rounded-lg bg-[var(--surface-1)] border border-[var(--border)] text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 focus:border-[var(--primary)]/50 resize-none"
-                                                    />
-                                                  </div>
+                                    
+                                    <div className="divide-y divide-[var(--border)]">
+                                      {selectedExam.grade.topic_grades.map((topic, idx) => {
+                                        const gradeColor = topic.grade === 3 ? 'var(--success)' : topic.grade === 2 ? 'var(--warning)' : 'var(--danger)';
+                                        const gradeLabel = topic.grade === 3 ? 'Excellent' : topic.grade === 2 ? 'Partial' : 'Needs Work';
+                                        const gradeBg = topic.grade === 3 ? 'bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400' : topic.grade === 2 ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400' : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400';
+                                        
+                                        return (
+                                          <div key={idx} className="px-6 py-4 hover:bg-[var(--surface-2)]/50 transition-colors">
+                                            <div className="flex items-start gap-4">
+                                              <div className="flex-shrink-0 mt-0.5">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${gradeBg}`}>
+                                                  <span className="text-lg font-bold">{topic.grade}</span>
                                                 </div>
-                                              )}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <h4 className="text-sm font-semibold text-[var(--foreground)]">{topic.topic}</h4>
+                                                  <span className={`text-[10px] px-2 py-0.5 rounded-full border ${gradeBg}`}>
+                                                    {gradeLabel}
+                                                  </span>
+                                                </div>
+                                                <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
+                                                  {topic.explanation}
+                                                </p>
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  {/* Review Module CTA */}
-                                  {(() => {
-                                    const topicList = currentExamState.gradeResult.topic_list || [];
-                                    const feedback = currentExamState.topicFeedback || {};
-                                    
-                                    // Check if all topics have feedback (default to agree if not set)
-                                    // and all disagreed topics have confidence ratings
-                                    const allValid = topicList.every((_, idx) => {
-                                      const f = feedback[idx];
-                                      // If no feedback, defaults to agree (valid)
-                                      if (!f) return true;
-                                      // If agree, valid
-                                      if (f.type === 'agree') return true;
-                                      // If disagree, must have confidence
-                                      if (f.type === 'disagree') return f.confidence != null;
-                                      return true;
-                                    });
-                                    
-                                    return (
-                                      <div className="px-6 py-4 border-t border-[var(--border)]">
-                                        <button
-                                          type="button"
-                                          disabled={!allValid}
-                                          onClick={async () => {
-                                            try {
-                                              await generateReviewModule(examType);
-                                            } catch (e) {
-                                              console.error('Failed to generate review module:', e);
-                                            }
-                                          }}
-                                          className={`w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
-                                            allValid
-                                              ? 'bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white shadow-lg shadow-[var(--primary)]/20 hover:shadow-[var(--primary)]/40 hover:scale-[1.01] active:scale-[0.99] cursor-pointer'
-                                              : 'bg-[var(--surface-muted)] text-[var(--muted-foreground)] cursor-not-allowed'
-                                          }`}
-                                        >
-                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                          </svg>
-                                          Generate Review Module
-                                        </button>
-                                        {!allValid && (
-                                          <p className="text-xs text-[var(--muted-foreground)] text-center mt-2">
-                                            Please provide a confidence rating for all topics you disagree with
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                              
-                              {/* Legacy topics to improve (fallback for old format) */}
-                              {!currentExamState.gradeResult.topic_list && currentExamState.topicsToImprove && currentExamState.topicsToImprove.length > 0 && (
-                                <div className="rounded-2xl bg-gradient-to-r from-[var(--warning)]/10 to-[var(--warning)]/5 border border-[var(--warning)]/20 p-6">
-                                  <p className="text-sm font-medium text-[var(--foreground)] mb-3 flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-[var(--warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                    </svg>
-                                    Topics to Review
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {currentExamState.topicsToImprove.map((topic, idx) => (
-                                      <span
-                                        key={idx}
-                                        className="px-3 py-1.5 rounded-full bg-[var(--warning)]/10 border border-[var(--warning)]/20 text-sm text-[var(--warning)]"
-                                      >
-                                        {typeof topic === 'string' ? topic : topic.name || topic.topic}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* PDF Viewer */}
-                          <div className="rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-1)] shadow-lg">
-                            <iframe
-                              src={`${currentExamState.url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-                              className="w-full bg-white"
-                              style={{ height: 'calc(100vh - 300px)', minHeight: '500px' }}
-                              title="Practice Exam PDF"
-                            />
-                          </div>
-                          
-                          {/* Collapsible lessons */}
-                          {lessonTitles.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="cursor-pointer text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex items-center gap-2 py-2">
-                                <svg className="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                                {lessonTitles.length} lessons covered in this exam
-                              </summary>
-                              <div className="mt-2 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {lessonTitles.map((title, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                      <span className="w-5 h-5 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-xs flex-shrink-0">{idx + 1}</span>
-                                      <span className="truncate">{title}</span>
+                                        );
+                                      })}
                                     </div>
-                                  ))}
-                                </div>
+                                  </div>
+                                )}
                               </div>
-                            </details>
-                          )}
-                        </div>
-                      );
-                    }
-                    
-                    // Fallback
-                    return null;
+                            )}
+
+                            {/* PDF Viewer */}
+                            <div className="rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-1)] shadow-lg">
+                              <iframe
+                                src={`${selectedExam.url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
+                                className="w-full bg-white"
+                                style={{ height: 'calc(100vh - 300px)', minHeight: '500px' }}
+                                title={`Practice Exam ${selectedExam.number}`}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
                   })()
                 ) : isLessonContentLoading(selectedLesson.id) ? (
                   <div className="animate-pulse space-y-6">
@@ -1990,7 +2080,10 @@ export default function CourseTabContent({
                     handleCardChange={handleCardChange}
                     setCurrentViewingItem={setCurrentViewingItem}
                     onQuizQuestionChange={setChatQuizContext}
-                    handleQuizCompleted={refetchStudyPlan}
+                    handleQuizCompleted={handleQuizContentCompleted}
+                    onReadingCompleted={handleReadingCompleted}
+                    onFlashcardsCompleted={handleFlashcardsCompleted}
+                    onVideoViewed={handleVideoViewed}
                   />
                 )}
               </section>
@@ -2054,6 +2147,7 @@ export default function CourseTabContent({
                       const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
                       const isActive = selectedContentType?.type === contentType.value;
                       const isPast = idx < currentIdx;
+                      const isCompleted = isContentCompleted(selectedLesson.id, contentType.value);
                       
                       return (
                         <button
@@ -2063,15 +2157,28 @@ export default function CourseTabContent({
                             setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
                             fetchLessonContent(selectedLesson.id, [contentType.value]);
                           }}
-                          title={contentType.label}
-                          className={`rounded-full transition-all duration-300 ${
+                          title={`${contentType.label}${isCompleted ? ' ✓' : ''}`}
+                          className={`relative rounded-full transition-all duration-300 ${
                             isActive
-                              ? 'w-8 h-3 bg-[var(--primary)] shadow-lg shadow-[var(--primary)]/30'
-                              : isPast
-                                ? 'w-3 h-3 bg-[var(--primary)]/50 hover:bg-[var(--primary)]/70'
-                                : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
+                              ? `w-8 h-3 ${isCompleted ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-[var(--primary)] shadow-lg shadow-[var(--primary)]/30'}`
+                              : isCompleted
+                                ? 'w-3 h-3 bg-emerald-500 hover:bg-emerald-600'
+                                : isPast
+                                  ? 'w-3 h-3 bg-[var(--primary)]/50 hover:bg-[var(--primary)]/70'
+                                  : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
                           }`}
-                        />
+                        >
+                          {/* Checkmark overlay for completed items */}
+                          {isCompleted && !isActive && (
+                            <svg 
+                              className="absolute inset-0 w-3 h-3 text-white p-0.5" 
+                              fill="currentColor" 
+                              viewBox="0 0 20 20"
+                            >
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
                       );
                     })
                   )}

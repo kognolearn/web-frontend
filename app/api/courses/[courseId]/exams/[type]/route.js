@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 
-// GET /api/courses/:courseId/exams/:type - Fetch existing exam URL
+// GET /api/courses/:courseId/exams/:type - Fetch list of generated practice exams
 export async function GET(request, { params }) {
   try {
     const { courseId, type } = await params;
@@ -35,6 +35,8 @@ export async function GET(request, { params }) {
       } catch {
         data = { error: "Invalid JSON from backend" };
       }
+      
+      // Return the response as-is (backend returns { success, exams: [...] })
       return NextResponse.json(data, { status: res.status });
     } finally {
       clearTimeout(to);
