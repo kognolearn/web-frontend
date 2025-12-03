@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import DurationInput from "@/components/ui/DurationInput";
 
 import {
   defaultTopicRating,
@@ -281,8 +282,9 @@ function CreateCoursePageContent() {
     d.setDate(d.getDate() + 7);
     return toDateInputValue(d);
   }, []);
-  const [studyHours, setStudyHours] = useState(50);
+  const [studyHours, setStudyHours] = useState(5);
   const [studyMinutes, setStudyMinutes] = useState(0);
+  const [studyTimeError, setStudyTimeError] = useState(false);
   const syllabusInputId = useId();
   const examInputId = useId();
 
@@ -336,7 +338,8 @@ function CreateCoursePageContent() {
     [overviewTopics]
   );
 
-  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim() && studyHours >= 0 && studyMinutes >= 0;
+  const hasStudyTime = studyHours > 0 || studyMinutes > 0;
+  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim();
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
@@ -1248,7 +1251,9 @@ function CreateCoursePageContent() {
                 {/* Course Title & University */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5">University / Institution *</label>
+                    <label className="block text-sm font-semibold mb-1.5">
+                      University / Institution <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="MIT"
@@ -1259,7 +1264,9 @@ function CreateCoursePageContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5">Course Name *</label>
+                    <label className="block text-sm font-semibold mb-1.5">
+                      Course Name <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="Introduction to Machine Learning"
@@ -1272,31 +1279,28 @@ function CreateCoursePageContent() {
                 </div>
 
                 {/* Study Time */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-semibold mb-1.5">Study Hours *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="1000"
-                      value={studyHours}
-                      onChange={(e) => setStudyHours(Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-1.5">Study Minutes *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={studyMinutes}
-                      onChange={(e) => setStudyMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20"
-                      required
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1.5">
+                    Time left to learn <span className="text-rose-500">*</span>
+                  </label>
+                  <DurationInput
+                    hours={studyHours}
+                    minutes={studyMinutes}
+                    onChange={({ hours, minutes }) => {
+                      setStudyHours(hours);
+                      setStudyMinutes(minutes);
+                      if (hours > 0 || minutes > 0) {
+                        setStudyTimeError(false);
+                      }
+                    }}
+                    hideSummary
+                    variant="minimal"
+                  />
+                  {studyTimeError && (
+                    <div className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-600 dark:text-rose-300">
+                      Please enter more than 0 hours and 0 minutes.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1332,7 +1336,13 @@ function CreateCoursePageContent() {
                 <Link href="/dashboard" className="btn btn-outline btn-sm">Cancel</Link>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(2)}
+                  onClick={() => {
+                    if (!hasStudyTime) {
+                      setStudyTimeError(true);
+                      return;
+                    }
+                    setCurrentStep(2);
+                  }}
                   disabled={!canProceedFromStep1}
                   className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >

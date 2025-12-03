@@ -6,10 +6,46 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 
 const FEEDBACK_TYPES = [
-  { id: "bug", label: "Bug Report", icon: "🐛", description: "Something isn't working" },
-  { id: "feature", label: "Feature Request", icon: "💡", description: "Suggest an improvement" },
-  { id: "content", label: "Content Issue", icon: "📚", description: "Problem with course material" },
-  { id: "other", label: "Other", icon: "💬", description: "General feedback" },
+  { 
+    id: "bug", 
+    label: "Bug Report", 
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    ),
+    description: "Something isn't working" 
+  },
+  { 
+    id: "feature", 
+    label: "Feature Request", 
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+      </svg>
+    ),
+    description: "Suggest an improvement" 
+  },
+  { 
+    id: "content", 
+    label: "Content Issue", 
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+    ),
+    description: "Problem with course material" 
+  },
+  { 
+    id: "other", 
+    label: "Other", 
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+    description: "General feedback" 
+  },
 ];
 
 export default function FeedbackWidget() {
@@ -137,7 +173,7 @@ export default function FeedbackWidget() {
   if (!mounted || !user) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50" ref={panelRef}>
+    <div className="fixed bottom-4 left-[4.75rem] z-50" ref={panelRef}>
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -145,7 +181,7 @@ export default function FeedbackWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="absolute bottom-14 right-0 w-80 sm:w-96 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xl overflow-hidden"
+            className="absolute bottom-14 left-0 w-80 sm:w-96 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xl overflow-hidden"
           >
             {/* Header */}
             <div className="px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--border)]">
@@ -196,7 +232,7 @@ export default function FeedbackWidget() {
                               : "border-[var(--border)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-2)]"
                           }`}
                         >
-                          <span className="text-lg">{type.icon}</span>
+                          <span className={`flex-shrink-0 ${selectedType === type.id ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}>{type.icon}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[var(--foreground)] truncate">{type.label}</p>
                           </div>
@@ -266,21 +302,30 @@ export default function FeedbackWidget() {
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`btn btn-ghost btn-icon transition-all duration-300 ${
-          isOpen ? "rotate-45 bg-[var(--surface-2)]" : ""
-        }`}
+        className="btn btn-glass btn-icon"
         aria-label="Send feedback"
         aria-expanded={isOpen}
       >
-        {isOpen ? (
+        <span
+          className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+            isOpen ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 rotate-90"
+          }`}
+          aria-hidden={!isOpen}
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
-        ) : (
+        </span>
+        <span
+          className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+            isOpen ? "opacity-0 scale-75 -rotate-90" : "opacity-100 scale-100 rotate-0"
+          }`}
+          aria-hidden={isOpen}
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-        )}
+        </span>
       </button>
     </div>
   );

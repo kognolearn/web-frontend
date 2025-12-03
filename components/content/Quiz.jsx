@@ -811,7 +811,7 @@ export default function Quiz({
             priority={12}
           >
             <div className="mb-8">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col gap-1 mb-3">
               <span className="text-sm font-medium text-[var(--foreground)]">
                 Question {currentIndex + 1} of {questionCount}
               </span>
@@ -827,20 +827,34 @@ export default function Quiz({
                 style={{ width: `${((currentIndex + 1) / questionCount) * 100}%` }}
               />
             </div>
-            {/* Question dots */}
-            <div className="flex items-center justify-center gap-1.5 mt-4">
+            {/* Question navigation */}
+            <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
               {normalizedQuestions.map((q, idx) => {
                 const isAnswered = !!responses[q.id];
                 const isCurrent = idx === currentIndex;
-                let dotColor = "bg-[var(--surface-2)]";
+                let statusClass = "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]";
+                let icon = null;
                 
                 if (isSubmitted) {
                   const userResponse = responses[q.id];
                   const selectedOpt = q.options.find((opt) => opt.id === userResponse);
-                  if (selectedOpt?.correct) dotColor = "bg-emerald-500";
-                  else if (userResponse) dotColor = "bg-rose-500";
+                  if (selectedOpt?.correct) {
+                    statusClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+                    icon = (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    );
+                  } else if (userResponse) {
+                    statusClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
+                    icon = (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    );
+                  }
                 } else if (isAnswered) {
-                  dotColor = "bg-[var(--primary)]";
+                  statusClass = "bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30";
                 }
                 
                 return (
@@ -848,11 +862,18 @@ export default function Quiz({
                     key={q.id}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
-                    className={`w-2 h-2 rounded-full transition-all duration-200 ${dotColor} ${
-                      isCurrent ? "ring-2 ring-[var(--primary)] ring-offset-2 ring-offset-[var(--background)]" : ""
-                    } hover:scale-125 cursor-pointer`}
+                    className={`
+                      w-8 h-8 rounded-lg border text-sm font-medium
+                      transition-all duration-200 cursor-pointer
+                      flex items-center justify-center
+                      ${statusClass}
+                      ${isCurrent ? "ring-2 ring-[var(--primary)] ring-offset-2 ring-offset-[var(--background)] scale-110" : "hover:scale-105"}
+                    `}
                     aria-label={`Go to question ${idx + 1}`}
-                  />
+                    aria-current={isCurrent ? "true" : undefined}
+                  >
+                    {icon || (idx + 1)}
+                  </button>
                 );
               })}
             </div>

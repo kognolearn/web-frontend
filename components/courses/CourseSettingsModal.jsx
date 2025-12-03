@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import DurationInput from "@/components/ui/DurationInput";
 
 export default function CourseSettingsModal({ 
   isOpen, 
@@ -12,14 +13,12 @@ export default function CourseSettingsModal({
   onTimerUpdate,
   courseName
 }) {
-  const [customHours, setCustomHours] = useState("");
-  const [customMinutes, setCustomMinutes] = useState("");
+  const [customDuration, setCustomDuration] = useState({ hours: 0, minutes: 0 });
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      setCustomHours("");
-      setCustomMinutes("");
+      setCustomDuration({ hours: 0, minutes: 0 });
     }
   }, [isOpen]);
 
@@ -37,14 +36,13 @@ export default function CourseSettingsModal({
   };
 
   const handleCustomTimeSet = async () => {
-    const hours = parseInt(customHours) || 0;
-    const minutes = parseInt(customMinutes) || 0;
+    const hours = customDuration.hours || 0;
+    const minutes = customDuration.minutes || 0;
     const newSeconds = hours * 3600 + minutes * 60;
     
     if (newSeconds >= 0) {
       await onTimerUpdate(newSeconds);
-      setCustomHours("");
-      setCustomMinutes("");
+      setCustomDuration({ hours: 0, minutes: 0 });
     }
   };
 
@@ -169,39 +167,35 @@ export default function CourseSettingsModal({
 
                 {/* Custom Time Input */}
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-[var(--muted-foreground)] flex items-center gap-1.5">
-                    Set Custom Time
-                    <InfoTooltip content="Enter a specific amount of time to set as your remaining study time. This replaces the current timer value." position="right" />
+                  <label className="block text-sm font-semibold mb-1.5 text-[var(--foreground)]">
+                    <span className="flex items-center gap-1.5">
+                      Set Custom Time
+                      <InfoTooltip
+                        content="Enter a specific amount of time to set as your remaining study time. This replaces the current timer value."
+                        position="right"
+                      />
+                    </span>
                   </label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Hours"
-                        value={customHours}
-                        onChange={(e) => setCustomHours(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="0"
-                        max="59"
-                        placeholder="Minutes"
-                        value={customMinutes}
-                        onChange={(e) => setCustomMinutes(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
-                      />
-                    </div>
+                  <DurationInput
+                    hours={customDuration.hours}
+                    minutes={customDuration.minutes}
+                    onChange={setCustomDuration}
+                    hourStep={1}
+                    minuteStep={5}
+                    variant="minimal"
+                    hideSummary
+                  />
+                  <div className="mt-4">
                     <button
                       type="button"
                       onClick={handleCustomTimeSet}
-                      disabled={!customHours && !customMinutes}
-                      className="rounded-lg bg-[var(--primary)] px-6 py-3 text-sm font-medium text-[var(--primary-contrast)] transition-all hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={(customDuration.hours || 0) === 0 && (customDuration.minutes || 0) === 0}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--primary)]/30 transition hover:bg-[var(--primary)]/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                     >
-                      Set
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2.5 2.5M12 22a10 10 0 100-20 10 10 0 000 20z" />
+                      </svg>
+                      Set Time
                     </button>
                   </div>
                 </div>

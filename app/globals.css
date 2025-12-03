@@ -221,6 +221,26 @@ body {
   --btn-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
+.btn-glass {
+  --btn-bg: transparent;
+  --btn-border-color: color-mix(in srgb, var(--border) 40%, transparent);
+  --btn-color: var(--muted-foreground);
+  --btn-shadow: none;
+  --btn-shadow-hover: 0 18px 40px color-mix(in srgb, var(--primary) 35%, transparent);
+  backdrop-filter: blur(8px);
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.btn-glass:hover:not(:disabled):not([aria-disabled="true"]) {
+  --btn-bg: linear-gradient(130deg,
+      color-mix(in srgb, var(--primary) 92%, white 6%),
+      color-mix(in srgb, var(--primary-active) 90%, black 6%));
+  --btn-border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
+  --btn-color: var(--primary-contrast);
+  backdrop-filter: none;
+  background-image: var(--btn-bg);
+}
+
 .btn-danger {
   --btn-bg: linear-gradient(130deg, #f16d6d, #b83333);
   --btn-border-color: color-mix(in srgb, #f16d6d 55%, #661212);

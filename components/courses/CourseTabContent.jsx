@@ -2108,46 +2108,54 @@ export default function CourseTabContent({
                 delay={800}
                 priority={8}
               >
-                <div className="flex items-center gap-2">
-                {/* Previous Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const types = getAvailableContentTypes(selectedLesson.id);
-                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
-                    if (currentIdx > 0) {
-                      const prevType = types[currentIdx - 1];
-                      setSelectedContentType({ lessonId: selectedLesson.id, type: prevType.value });
-                      fetchLessonContent(selectedLesson.id, [prevType.value]);
-                    }
-                  }}
-                  disabled={isLessonContentLoading(selectedLesson.id) || (() => {
-                    const types = getAvailableContentTypes(selectedLesson.id);
-                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
-                    return currentIdx <= 0;
-                  })()}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-
-                {/* Step indicator dots */}
-                <div className="flex items-center gap-2 px-3">
+                {/* Content type buttons */}
+                <div className="flex items-center gap-1.5">
                   {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
                     <>
-                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="w-3 h-3 rounded-full bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
                     </>
                   ) : (
-                    getAvailableContentTypes(selectedLesson.id).map((contentType, idx) => {
-                      const types = getAvailableContentTypes(selectedLesson.id);
-                      const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
+                    getAvailableContentTypes(selectedLesson.id).map((contentType) => {
                       const isActive = selectedContentType?.type === contentType.value;
-                      const isPast = idx < currentIdx;
                       const isCompleted = isContentCompleted(selectedLesson.id, contentType.value);
+                      
+                      // Icon for each content type
+                      const getIcon = () => {
+                        switch(contentType.value) {
+                          case 'reading':
+                            return (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                              </svg>
+                            );
+                          case 'video':
+                            return (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            );
+                          case 'flashcards':
+                            return (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                            );
+                          case 'mini_quiz':
+                            return (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                            );
+                          default:
+                            return (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            );
+                        }
+                      };
                       
                       return (
                         <button
@@ -2157,24 +2165,23 @@ export default function CourseTabContent({
                             setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
                             fetchLessonContent(selectedLesson.id, [contentType.value]);
                           }}
-                          title={`${contentType.label}${isCompleted ? ' ✓' : ''}`}
-                          className={`relative rounded-full transition-all duration-300 ${
-                            isActive
-                              ? `w-8 h-3 ${isCompleted ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-[var(--primary)] shadow-lg shadow-[var(--primary)]/30'}`
+                          className={`
+                            relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium
+                            transition-all duration-200
+                            ${isActive
+                              ? isCompleted
+                                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+                                : 'bg-[var(--primary)] text-white shadow-md shadow-[var(--primary)]/25'
                               : isCompleted
-                                ? 'w-3 h-3 bg-emerald-500 hover:bg-emerald-600'
-                                : isPast
-                                  ? 'w-3 h-3 bg-[var(--primary)]/50 hover:bg-[var(--primary)]/70'
-                                  : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
-                          }`}
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                                : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
+                            }
+                          `}
+                          title={contentType.label}
                         >
-                          {/* Checkmark overlay for completed items */}
+                          {getIcon()}
                           {isCompleted && !isActive && (
-                            <svg 
-                              className="absolute inset-0 w-3 h-3 text-white p-0.5" 
-                              fill="currentColor" 
-                              viewBox="0 0 20 20"
-                            >
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
@@ -2183,31 +2190,6 @@ export default function CourseTabContent({
                     })
                   )}
                 </div>
-
-                {/* Next Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const types = getAvailableContentTypes(selectedLesson.id);
-                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
-                    if (currentIdx < types.length - 1) {
-                      const nextType = types[currentIdx + 1];
-                      setSelectedContentType({ lessonId: selectedLesson.id, type: nextType.value });
-                      fetchLessonContent(selectedLesson.id, [nextType.value]);
-                    }
-                  }}
-                  disabled={isLessonContentLoading(selectedLesson.id) || (() => {
-                    const types = getAvailableContentTypes(selectedLesson.id);
-                    const currentIdx = types.findIndex(t => t.value === selectedContentType?.type);
-                    return currentIdx >= types.length - 1;
-                  })()}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
               </OnboardingTooltip>
             </div>
           </div>
@@ -2223,7 +2205,6 @@ export default function CourseTabContent({
             }}
           >
             <div className="flex items-center justify-center px-4 py-3">
-              <div className="flex items-center gap-2">
                 {(() => {
                   const payload = selectedReviewModule.content_payload || {};
                   const availableTypes = [];
@@ -2233,69 +2214,69 @@ export default function CourseTabContent({
                   // Practice problems hidden for now
                   // if (payload.practice_exam?.length > 0) availableTypes.push({ value: 'practice_exam', label: 'Practice Problems' });
                   
-                  const currentIdx = availableTypes.findIndex(t => t.value === reviewModuleContentType);
-                  
                   return (
-                    <>
-                      {/* Previous Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (currentIdx > 0) {
-                            setReviewModuleContentType(availableTypes[currentIdx - 1].value);
-                          }
-                        }}
-                        disabled={currentIdx <= 0}
-                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-
-                      {/* Step indicator dots */}
-                      <div className="flex items-center gap-2 px-3">
-                        {availableTypes.map((contentType, idx) => {
+                      <div className="flex items-center gap-1.5">
+                        {availableTypes.map((contentType) => {
                           const isActive = reviewModuleContentType === contentType.value;
-                          const isPast = idx < currentIdx;
+                          
+                          // Icon for each content type
+                          const getIcon = () => {
+                            switch(contentType.value) {
+                              case 'reading':
+                                return (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                  </svg>
+                                );
+                              case 'video':
+                                return (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                );
+                              case 'mini_quiz':
+                                return (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                  </svg>
+                                );
+                              case 'practice_exam':
+                                return (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                  </svg>
+                                );
+                              default:
+                                return (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                );
+                            }
+                          };
                           
                           return (
                             <button
                               key={contentType.value}
                               type="button"
                               onClick={() => setReviewModuleContentType(contentType.value)}
+                              className={`
+                                relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium
+                                transition-all duration-200
+                                ${isActive
+                                  ? 'bg-[var(--warning)] text-white shadow-md shadow-[var(--warning)]/25'
+                                  : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
+                                }
+                              `}
                               title={contentType.label}
-                              className={`rounded-full transition-all duration-300 ${
-                                isActive
-                                  ? 'w-8 h-3 bg-[var(--warning)] shadow-lg shadow-[var(--warning)]/30'
-                                  : isPast
-                                    ? 'w-3 h-3 bg-[var(--warning)]/50 hover:bg-[var(--warning)]/70'
-                                    : 'w-3 h-3 bg-[var(--surface-muted)] hover:bg-[var(--muted-foreground)]/30'
-                              }`}
-                            />
+                            >
+                              {getIcon()}
+                            </button>
                           );
                         })}
                       </div>
-
-                      {/* Next Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (currentIdx < availableTypes.length - 1) {
-                            setReviewModuleContentType(availableTypes[currentIdx + 1].value);
-                          }
-                        }}
-                        disabled={currentIdx >= availableTypes.length - 1}
-                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </>
                   );
                 })()}
-              </div>
             </div>
           </div>
         )}
