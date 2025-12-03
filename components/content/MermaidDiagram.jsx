@@ -34,6 +34,14 @@ export default function MermaidDiagram({ chart, className = "" }) {
       setIsLoading(false);
       return;
     }
+    
+    // Quick validation - skip if chart is too short or appears empty
+    const trimmedChart = chart.trim();
+    if (trimmedChart.length < 3) {
+      setIsLoading(false);
+      setError(true);
+      return;
+    }
 
     let isMounted = true;
 
@@ -49,6 +57,7 @@ export default function MermaidDiagram({ chart, className = "" }) {
         mermaid.initialize({
           startOnLoad: false,
           theme: "dark",
+          suppressErrorRendering: true, // Suppress error messages from being rendered
           themeVariables: {
             // Use CSS variables for theme consistency
             primaryColor: "#6366f1",
@@ -155,7 +164,7 @@ export default function MermaidDiagram({ chart, className = "" }) {
             maxNodeWidth: 200,
           },
           securityLevel: "loose",
-          logLevel: "error",
+          logLevel: 5, // 5 = silent, suppress all console logs
         });
 
         // Clean the chart input - remove any potential HTML encoding issues
@@ -205,6 +214,17 @@ export default function MermaidDiagram({ chart, className = "" }) {
 
         // Render the diagram
         const { svg: renderedSvg } = await mermaid.render(diagramId, cleanedChart);
+        
+        // Check if the rendered SVG contains an error message
+        // Mermaid sometimes renders error content instead of throwing
+        if (renderedSvg && (
+          renderedSvg.includes('Syntax error') ||
+          renderedSvg.includes('Parse error') ||
+          renderedSvg.includes('Error:') ||
+          renderedSvg.includes('error in text')
+        )) {
+          throw new Error('Mermaid syntax error detected in rendered output');
+        }
 
         if (isMounted) {
           setSvg(renderedSvg);
@@ -214,6 +234,7 @@ export default function MermaidDiagram({ chart, className = "" }) {
         // Silently handle errors - diagram will be hidden
         if (isMounted) {
           setError(true);
+          setSvg(""); // Clear any partial SVG
         }
       } finally {
         if (isMounted) {
