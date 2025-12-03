@@ -8,6 +8,7 @@ import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
+import TimerControls from "@/components/courses/TimerControls";
 import { 
   isContentTypeCompleted, 
   getLessonCompletionStatus, 
@@ -311,6 +312,8 @@ export default function CourseTabContent({
   refetchStudyPlan,
   secondsRemaining,
   handleTimerUpdate,
+  isTimerPaused,
+  onPauseToggle,
   isSettingsModalOpen,
   setIsSettingsModalOpen,
   isEditCourseModalOpen,
@@ -319,11 +322,20 @@ export default function CourseTabContent({
   onClose,
   onChatTabReturn,
   chatOpenRequest,
+  onTabTitleChange,
   isActive = true
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
+  const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
+
+  // Update tab title when lesson changes
+  useEffect(() => {
+    if (selectedLesson && onTabTitleChange) {
+      onTabTitleChange(selectedLesson.title);
+    }
+  }, [selectedLesson, onTabTitleChange]);
 
   // Handle external chat open requests
   useEffect(() => {
@@ -624,37 +636,6 @@ export default function CourseTabContent({
       }
     }
   }, [studyPlan, selectedLesson, viewMode]);
-
-  // Auto-select first available content type when lesson content is loaded
-  useEffect(() => {
-    if (!selectedLesson || selectedLesson.type === 'practice_exam') return;
-    
-    // Check if content is loaded for this lesson
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${selectedLesson.id}:`));
-    if (!lessonCacheKey) return;
-    
-    const cached = contentCache[lessonCacheKey];
-    if (cached?.status !== "loaded" || !cached?.data?.data) return;
-    
-    // Get available content types from the loaded data
-    const data = cached.data.data;
-    const availableTypes = [];
-    if (data.body || data.reading) availableTypes.push({ label: "Reading", value: "reading" });
-    if (data.videos && data.videos.length > 0) availableTypes.push({ label: "Video", value: "video" });
-    if (data.cards && data.cards.length > 0) availableTypes.push({ label: "Flashcards", value: "flashcards" });
-    if (data.questions || data.mcq || data.frq) availableTypes.push({ label: "Quiz", value: "mini_quiz" });
-    
-    // If we have available types, set the first one if not already set or if current type isn't available
-    if (availableTypes.length > 0) {
-      const currentType = selectedContentType?.type;
-      const isCurrentTypeAvailable = availableTypes.some(t => t.value === currentType);
-      
-      if (!selectedContentType || selectedContentType.lessonId !== selectedLesson.id || !isCurrentTypeAvailable) {
-        setSelectedContentType({ lessonId: selectedLesson.id, type: availableTypes[0].value });
-      }
-    }
-  }, [selectedLesson, contentCache, selectedContentType]);
 
   // Track viewport for responsive adjustments
   useEffect(() => {
@@ -1113,41 +1094,75 @@ export default function CourseTabContent({
         </motion.button>
       )}
 
-      {/* Top Right Controls: Settings, Timer, Close */}
+      {/* Timer Controls Modal */}
+      <AnimatePresence>
+        {isTimerControlsOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
+              onClick={() => setIsTimerControlsOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Timer Controls</h3>
+                <button onClick={() => setIsTimerControlsOpen(false)} className="p-1 hover:bg-[var(--surface-2)] rounded-lg">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <TimerControls 
+                currentSeconds={secondsRemaining}
+                onTimerUpdate={handleTimerUpdate}
+                isTimerPaused={isTimerPaused}
+                onPauseToggle={onPauseToggle}
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Top Right Controls: Pause, Timer, Settings */}
       <div 
         className="absolute top-4 z-50 flex items-center gap-2"
         style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
       >
-        {/* Settings Button */}
-        <OnboardingTooltip
-          id="course-settings-button"
-          content="Click here to adjust your study time. You can add or subtract time, or set a custom study duration for this course."
-          position="bottom"
-          pointerPosition="right"
-          delay={800}
-          priority={5}
-        >
+        {/* Pause/Play Button */}
+        {secondsRemaining !== null && (
           <button
             type="button"
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-            title="Course Settings"
+            onClick={onPauseToggle}
+            className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+            title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
           >
-            <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </OnboardingTooltip>
-
-        {/* Timer Display */}
-        {secondsRemaining !== null && (
-          <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-3 py-2 shadow-lg backdrop-blur-xl group">
-            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10">
-              <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            {isTimerPaused ? (
+              <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
               </svg>
-            </div>
+            ) : (
+              <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              </svg>
+            )}
+          </button>
+        )}
+
+        {/* Timer Display (Clickable) */}
+        {secondsRemaining !== null && (
+          <button
+            onClick={() => setIsTimerControlsOpen(true)}
+            className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+          >
+            <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             <div className="flex items-baseline gap-0.5">
               {(() => {
                 const h = Math.floor(secondsRemaining / 3600);
@@ -1162,22 +1177,30 @@ export default function CourseTabContent({
                 );
               })()}
             </div>
-          </div>
-        )}
-
-        {/* Close Button */}
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
-            title="Close Tab"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
           </button>
         )}
+
+        {/* Settings Button */}
+        <OnboardingTooltip
+          id="course-settings-button"
+          content="Click here to adjust your study time. You can add or subtract time, or set a custom study duration for this course."
+          position="bottom"
+          pointerPosition="right"
+          delay={800}
+          priority={5}
+        >
+          <button
+            type="button"
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+            title="Course Settings"
+          >
+            <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </OnboardingTooltip>
       </div>
 
       {/* Sidebar */}
@@ -1511,6 +1534,22 @@ export default function CourseTabContent({
                   </div>
                 );
               })}
+
+              {/* Review Section - Bottom of Sidebar */}
+              <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                <a
+                  href={`/courses/${courseId}/review`}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-sm font-medium">Review Mode</span>
+                  <svg className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </a>
+              </div>
             </nav>
 
             {!isMobile && (

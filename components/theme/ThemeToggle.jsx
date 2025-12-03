@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { supabase } from "@/lib/supabase/client";
 
+const PUBLIC_PATHS = ["/", "/auth/create-account", "/auth/sign-in"];
+
 export default function ThemeToggle() {
   const { theme, toggleTheme, mounted } = useTheme();
-  const [show, setShow] = useState(false);
+  const pathname = usePathname();
+  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -14,15 +18,15 @@ export default function ThemeToggle() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!active) return;
-        setShow(!!user);
+        setHasSession(!!user);
       } catch {
         if (!active) return;
-        setShow(false);
+        setHasSession(false);
       }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setShow(!!session?.user);
+      setHasSession(!!session?.user);
     });
     return () => {
       active = false;
@@ -30,7 +34,12 @@ export default function ThemeToggle() {
     };
   }, []);
 
-  if (!mounted || !show) return null;
+  const isPublicPage = useMemo(() => {
+    if (!pathname) return false;
+    return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }, [pathname]);
+
+  if (!mounted || (!hasSession && !isPublicPage)) return null;
 
   const isDark = theme === "dark";
 

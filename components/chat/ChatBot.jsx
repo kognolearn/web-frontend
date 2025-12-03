@@ -1912,19 +1912,6 @@ Instructions:
             </button>
           </OnboardingTooltip>
 
-          {/* Close Button */}
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500"
-              title="Close Tab"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
         </div>
 
         {/* Sidebar */}

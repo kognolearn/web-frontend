@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
+
+const PUBLIC_PATHS = ["/", "/auth/create-account", "/auth/sign-in"];
 
 const FEEDBACK_TYPES = [
   { 
@@ -58,6 +61,10 @@ export default function FeedbackWidget() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
   const pathname = usePathname();
+  const isPublicPage = useMemo(() => {
+    if (!pathname) return false;
+    return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }, [pathname]);
   const panelRef = useRef(null);
 
   // Get current context from URL
@@ -170,7 +177,7 @@ export default function FeedbackWidget() {
     }
   };
 
-  if (!mounted || !user) return null;
+  if (!mounted || (!user && !isPublicPage)) return null;
 
   return (
     <div className="fixed bottom-4 left-[4.75rem] z-50" ref={panelRef}>
@@ -200,7 +207,27 @@ export default function FeedbackWidget() {
 
             {/* Content */}
             <div className="p-4">
-              {submitted ? (
+              {!user ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    Sign in to share feedback with the team.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <Link
+                      href="/auth/sign-in"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-center text-sm font-semibold hover:border-[var(--primary)]/40 hover:bg-[var(--surface-muted)] transition-colors"
+                    >
+                      Sign in
+                    </Link>
+                    <Link
+                      href="/auth/create-account"
+                      className="w-full rounded-xl bg-[var(--primary)] px-4 py-2 text-center text-sm font-semibold text-white shadow-lg shadow-[var(--primary)]/30 hover:bg-[var(--primary)]/90 transition-colors"
+                    >
+                      Create account
+                    </Link>
+                  </div>
+                </div>
+              ) : submitted ? (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}

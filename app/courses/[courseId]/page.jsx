@@ -21,6 +21,7 @@ export default function CoursePage() {
   const [studyPlan, setStudyPlan] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(null);
   const [initialSeconds, setInitialSeconds] = useState(null);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
@@ -59,7 +60,7 @@ export default function CoursePage() {
 
   // Countdown timer effect
   useEffect(() => {
-    if (secondsRemaining === null || secondsRemaining <= 0) return;
+    if (isTimerPaused || secondsRemaining === null || secondsRemaining <= 0) return;
 
     const intervalId = setInterval(() => {
       setSecondsRemaining(prev => {
@@ -69,7 +70,7 @@ export default function CoursePage() {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [secondsRemaining]);
+  }, [isTimerPaused, secondsRemaining]);
 
   // Use ref to track current secondsRemaining for beforeunload without re-running effect
   const secondsRemainingRef = useRef(secondsRemaining);
@@ -216,6 +217,18 @@ export default function CoursePage() {
       console.error('Failed to update timer:', e);
     }
   }, [userId, courseId]);
+
+  const toggleTimerPause = useCallback(() => {
+    setIsTimerPaused((prev) => !prev);
+  }, []);
+
+  const handleTabTitleChange = useCallback((tabId, nextTitle) => {
+    if (!nextTitle) return;
+    setTabs((prev) => prev.map((tab) => {
+      if (tab.id !== tabId || tab.title === nextTitle) return tab;
+      return { ...tab, title: nextTitle };
+    }));
+  }, []);
 
   const addTab = (type) => {
     const newId = `tab-${Date.now()}`;
@@ -571,12 +584,14 @@ export default function CoursePage() {
                 refetchStudyPlan={refetchStudyPlan}
                 secondsRemaining={secondsRemaining}
                 handleTimerUpdate={handleTimerUpdate}
+                isTimerPaused={isTimerPaused}
+                onPauseToggle={toggleTimerPause}
+                onTabTitleChange={(title) => handleTabTitleChange(tab.id, title)}
                 isSettingsModalOpen={isSettingsModalOpen}
                 setIsSettingsModalOpen={setIsSettingsModalOpen}
                 isEditCourseModalOpen={isEditCourseModalOpen}
                 setIsEditCourseModalOpen={setIsEditCourseModalOpen}
                 onOpenChatTab={handleOpenChatTab}
-                onClose={() => closeTab(null, tab.id)}
                 onChatTabReturn={handleChatTabReturn}
                 chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
               />
@@ -600,6 +615,8 @@ export default function CoursePage() {
         currentSeconds={secondsRemaining}
         onTimerUpdate={handleTimerUpdate}
         courseName={courseName}
+        isTimerPaused={isTimerPaused}
+        onPauseToggle={toggleTimerPause}
       />
 
       <EditCourseModal
