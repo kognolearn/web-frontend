@@ -17,8 +17,8 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const openCourse = (e) => {
-    // Don't navigate if course is still building
-    if (status === 'pending') return;
+    // Don't navigate if course is still building or needs attention
+    if (status === 'pending' || status === 'needs_attention') return;
     // Prevent clicks from nested interactive elements if any
     if (e) {
       e.stopPropagation();
@@ -90,6 +90,58 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
             100% { transform: translateX(300%) skewX(-12deg); }
           }
         `}</style>
+      </div>
+    );
+  }
+
+  // Needs attention/Failed state - show error card with instructions
+  if (needsAttention) {
+    return (
+      <div
+        role="article"
+        aria-label={`Course ${courseCode} failed to generate`}
+        className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-[var(--surface-1)] border border-rose-500/30 shadow-lg shadow-rose-500/5"
+      >
+        {/* Error gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-rose-500/10" />
+
+        {/* Top section */}
+        <div className="relative z-10 flex items-start justify-between mb-2">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-500/10">
+            {/* Error icon */}
+            <svg className="w-5 h-5 text-rose-500 dark:text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/20">
+              <span className="text-xs font-medium text-rose-600 dark:text-rose-400">Failed</span>
+            </div>
+            <Tooltip content="Delete this course" position="bottom">
+              <button
+                onClick={handleDeleteClick}
+                className="p-1.5 rounded-full hover:bg-rose-500/10 text-[var(--muted-foreground)] hover:text-rose-500 transition-colors z-20"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="relative z-10 flex-1">
+          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-1 leading-snug">
+            {courseCode}
+          </h3>
+          <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
+            Course generation failed
+          </p>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1 leading-relaxed">
+            Please report this issue using the feedback button, then delete this course and try again.
+          </p>
+        </div>
       </div>
     );
   }
