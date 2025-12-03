@@ -522,133 +522,152 @@ function CreateCoursePageContent() {
       payload.examFiles = await buildFilePayload(examFiles);
     }
 
-    try {
-      const res = await fetch("/api/courses/topics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const MAX_RETRIES = 3;
+    let lastError = null;
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.success === false) {
-        throw new Error(data?.error || "Failed to build topics.");
-      }
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`Topic generation attempt ${attempt} of ${MAX_RETRIES}`);
 
-      console.log("Backend response:", JSON.stringify(data, null, 2));
+        const res = await fetch("/api/courses/topics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      const payloadCandidates = collectPayloadCandidates(data);
-      let extractedGrokDraft = null;
-      for (const candidate of payloadCandidates) {
-        const normalizedDraft = normalizeGrokDraftPayload(
-          candidate?.grok_draft || candidate?.grokDraft || candidate?.grokDraftPayload
-        );
-        if (normalizedDraft) {
-          extractedGrokDraft = normalizedDraft;
-          break;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.success === false) {
+          throw new Error(data?.error || "Failed to build topics.");
         }
-      }
-      let rawOverview = [];
-      for (const candidate of payloadCandidates) {
-        const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
-        if (Array.isArray(overviewArray) && overviewArray.length) {
-          rawOverview = overviewArray;
-          console.log("Found overviewTopics with", overviewArray.length, "items");
-          break;
-        }
-      }
 
-      if (!rawOverview.length) {
+        console.log("Backend response:", JSON.stringify(data, null, 2));
+
+        const payloadCandidates = collectPayloadCandidates(data);
+        let extractedGrokDraft = null;
         for (const candidate of payloadCandidates) {
-          if (Array.isArray(candidate?.topicTree) && candidate.topicTree.length) {
-            rawOverview = candidate.topicTree;
-            break;
-          }
-          if (Array.isArray(candidate?.topicGroups) && candidate.topicGroups.length) {
-            rawOverview = candidate.topicGroups;
+          const normalizedDraft = normalizeGrokDraftPayload(
+            candidate?.grok_draft || candidate?.grokDraft || candidate?.grokDraftPayload
+          );
+          if (normalizedDraft) {
+            extractedGrokDraft = normalizedDraft;
             break;
           }
         }
-      }
-
-      if (!rawOverview.length) {
+        let rawOverview = [];
         for (const candidate of payloadCandidates) {
-          const topicList = Array.isArray(candidate?.topics)
-            ? candidate.topics
-            : Array.isArray(candidate?.topicList)
-            ? candidate.topicList
-            : null;
-          if (topicList?.length) {
-            rawOverview = buildOverviewFromTopics(topicList);
+          const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
+          if (Array.isArray(overviewArray) && overviewArray.length) {
+            rawOverview = overviewArray;
+            console.log("Found overviewTopics with", overviewArray.length, "items");
             break;
           }
         }
-      }
 
-      if (!rawOverview.length) {
-        console.log("rawOverview is still empty, throwing error");
-        throw new Error("The model did not return any topics. Please try again.");
-      }
+        if (!rawOverview.length) {
+          for (const candidate of payloadCandidates) {
+            if (Array.isArray(candidate?.topicTree) && candidate.topicTree.length) {
+              rawOverview = candidate.topicTree;
+              break;
+            }
+            if (Array.isArray(candidate?.topicGroups) && candidate.topicGroups.length) {
+              rawOverview = candidate.topicGroups;
+              break;
+            }
+          }
+        }
 
-      console.log("rawOverview has", rawOverview.length, "overview topics");
+        if (!rawOverview.length) {
+          for (const candidate of payloadCandidates) {
+            const topicList = Array.isArray(candidate?.topics)
+              ? candidate.topics
+              : Array.isArray(candidate?.topicList)
+              ? candidate.topicList
+              : null;
+            if (topicList?.length) {
+              rawOverview = buildOverviewFromTopics(topicList);
+              break;
+            }
+          }
+        }
 
-      const hydrated = rawOverview.map((overview, index) => {
-        const overviewId = String(overview?.id ?? `overview_${index + 1}`);
-        const subtopics = Array.isArray(overview?.subtopics)
-          ? overview.subtopics
-          : Array.isArray(overview?.subTopics)
-          ? overview.subTopics
-          : [];
-        return {
-          id: overviewId,
-          title: String(overview?.title ?? `Topic group ${index + 1}`),
-          description: overview?.description ? String(overview.description) : "",
-          likelyOnExam: Boolean(overview?.likelyOnExam ?? true),
-          subtopics: subtopics.map((subtopic, subIndex) =>
-              createSubtopic({
-              id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
-              overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
-              title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
-              description: subtopic?.description || "",
-              difficulty: subtopic?.difficulty || "intermediate",
-              likelyOnExam: subtopic?.likelyOnExam ?? true,
-              familiarity: Number.isFinite(subtopic?.familiarity)
-                ? subtopic.familiarity
-                : defaultTopicRating,
-                // new metadata from backend
-                focus: subtopic?.focus || subtopic?.focus || subtopic?.category || undefined,
-                bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
-                estimatedStudyTimeMinutes: Number.isFinite(subtopic?.estimated_study_time_minutes)
-                  ? subtopic.estimated_study_time_minutes
-                  : Number.isFinite(subtopic?.estimatedStudyTimeMinutes)
-                  ? subtopic.estimatedStudyTimeMinutes
-                  : undefined,
-                importanceScore:
-                  Number.isFinite(subtopic?.importance_score) || Number.isFinite(subtopic?.importanceScore)
-                    ? Number(subtopic?.importance_score ?? subtopic?.importanceScore)
+        if (!rawOverview.length) {
+          console.log("rawOverview is still empty, throwing error");
+          throw new Error("The model did not return any topics. Please try again.");
+        }
+
+        console.log("rawOverview has", rawOverview.length, "overview topics");
+
+        const hydrated = rawOverview.map((overview, index) => {
+          const overviewId = String(overview?.id ?? `overview_${index + 1}`);
+          const subtopics = Array.isArray(overview?.subtopics)
+            ? overview.subtopics
+            : Array.isArray(overview?.subTopics)
+            ? overview.subTopics
+            : [];
+          return {
+            id: overviewId,
+            title: String(overview?.title ?? `Topic group ${index + 1}`),
+            description: overview?.description ? String(overview.description) : "",
+            likelyOnExam: Boolean(overview?.likelyOnExam ?? true),
+            subtopics: subtopics.map((subtopic, subIndex) =>
+                createSubtopic({
+                id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
+                overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
+                title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
+                description: subtopic?.description || "",
+                difficulty: subtopic?.difficulty || "intermediate",
+                likelyOnExam: subtopic?.likelyOnExam ?? true,
+                familiarity: Number.isFinite(subtopic?.familiarity)
+                  ? subtopic.familiarity
+                  : defaultTopicRating,
+                  // new metadata from backend
+                  focus: subtopic?.focus || subtopic?.focus || subtopic?.category || undefined,
+                  bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
+                  estimatedStudyTimeMinutes: Number.isFinite(subtopic?.estimated_study_time_minutes)
+                    ? subtopic.estimated_study_time_minutes
+                    : Number.isFinite(subtopic?.estimatedStudyTimeMinutes)
+                    ? subtopic.estimatedStudyTimeMinutes
                     : undefined,
-                examRelevanceReasoning: subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
-            })
-          ),
-        };
-      });
+                  importanceScore:
+                    Number.isFinite(subtopic?.importance_score) || Number.isFinite(subtopic?.importanceScore)
+                      ? Number(subtopic?.importance_score ?? subtopic?.importanceScore)
+                      : undefined,
+                  examRelevanceReasoning: subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
+              })
+            ),
+          };
+        });
 
-      const totalSubtopics = hydrated.reduce((sum, ot) => sum + ot.subtopics.length, 0);
-      console.log("Total subtopics after hydration:", totalSubtopics);
-      if (totalSubtopics === 0) {
-        throw new Error("The model did not return any topics. Please try again.");
+        const totalSubtopics = hydrated.reduce((sum, ot) => sum + ot.subtopics.length, 0);
+        console.log("Total subtopics after hydration:", totalSubtopics);
+        if (totalSubtopics === 0) {
+          throw new Error("The model did not return any topics. Please try again.");
+        }
+
+        // Success - update state and exit the retry loop
+        setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
+        setOverviewTopics(hydrated);
+        setTopicsError(null);
+        setIsTopicsLoading(false);
+        return; // Exit the function on success
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error);
+        lastError = error;
+
+        // If this wasn't the last attempt, continue to retry
+        if (attempt < MAX_RETRIES) {
+          console.log(`Retrying... (${attempt + 1}/${MAX_RETRIES})`);
+          continue;
+        }
       }
-
-      setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
-      setOverviewTopics(hydrated);
-      setTopicsError(null);
-    } catch (error) {
-      console.error(error);
-      setOverviewTopics([]);
-      setDeletedSubtopics([]);
-      setTopicsError(error?.message || "The model did not return any topics. Please try again.");
-    } finally {
-      setIsTopicsLoading(false);
     }
+
+    // All retries exhausted - show error to user
+    console.error("All retry attempts exhausted");
+    setOverviewTopics([]);
+    setDeletedSubtopics([]);
+    setTopicsError(lastError?.message || "The model did not return any topics. Please try again.");
+    setIsTopicsLoading(false);
   }, [
     collegeName,
     courseTitle,
@@ -1674,11 +1693,15 @@ function CreateCoursePageContent() {
                   <div className="mb-5">
                     <div className="flex items-center gap-2.5 mb-2">
                       <div className="h-2.5 w-2.5 rounded-full bg-[var(--primary)] animate-pulse"></div>
-                      <h3 className="text-base font-semibold">Analyzing your course materials...</h3>
+                      <h3 className="text-base font-semibold">
+                        Analyzing your course materials...
+                      </h3>
                     </div>
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--info)]/10 border border-[var(--info)]/30">
                       <div className="h-1.5 w-1.5 rounded-full bg-[var(--info)] animate-pulse"></div>
-                      <span className="text-xs text-[var(--muted-foreground)]">30-60 seconds</span>
+                      <span className="text-xs text-[var(--muted-foreground)]">
+                        30-60 seconds
+                      </span>
                     </div>
                   </div>
 

@@ -1,0 +1,860 @@
+"use client";
+
+import { useEffect, useState, useMemo } from "react";
+import {
+    ActiveUsersChart,
+    TokenUsageChart,
+    CostChart,
+    UsageBySourceChart,
+    CostBySourcePieChart,
+    ModelUsageTable,
+    SourceUsageTable,
+    ModelCostBarChart,
+    ModelTokensBarChart,
+    ModelCallsPieChart,
+    EventsChart,
+    EventTypePieChart,
+} from "@/components/admin/AnalyticsCharts";
+import FeedbackTable from "@/components/admin/FeedbackTable";
+
+// Date range presets
+const DATE_PRESETS = [
+    { label: "7d", days: 7 },
+    { label: "14d", days: 14 },
+    { label: "30d", days: 30 },
+    { label: "90d", days: 90 },
+    { label: "All", days: null },
+];
+
+// Tab configuration
+const TABS = [
+    { id: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+    { id: "users", label: "Users & Engagement", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+    { id: "usage", label: "API & Costs", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+    { id: "feedback", label: "Feedback", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
+];
+
+function StatCard({ title, value, subtitle, icon, trend, trendDirection, color = "primary", borderColor }) {
+    const colorClasses = {
+        primary: "text-[var(--primary)]",
+        purple: "text-[#8B5CF6]",
+        green: "text-[#34D399]",
+        red: "text-[#EF4444]",
+        blue: "text-[#3B82F6]",
+        orange: "text-[#F59E0B]",
+    };
+
+    return (
+        <div className={`card p-5 ${borderColor ? `border-l-4 ${borderColor}` : ''}`}>
+            <div className="flex items-start justify-between">
+                <div className="flex-1">
+                    <p className="text-sm font-medium text-[var(--muted-foreground)]">{title}</p>
+                    <p className={`mt-2 text-2xl font-bold ${colorClasses[color] || colorClasses.primary}`}>
+                        {value}
+                    </p>
+                    {subtitle && (
+                        <p className="text-xs text-[var(--muted-foreground)] mt-1">{subtitle}</p>
+                    )}
+                    {trend !== undefined && (
+                        <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${
+                            trendDirection === 'up' ? 'text-[#34D399]' : trendDirection === 'down' ? 'text-[#EF4444]' : 'text-[var(--muted-foreground)]'
+                        }`}>
+                            {trendDirection === 'up' && (
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                </svg>
+                            )}
+                            {trendDirection === 'down' && (
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                </svg>
+                            )}
+                            {trend}
+                        </div>
+                    )}
+                </div>
+                {icon && (
+                    <div className={`p-2 rounded-lg bg-[var(--surface-2)] ${colorClasses[color]}`}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
+                        </svg>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function DateRangeFilter({ startDate, endDate, onStartChange, onEndChange, onPresetSelect, activePreset }) {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            {/* Preset buttons */}
+            <div className="flex gap-1">
+                {DATE_PRESETS.map((preset) => (
+                    <button
+                        key={preset.label}
+                        onClick={() => onPresetSelect(preset.days)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            activePreset === preset.days
+                                ? "bg-[var(--primary)] text-white"
+                                : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
+                        }`}
+                    >
+                        {preset.label}
+                    </button>
+                ))}
+            </div>
+            
+            {/* Divider */}
+            <div className="h-4 w-px bg-[var(--border)]" />
+            
+            {/* Custom date range */}
+            <div className="flex items-center gap-1.5">
+                <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => onStartChange(e.target.value)}
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                />
+                <span className="text-[var(--muted-foreground)] text-xs">to</span>
+                <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => onEndChange(e.target.value)}
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                />
+            </div>
+        </div>
+    );
+}
+
+export default function AdminPage() {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState("overview");
+    const [rawUsageData, setRawUsageData] = useState([]);
+    const [feedbackData, setFeedbackData] = useState([]);
+    const [eventsData, setEventsData] = useState([]);
+    
+    // Date range state
+    const [activePreset, setActivePreset] = useState(30); // Default to last 30 days
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+
+    // Initialize date range on mount
+    useEffect(() => {
+        const end = new Date();
+        // Default end date is 1 day after current date
+        end.setDate(end.getDate() + 1);
+        const start = new Date();
+        start.setDate(start.getDate() - 30);
+        setEndDate(end.toISOString().split("T")[0]);
+        setStartDate(start.toISOString().split("T")[0]);
+    }, []);
+
+    const handlePresetSelect = (days) => {
+        setActivePreset(days);
+        const end = new Date();
+        // Set end date to 1 day after current date for presets as well
+        end.setDate(end.getDate() + 1);
+        setEndDate(end.toISOString().split("T")[0]);
+        
+        if (days === null) {
+            // All time - set start to a very old date
+            setStartDate("2020-01-01");
+        } else {
+            const start = new Date();
+            start.setDate(start.getDate() - days);
+            setStartDate(start.toISOString().split("T")[0]);
+        }
+    };
+
+    const handleCustomDateChange = (type, value) => {
+        setActivePreset(null); // Clear preset when using custom dates
+        if (type === "start") {
+            setStartDate(value);
+        } else {
+            setEndDate(value);
+        }
+    };
+
+    // Filter and process data based on date range
+    const data = useMemo(() => {
+        if (!startDate || !endDate) {
+            return {
+                activeUsers: [],
+                tokenUsage: [],
+                cost: [],
+                feedback: feedbackData,
+                bySource: [],
+                byModel: [],
+                events: [],
+                eventsByType: [],
+                stats: {
+                    totalUsers: 0,
+                    totalCost: 0,
+                    totalTokens: 0,
+                    totalCalls: 0,
+                    avgCostPerCall: 0,
+                    avgTokensPerCall: 0,
+                    currentDAU: 0,
+                    currentWAU: 0,
+                    currentMAU: 0,
+                    totalEvents: 0,
+                    feedbackCount: 0,
+                    bugCount: 0,
+                    featureCount: 0,
+                    otherCount: 0,
+                },
+            };
+        }
+
+        const startDateObj = new Date(startDate);
+        startDateObj.setHours(0, 0, 0, 0);
+        const endDateObj = new Date(endDate);
+        endDateObj.setHours(23, 59, 59, 999);
+
+        // Filter usage records by date range
+        const filteredRecords = rawUsageData.filter((stat) => {
+            const recordDate = new Date(stat.created_at);
+            return recordDate >= startDateObj && recordDate <= endDateObj;
+        });
+
+        // Process filtered data
+        const usageMap = {};
+        const uniqueUsers = new Set();
+        let totalCost = 0;
+        let totalTokens = 0;
+
+        filteredRecords.forEach((stat) => {
+            const date = new Date(stat.created_at).toLocaleDateString();
+            if (!usageMap[date]) {
+                usageMap[date] = {
+                    date,
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    cost: 0,
+                };
+            }
+            usageMap[date].prompt_tokens += stat.prompt_tokens;
+            usageMap[date].completion_tokens += stat.completion_tokens;
+            usageMap[date].cost += stat.cost_usd;
+
+            uniqueUsers.add(stat.user_id);
+            totalCost += stat.cost_usd;
+            totalTokens += stat.total_tokens;
+        });
+
+        const usageChartData = Object.values(usageMap).sort(
+            (a, b) => new Date(a.date) - new Date(b.date)
+        );
+
+        // Calculate DAU
+        const dauMap = {};
+        filteredRecords.forEach((stat) => {
+            const date = new Date(stat.created_at).toLocaleDateString();
+            if (!dauMap[date]) dauMap[date] = new Set();
+            dauMap[date].add(stat.user_id);
+        });
+
+        // Calculate DAU, WAU, MAU for each day (rolling windows)
+        const activeUsersData = [];
+        const sortedDates = Object.keys(dauMap).sort((a, b) => new Date(a) - new Date(b));
+        
+        sortedDates.forEach((dateStr) => {
+            const currentDate = new Date(dateStr);
+            const dau = dauMap[dateStr]?.size || 0;
+            
+            // Calculate WAU (users active in last 7 days)
+            const wauUsers = new Set();
+            const weekAgo = new Date(currentDate);
+            weekAgo.setDate(weekAgo.getDate() - 6);
+            
+            rawUsageData.forEach((stat) => {
+                const statDate = new Date(stat.created_at);
+                if (statDate >= weekAgo && statDate <= currentDate) {
+                    wauUsers.add(stat.user_id);
+                }
+            });
+            
+            // Calculate MAU (users active in last 30 days)
+            const mauUsers = new Set();
+            const monthAgo = new Date(currentDate);
+            monthAgo.setDate(monthAgo.getDate() - 29);
+            
+            rawUsageData.forEach((stat) => {
+                const statDate = new Date(stat.created_at);
+                if (statDate >= monthAgo && statDate <= currentDate) {
+                    mauUsers.add(stat.user_id);
+                }
+            });
+            
+            activeUsersData.push({
+                date: dateStr,
+                dau,
+                wau: wauUsers.size,
+                mau: mauUsers.size,
+            });
+        });
+
+        // Current period DAU/WAU/MAU (for stats cards)
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        
+        const todayUsers = new Set();
+        const weekUsers = new Set();
+        const monthUsers = new Set();
+        
+        const weekStart = new Date(today);
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+        
+        const monthStart = new Date(today);
+        monthStart.setDate(monthStart.getDate() - 29);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        const todayStart = new Date(today);
+        todayStart.setHours(0, 0, 0, 0);
+        
+        rawUsageData.forEach((stat) => {
+            const statDate = new Date(stat.created_at);
+            if (statDate >= todayStart && statDate <= today) {
+                todayUsers.add(stat.user_id);
+            }
+            if (statDate >= weekStart && statDate <= today) {
+                weekUsers.add(stat.user_id);
+            }
+            if (statDate >= monthStart && statDate <= today) {
+                monthUsers.add(stat.user_id);
+            }
+        });
+
+        const currentDAU = todayUsers.size;
+        const currentWAU = weekUsers.size;
+        const currentMAU = monthUsers.size;
+
+        // Aggregate by source
+        const sourceMap = {};
+        filteredRecords.forEach((stat) => {
+            const source = stat.source || "UNKNOWN";
+            if (!sourceMap[source]) {
+                sourceMap[source] = {
+                    source,
+                    calls: 0,
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                    cost: 0,
+                };
+            }
+            sourceMap[source].calls += 1;
+            sourceMap[source].prompt_tokens += stat.prompt_tokens;
+            sourceMap[source].completion_tokens += stat.completion_tokens;
+            sourceMap[source].total_tokens += stat.total_tokens;
+            sourceMap[source].cost += stat.cost_usd;
+        });
+
+        const bySourceData = Object.values(sourceMap)
+            .map((item) => ({
+                ...item,
+                percentage: totalCost > 0 ? (item.cost / totalCost) * 100 : 0,
+            }))
+            .sort((a, b) => b.cost - a.cost);
+
+        // Aggregate by model
+        const modelMap = {};
+        filteredRecords.forEach((stat) => {
+            const model = stat.model || "UNKNOWN";
+            if (!modelMap[model]) {
+                modelMap[model] = {
+                    model,
+                    calls: 0,
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                    cost: 0,
+                };
+            }
+            modelMap[model].calls += 1;
+            modelMap[model].prompt_tokens += stat.prompt_tokens;
+            modelMap[model].completion_tokens += stat.completion_tokens;
+            modelMap[model].total_tokens += stat.total_tokens;
+            modelMap[model].cost += stat.cost_usd;
+        });
+
+        const byModelData = Object.values(modelMap)
+            .map((item) => ({
+                ...item,
+                avgCostPerCall: item.calls > 0 ? item.cost / item.calls : 0,
+            }))
+            .sort((a, b) => b.cost - a.cost);
+
+        // Filter feedback by date range
+        const filteredFeedback = feedbackData.filter((item) => {
+            const itemDate = new Date(item.created_at);
+            return itemDate >= startDateObj && itemDate <= endDateObj;
+        });
+
+        // Feedback stats
+        const bugCount = filteredFeedback.filter(f => f.type === 'bug').length;
+        const featureCount = filteredFeedback.filter(f => f.type === 'feature').length;
+        const otherCount = filteredFeedback.filter(f => f.type === 'other').length;
+
+        // Filter and process events data
+        const filteredEvents = eventsData.filter((event) => {
+            const eventDate = new Date(event.created_at);
+            return eventDate >= startDateObj && eventDate <= endDateObj;
+        });
+
+        // Group events by date for chart
+        const eventsMap = {};
+        filteredEvents.forEach((event) => {
+            const date = new Date(event.created_at).toLocaleDateString();
+            if (!eventsMap[date]) {
+                eventsMap[date] = { date, count: 0 };
+            }
+            eventsMap[date].count += 1;
+        });
+
+        const eventsChartData = Object.values(eventsMap).sort(
+            (a, b) => new Date(a.date) - new Date(b.date)
+        );
+
+        // Group events by type
+        const eventTypeMap = {};
+        filteredEvents.forEach((event) => {
+            const type = event.event_type || 'unknown';
+            if (!eventTypeMap[type]) {
+                eventTypeMap[type] = { type, count: 0 };
+            }
+            eventTypeMap[type].count += 1;
+        });
+
+        const eventsByTypeData = Object.values(eventTypeMap).sort((a, b) => b.count - a.count);
+
+        const totalCalls = filteredRecords.length;
+        const stats = {
+            totalUsers: uniqueUsers.size,
+            totalCost,
+            totalTokens,
+            totalCalls,
+            avgCostPerCall: totalCalls > 0 ? totalCost / totalCalls : 0,
+            avgTokensPerCall: totalCalls > 0 ? totalTokens / totalCalls : 0,
+            currentDAU,
+            currentWAU,
+            currentMAU,
+            totalEvents: filteredEvents.length,
+            feedbackCount: filteredFeedback.length,
+            bugCount,
+            featureCount,
+            otherCount,
+        };
+
+        return {
+            activeUsers: activeUsersData,
+            tokenUsage: usageChartData,
+            cost: usageChartData,
+            feedback: filteredFeedback,
+            bySource: bySourceData,
+            byModel: byModelData,
+            events: eventsChartData,
+            eventsByType: eventsByTypeData,
+            stats,
+        };
+    }, [rawUsageData, feedbackData, eventsData, startDate, endDate]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                // Fetch all data in parallel
+                const [usageRes, feedbackRes, eventsRes] = await Promise.all([
+                    fetch("/api/admin/analytics/usage?limit=2000"),
+                    fetch("/api/admin/feedback?limit=500"),
+                    fetch("/api/admin/analytics/events?limit=2000"),
+                ]);
+
+                const [usageData, feedbackResult, eventsResult] = await Promise.all([
+                    usageRes.json(),
+                    feedbackRes.json(),
+                    eventsRes.json(),
+                ]);
+
+                // Store raw data - processing happens in useMemo based on date range
+                const usageRecords = usageData.success ? (usageData.usage || usageData.data || []) : [];
+                setRawUsageData(usageRecords);
+                setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
+                setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
+            } catch (err) {
+                console.error("Error fetching admin data:", err);
+                setError("Failed to load admin data. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex h-96 w-full items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--border)] border-t-[var(--primary)]"></div>
+                    <p className="text-sm text-[var(--muted-foreground)]">Loading dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex h-96 w-full flex-col items-center justify-center gap-4">
+                <div className="rounded-full bg-[#EF4444]/10 p-4">
+                    <svg className="w-8 h-8 text-[#EF4444]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <p className="text-[var(--danger)] font-medium">{error}</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="btn btn-primary"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Page Header with Date Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+                    <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
+                        {startDate && endDate && (
+                            <span>{new Date(startDate).toLocaleDateString()} – {new Date(endDate).toLocaleDateString()}</span>
+                        )}
+                    </p>
+                </div>
+                <DateRangeFilter
+                    startDate={startDate}
+                    endDate={endDate}
+                    onStartChange={(value) => handleCustomDateChange("start", value)}
+                    onEndChange={(value) => handleCustomDateChange("end", value)}
+                    onPresetSelect={handlePresetSelect}
+                    activePreset={activePreset}
+                />
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="border-b border-[var(--border)]">
+                <nav className="-mb-px flex space-x-1 overflow-x-auto">
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                                activeTab === tab.id
+                                    ? "border-[var(--primary)] text-[var(--primary)]"
+                                    : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"
+                            }`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
+                            </svg>
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === "overview" && (
+                <div className="space-y-6">
+                    {/* Key Metrics Grid */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Monthly Active Users"
+                            value={data.stats.currentMAU ?? 0}
+                            subtitle="Last 30 days"
+                            color="green"
+                            borderColor="border-l-[#34D399]"
+                            icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                        <StatCard
+                            title="Total Cost"
+                            value={`$${(data.stats.totalCost ?? 0).toFixed(2)}`}
+                            subtitle="In selected range"
+                            color="red"
+                            borderColor="border-l-[#EF4444]"
+                            icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                        <StatCard
+                            title="API Calls"
+                            value={(data.stats.totalCalls ?? 0).toLocaleString()}
+                            subtitle="In selected range"
+                            color="blue"
+                            borderColor="border-l-[#3B82F6]"
+                            icon="M13 10V3L4 14h7v7l9-11h-7z"
+                        />
+                        <StatCard
+                            title="Feedback"
+                            value={data.stats.feedbackCount ?? 0}
+                            subtitle={`${data.stats.bugCount} bugs, ${data.stats.featureCount} features`}
+                            color="orange"
+                            borderColor="border-l-[#F59E0B]"
+                            icon="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                    </div>
+
+                    {/* Active Users + Cost Side by Side */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-semibold">Active Users Trend</h3>
+                                <div className="flex items-center gap-3 text-xs">
+                                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--primary)]"></span>DAU</span>
+                                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#8B5CF6]"></span>WAU</span>
+                                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#34D399]"></span>MAU</span>
+                                </div>
+                            </div>
+                            <ActiveUsersChart data={data.activeUsers} />
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Daily Cost</h3>
+                            <CostChart data={data.cost} />
+                        </div>
+                    </div>
+
+                    {/* Quick Stats Row */}
+                    <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+                        <div className="card p-4 text-center">
+                            <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">DAU Today</p>
+                            <p className="text-xl font-bold mt-1 text-[var(--primary)]">{data.stats.currentDAU ?? 0}</p>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">WAU</p>
+                            <p className="text-xl font-bold mt-1" style={{ color: '#8B5CF6' }}>{data.stats.currentWAU ?? 0}</p>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Avg Cost/Call</p>
+                            <p className="text-xl font-bold mt-1">${(data.stats.avgCostPerCall ?? 0).toFixed(4)}</p>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Avg Tokens/Call</p>
+                            <p className="text-xl font-bold mt-1">{Math.round(data.stats.avgTokensPerCall ?? 0).toLocaleString()}</p>
+                        </div>
+                    </div>
+
+                    {/* Token Usage + Model Distribution */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Token Usage by Day</h3>
+                            <TokenUsageChart data={data.tokenUsage} />
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">API Calls by Model</h3>
+                            <ModelCallsPieChart data={data.byModel} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "users" && (
+                <div className="space-y-6">
+                    {/* User Stats */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Daily Active Users"
+                            value={data.stats.currentDAU ?? 0}
+                            subtitle="Today"
+                            color="primary"
+                            borderColor="border-l-[var(--primary)]"
+                        />
+                        <StatCard
+                            title="Weekly Active Users"
+                            value={data.stats.currentWAU ?? 0}
+                            subtitle="Last 7 days"
+                            color="purple"
+                            borderColor="border-l-[#8B5CF6]"
+                        />
+                        <StatCard
+                            title="Monthly Active Users"
+                            value={data.stats.currentMAU ?? 0}
+                            subtitle="Last 30 days"
+                            color="green"
+                            borderColor="border-l-[#34D399]"
+                        />
+                        <StatCard
+                            title="Unique Users"
+                            value={data.stats.totalUsers ?? 0}
+                            subtitle="In selected range"
+                            color="blue"
+                        />
+                    </div>
+
+                    {/* Active Users Chart - Full Width */}
+                    <div className="card p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold">Active Users Over Time</h3>
+                            <div className="flex items-center gap-4 text-xs">
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 h-0.5 bg-[var(--primary)]"></span>
+                                    DAU (Daily)
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 h-0.5 bg-[#8B5CF6]"></span>
+                                    WAU (Weekly)
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 h-0.5 bg-[#34D399]"></span>
+                                    MAU (Monthly)
+                                </span>
+                            </div>
+                        </div>
+                        <ActiveUsersChart data={data.activeUsers} />
+                    </div>
+
+                    {/* Events Section */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-semibold">User Events Over Time</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">
+                                    {(data.stats.totalEvents ?? 0).toLocaleString()} total events
+                                </span>
+                            </div>
+                            <EventsChart data={data.events} />
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Events by Type</h3>
+                            <EventTypePieChart data={data.eventsByType} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "usage" && (
+                <div className="space-y-6">
+                    {/* Cost Stats */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+                        <StatCard
+                            title="Total Cost"
+                            value={`$${(data.stats.totalCost ?? 0).toFixed(2)}`}
+                            color="red"
+                        />
+                        <StatCard
+                            title="Total Tokens"
+                            value={(data.stats.totalTokens ?? 0).toLocaleString()}
+                            color="primary"
+                        />
+                        <StatCard
+                            title="API Calls"
+                            value={(data.stats.totalCalls ?? 0).toLocaleString()}
+                            color="blue"
+                        />
+                        <StatCard
+                            title="Avg Cost/Call"
+                            value={`$${(data.stats.avgCostPerCall ?? 0).toFixed(4)}`}
+                        />
+                        <StatCard
+                            title="Avg Tokens/Call"
+                            value={Math.round(data.stats.avgTokensPerCall ?? 0).toLocaleString()}
+                        />
+                    </div>
+
+                    {/* Cost & Token Charts */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Cost Over Time</h3>
+                            <CostChart data={data.cost} />
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Token Usage Over Time</h3>
+                            <TokenUsageChart data={data.tokenUsage} />
+                        </div>
+                    </div>
+
+                    {/* Model Analysis */}
+                    <div className="space-y-4">
+                        <h3 className="font-semibold text-lg">By Model</h3>
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <div className="card p-6">
+                                <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Cost by Model</h4>
+                                <ModelCostBarChart data={data.byModel} />
+                            </div>
+                            <div className="card p-6">
+                                <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Calls Distribution</h4>
+                                <ModelCallsPieChart data={data.byModel} />
+                            </div>
+                        </div>
+                        <div className="card p-6">
+                            <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Token Usage by Model</h4>
+                            <ModelTokensBarChart data={data.byModel} />
+                        </div>
+                        <div className="card p-6">
+                            <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Detailed Model Breakdown</h4>
+                            <ModelUsageTable data={data.byModel} />
+                        </div>
+                    </div>
+
+                    {/* Source Analysis */}
+                    <div className="space-y-4">
+                        <h3 className="font-semibold text-lg">By Source / Stage</h3>
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <div className="card p-6">
+                                <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">API Calls by Source</h4>
+                                <UsageBySourceChart data={data.bySource} />
+                            </div>
+                            <div className="card p-6">
+                                <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Cost Distribution</h4>
+                                <CostBySourcePieChart data={data.bySource} />
+                            </div>
+                        </div>
+                        <div className="card p-6">
+                            <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-4">Detailed Source Breakdown</h4>
+                            <SourceUsageTable data={data.bySource} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "feedback" && (
+                <div className="space-y-6">
+                    {/* Feedback Summary */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Total Feedback"
+                            value={data.stats.feedbackCount ?? 0}
+                            subtitle="In selected range"
+                            color="primary"
+                        />
+                        <StatCard
+                            title="Bug Reports"
+                            value={data.stats.bugCount ?? 0}
+                            color="red"
+                            icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                        <StatCard
+                            title="Feature Requests"
+                            value={data.stats.featureCount ?? 0}
+                            color="blue"
+                            icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                        />
+                        <StatCard
+                            title="Other Feedback"
+                            value={data.stats.otherCount ?? 0}
+                            color="green"
+                        />
+                    </div>
+
+                    {/* Feedback Table */}
+                    <FeedbackTable feedback={data.feedback} />
+                </div>
+            )}
+        </div>
+    );
+}

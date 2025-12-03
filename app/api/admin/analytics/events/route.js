@@ -1,0 +1,42 @@
+import { NextResponse } from "next/server";
+
+const API_BASE = process.env.API_BASE_URL || "https://api.kognolearn.com";
+
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+    const eventTypes = searchParams.get("eventTypes");
+    const courseId = searchParams.get("courseId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    const limit = searchParams.get("limit");
+    const offset = searchParams.get("offset");
+
+    const params = new URLSearchParams();
+    if (userId) params.append("userId", userId);
+    if (eventTypes) params.append("eventTypes", eventTypes);
+    if (courseId) params.append("courseId", courseId);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (limit) params.append("limit", limit);
+    if (offset) params.append("offset", offset);
+
+    const queryString = params.toString();
+    const url = `${API_BASE}/analytics/events${queryString ? `?${queryString}` : ""}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch (err) {
+    console.error("Error fetching analytics events:", err);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
