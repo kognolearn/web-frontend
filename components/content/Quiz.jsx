@@ -5,7 +5,7 @@ import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
-import { saveQuizSubmission, getQuizProgress, isQuizCompleted } from "@/utils/lessonProgress";
+import { saveQuizSubmission, getQuizProgress, isQuizCompleted, saveFlaggedQuestions, getFlaggedQuestions } from "@/utils/lessonProgress";
 
 /**
  * Seeded random number generator for consistent shuffling per question
@@ -296,7 +296,7 @@ function getOptionLabel(option, index) {
   return String.fromCharCode("A".charCodeAt(0) + index);
 }
 
-function normalizeOption(option, index) {
+function normalizeOption(option, index, optionExplanation = null) {
   const blockSource =
     option?.block ?? (option?.content ? { content: option.content } : option);
   const feedbackBlock = option?.feedback ? normalizeRichBlock(option.feedback) : null;
@@ -306,12 +306,22 @@ function normalizeOption(option, index) {
       ? option
       : option?.value ?? option?.text ?? (typeof option?.label === "string" ? option.label : null);
   const plainText = extractPlainTextFromBlock(block);
+  
+  // Handle explanation - can come from option itself or from question-level array
+  let explanationBlock = null;
+  if (optionExplanation) {
+    explanationBlock = normalizeRichBlock(optionExplanation);
+  } else if (option?.explanation) {
+    explanationBlock = normalizeRichBlock(option.explanation);
+  }
+  
   return {
     id: option?.id ?? String(index),
     label: getOptionLabel(option, index),
     block,
     correct: Boolean(option?.correct),
     feedback: feedbackBlock && hasRichContent(feedbackBlock) ? feedbackBlock : null,
+    explanation: explanationBlock && hasRichContent(explanationBlock) ? explanationBlock : null,
     valueText: typeof fallbackValue === "string" ? fallbackValue : null,
     plainText,
   };
@@ -324,17 +334,27 @@ function normalizeQuestion(item, index) {
     item?.block ??
     (item?.content ? { content: item.content } : item);
 
-  const options = Array.isArray(item?.options) ? item.options.map(normalizeOption) : [];
+  // Check if explanation is an array (per-option explanations) or a single value
+  const explanationIsArray = Array.isArray(item?.explanation);
+  const optionExplanations = explanationIsArray ? item.explanation : [];
+  
+  const options = Array.isArray(item?.options) 
+    ? item.options.map((opt, idx) => normalizeOption(opt, idx, optionExplanations[idx] || null)) 
+    : [];
   applyQuestionLevelCorrectness(item, options);
 
-  const explanationBlock = item?.explanation ? normalizeRichBlock(item.explanation) : null;
+  // Only use question-level explanation if it's not an array (for backward compatibility)
+  const questionExplanationBlock = !explanationIsArray && item?.explanation 
+    ? normalizeRichBlock(item.explanation) 
+    : null;
 
   return {
     id: item?.id ?? String(index),
     block: normalizeRichBlock(blockSource),
     options,
     explanation:
-      explanationBlock && hasRichContent(explanationBlock) ? explanationBlock : null,
+      questionExplanationBlock && hasRichContent(questionExplanationBlock) ? questionExplanationBlock : null,
+    hasOptionExplanations: explanationIsArray && optionExplanations.length > 0,
   };
 }
 
@@ -478,7 +498,7 @@ export default function Quiz({
         {
           id: "0",
           block: normalizeRichBlock(question),
-          options: options.map(normalizeOption),
+          options: options.map((opt, idx) => normalizeOption(opt, idx, null)),
         },
       ];
     }
@@ -515,6 +535,8 @@ export default function Quiz({
   const [revealedByQuestion, setRevealedByQuestion] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedExplanations, setExpandedExplanations] = useState({});
+  const [flaggedQuestions, setFlaggedQuestions] = useState({});
 
   // Track the last notification sent to parent to prevent duplicate calls
   const lastNotificationRef = useRef(null);
@@ -522,6 +544,10 @@ export default function Quiz({
   const currentQuestion = normalizedQuestions[currentIndex] ?? null;
   const currentShuffledData = shuffledQuestionsData[currentIndex] ?? null;
   const questionCount = normalizedQuestions.length;
+  
+  // Check if current question has per-option explanations
+  const hasOptionExplanations = currentQuestion?.hasOptionExplanations || 
+    currentQuestion?.options?.some(opt => opt.explanation);
   
   // Use shuffled options when quiz not submitted, original when submitted (for review)
   const displayOptions = useMemo(() => {
@@ -556,6 +582,8 @@ export default function Quiz({
     setRevealedByQuestion({});
     setIsSubmitted(false);
     setIsSubmitting(false);
+    setExpandedExplanations({});
+    setFlaggedQuestions({});
     lastNotificationRef.current = null;
     
     // Restore quiz state from localStorage if already submitted
@@ -575,6 +603,12 @@ export default function Quiz({
           revealed[questionId] = true;
         });
         setRevealedByQuestion(revealed);
+      }
+      
+      // Restore flagged questions
+      const savedFlags = getFlaggedQuestions(courseId, lessonId);
+      if (savedFlags && Object.keys(savedFlags).length > 0) {
+        setFlaggedQuestions(savedFlags);
       }
     }
   }, [questionsSignature, courseId, lessonId]);
@@ -627,13 +661,21 @@ export default function Quiz({
     let correctCount = 0;
     let totalCount = 0;
     const quizAnswers = {};
+    const questionStatusUpdates = [];
 
     normalizedQuestions.forEach((question) => {
       if (!question?.id || !Array.isArray(question.options)) return;
       
       totalCount++;
       const userResponseId = responses[question.id];
-      if (!userResponseId) return;
+      if (!userResponseId) {
+        // Mark unanswered questions as unattempted
+        questionStatusUpdates.push({
+          id: question.id,
+          status: 'unattempted'
+        });
+        return;
+      }
 
       const selectedOption = question.options.find((opt) => opt.id === userResponseId);
       const isCorrect = selectedOption?.correct || false;
@@ -642,6 +684,12 @@ export default function Quiz({
         selectedOptionId: userResponseId,
         isCorrect
       };
+      
+      // Add to status updates for the PATCH request
+      questionStatusUpdates.push({
+        id: question.id,
+        status: isCorrect ? 'correct' : 'incorrect'
+      });
       
       if (isCorrect) {
         correctCount++;
@@ -661,7 +709,8 @@ export default function Quiz({
         const allCorrect = totalCount > 0 && correctCount === totalCount;
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
 
-        const response = await fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
+        // Send both progress update and question status updates in parallel
+        const progressPromise = fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -671,8 +720,29 @@ export default function Quiz({
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`Progress update failed: ${response.status}`);
+        // Send question status updates
+        const questionStatusPromise = questionStatusUpdates.length > 0 
+          ? fetch(`/api/courses/${courseId}/questions`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId,
+                updates: questionStatusUpdates
+              }),
+            })
+          : Promise.resolve({ ok: true });
+
+        const [progressResponse, questionStatusResponse] = await Promise.all([
+          progressPromise,
+          questionStatusPromise
+        ]);
+
+        if (!progressResponse.ok) {
+          throw new Error(`Progress update failed: ${progressResponse.status}`);
+        }
+
+        if (questionStatusResponse && !questionStatusResponse.ok) {
+          console.error('Question status update failed:', questionStatusResponse.status);
         }
 
         // Notify parent that quiz was completed successfully
@@ -714,6 +784,56 @@ export default function Quiz({
       });
     },
     [questionCount]
+  );
+
+  const handleFlagQuestion = useCallback(
+    async (questionId) => {
+      if (!isSubmitted || !userId || !courseId) return;
+      
+      // Toggle flag state
+      const isCurrentlyFlagged = flaggedQuestions[questionId];
+      const newFlaggedState = !isCurrentlyFlagged;
+      
+      // Update local state immediately for responsive UI
+      setFlaggedQuestions((prev) => ({
+        ...prev,
+        [questionId]: newFlaggedState
+      }));
+      
+      // Save to localStorage
+      if (lessonId) {
+        const updatedFlags = {
+          ...flaggedQuestions,
+          [questionId]: newFlaggedState
+        };
+        saveFlaggedQuestions(courseId, lessonId, updatedFlags);
+      }
+      
+      // Send PATCH request to mark as incorrect when flagging
+      // (unflagging doesn't change the server status - once flagged as incorrect, it stays that way)
+      if (newFlaggedState) {
+        try {
+          const response = await fetch(`/api/courses/${courseId}/questions`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              updates: [{
+                id: questionId,
+                status: 'incorrect'
+              }]
+            }),
+          });
+          
+          if (!response.ok) {
+            console.error('Failed to update flagged question status:', response.status);
+          }
+        } catch (error) {
+          console.error('Error flagging question:', error);
+        }
+      }
+    },
+    [isSubmitted, userId, courseId, lessonId, flaggedQuestions]
   );
 
   const questionLabelId = currentQuestion ? `quiz-question-${currentQuestion.id}` : undefined;
@@ -832,26 +952,37 @@ export default function Quiz({
               {normalizedQuestions.map((q, idx) => {
                 const isAnswered = !!responses[q.id];
                 const isCurrent = idx === currentIndex;
+                const isFlagged = flaggedQuestions[q.id];
                 let statusClass = "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]";
                 let icon = null;
                 
                 if (isSubmitted) {
-                  const userResponse = responses[q.id];
-                  const selectedOpt = q.options.find((opt) => opt.id === userResponse);
-                  if (selectedOpt?.correct) {
-                    statusClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+                  if (isFlagged) {
+                    // Flagged questions show amber styling
+                    statusClass = "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
                     icon = (
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
                       </svg>
                     );
-                  } else if (userResponse) {
-                    statusClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
-                    icon = (
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    );
+                  } else {
+                    const userResponse = responses[q.id];
+                    const selectedOpt = q.options.find((opt) => opt.id === userResponse);
+                    if (selectedOpt?.correct) {
+                      statusClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+                      icon = (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      );
+                    } else if (userResponse) {
+                      statusClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
+                      icon = (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      );
+                    }
                   }
                 } else if (isAnswered) {
                   statusClass = "bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30";
@@ -882,9 +1013,54 @@ export default function Quiz({
 
           {/* Question */}
           <div className="mb-8">
-            <div id={questionLabelId} className="text-lg font-medium text-[var(--foreground)] leading-relaxed">
-              <RichBlock block={currentQuestion.block} maxWidth="100%" />
+            <div className="flex items-start justify-between gap-4">
+              <div id={questionLabelId} className="text-lg font-medium text-[var(--foreground)] leading-relaxed flex-1">
+                <RichBlock block={currentQuestion.block} maxWidth="100%" />
+              </div>
+              {/* Flag button - only show after submission */}
+              {isSubmitted && currentQuestion && (
+                <Tooltip 
+                  text={flaggedQuestions[currentQuestion.id] ? "Question flagged for review" : "Flag this question if you think it needs review"} 
+                  position="left"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleFlagQuestion(currentQuestion.id)}
+                    className={`
+                      flex-shrink-0 p-2 rounded-lg transition-all duration-200 cursor-pointer
+                      ${flaggedQuestions[currentQuestion.id]
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                      }
+                    `}
+                    aria-label={flaggedQuestions[currentQuestion.id] ? "Unflag question" : "Flag question for review"}
+                  >
+                    <svg 
+                      className="w-5 h-5" 
+                      fill={flaggedQuestions[currentQuestion.id] ? "currentColor" : "none"} 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" 
+                      />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
             </div>
+            {/* Flagged indicator */}
+            {isSubmitted && flaggedQuestions[currentQuestion?.id] && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                </svg>
+                <span>Flagged for review</span>
+              </div>
+            )}
           </div>
 
           {/* Options */}
@@ -904,84 +1080,138 @@ export default function Quiz({
                   else if (isSelected) status = "incorrect";
                 }
 
-                return (
-                  <div
-                    key={opt.id}
-                    role="radio"
-                    aria-checked={isSelected}
-                    tabIndex={0}
-                    className={`
-                      group relative flex w-full items-start gap-4 rounded-xl border p-4 
-                      transition-all duration-200 focus:outline-none cursor-pointer
-                      ${status === "correct" 
-                        ? "border-emerald-500/50 bg-emerald-500/10" 
-                        : status === "incorrect" 
-                        ? "border-rose-500/50 bg-rose-500/10" 
-                        : isSelected 
-                        ? "border-[var(--primary)] bg-[var(--primary)]/5 shadow-sm" 
-                        : "border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-2)]/50"
-                      }
-                    `}
-                    onClick={() => handleSelect(opt.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleSelect(opt.id);
-                      }
-                    }}
-                  >
-                    {/* Option letter badge */}
-                    <div className={`
-                      flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition-all duration-200
-                      ${status === "correct" 
-                        ? "bg-emerald-500 text-white" 
-                        : status === "incorrect" 
-                        ? "bg-rose-500 text-white" 
-                        : isSelected 
-                        ? "bg-[var(--primary)] text-white" 
-                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] group-hover:bg-[var(--primary)]/10 group-hover:text-[var(--primary)]"
-                      }
-                    `}>
-                      {opt.label}
-                    </div>
+                // Check if this option has an explanation
+                const hasExplanation = opt.explanation && hasRichContent(opt.explanation);
+                const explanationKey = `${currentQuestion?.id}-${opt.id}`;
+                const isExplanationExpanded = expandedExplanations[explanationKey];
 
-                    {/* Option content */}
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="text-[var(--foreground)]">
-                        <RichBlock block={opt.block} maxWidth="100%" />
+                return (
+                  <div key={opt.id} className="space-y-0">
+                    <div
+                      role="radio"
+                      aria-checked={isSelected}
+                      tabIndex={0}
+                      className={`
+                        group relative flex w-full items-start gap-4 rounded-xl border p-4 
+                        transition-all duration-200 focus:outline-none cursor-pointer
+                        ${status === "correct" 
+                          ? "border-emerald-500/50 bg-emerald-500/10" 
+                          : status === "incorrect" 
+                          ? "border-rose-500/50 bg-rose-500/10" 
+                          : isSelected 
+                          ? "border-[var(--primary)] bg-[var(--primary)]/5 shadow-sm" 
+                          : "border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)]/40 hover:bg-[var(--surface-2)]/50"
+                        }
+                      `}
+                      onClick={() => handleSelect(opt.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleSelect(opt.id);
+                        }
+                      }}
+                    >
+                      {/* Option letter badge */}
+                      <div className={`
+                        flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition-all duration-200
+                        ${status === "correct" 
+                          ? "bg-emerald-500 text-white" 
+                          : status === "incorrect" 
+                          ? "bg-rose-500 text-white" 
+                          : isSelected 
+                          ? "bg-[var(--primary)] text-white" 
+                          : "bg-[var(--surface-2)] text-[var(--muted-foreground)] group-hover:bg-[var(--primary)]/10 group-hover:text-[var(--primary)]"
+                        }
+                      `}>
+                        {opt.label}
                       </div>
 
-                      {showState && opt.feedback && (
-                        <div className="mt-3 pt-3 border-t border-[var(--border)] text-sm text-[var(--muted-foreground)]">
-                          <RichBlock block={opt.feedback} maxWidth="100%" />
+                      {/* Option content */}
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <div className="text-[var(--foreground)]">
+                          <RichBlock block={opt.block} maxWidth="100%" />
+                        </div>
+
+                        {showState && opt.feedback && (
+                          <div className="mt-3 pt-3 border-t border-[var(--border)] text-sm text-[var(--muted-foreground)]">
+                            <RichBlock block={opt.feedback} maxWidth="100%" />
+                          </div>
+                        )}
+
+                        {/* Explanation toggle button - only show after submission */}
+                        {showState && hasExplanation && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedExplanations(prev => ({
+                                ...prev,
+                                [explanationKey]: !prev[explanationKey]
+                              }));
+                            }}
+                            className={`
+                              mt-3 flex items-center gap-1.5 text-xs font-medium transition-colors
+                              ${status === "correct" 
+                                ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300" 
+                                : status === "incorrect"
+                                ? "text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300"
+                                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                              }
+                            `}
+                          >
+                            <svg 
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${isExplanationExpanded ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            {isExplanationExpanded ? 'Hide explanation' : 'Why is this ' + (opt.correct ? 'correct' : 'incorrect') + '?'}
+                          </button>
+                        )}
+
+                        {/* Expanded explanation */}
+                        {showState && hasExplanation && isExplanationExpanded && (
+                          <div className={`
+                            mt-3 pt-3 border-t text-sm leading-relaxed
+                            ${status === "correct" 
+                              ? "border-emerald-500/20 text-emerald-700 dark:text-emerald-300" 
+                              : status === "incorrect"
+                              ? "border-rose-500/20 text-rose-700 dark:text-rose-300"
+                              : "border-[var(--border)] text-[var(--muted-foreground)]"
+                            }
+                          `}>
+                            <RichBlock block={opt.explanation} maxWidth="100%" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Status indicator */}
+                      {status === "correct" && (
+                        <div className="flex items-center gap-1.5 text-emerald-500">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+
+                      {status === "incorrect" && (
+                        <div className="flex items-center gap-1.5 text-rose-500">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
                         </div>
                       )}
                     </div>
-
-                    {/* Status indicator */}
-                    {status === "correct" && (
-                      <div className="flex items-center gap-1.5 text-emerald-500">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
-
-                    {status === "incorrect" && (
-                      <div className="flex items-center gap-1.5 text-rose-500">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* Explanation panel */}
-          {showExplanation && (
+          {/* Explanation panel - only show if no per-option explanations */}
+          {showExplanation && !hasOptionExplanations && (
             <div className="mt-6 rounded-xl bg-[var(--primary)]/5 border border-[var(--primary)]/10 p-5">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">

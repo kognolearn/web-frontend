@@ -112,8 +112,16 @@ export async function GET(request) {
         }),
         
         // Quiz questions (both mini_quiz and practice_exam format)
-        ...(contentPayload.quiz && contentPayload.quiz.length > 0 && {
-          questions: contentPayload.quiz.map(q => {
+        // Handle both single quiz object and array of quiz questions
+        ...(contentPayload.quiz && (() => {
+          // Normalize quiz to array format
+          const quizArray = Array.isArray(contentPayload.quiz) 
+            ? contentPayload.quiz 
+            : [contentPayload.quiz];
+          
+          if (quizArray.length === 0) return {};
+          
+          const transformQuestion = (q) => {
             const resolvedCorrectIndex = Number.isInteger(q.correct_index)
               ? q.correct_index
               : Number.isInteger(q.correctIndex)
@@ -141,11 +149,57 @@ export async function GET(request) {
                 rubric: q.rubric || ''
               })
             };
-          }),
-          // Also provide in exam format
-          mcq: contentPayload.quiz
-            .filter(q => !q.type || q.type === 'mcq')
-            .map(q => {
+          };
+
+          return {
+            questions: quizArray.map(transformQuestion),
+            // Also provide in exam format
+            mcq: quizArray
+              .filter(q => !q.type || q.type === 'mcq')
+              .map(q => {
+                const resolvedCorrectIndex = Number.isInteger(q.correct_index)
+                  ? q.correct_index
+                  : Number.isInteger(q.correctIndex)
+                  ? q.correctIndex
+                  : null;
+                const resolvedAnswer =
+                  q.correct_answer ??
+                  q.correctAnswer ??
+                  q.answer ??
+                  (resolvedCorrectIndex !== null && Array.isArray(q.options)
+                    ? q.options[resolvedCorrectIndex]
+                    : '');
+
+                return {
+                  question: q.question || '',
+                  options: q.options || [],
+                  answer: resolvedAnswer,
+                  correctAnswer: resolvedAnswer,
+                  correctIndex: resolvedCorrectIndex,
+                  explanation: q.explanation || ''
+                };
+              }),
+            frq: quizArray
+              .filter(q => q.type === 'frq')
+              .map(q => ({
+                prompt: q.prompt || q.question || '',
+                model_answer: q.model_answer || q.answer || '',
+                rubric: q.rubric || '',
+                explanation: q.explanation || ''
+              }))
+          };
+        })()),
+        
+        // Practice exam (if available)
+        ...(contentPayload.practice_exam && (() => {
+          const examArray = Array.isArray(contentPayload.practice_exam)
+            ? contentPayload.practice_exam
+            : [contentPayload.practice_exam];
+          
+          if (examArray.length === 0) return {};
+          
+          return {
+            practice_exam: examArray.map(q => {
               const resolvedCorrectIndex = Number.isInteger(q.correct_index)
                 ? q.correct_index
                 : Number.isInteger(q.correctIndex)
@@ -160,23 +214,22 @@ export async function GET(request) {
                   : '');
 
               return {
-                question: q.question || '',
+                type: q.type || 'mcq',
+                question: q.question || q.prompt || '',
                 options: q.options || [],
                 answer: resolvedAnswer,
                 correctAnswer: resolvedAnswer,
                 correctIndex: resolvedCorrectIndex,
-                explanation: q.explanation || ''
+                explanation: q.explanation || '',
+                ...(q.type === 'frq' && {
+                  prompt: q.prompt || q.question,
+                  model_answer: q.model_answer || q.answer,
+                  rubric: q.rubric || ''
+                })
               };
-            }),
-          frq: contentPayload.quiz
-            .filter(q => q.type === 'frq')
-            .map(q => ({
-              prompt: q.prompt || q.question || '',
-              model_answer: q.model_answer || q.answer || '',
-              rubric: q.rubric || '',
-              explanation: q.explanation || ''
-            }))
-        }),
+            })
+          };
+        })()),
       }
     };
 

@@ -259,6 +259,23 @@ export function getQuizScore(courseId, lessonId) {
   return quizProgress.score;
 }
 
+/**
+ * Get flagged questions for a quiz
+ */
+export function getFlaggedQuestions(courseId, lessonId) {
+  const progress = getLessonProgress(courseId, lessonId);
+  return progress?.flaggedQuestions || {};
+}
+
+/**
+ * Save flagged questions for a quiz
+ */
+export function saveFlaggedQuestions(courseId, lessonId, flaggedQuestions) {
+  saveLessonProgress(courseId, lessonId, {
+    flaggedQuestions
+  });
+}
+
 // ============================================
 // OVERALL LESSON COMPLETION
 // ============================================

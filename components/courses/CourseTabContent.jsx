@@ -625,6 +625,37 @@ export default function CourseTabContent({
     }
   }, [studyPlan, selectedLesson, viewMode]);
 
+  // Auto-select first available content type when lesson content is loaded
+  useEffect(() => {
+    if (!selectedLesson || selectedLesson.type === 'practice_exam') return;
+    
+    // Check if content is loaded for this lesson
+    const cacheKeys = Object.keys(contentCache);
+    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${selectedLesson.id}:`));
+    if (!lessonCacheKey) return;
+    
+    const cached = contentCache[lessonCacheKey];
+    if (cached?.status !== "loaded" || !cached?.data?.data) return;
+    
+    // Get available content types from the loaded data
+    const data = cached.data.data;
+    const availableTypes = [];
+    if (data.body || data.reading) availableTypes.push({ label: "Reading", value: "reading" });
+    if (data.videos && data.videos.length > 0) availableTypes.push({ label: "Video", value: "video" });
+    if (data.cards && data.cards.length > 0) availableTypes.push({ label: "Flashcards", value: "flashcards" });
+    if (data.questions || data.mcq || data.frq) availableTypes.push({ label: "Quiz", value: "mini_quiz" });
+    
+    // If we have available types, set the first one if not already set or if current type isn't available
+    if (availableTypes.length > 0) {
+      const currentType = selectedContentType?.type;
+      const isCurrentTypeAvailable = availableTypes.some(t => t.value === currentType);
+      
+      if (!selectedContentType || selectedContentType.lessonId !== selectedLesson.id || !isCurrentTypeAvailable) {
+        setSelectedContentType({ lessonId: selectedLesson.id, type: availableTypes[0].value });
+      }
+    }
+  }, [selectedLesson, contentCache, selectedContentType]);
+
   // Track viewport for responsive adjustments
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');

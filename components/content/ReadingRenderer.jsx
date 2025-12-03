@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { MathJax } from "better-react-mathjax";
+import MermaidDiagram from "./MermaidDiagram";
 import { 
   markReadingQuestionAnswered, 
   setReadingTotalQuestions, 
@@ -60,8 +61,26 @@ function shuffleWithMapping(array, seed) {
 function parseContent(content) {
   if (!content) return [];
   
+  // Preprocess: Convert literal \n strings to actual newlines
+  // This handles cases where content comes through with escaped newlines
+  let normalizedContent = content;
+  
+  // Replace literal \n (backslash followed by n) with actual newlines
+  // But be careful not to break actual escape sequences in code blocks
+  // We do a simple replacement since code blocks will be reparsed anyway
+  normalizedContent = normalizedContent.replace(/\\n/g, '\n');
+  
+  // Also handle \r\n and \r
+  normalizedContent = normalizedContent.replace(/\\r\\n/g, '\n');
+  normalizedContent = normalizedContent.replace(/\\r/g, '\n');
+  
+  // Handle Check Your Understanding blocks that are concatenated to previous text
+  // Insert a newline before **Check Your Understanding** if it's not at the start of a line
+  normalizedContent = normalizedContent.replace(/([^\n])(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
+  
   const blocks = [];
-  const lines = content.split("\n");
+  const lines = normalizedContent.split("\n");
+  
   let i = 0;
   
   // Helper to consume lines for multi-line blocks
@@ -87,6 +106,7 @@ function parseContent(content) {
     
     // Question block (starts with "Question:" or "**Question:**" or "**Check Your Understanding**")
     if (/^(\*\*)?Question:?\*?\*?/i.test(trimmed) || /^\*\*Check Your Understanding\*\*/i.test(trimmed)) {
+      console.log('[ReadingRenderer] Detected Check Your Understanding block:', lines.slice(i, i + 20).join('\n'));
       const questionBlock = parseQuestionBlock(lines, i);
       if (questionBlock) {
         blocks.push(questionBlock);
@@ -289,6 +309,21 @@ function parseContent(content) {
  * Supports formats:
  * 1. "Question: ..." with options A., B., C., D.
  * 2. "**Check Your Understanding**" followed by question text and options
+ * 
+ * New format with per-option explanations:
+ * **Check Your Understanding**
+ * [Question Text]
+ * - A. [Option A Text]
+ * - B. [Option B Text]
+ * - C. [Option C Text]
+ * - D. [Option D Text]
+ * <details><summary>Show Answer</summary>
+ * **Answer:** [Letter]
+ * - **A** ❌ [Explanation for A]
+ * - **B** ✅ [Explanation for B]
+ * - **C** ❌ [Explanation for C]
+ * - **D** ❌ [Explanation for D]
+ * </details>
  */
 function parseQuestionBlock(lines, startIdx) {
   const firstLine = lines[startIdx];
@@ -343,55 +378,96 @@ function parseQuestionBlock(lines, startIdx) {
   const options = [];
   let correctIndex = -1;
   let explanation = "";
+  const optionExplanations = {}; // Store per-option explanations
+  let inDetailsBlock = false;
   
   // Collect options - format: "- A. Option text" or "A. Option text"
-  // Single letter only (no duplicate like "- A. A.")
   while (i < lines.length) {
     const line = lines[i].trim();
     if (!line) {
       i++;
       continue;
     }
-    // Match options: "- A. text", "A. text", "A) text", "* A. text"
-    // Single letter format only: "- A. Option text here"
-    const optionMatch = line.match(/^[-*]?\s*([A-D])[.)]\s+(.+)$/i);
     
-    if (optionMatch) {
-      options.push({
-        label: optionMatch[1].toUpperCase(),
-        text: optionMatch[2],
-      });
+    // Check for details block start
+    if (/^<details>/i.test(line)) {
+      inDetailsBlock = true;
       i++;
-    } else if (/^<details>|^<summary>|Show Answer/i.test(line)) {
-      // Inside details block - continue to find answer
+      continue;
+    }
+    
+    // Check for details block end
+    if (/^<\/details>/i.test(line)) {
+      inDetailsBlock = false;
       i++;
-    } else if (/^<\/details>|^<\/summary>/i.test(line)) {
+      continue;
+    }
+    
+    // Skip summary tags
+    if (/^<\/?summary>/i.test(line) || /Show Answer/i.test(line)) {
       i++;
-    } else if (/^\*?\*?Answer:?\*?\*?/i.test(line)) {
-      // Found answer line - format: "**Answer:** B. *Explanation:* text"
-      // Extract the answer letter
+      continue;
+    }
+    
+    // If we're NOT in the details block, parse options
+    if (!inDetailsBlock) {
+      // Match options: "- A. text", "A. text", "A) text", "* A. text"
+      const optionMatch = line.match(/^[-*]?\s*([A-D])[.)]\s+(.+)$/i);
+      
+      if (optionMatch) {
+        options.push({
+          label: optionMatch[1].toUpperCase(),
+          text: optionMatch[2],
+        });
+        i++;
+        continue;
+      }
+    }
+    
+    // Inside details block - look for answer and explanations
+    if (inDetailsBlock) {
+      // Look for answer line: "**Answer:** B" or "Answer: B"
       const answerMatch = line.match(/\*?\*?Answer:?\*?\*?\s*([A-D])/i);
       if (answerMatch) {
         const letter = answerMatch[1].toUpperCase();
         correctIndex = options.findIndex(o => o.label === letter);
+        
+        // Also check for old-style explanation on same line
+        const explMatch = line.match(/\*?Explanation:?\*?\s*(.+)$/i);
+        if (explMatch) {
+          explanation = explMatch[1].trim();
+        }
+        i++;
+        continue;
       }
       
-      // Extract explanation - format: "*Explanation:* text" or "Explanation: text"
-      const explMatch = line.match(/\*?Explanation:?\*?\s*(.+)$/i);
-      if (explMatch) {
-        explanation = explMatch[1].trim();
+      // Look for per-option explanations: "- **A** explanation" or "- **B** explanation"
+      // Handles formats:
+      //   - **A** Some explanation text
+      //   - **A.** Some explanation text  
+      //   - **A** ❌ Some explanation text (with optional emoji)
+      //   - **A** ✅ Some explanation text
+      const optionExplMatch = line.match(/^[-*]\s*\*\*([A-D])\.?\*\*\s*(.+)$/i);
+      if (optionExplMatch) {
+        const letter = optionExplMatch[1].toUpperCase();
+        let explText = optionExplMatch[2].trim();
+        // Remove leading emoji if present at start of explanation
+        explText = explText.replace(/^[❌✅✓✗⭕️🔴🟢]\s*/, '');
+        optionExplanations[letter] = explText;
+        i++;
+        continue;
       }
-      i++;
-    } else if (line.startsWith("---") || /^#{1,6}\s/.test(line) || /^(\*\*)?Question:?\*?\*?/i.test(line) || /^\*\*Check Your Understanding\*\*/i.test(line)) {
-      // Hit new section, stop parsing
-      break;
-    } else {
-      // Continue looking for answer in subsequent lines
-      i++;
     }
+    
+    // Check if we hit a new section
+    if (line.startsWith("---") || /^#{1,6}\s/.test(line) || /^(\*\*)?Question:?\*?\*?/i.test(line) || /^\*\*Check Your Understanding\*\*/i.test(line)) {
+      break;
+    }
+    
+    i++;
   }
   
-  // If we still haven't found the answer, do a broader search
+  // If we still haven't found the answer, do a broader search (backwards compatibility)
   if (correctIndex === -1 && options.length > 0) {
     let searchStart = startIdx;
     let searchLimit = Math.min(startIdx + 30, lines.length);
@@ -427,12 +503,19 @@ function parseQuestionBlock(lines, startIdx) {
     return null;
   }
   
+  // Attach explanations to options
+  options.forEach(opt => {
+    if (optionExplanations[opt.label]) {
+      opt.explanation = optionExplanations[opt.label];
+    }
+  });
+  
   return {
     type: "question",
     question: questionText.trim(),
     options,
     correctIndex,
-    explanation,
+    explanation, // Legacy single explanation
     endIdx: i,
   };
 }
@@ -714,10 +797,24 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
                   option.label
                 )}
               </div>
-              <div className="flex-1 pt-0.5 text-[var(--foreground)]">
-                <MathJax dynamic>
-                  <InlineContent text={option.text} />
-                </MathJax>
+              <div className="flex-1 pt-0.5">
+                <div className="text-[var(--foreground)]">
+                  <MathJax dynamic>
+                    <InlineContent text={option.text} />
+                  </MathJax>
+                </div>
+                {/* Show per-option explanation after submission */}
+                {submitted && option.explanation && (
+                  <div className={`mt-2 text-sm leading-relaxed ${
+                    isCorrectOption 
+                      ? "text-emerald-400" 
+                      : "text-[var(--muted-foreground)]"
+                  }`}>
+                    <MathJax dynamic>
+                      <InlineContent text={option.explanation} />
+                    </MathJax>
+                  </div>
+                )}
               </div>
               {showAsCorrect && (
                 <span className="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Correct</span>
@@ -750,8 +847,8 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       {/* Results section - only show after submission */}
       {submitted && (
         <div className="px-4 pb-4 space-y-3">
-          {/* Explanation */}
-          {explanation && (
+          {/* Legacy single explanation - only show if no per-option explanations exist */}
+          {explanation && !shuffledOptions.some(opt => opt.explanation) && (
             <div className="p-4 rounded-xl bg-[var(--primary)]/5 border border-[var(--primary)]/10">
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-md bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -938,6 +1035,18 @@ export default function ReadingRenderer({ content, courseId, lessonId, onReading
                 );
                 
               case "code":
+                // Check if this is a Mermaid diagram
+                const isMermaid = block.language?.toLowerCase() === "mermaid";
+                
+                if (isMermaid) {
+                  return (
+                    <MermaidDiagram 
+                      key={idx} 
+                      chart={block.content} 
+                    />
+                  );
+                }
+                
                 return (
                   <div key={idx} className="my-6 rounded-xl overflow-hidden border border-[var(--border)]">
                     {block.language && (
