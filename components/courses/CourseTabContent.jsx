@@ -946,6 +946,42 @@ export default function CourseTabContent({
     return null;
   }, [studyPlan]);
 
+  // Get all lessons in a flat array (for navigation)
+  const allLessonsFlat = useMemo(() => {
+    if (!studyPlan?.modules) return [];
+    return studyPlan.modules
+      .filter(m => !m.is_practice_exam_module)
+      .flatMap(m => m.lessons || []);
+  }, [studyPlan]);
+
+  // Get previous and next lessons relative to the current lesson
+  const { prevLesson, nextLesson } = useMemo(() => {
+    if (!selectedLesson?.id || allLessonsFlat.length === 0) {
+      return { prevLesson: null, nextLesson: null };
+    }
+    const currentIndex = allLessonsFlat.findIndex(l => l.id === selectedLesson.id);
+    if (currentIndex === -1) {
+      return { prevLesson: null, nextLesson: null };
+    }
+    return {
+      prevLesson: currentIndex > 0 ? allLessonsFlat[currentIndex - 1] : null,
+      nextLesson: currentIndex < allLessonsFlat.length - 1 ? allLessonsFlat[currentIndex + 1] : null
+    };
+  }, [selectedLesson?.id, allLessonsFlat]);
+
+  // Navigate to a lesson
+  const navigateToLesson = useCallback((lesson) => {
+    if (!lesson) return;
+    setSelectedLesson(lesson);
+    setSelectedContentType({ lessonId: lesson.id, type: 'reading' });
+    setSelectedReviewModule(null);
+    setViewMode("topic");
+    setCurrentViewingItem(null);
+    // Note: fetchLessonContent is not in deps as it's a stable function that uses state setters
+    fetchLessonContent(lesson.id, ['reading']);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Check if all content types for a lesson are completed
   const isLessonFullyCompleted = useCallback((lessonId) => {
     // First check if the lesson has a status or mastery_status from the backend (not pending = completed)
@@ -2180,7 +2216,29 @@ export default function CourseTabContent({
               right: isMobile ? 0 : `${chatBotWidth}px` 
             }}
           >
-            <div className="flex items-center justify-center px-4 py-3">
+            <div className="flex items-center justify-between px-4 py-3">
+              {/* Previous Lesson Button */}
+              <button
+                type="button"
+                onClick={() => navigateToLesson(prevLesson)}
+                disabled={!prevLesson}
+                className={`
+                  flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                  ${prevLesson
+                    ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                    : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                  }
+                `}
+                title={prevLesson ? `Previous: ${prevLesson.title}` : 'No previous lesson'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                <span className="hidden sm:inline max-w-[120px] truncate">
+                  {prevLesson ? prevLesson.title : 'Previous'}
+                </span>
+              </button>
+
               <OnboardingTooltip
                 id="course-content-types"
                 content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
@@ -2272,6 +2330,28 @@ export default function CourseTabContent({
                   )}
                 </div>
               </OnboardingTooltip>
+
+              {/* Next Lesson Button */}
+              <button
+                type="button"
+                onClick={() => navigateToLesson(nextLesson)}
+                disabled={!nextLesson}
+                className={`
+                  flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                  ${nextLesson
+                    ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                    : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                  }
+                `}
+                title={nextLesson ? `Next: ${nextLesson.title}` : 'No next lesson'}
+              >
+                <span className="hidden sm:inline max-w-[120px] truncate">
+                  {nextLesson ? nextLesson.title : 'Next'}
+                </span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           </div>
         )}

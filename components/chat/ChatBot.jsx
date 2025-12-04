@@ -1283,7 +1283,7 @@ Instructions:
       pointerPosition="bottom"
       delay={1500}
       priority={20}
-      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50"
+      className="fixed bottom-20 right-4 sm:bottom-20 sm:right-6 z-50"
     >
       <button
         onClick={() => setIsOpen(true)}
@@ -1945,7 +1945,7 @@ Instructions:
     const content = (
       <>
         {/* Persistent button to restore/toggle if needed */}
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[100]">
+        <div className="fixed bottom-20 right-4 sm:bottom-20 sm:right-6 z-[100]">
           <button
             onClick={() => setIsOpen(false)}
             type="button"
