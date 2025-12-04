@@ -22,9 +22,15 @@ export async function GET(request) {
     const queryString = params.toString();
     const url = `${API_BASE}/analytics/lookup${queryString ? `?${queryString}` : ""}`;
 
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(url, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
 
     const data = await res.json();

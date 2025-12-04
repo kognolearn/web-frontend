@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import DurationInput from "@/components/ui/DurationInput";
+import { authFetch } from "@/lib/api";
 
 import {
   defaultTopicRating,
@@ -537,7 +538,7 @@ function CreateCoursePageContent() {
       try {
         console.log(`Topic generation attempt ${attempt} of ${MAX_RETRIES}`);
 
-        const res = await fetch("/api/courses/topics", {
+        const res = await authFetch("/api/courses/topics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -1111,7 +1112,7 @@ function CreateCoursePageContent() {
       payload.seconds_to_complete = secondsToComplete;
       
       console.log("[CreateCourse] About to fetch /api/courses");
-      const response = await fetch("/api/courses", {
+      const response = await authFetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

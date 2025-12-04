@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "re
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { authFetch } from "@/lib/api";
 
 // System prompt to guide the assistant's behavior
 const SYSTEM_PROMPT = `You are Kogno, the in‑course teaching assistant for a single learner.
@@ -925,7 +926,7 @@ Instructions:
 - Answer only in natural language (and code/math notation when relevant), not in JSON or other machine formats.`;
 
       // Call the API route with the standardized schema
-      const response = await fetch('/api/chatbot', {
+      const response = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1171,7 +1172,7 @@ Instructions:
 - Answer only in natural language (and code/math notation when relevant), not in JSON or other machine formats.`;
 
       // Call the API route
-      const response = await fetch('/api/chatbot', {
+      const response = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

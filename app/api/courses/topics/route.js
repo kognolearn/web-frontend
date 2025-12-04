@@ -7,13 +7,19 @@ export async function POST(request) {
     const json = await request.json().catch(() => ({}));
     const url = new URL("/courses/topics", BASE_URL);
 
+    const headers = { "Content-Type": "application/json", Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     // Topic generation may take longer; allow up to 10 minutes (600000 ms)
     const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000);
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers,
         body: JSON.stringify(json),
         signal: controller.signal,
       });

@@ -13,9 +13,15 @@ export async function POST(request) {
       );
     }
 
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(`${API_BASE}/feedback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
 

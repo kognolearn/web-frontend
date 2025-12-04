@@ -9,6 +9,7 @@ import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { authFetch } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function DashboardPage() {
 
   const loadCourses = useCallback(async (userId, silent = false) => {
     try {
-      const res = await fetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
+      const res = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
       if (!res.ok) {
         console.error("Failed to fetch courses from API", res.status);
         if (!silent) setCourses([]);
@@ -120,7 +121,7 @@ export default function DashboardPage() {
   const handleDeleteCourse = async () => {
     if (!user?.id || !courseToDelete) return;
 
-    const res = await fetch(`/api/courses?userId=${user.id}&courseId=${courseToDelete.id}`, {
+    const res = await authFetch(`/api/courses?userId=${user.id}&courseId=${courseToDelete.id}`, {
       method: "DELETE",
     });
 

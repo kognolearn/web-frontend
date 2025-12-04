@@ -20,12 +20,18 @@ export async function GET(request, { params }) {
     const url = new URL(`/courses/${courseId}/exams/${type}`, BASE_URL);
     url.searchParams.set("userId", userId);
 
+    const headers = { Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch(url.toString(), {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers,
         signal: controller.signal,
       });
       const bodyText = await res.text();

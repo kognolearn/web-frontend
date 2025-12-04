@@ -125,8 +125,15 @@ export async function POST(request, { params }) {
     const to = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
     
     try {
+      const headers = {};
+      const authHeader = request.headers.get("Authorization");
+      if (authHeader) {
+        headers["Authorization"] = authHeader;
+      }
+
       const res = await fetch(url.toString(), {
         method: "POST",
+        headers,
         body: backendFormData,
         signal: controller.signal,
       });

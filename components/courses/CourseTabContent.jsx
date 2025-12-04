@@ -16,6 +16,7 @@ import {
   getQuizScore,
   determineMasteryStatus
 } from "@/utils/lessonProgress";
+import { authFetch } from "@/lib/api";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -72,7 +73,7 @@ function ItemContent({
         if (userId) params.set("userId", String(userId));
         if (courseId) params.set("courseId", String(courseId));
         const url = `/api/content?${params.toString()}`;
-        const res = await fetch(url, { signal: ac.signal });
+        const res = await authFetch(url, { signal: ac.signal });
         let data;
         try {
           data = await res.json();
@@ -422,7 +423,7 @@ export default function CourseTabContent({
     }));
     
     try {
-      const fetchRes = await fetch(
+      const fetchRes = await authFetch(
         `/api/courses/${courseId}/exams/${examType}?userId=${userId}`
       );
       
@@ -471,7 +472,7 @@ export default function CourseTabContent({
     }));
     
     try {
-      const generateRes = await fetch(
+      const generateRes = await authFetch(
         `/api/courses/${courseId}/exams/generate`,
         {
           method: 'POST',
@@ -551,7 +552,7 @@ export default function CourseTabContent({
       formData.append('exam_number', String(examNumber));
       formData.append('input_pdf', file);
       
-      const gradeRes = await fetch(
+      const gradeRes = await authFetch(
         `/api/courses/${courseId}/exams/grade`,
         {
           method: 'POST',
@@ -661,7 +662,7 @@ export default function CourseTabContent({
     
     const fetchReviewModules = async () => {
       try {
-        const res = await fetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+        const res = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
         if (res.ok) {
           const data = await res.json();
           setReviewModules(data.modules || []);
@@ -689,7 +690,7 @@ export default function CourseTabContent({
     }));
 
     try {
-      const res = await fetch(`/api/courses/${courseId}/review-modules`, {
+      const res = await authFetch(`/api/courses/${courseId}/review-modules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -706,7 +707,7 @@ export default function CourseTabContent({
       const data = await res.json();
       
       // Refresh review modules list
-      const listRes = await fetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+      const listRes = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
       if (listRes.ok) {
         const listData = await listRes.json();
         setReviewModules(listData.modules || []);
@@ -777,7 +778,7 @@ export default function CourseTabContent({
           if (userId) params.set("userId", String(userId));
           if (courseId) params.set("courseId", String(courseId));
           const url = `/api/content?${params.toString()}`;
-          const res = await fetch(url);
+          const res = await authFetch(url);
           let data;
           try {
             data = await res.json();
@@ -1022,7 +1023,7 @@ export default function CourseTabContent({
       // Update lesson status via API
       (async () => {
         try {
-          const response = await fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
+          const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -10,6 +10,7 @@ import ChatTabContent from "@/components/courses/ChatTabContent";
 import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { authFetch, getAuthHeaders } from "@/lib/api";
 
 export default function CoursePage() {
   const { courseId } = useParams();
@@ -86,7 +87,7 @@ export default function CoursePage() {
       if (secondsRemainingRef.current === null) return;
       
       try {
-        await fetch(`/api/courses/${courseId}/settings`, {
+        await authFetch(`/api/courses/${courseId}/settings`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -129,7 +130,7 @@ export default function CoursePage() {
     (async () => {
       try {
         const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}`;
-        const courseMetaRes = await fetch(courseMetaUrl);
+        const courseMetaRes = await authFetch(courseMetaUrl);
         if (courseMetaRes.ok) {
           const body = await courseMetaRes.json();
           const courses = Array.isArray(body?.courses) ? body.courses : [];
@@ -147,7 +148,7 @@ export default function CoursePage() {
         }
         
         const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
-        const res = await fetch(url);
+        const res = await authFetch(url);
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed: ${res.status}`);
@@ -182,7 +183,7 @@ export default function CoursePage() {
     if (!userId || !courseId) return;
     try {
       const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
-      const res = await fetch(url);
+      const res = await authFetch(url);
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
       }
@@ -205,7 +206,7 @@ export default function CoursePage() {
     if (!userId || !courseId) return;
     setSecondsRemaining(newSeconds);
     try {
-      await fetch(`/api/courses/${courseId}/settings`, {
+      await authFetch(`/api/courses/${courseId}/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

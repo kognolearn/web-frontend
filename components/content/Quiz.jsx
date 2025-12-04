@@ -5,6 +5,7 @@ import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { authFetch } from "@/lib/api";
 
 /**
  * Seeded random number generator for consistent shuffling per question
@@ -734,7 +735,7 @@ export default function Quiz({
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
 
         // Send both progress update and question status updates in parallel
-        const progressPromise = fetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
+        const progressPromise = authFetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -746,7 +747,7 @@ export default function Quiz({
 
         // Send question status updates
         const questionStatusPromise = questionStatusUpdates.length > 0 
-          ? fetch(`/api/courses/${courseId}/questions`, {
+          ? authFetch(`/api/courses/${courseId}/questions`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -838,7 +839,7 @@ export default function Quiz({
       
       // Send PATCH request to update the status
       try {
-        const response = await fetch(`/api/courses/${courseId}/questions`, {
+        const response = await authFetch(`/api/courses/${courseId}/questions`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

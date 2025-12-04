@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 import { supabase } from "@/lib/supabase/client";
 import ReviewQuiz from "@/components/content/ReviewQuiz";
+import { authFetch } from "@/lib/api";
 
 // Calculate spaced repetition intervals based on time remaining
 // Uses percentages of remaining time following spaced repetition best practices
@@ -89,7 +90,7 @@ export default function ReviewPage() {
       setStudyPlanLoading(true);
       try {
         // Fetch course name
-        const courseRes = await fetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
+        const courseRes = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
         if (courseRes.ok) {
           const courseData = await courseRes.json();
           const course = courseData.courses?.find(c => c.id === courseId);
@@ -104,7 +105,7 @@ export default function ReviewPage() {
         }
         
         // Fetch study plan for lesson selection
-        const planRes = await fetch(`/api/courses/${courseId}/plan?userId=${encodeURIComponent(userId)}`);
+        const planRes = await authFetch(`/api/courses/${courseId}/plan?userId=${encodeURIComponent(userId)}`);
         if (planRes.ok) {
           const planData = await planRes.json();
           setStudyPlan(planData);
@@ -126,7 +127,7 @@ export default function ReviewPage() {
     const fetchQuestions = async () => {
       setQuestionsLoading(true);
       try {
-        const res = await fetch(
+        const res = await authFetch(
           `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
         );
         if (res.ok) {
@@ -210,7 +211,7 @@ export default function ReviewPage() {
     try {
       const now = new Date().toISOString();
       const lessonsParam = selectedLessons.join(",");
-      const res = await fetch(
+      const res = await authFetch(
         `/api/courses/${courseId}/flashcards?userId=${encodeURIComponent(userId)}&current_timestamp=${encodeURIComponent(now)}&lessons=${encodeURIComponent(lessonsParam)}`
       );
       if (res.ok) {
@@ -252,7 +253,7 @@ export default function ReviewPage() {
     const nextShowTime = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
     
     try {
-      await fetch(`/api/courses/${courseId}/flashcards`, {
+      await authFetch(`/api/courses/${courseId}/flashcards`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -458,7 +459,7 @@ export default function ReviewPage() {
                   // Refresh questions after completing review
                   const fetchQuestions = async () => {
                     try {
-                      const res = await fetch(
+                      const res = await authFetch(
                         `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
                       );
                       if (res.ok) {

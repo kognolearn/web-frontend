@@ -22,16 +22,22 @@ export async function POST(request, { params }) {
 
     const url = new URL(`/courses/${courseId}/exams/generate`, BASE_URL);
 
+    const headers = { 
+      "Content-Type": "application/json", 
+      Accept: "application/json" 
+    };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     // Long timeout for exam generation (can take a while)
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          Accept: "application/json" 
-        },
+        headers,
         body: JSON.stringify({ userId, lessons, type }),
         signal: controller.signal,
       });

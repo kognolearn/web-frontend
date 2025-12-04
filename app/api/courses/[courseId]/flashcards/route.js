@@ -20,9 +20,15 @@ export async function GET(request, { params }) {
   if (lessons) queryParams.set("lessons", lessons);
 
   try {
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(`${API_BASE}/courses/${courseId}/flashcards?${queryParams}`, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
 
     const data = await res.json();
@@ -43,9 +49,15 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ success: false, error: "Missing userId or updates" }, { status: 400 });
     }
 
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(`${API_BASE}/courses/${courseId}/flashcards`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
 

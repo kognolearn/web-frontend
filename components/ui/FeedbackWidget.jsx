@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/api";
 
 const PUBLIC_PATHS = ["/", "/auth/create-account", "/auth/sign-in"];
 
@@ -158,7 +159,7 @@ export default function FeedbackWidget() {
         context: getContext(),
       };
 
-      const res = await fetch("/api/feedback", {
+      const res = await authFetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

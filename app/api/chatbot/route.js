@@ -40,9 +40,15 @@ export async function POST(request) {
       ...(reasoning !== undefined ? { reasoning } : {}),
     };
 
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+    }
+
     const resp = await fetch(url.toString(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { authFetch } from "@/lib/api";
 
 export default function EditCourseModal({ 
   isOpen, 
@@ -108,7 +109,7 @@ export default function EditCourseModal({
     setErrorMessage("");
     
     try {
-      const response = await fetch(`/api/courses/${courseId}/restructure`, {
+      const response = await authFetch(`/api/courses/${courseId}/restructure`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -12,12 +12,18 @@ export async function GET(request) {
     if (userId) url.searchParams.set("userId", userId);
     if (courseId) url.searchParams.set("courseId", courseId);
 
+    const headers = { Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url.toString(), {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers,
         signal: controller.signal,
       });
       const bodyText = await res.text();
@@ -40,12 +46,18 @@ export async function POST(request) {
     const json = await request.json().catch(() => ({}));
     const url = new URL("/courses", BASE_URL);
 
+    const headers = { "Content-Type": "application/json", Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 10 * 60 * 1000);
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers,
         body: JSON.stringify(json),
         signal: controller.signal,
       });
@@ -75,12 +87,18 @@ export async function DELETE(request) {
     url.searchParams.set("userId", userId);
     url.searchParams.set("courseId", courseId);
 
+    const headers = { Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url.toString(), {
         method: "DELETE",
-        headers: { Accept: "application/json" },
+        headers,
         signal: controller.signal,
       });
       const bodyText = await res.text();

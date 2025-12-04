@@ -22,13 +22,19 @@ export async function POST(request, { params }) {
 
     const url = new URL(`/courses/${courseId}/review-modules`, BASE_URL);
 
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 minutes
     
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ userId, examType, topics }),
         signal: controller.signal,
       });
@@ -73,9 +79,15 @@ export async function GET(request, { params }) {
       url.searchParams.set("type", type);
     }
 
+    const headers = { "Content-Type": "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(url.toString(), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
 
     const bodyText = await res.text();

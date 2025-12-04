@@ -6,6 +6,7 @@ import { MathJax } from "better-react-mathjax";
 import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
+import { authFetch } from "@/lib/api";
 
 /**
  * Seeded random number generator for consistent shuffling per question
@@ -274,7 +275,7 @@ export default function ReviewQuiz({
         try {
           const selectedOriginalIndex = selectedOption.originalIndex;
           
-          await fetch(`/api/courses/${courseId}/questions`, {
+          await authFetch(`/api/courses/${courseId}/questions`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -354,7 +355,7 @@ export default function ReviewQuiz({
       const selectedOption = currentQuestion.shuffledOptions.find(opt => opt.id === selectedId);
       const selectedOriginalIndex = selectedOption?.originalIndex ?? null;
       
-      await fetch(`/api/courses/${courseId}/questions`, {
+      await authFetch(`/api/courses/${courseId}/questions`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

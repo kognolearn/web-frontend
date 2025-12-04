@@ -12,12 +12,18 @@ export async function GET(request) {
     if (userId) url.searchParams.set("userId", userId);
     if (courseId) url.searchParams.set("courseId", courseId);
 
+    const headers = { Accept: "application/json" };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url.toString(), {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers,
         signal: controller.signal,
       });
       const bodyText = await res.text();
