@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 import { supabase } from "@/lib/supabase/client";
+import ReviewQuiz from "@/components/content/ReviewQuiz";
 
 // Calculate spaced repetition intervals based on time remaining
 // Uses percentages of remaining time following spaced repetition best practices
@@ -46,7 +47,7 @@ export default function ReviewPage() {
   
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("questions");
+  const [activeTab, setActiveTab] = useState(null); // null = mode selector view
   
   // Questions state
   const [incorrectQuestions, setIncorrectQuestions] = useState([]);
@@ -118,7 +119,7 @@ export default function ReviewPage() {
     fetchCourseData();
   }, [userId, courseId]);
 
-  // Fetch incorrect questions
+  // Fetch questions that need review
   useEffect(() => {
     if (!userId || !courseId) return;
     
@@ -126,7 +127,7 @@ export default function ReviewPage() {
       setQuestionsLoading(true);
       try {
         const res = await fetch(
-          `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=incorrect`
+          `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
         );
         if (res.ok) {
           const data = await res.json();
@@ -309,62 +310,137 @@ export default function ReviewPage() {
                 <p className="text-sm text-[var(--muted-foreground)]">{courseName}</p>
               </div>
             </div>
-            <Link
-              href={`/courses/${courseId}`}
-              className="btn btn-outline btn-sm"
-            >
-              Back to Course
-            </Link>
+            <div className="flex items-center gap-3">
+              {activeTab && (
+                <button
+                  onClick={() => { setActiveTab(null); setFlashcardStudyMode(false); }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  Change Mode
+                </button>
+              )}
+              <Link
+                href={`/courses/${courseId}`}
+                className="btn btn-outline btn-sm"
+              >
+                Back to Course
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-[var(--border)] bg-[var(--surface-1)]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-1">
-            <button
-              onClick={() => { setActiveTab("questions"); setFlashcardStudyMode(false); }}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "questions"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Questions to Review
-                {!questionsLoading && (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-[var(--surface-2)]">
-                    {incorrectQuestions.length}
-                  </span>
-                )}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab("flashcards")}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "flashcards"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Flashcards
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AnimatePresence mode="wait">
+          {/* Mode Selector */}
+          {!activeTab && (
+            <motion.div
+              key="mode-selector"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="py-8"
+            >
+              <div className="text-center mb-10">
+                <h2 className="text-2xl sm:text-3xl font-bold mb-3">How would you like to review?</h2>
+                <p className="text-[var(--muted-foreground)] max-w-lg mx-auto">
+                  Choose a review method that works best for your learning style
+                </p>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                {/* Questions Card */}
+                <motion.button
+                  onClick={() => setActiveTab("questions")}
+                  className="group relative p-8 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/10 transition-all duration-300 text-center"
+                  whileHover={{ scale: 1.02, y: -4 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {/* Badge */}
+                  {!questionsLoading && incorrectQuestions.length > 0 && (
+                    <div className="absolute -top-3 -right-3 px-3 py-1 rounded-full bg-amber-500 text-white text-sm font-bold shadow-lg">
+                      {incorrectQuestions.length} to review
+                    </div>
+                  )}
+                  
+                  {/* Icon */}
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform">
+                    <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content */}
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-[var(--primary)] transition-colors">
+                    Question Review
+                  </h3>
+                  <p className="text-[var(--muted-foreground)] mb-6">
+                    Practice questions you got wrong or flagged. Get instant feedback and track your improvement.
+                  </p>
+                  
+                  {/* Arrow */}
+                  <div className="w-10 h-10 rounded-full bg-[var(--surface-2)] flex items-center justify-center mx-auto group-hover:bg-[var(--primary)] group-hover:text-white transition-all">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </div>
+                </motion.button>
+                
+                {/* Flashcards Card */}
+                <motion.button
+                  onClick={() => setActiveTab("flashcards")}
+                  className="group relative p-8 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/10 transition-all duration-300 text-center"
+                  whileHover={{ scale: 1.02, y: -4 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {/* Icon */}
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--primary)]/20 to-emerald-500/10 flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform">
+                    <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content */}
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-[var(--primary)] transition-colors">
+                    Flashcard Study
+                  </h3>
+                  <p className="text-[var(--muted-foreground)] mb-6">
+                    Review key concepts with spaced repetition. Rate your confidence to optimize your study schedule.
+                  </p>
+                  
+                  {/* Arrow */}
+                  <div className="w-10 h-10 rounded-full bg-[var(--surface-2)] flex items-center justify-center mx-auto group-hover:bg-[var(--primary)] group-hover:text-white transition-all">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </div>
+                </motion.button>
+              </div>
+              
+              {/* Quick stats */}
+              <div className="mt-12 flex justify-center gap-8 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-[var(--foreground)]">
+                    {questionsLoading ? "..." : incorrectQuestions.length}
+                  </p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Questions to review</p>
+                </div>
+                <div className="w-px bg-[var(--border)]" />
+                <div>
+                  <p className="text-2xl font-bold text-[var(--foreground)]">
+                    {studyPlanLoading ? "..." : allLessons.length}
+                  </p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Lessons with flashcards</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === "questions" && (
             <motion.div
               key="questions"
@@ -375,7 +451,26 @@ export default function ReviewPage() {
             >
               <QuestionsReview 
                 questions={incorrectQuestions} 
-                loading={questionsLoading} 
+                loading={questionsLoading}
+                userId={userId}
+                courseId={courseId}
+                onQuestionsUpdated={() => {
+                  // Refresh questions after completing review
+                  const fetchQuestions = async () => {
+                    try {
+                      const res = await fetch(
+                        `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
+                      );
+                      if (res.ok) {
+                        const data = await res.json();
+                        setIncorrectQuestions(data.questions || []);
+                      }
+                    } catch (err) {
+                      console.error("Error fetching questions:", err);
+                    }
+                  };
+                  fetchQuestions();
+                }}
               />
             </motion.div>
           )}
@@ -430,8 +525,36 @@ export default function ReviewPage() {
 }
 
 // Questions Review Component
-function QuestionsReview({ questions, loading }) {
-  const [expandedId, setExpandedId] = useState(null);
+function QuestionsReview({ questions, loading, userId, courseId, onQuestionsUpdated }) {
+  const [reviewComplete, setReviewComplete] = useState(false);
+  const [reviewStats, setReviewStats] = useState(null);
+
+  // Reset review state when questions change
+  useEffect(() => {
+    setReviewComplete(false);
+    setReviewStats(null);
+  }, [questions]);
+
+  const handleQuestionCompleted = useCallback((questionId, isCorrect, attemptCount) => {
+    console.log(`Question ${questionId} completed: correct=${isCorrect}, attempts=${attemptCount}`);
+  }, []);
+
+  const handleAllCompleted = useCallback((stats) => {
+    setReviewComplete(true);
+    setReviewStats(stats);
+    // Notify parent to refresh questions
+    if (typeof onQuestionsUpdated === 'function') {
+      onQuestionsUpdated();
+    }
+  }, [onQuestionsUpdated]);
+
+  const handleStartNewReview = useCallback(() => {
+    setReviewComplete(false);
+    setReviewStats(null);
+    if (typeof onQuestionsUpdated === 'function') {
+      onQuestionsUpdated();
+    }
+  }, [onQuestionsUpdated]);
 
   if (loading) {
     return (
@@ -450,112 +573,77 @@ function QuestionsReview({ questions, loading }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold mb-2">No questions to review</h3>
+        <h3 className="text-lg font-semibold mb-2">All caught up! 🎉</h3>
         <p className="text-[var(--muted-foreground)] max-w-md">
-          Continue in your course and we'll add questions here as you go. Questions you get wrong will appear here for review.
+          You have no questions to review. Continue learning in your course and check back later.
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">
-          {questions.length} question{questions.length !== 1 ? "s" : ""} to review
-        </h2>
-      </div>
-      
-      {questions.map((q, idx) => (
-        <div
-          key={q.id}
-          className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden"
+  // Show completion screen
+  if (reviewComplete) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 200, damping: 15 }}
+          className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/30"
         >
-          <button
-            onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}
-            className="w-full px-5 py-4 flex items-start gap-4 text-left hover:bg-[var(--surface-2)]/50 transition-colors"
-          >
-            <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center text-sm font-semibold">
-              {idx + 1}
-            </span>
-            <div className="flex-1 min-w-0">
-              <MathJax dynamic>
-                <p className="text-[var(--foreground)] line-clamp-2">{q.question}</p>
-              </MathJax>
-            </div>
-            <svg 
-              className={`w-5 h-5 text-[var(--muted-foreground)] transition-transform ${expandedId === q.id ? 'rotate-180' : ''}`} 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          
-          <AnimatePresence>
-            {expandedId === q.id && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="px-5 pb-5 pt-2 space-y-3 border-t border-[var(--border)]">
-                  {q.options?.map((opt, optIdx) => {
-                    const isCorrect = optIdx === q.correct_index;
-                    return (
-                      <div
-                        key={optIdx}
-                        className={`flex items-start gap-3 p-3 rounded-lg ${
-                          isCorrect 
-                            ? "bg-emerald-500/10 border border-emerald-500/30" 
-                            : "bg-[var(--surface-2)]"
-                        }`}
-                      >
-                        <span className={`flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-xs font-semibold ${
-                          isCorrect ? "bg-emerald-500 text-white" : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
-                        }`}>
-                          {String.fromCharCode(65 + optIdx)}
-                        </span>
-                        <MathJax dynamic>
-                          <span className={isCorrect ? "text-emerald-600 dark:text-emerald-400" : ""}>
-                            {opt}
-                          </span>
-                        </MathJax>
-                        {isCorrect && (
-                          <svg className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </div>
-                    );
-                  })}
-                  
-                  {q.explanation && (
-                    <div className="mt-4 p-4 rounded-lg bg-[var(--primary)]/5 border border-[var(--primary)]/10">
-                      <div className="flex items-start gap-3">
-                        <div className="w-6 h-6 rounded flex items-center justify-center bg-[var(--primary)]/10 flex-shrink-0">
-                          <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)] mb-1">Explanation</p>
-                          <MathJax dynamic>
-                            <p className="text-sm text-[var(--foreground)]">{q.explanation}</p>
-                          </MathJax>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
+          <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h3 className="text-2xl font-bold mb-2 text-[var(--foreground)]">Review Complete!</h3>
+          <p className="text-[var(--muted-foreground)] max-w-md mb-6">
+            Great job! You've reviewed all {reviewStats?.totalQuestions || 0} questions.
+            {reviewStats?.flaggedCount > 0 && (
+              <span className="block mt-1">
+                {reviewStats.flaggedCount} question{reviewStats.flaggedCount !== 1 ? 's' : ''} flagged for future review.
+              </span>
             )}
-          </AnimatePresence>
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={handleStartNewReview}
+              className="px-6 py-3 rounded-xl bg-[var(--primary)] text-white font-semibold hover:opacity-90 transition-colors"
+            >
+              Check for More Questions
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">
+            {questions.length} question{questions.length !== 1 ? "s" : ""} to review
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Answer each question correctly to remove it from your review list
+          </p>
         </div>
-      ))}
+      </div>
+
+      {/* Interactive Review Quiz */}
+      <ReviewQuiz
+        questions={questions}
+        userId={userId}
+        courseId={courseId}
+        onQuestionCompleted={handleQuestionCompleted}
+        onAllCompleted={handleAllCompleted}
+      />
     </div>
   );
 }
@@ -585,12 +673,12 @@ function FlashcardLessonSelector({
   if (!lessons.length) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-20 h-20 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
-          <svg className="w-10 h-10 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] flex items-center justify-center mb-6 shadow-lg">
+          <svg className="w-12 h-12 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold mb-2">No lessons found</h3>
+        <h3 className="text-xl font-semibold mb-2">No lessons found</h3>
         <p className="text-[var(--muted-foreground)] max-w-md">
           Complete some lessons in your course first to review flashcards.
         </p>
@@ -606,106 +694,206 @@ function FlashcardLessonSelector({
     return acc;
   }, {});
 
+  const totalLessons = lessons.length;
+  const selectedCount = selectedLessons.length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header with stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Select lessons to study</h2>
-          <p className="text-sm text-[var(--muted-foreground)]">
+          <h2 className="text-xl font-bold text-[var(--foreground)]">Select lessons to study</h2>
+          <p className="text-sm text-[var(--muted-foreground)] mt-1">
             Choose which lessons' flashcards you want to review
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={clearAll}
-            className="px-3 py-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          >
-            Clear
-          </button>
-          <button
-            onClick={selectAll}
-            className="px-3 py-1.5 text-sm text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors"
-          >
-            Select All
-          </button>
+        
+        {/* Selection stats and actions */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--surface-2)]">
+            <div className={`w-2 h-2 rounded-full ${selectedCount > 0 ? 'bg-emerald-500' : 'bg-[var(--muted-foreground)]'}`} />
+            <span className="text-sm font-medium">
+              {selectedCount} / {totalLessons} selected
+            </span>
+          </div>
+          <div className="flex items-center border border-[var(--border)] rounded-lg overflow-hidden">
+            <button
+              onClick={clearAll}
+              disabled={selectedCount === 0}
+              className="px-3 py-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Clear
+            </button>
+            <div className="w-px h-6 bg-[var(--border)]" />
+            <button
+              onClick={selectAll}
+              disabled={selectedCount === totalLessons}
+              className="px-3 py-1.5 text-sm text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Select All
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Module list */}
       <div className="space-y-4">
-        {Object.entries(lessonsByModule).map(([moduleName, moduleLessons]) => {
+        {Object.entries(lessonsByModule).map(([moduleName, moduleLessons], moduleIdx) => {
           const allModuleLessonsSelected = moduleLessons.every(l => selectedLessons.includes(l.id));
           const someModuleLessonsSelected = moduleLessons.some(l => selectedLessons.includes(l.id));
+          const moduleSelectedCount = moduleLessons.filter(l => selectedLessons.includes(l.id)).length;
           
           return (
-          <div key={moduleName} className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
-            <div className="px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--border)] flex items-center justify-between">
-              <h3 className="font-medium text-sm">{moduleName}</h3>
-              <button
-                onClick={() => allModuleLessonsSelected ? deselectModule(moduleName) : selectModule(moduleName)}
-                className={`text-xs px-2 py-1 rounded transition-colors ${
-                  allModuleLessonsSelected
-                    ? "text-[var(--primary)] hover:bg-[var(--primary)]/10"
-                    : someModuleLessonsSelected
-                      ? "text-[var(--primary)] hover:bg-[var(--primary)]/10"
-                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-1)]"
-                }`}
-              >
-                {allModuleLessonsSelected ? "Deselect All" : "Select All"}
-              </button>
-            </div>
-            <div className="p-2">
-              {moduleLessons.map(lesson => (
+            <motion.div 
+              key={moduleName} 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: moduleIdx * 0.05 }}
+              className={`rounded-2xl border overflow-hidden transition-colors ${
+                someModuleLessonsSelected 
+                  ? 'border-[var(--primary)]/30 bg-[var(--primary)]/5' 
+                  : 'border-[var(--border)] bg-[var(--surface-1)]'
+              }`}
+            >
+              {/* Module header */}
+              <div className="px-4 py-3 bg-[var(--surface-2)]/50 border-b border-[var(--border)] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    allModuleLessonsSelected 
+                      ? 'bg-[var(--primary)] text-white' 
+                      : someModuleLessonsSelected
+                      ? 'bg-[var(--primary)]/20 text-[var(--primary)]'
+                      : 'bg-[var(--surface-muted)] text-[var(--muted-foreground)]'
+                  }`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-[var(--foreground)]">{moduleName}</h3>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {moduleSelectedCount} of {moduleLessons.length} lessons selected
+                    </p>
+                  </div>
+                </div>
                 <button
-                  key={lesson.id}
-                  onClick={() => toggleLesson(lesson.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
-                    selectedLessons.includes(lesson.id)
-                      ? "bg-[var(--primary)]/10 text-[var(--primary)]"
-                      : "hover:bg-[var(--surface-2)]"
+                  onClick={() => allModuleLessonsSelected ? deselectModule(moduleName) : selectModule(moduleName)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    allModuleLessonsSelected
+                      ? "bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-1)]"
                   }`}
                 >
-                  <span className="flex items-center gap-3">
-                    <span className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                      selectedLessons.includes(lesson.id)
-                        ? "border-[var(--primary)] bg-[var(--primary)]"
-                        : "border-[var(--border)]"
-                    }`}>
-                      {selectedLessons.includes(lesson.id) && (
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </span>
-                    <span className="text-sm">{lesson.title}</span>
-                  </span>
+                  {allModuleLessonsSelected ? "Deselect All" : "Select All"}
                 </button>
-              ))}
-            </div>
-          </div>
-        )})}
+              </div>
+              
+              {/* Lessons */}
+              <div className="p-2 grid gap-1">
+                {moduleLessons.map((lesson, lessonIdx) => {
+                  const isSelected = selectedLessons.includes(lesson.id);
+                  return (
+                    <motion.button
+                      key={lesson.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: moduleIdx * 0.05 + lessonIdx * 0.02 }}
+                      onClick={() => toggleLesson(lesson.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
+                        isSelected
+                          ? "bg-[var(--primary)]/10"
+                          : "hover:bg-[var(--surface-2)]"
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                        isSelected
+                          ? "border-[var(--primary)] bg-[var(--primary)] scale-110"
+                          : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                      }`}>
+                        {isSelected && (
+                          <motion.svg 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="w-3 h-3 text-white" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </motion.svg>
+                        )}
+                      </div>
+                      
+                      {/* Lesson info */}
+                      <div className="flex-1 text-left">
+                        <span className={`text-sm font-medium transition-colors ${
+                          isSelected ? 'text-[var(--primary)]' : 'text-[var(--foreground)]'
+                        }`}>
+                          {lesson.title}
+                        </span>
+                      </div>
+                      
+                      {/* Card icon */}
+                      <div className={`flex items-center gap-1 ${
+                        isSelected ? 'text-[var(--primary)]' : 'text-[var(--muted-foreground)]'
+                      }`}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
 
-      <div className="sticky bottom-4 pt-4">
-        <button
+      {/* Start button - sticky at bottom */}
+      <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent">
+        <motion.button
+          whileHover={{ scale: selectedCount > 0 ? 1.01 : 1 }}
+          whileTap={{ scale: selectedCount > 0 ? 0.99 : 1 }}
           onClick={onStart}
-          disabled={selectedLessons.length === 0 || fetchingFlashcards}
-          className="w-full btn btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          disabled={selectedCount === 0 || fetchingFlashcards}
+          className={`
+            w-full py-4 rounded-2xl font-semibold text-lg
+            flex items-center justify-center gap-3
+            transition-all duration-200 shadow-lg
+            ${selectedCount > 0 
+              ? 'bg-[var(--primary)] text-white hover:shadow-xl hover:shadow-[var(--primary)]/20' 
+              : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] cursor-not-allowed'
+            }
+            disabled:opacity-50 disabled:cursor-not-allowed
+          `}
         >
           {fetchingFlashcards ? (
             <>
               <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-              Loading...
+              Loading flashcards...
+            </>
+          ) : selectedCount > 0 ? (
+            <>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Start Studying
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-sm">
+                {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
+              </span>
             </>
           ) : (
             <>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              Start Studying ({selectedLessons.length} lesson{selectedLessons.length !== 1 ? "s" : ""} selected)
+              Select at least one lesson
             </>
           )}
-        </button>
+        </motion.button>
       </div>
     </div>
   );
@@ -713,14 +901,29 @@ function FlashcardLessonSelector({
 
 // Flashcard Study Component
 function FlashcardStudy({ flashcard, index, total, isFlipped, onFlip, onRate, onExit, intervals }) {
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showKeyboardHint, setShowKeyboardHint] = useState(true);
+
+  // Hide keyboard hint after first interaction
+  useEffect(() => {
+    if (isFlipped && showKeyboardHint) {
+      const timer = setTimeout(() => setShowKeyboardHint(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isFlipped, showKeyboardHint]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
-        if (!isFlipped) onFlip();
+        if (!isAnimating) {
+          setIsAnimating(true);
+          onFlip();
+          setTimeout(() => setIsAnimating(false), 400);
+        }
       }
-      if (isFlipped) {
+      if (isFlipped && !isAnimating) {
         if (e.key === "1") onRate("again");
         if (e.key === "2") onRate("hard");
         if (e.key === "3") onRate("good");
@@ -729,114 +932,347 @@ function FlashcardStudy({ flashcard, index, total, isFlipped, onFlip, onRate, on
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isFlipped, onFlip, onRate]);
+  }, [isFlipped, onFlip, onRate, isAnimating]);
+
+  const handleFlip = () => {
+    if (!isAnimating) {
+      setIsAnimating(true);
+      onFlip();
+      setTimeout(() => setIsAnimating(false), 400);
+    }
+  };
+
+  const progressPercent = ((index + 1) / total) * 100;
+  const cardsRemaining = total - index - 1;
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Progress */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Enhanced Header */}
+      <div className="flex items-center justify-between mb-4">
         <button
           onClick={onExit}
-          className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Exit
+          Exit Study
         </button>
-        <span className="text-sm font-medium">
-          {index + 1} / {total}
-        </span>
+        
+        <div className="flex items-center gap-4">
+          {/* Cards remaining indicator */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--surface-2)]">
+            <svg className="w-4 h-4 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span className="text-sm font-medium">{cardsRemaining} left</span>
+          </div>
+          
+          {/* Current position */}
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-[var(--foreground)]">{index + 1}</span>
+            <span className="text-[var(--muted-foreground)]">/</span>
+            <span className="text-lg text-[var(--muted-foreground)]">{total}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-[var(--surface-2)] rounded-full overflow-hidden mb-8">
-        <div 
-          className="h-full bg-[var(--primary)] rounded-full transition-all duration-300"
-          style={{ width: `${((index + 1) / total) * 100}%` }}
-        />
+      {/* Enhanced Progress bar */}
+      <div className="relative mb-8">
+        <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
+          <motion.div 
+            className="h-full bg-[var(--primary)] rounded-full"
+            initial={{ width: `${((index) / total) * 100}%` }}
+            animate={{ width: `${progressPercent}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+        </div>
+        {/* Progress milestones */}
+        <div className="absolute inset-0 flex justify-between items-center px-0.5">
+          {[0, 25, 50, 75, 100].map((milestone) => (
+            <div
+              key={milestone}
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                progressPercent >= milestone 
+                  ? "bg-white shadow-sm" 
+                  : "bg-[var(--surface-muted)]"
+              }`}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Card */}
+      {/* Enhanced Card */}
       <div 
-        onClick={!isFlipped ? onFlip : undefined}
-        className={`relative min-h-[300px] rounded-2xl p-8 transition-all duration-300 ${
-          !isFlipped ? "cursor-pointer" : ""
-        }`}
-        style={{ perspective: "1000px" }}
+        onClick={handleFlip}
+        className="relative cursor-pointer group"
+        style={{ perspective: "1200px" }}
       >
+        {/* Card glow effect */}
+        <div className={`absolute -inset-4 rounded-3xl transition-opacity duration-500 ${
+          !isFlipped 
+            ? "bg-[var(--primary)]/20 opacity-50 blur-xl" 
+            : "bg-emerald-500/10 opacity-30 blur-xl"
+        }`} />
+        
         <motion.div
-          className="relative w-full h-full"
+          className="relative w-full"
           style={{ transformStyle: "preserve-3d" }}
           animate={{ rotateY: isFlipped ? 180 : 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         >
-          {/* Front */}
+          {/* Front of card */}
           <div 
-            className="absolute inset-0 min-h-[300px] rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-active)] p-8 flex flex-col items-center justify-center text-center shadow-lg"
+            className="relative min-h-[320px] rounded-2xl overflow-hidden shadow-2xl"
             style={{ backfaceVisibility: "hidden" }}
           >
-            <MathJax dynamic>
-              <p className="text-xl font-semibold text-white leading-relaxed">{flashcard.front}</p>
-            </MathJax>
-            <p className="mt-6 text-white/60 text-sm">Click or press Space to flip</p>
+            {/* Gradient background with pattern */}
+            <div className="absolute inset-0 bg-[var(--primary)]">
+              <div className="absolute inset-0 opacity-10">
+                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="white" strokeWidth="0.5"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                </svg>
+              </div>
+            </div>
+            
+            {/* Card content */}
+            <div className="relative h-full min-h-[320px] p-8 flex flex-col items-center justify-center">
+              {/* Question label */}
+              <div className="absolute top-4 left-4">
+                <span className="px-3 py-1 rounded-full bg-white/20 text-white/80 text-xs font-medium backdrop-blur-sm">
+                  Question
+                </span>
+              </div>
+              
+              {/* Main content */}
+              <div className="text-center max-w-lg">
+                <MathJax dynamic>
+                  <p className="text-xl sm:text-2xl font-semibold text-white leading-relaxed">
+                    {flashcard.front}
+                  </p>
+                </MathJax>
+              </div>
+              
+              {/* Flip hint */}
+              <div className="absolute bottom-6 flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
+                  <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-sm text-white/80 font-medium">Tap to reveal</span>
+                </div>
+                <span className="text-xs text-white/50">or press Space</span>
+              </div>
+            </div>
           </div>
 
-          {/* Back */}
+          {/* Back of card */}
           <div 
-            className="absolute inset-0 min-h-[300px] rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] p-8 flex flex-col items-center justify-center text-center shadow-lg"
+            className="absolute inset-0 min-h-[320px] rounded-2xl overflow-hidden shadow-2xl"
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
           >
-            <div>
-              <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-4 inline-block">
-                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Answer</span>
+            {/* Light gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]" />
+            
+            {/* Decorative elements */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-[var(--primary)]/10 rounded-full blur-2xl" />
+            
+            {/* Card content */}
+            <div className="relative h-full min-h-[320px] p-8 flex flex-col items-center justify-center border border-[var(--border)] rounded-2xl">
+              {/* Answer label */}
+              <div className="absolute top-4 left-4">
+                <span className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Answer
+                </span>
               </div>
-              <MathJax dynamic>
-                <p className="text-lg font-medium text-[var(--foreground)] leading-relaxed">{flashcard.back}</p>
-              </MathJax>
+              
+              {/* Main content */}
+              <div className="text-center max-w-lg">
+                <MathJax dynamic>
+                  <p className="text-xl sm:text-2xl font-medium text-[var(--foreground)] leading-relaxed">
+                    {flashcard.back}
+                  </p>
+                </MathJax>
+              </div>
+              
+              {/* Flip back hint */}
+              <div className="absolute bottom-4 right-4">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleFlip();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors text-xs font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  See question
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
       </div>
 
-      {/* Confidence Buttons */}
+      {/* Enhanced Confidence Buttons */}
       <AnimatePresence>
         {isFlipped && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="mt-8"
+            exit={{ opacity: 0, y: 30 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            className="mt-10"
           >
-            <p className="text-center text-sm text-[var(--muted-foreground)] mb-4">
-              How well did you know this?
-            </p>
-            <div className="grid grid-cols-4 gap-3">
-              {Object.entries(CONFIDENCE_LABELS).map(([key, { label, description, color }]) => (
-                <button
-                  key={key}
-                  onClick={() => onRate(key)}
-                  className={`flex flex-col items-center gap-1 p-4 rounded-xl border transition-all hover:scale-105 active:scale-95 ${
-                    color === "rose" ? "border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400" :
-                    color === "amber" ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400" :
-                    color === "emerald" ? "border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
-                    "border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/10 text-sky-600 dark:text-sky-400"
-                  }`}
-                >
-                  <span className="font-semibold">{label}</span>
-                  <span className="text-xs opacity-75">{description}</span>
-                  <span className="text-[10px] opacity-50 mt-1">
-                    {formatInterval(intervals[key])}
-                  </span>
-                </button>
-              ))}
+            {/* Section header */}
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">
+                How well did you know this?
+              </h3>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Your rating determines when you'll see this card again
+              </p>
             </div>
-            <p className="text-center text-xs text-[var(--muted-foreground)] mt-4">
-              Press 1-4 on keyboard for quick rating
-            </p>
+            
+            {/* Rating buttons */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Object.entries(CONFIDENCE_LABELS).map(([key, { label, description, color }], idx) => {
+                const colorClasses = {
+                  rose: {
+                    bg: "bg-gradient-to-br from-rose-500/10 to-rose-600/5",
+                    border: "border-rose-500/30 hover:border-rose-500/50",
+                    text: "text-rose-600 dark:text-rose-400",
+                    icon: "bg-rose-500",
+                    hover: "hover:shadow-rose-500/20",
+                  },
+                  amber: {
+                    bg: "bg-gradient-to-br from-amber-500/10 to-amber-600/5",
+                    border: "border-amber-500/30 hover:border-amber-500/50",
+                    text: "text-amber-600 dark:text-amber-400",
+                    icon: "bg-amber-500",
+                    hover: "hover:shadow-amber-500/20",
+                  },
+                  emerald: {
+                    bg: "bg-gradient-to-br from-emerald-500/10 to-emerald-600/5",
+                    border: "border-emerald-500/30 hover:border-emerald-500/50",
+                    text: "text-emerald-600 dark:text-emerald-400",
+                    icon: "bg-emerald-500",
+                    hover: "hover:shadow-emerald-500/20",
+                  },
+                  sky: {
+                    bg: "bg-gradient-to-br from-sky-500/10 to-sky-600/5",
+                    border: "border-sky-500/30 hover:border-sky-500/50",
+                    text: "text-sky-600 dark:text-sky-400",
+                    icon: "bg-sky-500",
+                    hover: "hover:shadow-sky-500/20",
+                  },
+                };
+                
+                const classes = colorClasses[color];
+                
+                return (
+                  <motion.button
+                    key={key}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + idx * 0.05 }}
+                    onClick={() => onRate(key)}
+                    className={`
+                      relative flex flex-col items-center gap-2 p-4 sm:p-5 rounded-2xl border-2
+                      transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                      hover:shadow-lg ${classes.hover}
+                      ${classes.bg} ${classes.border} ${classes.text}
+                    `}
+                  >
+                    {/* Keyboard shortcut badge */}
+                    <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-[var(--surface-1)] border border-[var(--border)] flex items-center justify-center shadow-sm">
+                      <span className="text-xs font-bold text-[var(--muted-foreground)]">{idx + 1}</span>
+                    </div>
+                    
+                    {/* Icon */}
+                    <div className={`w-10 h-10 rounded-xl ${classes.icon} flex items-center justify-center shadow-lg`}>
+                      {key === 'again' && (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                      {key === 'hard' && (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      )}
+                      {key === 'good' && (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                      {key === 'easy' && (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      )}
+                    </div>
+                    
+                    {/* Label and description */}
+                    <div className="text-center">
+                      <span className="font-bold text-base">{label}</span>
+                      <p className="text-xs opacity-75 mt-0.5 hidden sm:block">{description}</p>
+                    </div>
+                    
+                    {/* Time interval */}
+                    <div className="px-2 py-1 rounded-full bg-[var(--surface-2)]/50 backdrop-blur-sm">
+                      <span className="text-[10px] font-medium opacity-60">
+                        {formatInterval(intervals[key])}
+                      </span>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+            
+            {/* Keyboard hint */}
+            <AnimatePresence>
+              {showKeyboardHint && (
+                <motion.p 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-center text-xs text-[var(--muted-foreground)] mt-5 flex items-center justify-center gap-2"
+                >
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)] font-mono text-[10px]">1</kbd>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)] font-mono text-[10px]">2</kbd>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)] font-mono text-[10px]">3</kbd>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)] font-mono text-[10px]">4</kbd>
+                  <span className="ml-1">for quick rating</span>
+                </motion.p>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Study streak / motivation (appears when not flipped) */}
+      {!isFlipped && index > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-8 text-center"
+        >
+          <p className="text-sm text-[var(--muted-foreground)]">
+            You've reviewed <span className="font-semibold text-[var(--foreground)]">{index}</span> card{index !== 1 ? 's' : ''} this session
+          </p>
+        </motion.div>
+      )}
     </div>
   );
 }

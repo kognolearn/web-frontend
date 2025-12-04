@@ -12,6 +12,8 @@ export async function GET(request) {
     const userId = searchParams.get('userId');
     const format = searchParams.get('format'); // Legacy parameter, not used in new API
 
+    console.log(`[Content API] Request received - courseId: ${courseId}, nodeId: ${nodeId}, format: ${format}`);
+
     // Validate required parameters
     if (!nodeId) {
       return NextResponse.json(
@@ -63,6 +65,9 @@ export async function GET(request) {
     // Parse the backend response
     const backendData = await response.json();
 
+    // Log raw backend response for quiz content debugging
+    console.log('[Content API] Raw backend response:', JSON.stringify(backendData, null, 2));
+
     // Check if the response has the expected structure
     if (!backendData.success || !backendData.lesson) {
       return NextResponse.json(
@@ -73,6 +78,11 @@ export async function GET(request) {
 
     const lesson = backendData.lesson;
     const contentPayload = lesson.content_payload || {};
+
+    // Log quiz data specifically if present
+    if (contentPayload.quiz) {
+      console.log('[Content API] Quiz data from backend:', JSON.stringify(contentPayload.quiz, null, 2));
+    }
 
     // Transform the backend response to match the frontend's expected format
     // The frontend expects { format, data } where data contains the content
@@ -136,6 +146,12 @@ export async function GET(request) {
                 : '');
 
             return {
+              // Pass through the UUID from api.quiz_questions table
+              ...(q.id && { id: q.id }),
+              // Pass through the status (correct, incorrect, unattempted) from api.quiz_questions table
+              ...(q.status && { status: q.status }),
+              // Pass through the user's selected answer index from api.quiz_questions table
+              ...(q.selectedAnswer !== undefined && q.selectedAnswer !== null && { selectedAnswer: q.selectedAnswer }),
               type: q.type || 'mcq',
               question: q.question || q.prompt || '',
               options: q.options || [],
@@ -171,6 +187,12 @@ export async function GET(request) {
                     : '');
 
                 return {
+                  // Pass through the UUID from api.quiz_questions table
+                  ...(q.id && { id: q.id }),
+                  // Pass through the status (correct, incorrect, unattempted) from api.quiz_questions table
+                  ...(q.status && { status: q.status }),
+                  // Pass through the user's selected answer index from api.quiz_questions table
+                  ...(q.selectedAnswer !== undefined && q.selectedAnswer !== null && { selectedAnswer: q.selectedAnswer }),
                   question: q.question || '',
                   options: q.options || [],
                   answer: resolvedAnswer,
@@ -182,6 +204,12 @@ export async function GET(request) {
             frq: quizArray
               .filter(q => q.type === 'frq')
               .map(q => ({
+                // Pass through the UUID from api.quiz_questions table
+                ...(q.id && { id: q.id }),
+                // Pass through the status (correct, incorrect, unattempted) from api.quiz_questions table
+                ...(q.status && { status: q.status }),
+                // Pass through the user's selected answer index from api.quiz_questions table
+                ...(q.selectedAnswer !== undefined && q.selectedAnswer !== null && { selectedAnswer: q.selectedAnswer }),
                 prompt: q.prompt || q.question || '',
                 model_answer: q.model_answer || q.answer || '',
                 rubric: q.rubric || '',
@@ -214,6 +242,12 @@ export async function GET(request) {
                   : '');
 
               return {
+                // Pass through the UUID from api.quiz_questions table
+                ...(q.id && { id: q.id }),
+                // Pass through the status (correct, incorrect, unattempted) from api.quiz_questions table
+                ...(q.status && { status: q.status }),
+                // Pass through the user's selected answer index from api.quiz_questions table
+                ...(q.selectedAnswer !== undefined && q.selectedAnswer !== null && { selectedAnswer: q.selectedAnswer }),
                 type: q.type || 'mcq',
                 question: q.question || q.prompt || '',
                 options: q.options || [],

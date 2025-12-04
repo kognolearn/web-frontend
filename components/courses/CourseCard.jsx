@@ -147,21 +147,22 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   }
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={openCourse}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openCourse();
-        }
-      }}
-      aria-label={`Open course ${courseCode}`}
-      className="relative rounded-2xl p-5 h-44 flex flex-col cursor-pointer overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg"
-    >
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/10 via-transparent to-[var(--primary)]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+    <div className="flex flex-col gap-2">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={openCourse}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openCourse();
+          }
+        }}
+        aria-label={`Open course ${courseCode}`}
+        className="relative rounded-2xl p-5 h-40 flex flex-col cursor-pointer overflow-hidden group transition-all duration-300 hover:shadow-2xl backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg"
+      >
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/10 via-transparent to-[var(--primary)]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
       {/* Shine effect on hover */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
@@ -185,16 +186,6 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
             }`}>
               {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
             </span>
-          </Tooltip>
-          <Tooltip content="Review flashcards and questions" position="bottom">
-            <button
-              onClick={handleReviewClick}
-              className="p-1.5 rounded-full hover:bg-[var(--primary)]/10 text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors z-20"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
           </Tooltip>
           <Tooltip content="Delete this course" position="bottom">
             <button
@@ -236,6 +227,18 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           </svg>
         </div>
       </div>
+    </div>
+    
+      {/* Review Tab - sits below the card */}
+      <button
+        onClick={handleReviewClick}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--primary)] text-[var(--muted-foreground)] hover:text-white border border-[var(--border)] hover:border-[var(--primary)] transition-all duration-200 text-sm font-medium"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Review
+      </button>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
-import { saveQuizSubmission, getQuizProgress, isQuizCompleted, saveFlaggedQuestions, getFlaggedQuestions } from "@/utils/lessonProgress";
 
 /**
  * Seeded random number generator for consistent shuffling per question
@@ -349,7 +348,12 @@ function normalizeQuestion(item, index) {
     : null;
 
   return {
+    // Use backend-provided UUID if available, otherwise fall back to index
     id: item?.id ?? String(index),
+    // Include status from backend (correct, incorrect, unattempted)
+    status: item?.status ?? null,
+    // Include the user's previously selected answer index from backend
+    selectedAnswer: item?.selectedAnswer ?? null,
     block: normalizeRichBlock(blockSource),
     options,
     explanation:
@@ -427,8 +431,12 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
     });
   }
 
+  // Get status from backend if available
+  const status = (typeof value === "object" && value !== null && value.status) || null;
+
   return {
     id: baseId,
+    status,
     block: questionBlock,
     options,
     explanation: explanationBlock,
@@ -567,6 +575,7 @@ export default function Quiz({
       return JSON.stringify(
         normalizedQuestions.map((question) => ({
           id: question.id,
+          status: question.status,
           optionIds: question.options.map((opt) => opt.id),
           optionCorrect: question.options.map((opt) => Boolean(opt.correct)),
           explanation: Boolean(question.explanation && hasRichContent(question.explanation)),
@@ -579,41 +588,56 @@ export default function Quiz({
 
   useEffect(() => {
     setCurrentIndex(0);
-    setResponses({});
-    setRevealedByQuestion({});
-    setIsSubmitted(false);
     setIsSubmitting(false);
     setExpandedExplanations({});
-    setFlaggedQuestions({});
     setStrikethroughOptions({});
     lastNotificationRef.current = null;
     
-    // Restore quiz state from localStorage if already submitted
-    if (courseId && lessonId) {
-      const savedProgress = getQuizProgress(courseId, lessonId);
-      if (savedProgress.submitted && savedProgress.answers) {
-        // Restore responses - map from our storage format to the responses format
-        const restoredResponses = {};
-        Object.entries(savedProgress.answers).forEach(([questionId, answer]) => {
-          restoredResponses[questionId] = answer.selectedOptionId;
-        });
-        setResponses(restoredResponses);
-        setIsSubmitted(true);
-        // Mark all questions as revealed
-        const revealed = {};
-        Object.keys(savedProgress.answers).forEach(questionId => {
-          revealed[questionId] = true;
-        });
-        setRevealedByQuestion(revealed);
-      }
+    // Derive initial state from backend status on each question
+    // If any question has a status of 'correct', 'incorrect', or 'correct/flag', the quiz was previously submitted
+    const hasAnsweredQuestions = normalizedQuestions.some(
+      q => q.status === 'correct' || q.status === 'incorrect' || q.status === 'correct/flag'
+    );
+    
+    if (hasAnsweredQuestions) {
+      // Mark quiz as submitted since we have answered questions from backend
+      setIsSubmitted(true);
       
-      // Restore flagged questions
-      const savedFlags = getFlaggedQuestions(courseId, lessonId);
-      if (savedFlags && Object.keys(savedFlags).length > 0) {
-        setFlaggedQuestions(savedFlags);
-      }
+      // Restore user's selected answers from backend
+      const restoredResponses = {};
+      normalizedQuestions.forEach(q => {
+        if (q.selectedAnswer !== null && q.selectedAnswer !== undefined && q.options[q.selectedAnswer]) {
+          // Map the selectedAnswer index to the option ID
+          restoredResponses[q.id] = q.options[q.selectedAnswer].id;
+        }
+      });
+      setResponses(restoredResponses);
+      
+      // Mark all questions with status as revealed
+      const revealed = {};
+      normalizedQuestions.forEach(q => {
+        if (q.status === 'correct' || q.status === 'incorrect' || q.status === 'correct/flag') {
+          revealed[q.id] = true;
+        }
+      });
+      setRevealedByQuestion(revealed);
+      
+      // Initialize flagged questions from 'correct/flag' status only
+      const flagged = {};
+      normalizedQuestions.forEach(q => {
+        if (q.status === 'correct/flag') {
+          flagged[q.id] = true;
+        }
+      });
+      setFlaggedQuestions(flagged);
+    } else {
+      setIsSubmitted(false);
+      setResponses({});
+      setRevealedByQuestion({});
+      setFlaggedQuestions({});
     }
-  }, [questionsSignature, courseId, lessonId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsSignature]);
 
   useEffect(() => {
     setCurrentIndex((prev) => {
@@ -679,7 +703,8 @@ export default function Quiz({
         return;
       }
 
-      const selectedOption = question.options.find((opt) => opt.id === userResponseId);
+      const selectedOptionIndex = question.options.findIndex((opt) => opt.id === userResponseId);
+      const selectedOption = selectedOptionIndex >= 0 ? question.options[selectedOptionIndex] : null;
       const isCorrect = selectedOption?.correct || false;
       
       quizAnswers[question.id] = {
@@ -688,9 +713,11 @@ export default function Quiz({
       };
       
       // Add to status updates for the PATCH request
+      // Include selectedAnswer (the option index) along with status
       questionStatusUpdates.push({
         id: question.id,
-        status: isCorrect ? 'correct' : 'incorrect'
+        status: isCorrect ? 'correct' : 'incorrect',
+        selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
       });
       
       if (isCorrect) {
@@ -699,11 +726,6 @@ export default function Quiz({
     });
 
     const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
-
-    // Save quiz submission to localStorage
-    if (courseId && lessonId) {
-      saveQuizSubmission(courseId, lessonId, quizAnswers, familiarityScore, totalCount);
-    }
 
     // Update progress if tracking info is available
     if (userId && courseId && lessonId) {
@@ -792,6 +814,18 @@ export default function Quiz({
     async (questionId) => {
       if (!isSubmitted || !userId || !courseId) return;
       
+      // Only allow flagging for correct questions
+      const question = normalizedQuestions.find(q => q.id === questionId);
+      if (!question) return;
+      
+      const userResponse = responses[questionId];
+      const selectedOptionIndex = question.options.findIndex((opt) => opt.id === userResponse);
+      const selectedOpt = selectedOptionIndex >= 0 ? question.options[selectedOptionIndex] : null;
+      const isCorrect = selectedOpt?.correct;
+      
+      // Only correct questions can be flagged
+      if (!isCorrect) return;
+      
       // Toggle flag state
       const isCurrentlyFlagged = flaggedQuestions[questionId];
       const newFlaggedState = !isCurrentlyFlagged;
@@ -802,40 +836,29 @@ export default function Quiz({
         [questionId]: newFlaggedState
       }));
       
-      // Save to localStorage
-      if (lessonId) {
-        const updatedFlags = {
-          ...flaggedQuestions,
-          [questionId]: newFlaggedState
-        };
-        saveFlaggedQuestions(courseId, lessonId, updatedFlags);
-      }
-      
-      // Send PATCH request to mark as incorrect when flagging
-      // (unflagging doesn't change the server status - once flagged as incorrect, it stays that way)
-      if (newFlaggedState) {
-        try {
-          const response = await fetch(`/api/courses/${courseId}/questions`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              updates: [{
-                id: questionId,
-                status: 'incorrect'
-              }]
-            }),
-          });
-          
-          if (!response.ok) {
-            console.error('Failed to update flagged question status:', response.status);
-          }
-        } catch (error) {
-          console.error('Error flagging question:', error);
+      // Send PATCH request to update the status
+      try {
+        const response = await fetch(`/api/courses/${courseId}/questions`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            updates: [{
+              id: questionId,
+              status: newFlaggedState ? 'correct/flag' : 'correct',
+              selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
+            }]
+          }),
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to update flagged question status:', response.status);
         }
+      } catch (error) {
+        console.error('Error flagging question:', error);
       }
     },
-    [isSubmitted, userId, courseId, lessonId, flaggedQuestions]
+    [isSubmitted, userId, courseId, flaggedQuestions, normalizedQuestions, responses]
   );
 
   const questionLabelId = currentQuestion ? `quiz-question-${currentQuestion.id}` : undefined;
@@ -955,36 +978,38 @@ export default function Quiz({
                 const isAnswered = !!responses[q.id];
                 const isCurrent = idx === currentIndex;
                 const isFlagged = flaggedQuestions[q.id];
+                const userResponse = responses[q.id];
+                const selectedOpt = q.options.find((opt) => opt.id === userResponse);
+                const isCorrect = selectedOpt?.correct;
+                
                 let statusClass = "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]";
                 let icon = null;
                 
                 if (isSubmitted) {
-                  if (isFlagged) {
-                    // Flagged questions show amber styling
+                  if (isFlagged && isCorrect) {
+                    // Flagged correct questions show amber styling with flag icon
                     statusClass = "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
                     icon = (
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
                       </svg>
                     );
-                  } else {
-                    const userResponse = responses[q.id];
-                    const selectedOpt = q.options.find((opt) => opt.id === userResponse);
-                    if (selectedOpt?.correct) {
-                      statusClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
-                      icon = (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      );
-                    } else if (userResponse) {
-                      statusClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
-                      icon = (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      );
-                    }
+                  } else if (isCorrect) {
+                    // Correct questions show green checkmark
+                    statusClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+                    icon = (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    );
+                  } else if (userResponse) {
+                    // Incorrect questions show red X
+                    statusClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
+                    icon = (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    );
                   }
                 } else if (isAnswered) {
                   statusClass = "bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30";
@@ -1019,50 +1044,67 @@ export default function Quiz({
               <div id={questionLabelId} className="text-lg font-medium text-[var(--foreground)] leading-relaxed flex-1">
                 <RichBlock block={currentQuestion.block} maxWidth="100%" />
               </div>
-              {/* Flag button - only show after submission */}
-              {isSubmitted && currentQuestion && (
-                <Tooltip 
-                  text={flaggedQuestions[currentQuestion.id] ? "Question flagged for review" : "Flag this question if you think it needs review"} 
-                  position="left"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleFlagQuestion(currentQuestion.id)}
-                    className={`
-                      flex-shrink-0 p-2 rounded-lg transition-all duration-200 cursor-pointer
-                      ${flaggedQuestions[currentQuestion.id]
-                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-                      }
-                    `}
-                    aria-label={flaggedQuestions[currentQuestion.id] ? "Unflag question" : "Flag question for review"}
+              {/* Flag button - only show after submission for correct questions */}
+              {isSubmitted && currentQuestion && (() => {
+                const userResponse = responses[currentQuestion.id];
+                const selectedOpt = currentQuestion.options.find((opt) => opt.id === userResponse);
+                const isCurrentQuestionCorrect = selectedOpt?.correct;
+                
+                // Only show flag button for correct questions
+                if (!isCurrentQuestionCorrect) return null;
+                
+                return (
+                  <Tooltip 
+                    text={flaggedQuestions[currentQuestion.id] ? "Question flagged for review" : "Flag this question if you think it needs review"} 
+                    position="left"
                   >
-                    <svg 
-                      className="w-5 h-5" 
-                      fill={flaggedQuestions[currentQuestion.id] ? "currentColor" : "none"} 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
+                    <button
+                      type="button"
+                      onClick={() => handleFlagQuestion(currentQuestion.id)}
+                      className={`
+                        flex-shrink-0 p-2 rounded-lg transition-all duration-200 cursor-pointer
+                        ${flaggedQuestions[currentQuestion.id]
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                          : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                        }
+                      `}
+                      aria-label={flaggedQuestions[currentQuestion.id] ? "Unflag question" : "Flag question for review"}
                     >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" 
-                      />
-                    </svg>
-                  </button>
-                </Tooltip>
-              )}
+                      <svg 
+                        className="w-5 h-5" 
+                        fill={flaggedQuestions[currentQuestion.id] ? "currentColor" : "none"} 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" 
+                        />
+                      </svg>
+                    </button>
+                  </Tooltip>
+                );
+              })()}
             </div>
-            {/* Flagged indicator */}
-            {isSubmitted && flaggedQuestions[currentQuestion?.id] && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-                </svg>
-                <span>Flagged for review</span>
-              </div>
-            )}
+            {/* Flagged indicator - only show for correct questions that are flagged */}
+            {isSubmitted && currentQuestion && flaggedQuestions[currentQuestion.id] && (() => {
+              const userResponse = responses[currentQuestion.id];
+              const selectedOpt = currentQuestion.options.find((opt) => opt.id === userResponse);
+              const isCurrentQuestionCorrect = selectedOpt?.correct;
+              
+              if (!isCurrentQuestionCorrect) return null;
+              
+              return (
+                <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                  </svg>
+                  <span>Flagged for review</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Options */}
