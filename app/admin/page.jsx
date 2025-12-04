@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { supabase } from "@/lib/supabase/client";
 import {
     ActiveUsersChart,
     TokenUsageChart,
@@ -472,13 +473,19 @@ export default function AdminPage() {
             setLoading(true);
             setError(null);
             try {
+                // Get the current session for admin authentication
+                const { data: { session } } = await supabase.auth.getSession();
+                const headers = session?.access_token
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {};
+
                 // Fetch all data in parallel
                 const [usageRes, feedbackRes, eventsRes, usageByUserRes, usageByCourseRes] = await Promise.all([
-                    fetch("/api/admin/analytics/usage?limit=2000"),
-                    fetch("/api/admin/feedback?limit=500"),
-                    fetch("/api/admin/analytics/events?limit=2000"),
-                    fetch("/api/admin/analytics/usage-by-user?includeEmail=true"),
-                    fetch("/api/admin/analytics/usage-by-course?includeCourseName=true"),
+                    fetch("/api/admin/analytics/usage", { headers }),
+                    fetch("/api/admin/feedback", { headers }),
+                    fetch("/api/admin/analytics/events", { headers }),
+                    fetch("/api/admin/analytics/usage-by-user?includeEmail=true", { headers }),
+                    fetch("/api/admin/analytics/usage-by-course?includeCourseName=true", { headers }),
                 ]);
 
                 const [usageData, feedbackResult, eventsResult, usageByUserResult, usageByCourseResult] = await Promise.all([
