@@ -9,6 +9,7 @@ import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
 import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
+import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch, getAuthHeaders } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export default function CoursePage() {
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
+  const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const dragPreviewRef = useRef(null);
 
@@ -65,13 +67,28 @@ export default function CoursePage() {
 
     const intervalId = setInterval(() => {
       setSecondsRemaining(prev => {
-        if (prev === null || prev <= 0) return 0;
-        return prev - 1;
+        if (prev === null || prev <= 1) return 0;
+        return Math.max(0, prev - 1);
       });
     }, 1000);
 
     return () => clearInterval(intervalId);
   }, [isTimerPaused, secondsRemaining]);
+
+  // Show timer expired modal when timer hits 0
+  const prevSecondsRef = useRef(secondsRemaining);
+  useEffect(() => {
+    // Only show modal if timer transitioned from positive to 0 (not on initial load)
+    if (
+      prevSecondsRef.current !== null &&
+      prevSecondsRef.current > 0 &&
+      secondsRemaining === 0 &&
+      !isTimerPaused
+    ) {
+      setIsTimerExpiredModalOpen(true);
+    }
+    prevSecondsRef.current = secondsRemaining;
+  }, [secondsRemaining, isTimerPaused]);
 
   // Use ref to track current secondsRemaining for beforeunload without re-running effect
   const secondsRemainingRef = useRef(secondsRemaining);
@@ -222,6 +239,12 @@ export default function CoursePage() {
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
   }, []);
+
+  const handleAddTimeFromModal = useCallback(async (additionalSeconds) => {
+    const newSeconds = (secondsRemaining || 0) + additionalSeconds;
+    setIsTimerExpiredModalOpen(false);
+    await handleTimerUpdate(newSeconds);
+  }, [secondsRemaining, handleTimerUpdate]);
 
   const handleTabTitleChange = useCallback((tabId, nextTitle) => {
     if (!nextTitle) return;
@@ -642,6 +665,12 @@ export default function CoursePage() {
         courseName={courseName}
         studyPlan={studyPlan}
         onRefetch={refetchStudyPlan}
+      />
+
+      <TimerExpiredModal
+        isOpen={isTimerExpiredModalOpen}
+        onClose={() => setIsTimerExpiredModalOpen(false)}
+        onAddTime={handleAddTimeFromModal}
       />
 
       {/* Hidden Drag Preview Source (for setDragImage) */}

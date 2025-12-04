@@ -14,9 +14,10 @@ export default function TimerControls({
 
   const formatTime = (seconds) => {
     if (seconds === null || seconds === undefined) return "Not set";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
+    const safeSeconds = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(safeSeconds / 3600);
+    const m = Math.floor((safeSeconds % 3600) / 60);
+    const s = safeSeconds % 60;
     return `${h}h ${m}m ${s}s`;
   };
 
