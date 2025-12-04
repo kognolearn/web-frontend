@@ -494,8 +494,8 @@ export default function AdminPage() {
                 setRawUsageData(usageRecords);
                 setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
                 setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
-                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.data || []) : []);
-                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.data || []) : []);
+                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
+                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
             } catch (err) {
                 console.error("Error fetching admin data:", err);
                 setError("Failed to load admin data. Please try again.");
@@ -760,18 +760,18 @@ export default function AdminPage() {
                         />
                         <StatCard
                             title="Total Cost (All Users)"
-                            value={`$${usageByUserData.reduce((sum, u) => sum + (u.total_cost || 0), 0).toFixed(2)}`}
+                            value={`$${usageByUserData.reduce((sum, u) => sum + (u.totalCost || 0), 0).toFixed(2)}`}
                             color="red"
                             icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                         <StatCard
                             title="Avg Cost per User"
-                            value={`$${usageByUserData.length > 0 ? (usageByUserData.reduce((sum, u) => sum + (u.total_cost || 0), 0) / usageByUserData.length).toFixed(2) : '0.00'}`}
+                            value={`$${usageByUserData.length > 0 ? (usageByUserData.reduce((sum, u) => sum + (u.totalCost || 0), 0) / usageByUserData.length).toFixed(2) : '0.00'}`}
                             color="orange"
                         />
                         <StatCard
                             title="Avg Tokens per User"
-                            value={usageByUserData.length > 0 ? Math.round(usageByUserData.reduce((sum, u) => sum + (u.total_tokens || 0), 0) / usageByUserData.length).toLocaleString() : '0'}
+                            value={usageByUserData.length > 0 ? Math.round(usageByUserData.reduce((sum, u) => sum + (u.totalTokens || 0), 0) / usageByUserData.length).toLocaleString() : '0'}
                             color="blue"
                         />
                     </div>
@@ -805,40 +805,40 @@ export default function AdminPage() {
                                         </tr>
                                     ) : (
                                         usageByUserData
-                                            .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                            .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
                                             .map((user, idx) => (
-                                                <tr key={user.user_id || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                                                <tr key={user.userId || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
                                                     <td className="py-3 px-4">
                                                         <div className="flex flex-col">
                                                             <span className="font-medium text-[var(--foreground)]">
                                                                 {user.email || 'Unknown'}
                                                             </span>
                                                             <span className="text-xs text-[var(--muted-foreground)] font-mono">
-                                                                {user.user_id?.substring(0, 8)}...
+                                                                {user.userId?.substring(0, 8)}...
                                                             </span>
                                                         </div>
                                                     </td>
                                                     <td className="py-3 px-4 text-right font-medium">
-                                                        {(user.total_calls || 0).toLocaleString()}
+                                                        {(user.requestCount || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right">
-                                                        {(user.total_tokens || 0).toLocaleString()}
+                                                        {(user.totalTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        {(user.prompt_tokens || 0).toLocaleString()}
+                                                        {(user.totalPromptTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        {(user.completion_tokens || 0).toLocaleString()}
+                                                        {(user.totalCompletionTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right font-medium text-[#EF4444]">
-                                                        ${(user.total_cost || 0).toFixed(4)}
+                                                        ${(user.totalCost || 0).toFixed(4)}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        ${user.total_calls > 0 ? ((user.total_cost || 0) / user.total_calls).toFixed(4) : '0.0000'}
+                                                        ${user.requestCount > 0 ? ((user.totalCost || 0) / user.requestCount).toFixed(4) : '0.0000'}
                                                     </td>
                                                     <td className="py-3 px-4 text-right">
                                                         <span className="inline-flex items-center rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--primary)]">
-                                                            {user.course_count || 0}
+                                                            {user.courses?.length || 0}
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -864,18 +864,18 @@ export default function AdminPage() {
                         />
                         <StatCard
                             title="Total Cost (All Courses)"
-                            value={`$${usageByCourseData.reduce((sum, c) => sum + (c.total_cost || 0), 0).toFixed(2)}`}
+                            value={`$${usageByCourseData.reduce((sum, c) => sum + (c.totalCost || 0), 0).toFixed(2)}`}
                             color="red"
                             icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                         <StatCard
                             title="Avg Cost per Course"
-                            value={`$${usageByCourseData.length > 0 ? (usageByCourseData.reduce((sum, c) => sum + (c.total_cost || 0), 0) / usageByCourseData.length).toFixed(2) : '0.00'}`}
+                            value={`$${usageByCourseData.length > 0 ? (usageByCourseData.reduce((sum, c) => sum + (c.totalCost || 0), 0) / usageByCourseData.length).toFixed(2) : '0.00'}`}
                             color="orange"
                         />
                         <StatCard
                             title="Avg Tokens per Course"
-                            value={usageByCourseData.length > 0 ? Math.round(usageByCourseData.reduce((sum, c) => sum + (c.total_tokens || 0), 0) / usageByCourseData.length).toLocaleString() : '0'}
+                            value={usageByCourseData.length > 0 ? Math.round(usageByCourseData.reduce((sum, c) => sum + (c.totalTokens || 0), 0) / usageByCourseData.length).toLocaleString() : '0'}
                             color="blue"
                         />
                     </div>
@@ -909,39 +909,39 @@ export default function AdminPage() {
                                         </tr>
                                     ) : (
                                         usageByCourseData
-                                            .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                            .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
                                             .map((course, idx) => (
-                                                <tr key={course.course_id || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                                                <tr key={course.courseId || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
                                                     <td className="py-3 px-4">
                                                         <div className="flex flex-col">
                                                             <span className="font-medium text-[var(--foreground)]">
-                                                                {course.course_name || 'Untitled Course'}
+                                                                {course.courseName || 'Untitled Course'}
                                                             </span>
                                                             <span className="text-xs text-[var(--muted-foreground)] font-mono">
-                                                                {course.course_id?.substring(0, 8)}...
+                                                                {course.courseId?.substring(0, 8)}...
                                                             </span>
                                                         </div>
                                                     </td>
                                                     <td className="py-3 px-4 text-right font-medium">
-                                                        {(course.total_calls || 0).toLocaleString()}
+                                                        {(course.requestCount || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right">
-                                                        {(course.total_tokens || 0).toLocaleString()}
+                                                        {(course.totalTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        {(course.prompt_tokens || 0).toLocaleString()}
+                                                        {(course.totalPromptTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        {(course.completion_tokens || 0).toLocaleString()}
+                                                        {(course.totalCompletionTokens || 0).toLocaleString()}
                                                     </td>
                                                     <td className="py-3 px-4 text-right font-medium text-[#EF4444]">
-                                                        ${(course.total_cost || 0).toFixed(4)}
+                                                        ${(course.totalCost || 0).toFixed(4)}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        ${course.total_calls > 0 ? ((course.total_cost || 0) / course.total_calls).toFixed(4) : '0.0000'}
+                                                        ${course.requestCount > 0 ? ((course.totalCost || 0) / course.requestCount).toFixed(4) : '0.0000'}
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
-                                                        {course.total_calls > 0 ? Math.round((course.total_tokens || 0) / course.total_calls).toLocaleString() : '0'}
+                                                        {course.requestCount > 0 ? Math.round((course.totalTokens || 0) / course.requestCount).toLocaleString() : '0'}
                                                     </td>
                                                 </tr>
                                             ))
@@ -957,21 +957,21 @@ export default function AdminPage() {
                             <h3 className="font-semibold mb-4">Top 10 Courses by Cost</h3>
                             <div className="space-y-3">
                                 {usageByCourseData
-                                    .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                    .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
                                     .slice(0, 10)
                                     .map((course, idx) => {
-                                        const maxCost = Math.max(...usageByCourseData.map(c => c.total_cost || 0));
-                                        const percentage = maxCost > 0 ? ((course.total_cost || 0) / maxCost) * 100 : 0;
+                                        const maxCost = Math.max(...usageByCourseData.map(c => c.totalCost || 0));
+                                        const percentage = maxCost > 0 ? ((course.totalCost || 0) / maxCost) * 100 : 0;
                                         return (
-                                            <div key={course.course_id || idx} className="flex items-center gap-3">
+                                            <div key={course.courseId || idx} className="flex items-center gap-3">
                                                 <span className="text-xs text-[var(--muted-foreground)] w-4">{idx + 1}</span>
                                                 <div className="flex-1">
                                                     <div className="flex items-center justify-between mb-1">
                                                         <span className="text-sm font-medium truncate max-w-[200px]">
-                                                            {course.course_name || 'Untitled'}
+                                                            {course.courseName || 'Untitled'}
                                                         </span>
                                                         <span className="text-sm font-medium text-[#EF4444]">
-                                                            ${(course.total_cost || 0).toFixed(2)}
+                                                            ${(course.totalCost || 0).toFixed(2)}
                                                         </span>
                                                     </div>
                                                     <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
@@ -994,21 +994,21 @@ export default function AdminPage() {
                             <h3 className="font-semibold mb-4">Top 10 Courses by Token Usage</h3>
                             <div className="space-y-3">
                                 {usageByCourseData
-                                    .sort((a, b) => (b.total_tokens || 0) - (a.total_tokens || 0))
+                                    .sort((a, b) => (b.totalTokens || 0) - (a.totalTokens || 0))
                                     .slice(0, 10)
                                     .map((course, idx) => {
-                                        const maxTokens = Math.max(...usageByCourseData.map(c => c.total_tokens || 0));
-                                        const percentage = maxTokens > 0 ? ((course.total_tokens || 0) / maxTokens) * 100 : 0;
+                                        const maxTokens = Math.max(...usageByCourseData.map(c => c.totalTokens || 0));
+                                        const percentage = maxTokens > 0 ? ((course.totalTokens || 0) / maxTokens) * 100 : 0;
                                         return (
-                                            <div key={course.course_id || idx} className="flex items-center gap-3">
+                                            <div key={course.courseId || idx} className="flex items-center gap-3">
                                                 <span className="text-xs text-[var(--muted-foreground)] w-4">{idx + 1}</span>
                                                 <div className="flex-1">
                                                     <div className="flex items-center justify-between mb-1">
                                                         <span className="text-sm font-medium truncate max-w-[200px]">
-                                                            {course.course_name || 'Untitled'}
+                                                            {course.courseName || 'Untitled'}
                                                         </span>
                                                         <span className="text-sm font-medium text-[var(--primary)]">
-                                                            {(course.total_tokens || 0).toLocaleString()}
+                                                            {(course.totalTokens || 0).toLocaleString()}
                                                         </span>
                                                     </div>
                                                     <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
