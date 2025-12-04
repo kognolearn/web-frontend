@@ -7,21 +7,15 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const endpoint = searchParams.get("endpoint");
-    const model = searchParams.get("model");
-    const userId = searchParams.get("userId");
-    const courseId = searchParams.get("courseId");
+    const includeCourseName = searchParams.get("includeCourseName");
 
     const params = new URLSearchParams();
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
-    if (endpoint) params.append("endpoint", endpoint);
-    if (model) params.append("model", model);
-    if (userId) params.append("userId", userId);
-    if (courseId) params.append("courseId", courseId);
+    if (includeCourseName) params.append("includeCourseName", includeCourseName);
 
     const queryString = params.toString();
-    const url = `${API_BASE}/analytics/usage/summary${queryString ? `?${queryString}` : ""}`;
+    const url = `${API_BASE}/analytics/usage-by-course${queryString ? `?${queryString}` : ""}`;
 
     const res = await fetch(url, {
       method: "GET",
@@ -31,7 +25,7 @@ export async function GET(request) {
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
-    console.error("Error fetching usage summary:", err);
+    console.error("Error fetching usage by course:", err);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

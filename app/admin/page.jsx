@@ -30,6 +30,8 @@ const DATE_PRESETS = [
 const TABS = [
     { id: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
     { id: "users", label: "Users & Engagement", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+    { id: "userBreakdown", label: "By User", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+    { id: "courseBreakdown", label: "By Course", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     { id: "usage", label: "API & Costs", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { id: "feedback", label: "Feedback", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
 ];
@@ -135,6 +137,8 @@ export default function AdminPage() {
     const [rawUsageData, setRawUsageData] = useState([]);
     const [feedbackData, setFeedbackData] = useState([]);
     const [eventsData, setEventsData] = useState([]);
+    const [usageByUserData, setUsageByUserData] = useState([]);
+    const [usageByCourseData, setUsageByCourseData] = useState([]);
     
     // Date range state
     const [activePreset, setActivePreset] = useState(30); // Default to last 30 days
@@ -469,16 +473,20 @@ export default function AdminPage() {
             setError(null);
             try {
                 // Fetch all data in parallel
-                const [usageRes, feedbackRes, eventsRes] = await Promise.all([
+                const [usageRes, feedbackRes, eventsRes, usageByUserRes, usageByCourseRes] = await Promise.all([
                     fetch("/api/admin/analytics/usage?limit=2000"),
                     fetch("/api/admin/feedback?limit=500"),
                     fetch("/api/admin/analytics/events?limit=2000"),
+                    fetch("/api/admin/analytics/usage-by-user?includeEmail=true"),
+                    fetch("/api/admin/analytics/usage-by-course?includeCourseName=true"),
                 ]);
 
-                const [usageData, feedbackResult, eventsResult] = await Promise.all([
+                const [usageData, feedbackResult, eventsResult, usageByUserResult, usageByCourseResult] = await Promise.all([
                     usageRes.json(),
                     feedbackRes.json(),
                     eventsRes.json(),
+                    usageByUserRes.json(),
+                    usageByCourseRes.json(),
                 ]);
 
                 // Store raw data - processing happens in useMemo based on date range
@@ -486,6 +494,8 @@ export default function AdminPage() {
                 setRawUsageData(usageRecords);
                 setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
                 setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
+                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.data || []) : []);
+                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.data || []) : []);
             } catch (err) {
                 console.error("Error fetching admin data:", err);
                 setError("Failed to load admin data. Please try again.");
@@ -732,6 +742,289 @@ export default function AdminPage() {
                         <div className="card p-6">
                             <h3 className="font-semibold mb-4">Events by Type</h3>
                             <EventTypePieChart data={data.eventsByType} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "userBreakdown" && (
+                <div className="space-y-6">
+                    {/* Summary Stats */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Total Users"
+                            value={usageByUserData.length}
+                            subtitle="With API usage"
+                            color="primary"
+                            icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                        <StatCard
+                            title="Total Cost (All Users)"
+                            value={`$${usageByUserData.reduce((sum, u) => sum + (u.total_cost || 0), 0).toFixed(2)}`}
+                            color="red"
+                            icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                        <StatCard
+                            title="Avg Cost per User"
+                            value={`$${usageByUserData.length > 0 ? (usageByUserData.reduce((sum, u) => sum + (u.total_cost || 0), 0) / usageByUserData.length).toFixed(2) : '0.00'}`}
+                            color="orange"
+                        />
+                        <StatCard
+                            title="Avg Tokens per User"
+                            value={usageByUserData.length > 0 ? Math.round(usageByUserData.reduce((sum, u) => sum + (u.total_tokens || 0), 0) / usageByUserData.length).toLocaleString() : '0'}
+                            color="blue"
+                        />
+                    </div>
+
+                    {/* User Breakdown Table */}
+                    <div className="card">
+                        <div className="p-4 border-b border-[var(--border)]">
+                            <h3 className="font-semibold">User-by-User Breakdown</h3>
+                            <p className="text-xs text-[var(--muted-foreground)] mt-1">Detailed API usage, cost, and token metrics per user</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">User</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">API Calls</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Prompt Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Completion Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Cost/Call</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Courses</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {usageByUserData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className="py-8 text-center text-[var(--muted-foreground)]">
+                                                No user data available
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        usageByUserData
+                                            .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                            .map((user, idx) => (
+                                                <tr key={user.user_id || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-[var(--foreground)]">
+                                                                {user.email || 'Unknown'}
+                                                            </span>
+                                                            <span className="text-xs text-[var(--muted-foreground)] font-mono">
+                                                                {user.user_id?.substring(0, 8)}...
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-medium">
+                                                        {(user.total_calls || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right">
+                                                        {(user.total_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        {(user.prompt_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        {(user.completion_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-medium text-[#EF4444]">
+                                                        ${(user.total_cost || 0).toFixed(4)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        ${user.total_calls > 0 ? ((user.total_cost || 0) / user.total_calls).toFixed(4) : '0.0000'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right">
+                                                        <span className="inline-flex items-center rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--primary)]">
+                                                            {user.course_count || 0}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "courseBreakdown" && (
+                <div className="space-y-6">
+                    {/* Summary Stats */}
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Total Courses"
+                            value={usageByCourseData.length}
+                            subtitle="With API usage"
+                            color="primary"
+                            icon="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                        />
+                        <StatCard
+                            title="Total Cost (All Courses)"
+                            value={`$${usageByCourseData.reduce((sum, c) => sum + (c.total_cost || 0), 0).toFixed(2)}`}
+                            color="red"
+                            icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                        <StatCard
+                            title="Avg Cost per Course"
+                            value={`$${usageByCourseData.length > 0 ? (usageByCourseData.reduce((sum, c) => sum + (c.total_cost || 0), 0) / usageByCourseData.length).toFixed(2) : '0.00'}`}
+                            color="orange"
+                        />
+                        <StatCard
+                            title="Avg Tokens per Course"
+                            value={usageByCourseData.length > 0 ? Math.round(usageByCourseData.reduce((sum, c) => sum + (c.total_tokens || 0), 0) / usageByCourseData.length).toLocaleString() : '0'}
+                            color="blue"
+                        />
+                    </div>
+
+                    {/* Course Breakdown Table */}
+                    <div className="card">
+                        <div className="p-4 border-b border-[var(--border)]">
+                            <h3 className="font-semibold">Course-by-Course Breakdown</h3>
+                            <p className="text-xs text-[var(--muted-foreground)] mt-1">Average cost, token usage, and other metrics per course</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Course</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">API Calls</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Prompt Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Completion Tokens</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Cost/Call</th>
+                                        <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Tokens/Call</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {usageByCourseData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className="py-8 text-center text-[var(--muted-foreground)]">
+                                                No course data available
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        usageByCourseData
+                                            .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                            .map((course, idx) => (
+                                                <tr key={course.course_id || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-[var(--foreground)]">
+                                                                {course.course_name || 'Untitled Course'}
+                                                            </span>
+                                                            <span className="text-xs text-[var(--muted-foreground)] font-mono">
+                                                                {course.course_id?.substring(0, 8)}...
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-medium">
+                                                        {(course.total_calls || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right">
+                                                        {(course.total_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        {(course.prompt_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        {(course.completion_tokens || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-medium text-[#EF4444]">
+                                                        ${(course.total_cost || 0).toFixed(4)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        ${course.total_calls > 0 ? ((course.total_cost || 0) / course.total_calls).toFixed(4) : '0.0000'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
+                                                        {course.total_calls > 0 ? Math.round((course.total_tokens || 0) / course.total_calls).toLocaleString() : '0'}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Top Courses by Cost */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Top 10 Courses by Cost</h3>
+                            <div className="space-y-3">
+                                {usageByCourseData
+                                    .sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0))
+                                    .slice(0, 10)
+                                    .map((course, idx) => {
+                                        const maxCost = Math.max(...usageByCourseData.map(c => c.total_cost || 0));
+                                        const percentage = maxCost > 0 ? ((course.total_cost || 0) / maxCost) * 100 : 0;
+                                        return (
+                                            <div key={course.course_id || idx} className="flex items-center gap-3">
+                                                <span className="text-xs text-[var(--muted-foreground)] w-4">{idx + 1}</span>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-sm font-medium truncate max-w-[200px]">
+                                                            {course.course_name || 'Untitled'}
+                                                        </span>
+                                                        <span className="text-sm font-medium text-[#EF4444]">
+                                                            ${(course.total_cost || 0).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-[#EF4444] rounded-full transition-all"
+                                                            style={{ width: `${percentage}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                {usageByCourseData.length === 0 && (
+                                    <p className="text-sm text-[var(--muted-foreground)] text-center py-4">No course data available</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="card p-6">
+                            <h3 className="font-semibold mb-4">Top 10 Courses by Token Usage</h3>
+                            <div className="space-y-3">
+                                {usageByCourseData
+                                    .sort((a, b) => (b.total_tokens || 0) - (a.total_tokens || 0))
+                                    .slice(0, 10)
+                                    .map((course, idx) => {
+                                        const maxTokens = Math.max(...usageByCourseData.map(c => c.total_tokens || 0));
+                                        const percentage = maxTokens > 0 ? ((course.total_tokens || 0) / maxTokens) * 100 : 0;
+                                        return (
+                                            <div key={course.course_id || idx} className="flex items-center gap-3">
+                                                <span className="text-xs text-[var(--muted-foreground)] w-4">{idx + 1}</span>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-sm font-medium truncate max-w-[200px]">
+                                                            {course.course_name || 'Untitled'}
+                                                        </span>
+                                                        <span className="text-sm font-medium text-[var(--primary)]">
+                                                            {(course.total_tokens || 0).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-[var(--primary)] rounded-full transition-all"
+                                                            style={{ width: `${percentage}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                {usageByCourseData.length === 0 && (
+                                    <p className="text-sm text-[var(--muted-foreground)] text-center py-4">No course data available</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
