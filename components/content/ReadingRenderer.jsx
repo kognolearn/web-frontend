@@ -638,6 +638,7 @@ function InlineContent({ text }) {
 function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, onAnswered }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [strikethroughOptions, setStrikethroughOptions] = useState({});
   
   // Create shuffled options with deterministic seed based on question context
   const { shuffledOptions, shuffledToOriginal, originalCorrectInShuffled } = useMemo(() => {
@@ -728,8 +729,9 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           const isCorrectOption = idx === originalCorrectInShuffled;
           const showAsCorrect = submitted && isCorrectOption;
           const showAsIncorrect = submitted && isSelected && !isCorrectOption;
+          const isStruckThrough = strikethroughOptions[idx] && !submitted;
           
-          let optionClass = "flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 ";
+          let optionClass = "group flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 ";
           
           if (!submitted) {
             optionClass += "cursor-pointer ";
@@ -789,8 +791,36 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
                   option.label
                 )}
               </div>
-              <div className="flex-1 pt-0.5">
-                <div className="text-[var(--foreground)]">
+              {/* Strikethrough toggle button - only show before submission */}
+              {!submitted && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStrikethroughOptions(prev => ({
+                      ...prev,
+                      [idx]: !prev[idx]
+                    }));
+                  }}
+                  className={`
+                    flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer
+                    ${isStruckThrough
+                      ? "bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30"
+                      : "text-[var(--muted-foreground)]/50 hover:text-rose-500 hover:bg-rose-500/10"
+                    }
+                  `}
+                  aria-label={isStruckThrough ? "Remove strikethrough" : "Strike through option"}
+                  title={isStruckThrough ? "Remove strikethrough" : "Cross out this option"}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 4H9a3 3 0 0 0 0 6h6" />
+                    <path d="M4 12h16" />
+                    <path d="M15 12a3 3 0 1 1 0 6H8" />
+                  </svg>
+                </button>
+              )}
+              <div className={`flex-1 pt-0.5 transition-opacity duration-200 ${isStruckThrough ? "opacity-40" : ""}`}>
+                <div className={`text-[var(--foreground)] ${isStruckThrough ? "line-through decoration-2 decoration-rose-500/70" : ""}`}>
                   <MathJax dynamic>
                     <InlineContent text={option.text} />
                   </MathJax>

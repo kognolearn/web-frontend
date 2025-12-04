@@ -19,21 +19,26 @@ export default function DashboardPage() {
   const { mounted } = useTheme();
   const pollingRef = useRef(null);
 
-  const loadCourses = useCallback(async (userId) => {
+  const loadCourses = useCallback(async (userId, silent = false) => {
     try {
       const res = await fetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
       if (!res.ok) {
         console.error("Failed to fetch courses from API", res.status);
-        setCourses([]);
+        if (!silent) setCourses([]);
       } else {
         const body = await res.json();
         const items = Array.isArray(body?.courses) ? body.courses : [];
-        setCourses(items);
+        // Only update if data has changed (compare by JSON)
+        setCourses(prev => {
+          const prevStr = JSON.stringify(prev);
+          const newStr = JSON.stringify(items);
+          return prevStr === newStr ? prev : items;
+        });
         return items;
       }
     } catch (err) {
       console.error("Error fetching courses from API:", err);
-      setCourses([]);
+      if (!silent) setCourses([]);
     }
     return [];
   }, []);
@@ -99,10 +104,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user?.id) return;
     const handler = async () => {
-      setLoading(true);
+      // Silent refresh - don't show loading state, just update if data changed
       const courseList = await loadCourses(user.id);
       startPollingForPendingCourses(user.id, courseList);
-      setLoading(false);
     };
     window.addEventListener("courses:updated", handler);
     return () => window.removeEventListener("courses:updated", handler);

@@ -537,6 +537,7 @@ export default function Quiz({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedExplanations, setExpandedExplanations] = useState({});
   const [flaggedQuestions, setFlaggedQuestions] = useState({});
+  const [strikethroughOptions, setStrikethroughOptions] = useState({});
 
   // Track the last notification sent to parent to prevent duplicate calls
   const lastNotificationRef = useRef(null);
@@ -584,6 +585,7 @@ export default function Quiz({
     setIsSubmitting(false);
     setExpandedExplanations({});
     setFlaggedQuestions({});
+    setStrikethroughOptions({});
     lastNotificationRef.current = null;
     
     // Restore quiz state from localStorage if already submitted
@@ -1080,6 +1082,10 @@ export default function Quiz({
                   else if (isSelected) status = "incorrect";
                 }
 
+                // Check if option is struck through
+                const strikeKey = `${currentQuestion?.id}-${opt.id}`;
+                const isStruckThrough = strikethroughOptions[strikeKey] && !isSubmitted;
+
                 // Check if this option has an explanation
                 const hasExplanation = opt.explanation && hasRichContent(opt.explanation);
                 const explanationKey = `${currentQuestion?.id}-${opt.id}`;
@@ -1126,9 +1132,39 @@ export default function Quiz({
                         {opt.label}
                       </div>
 
+                      {/* Strikethrough toggle button - only show before submission */}
+                      {!isSubmitted && (
+                        <Tooltip text={isStruckThrough ? "Remove strikethrough" : "Cross out this option"} position="top">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStrikethroughOptions(prev => ({
+                                ...prev,
+                                [strikeKey]: !prev[strikeKey]
+                              }));
+                            }}
+                            className={`
+                              flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer
+                              ${isStruckThrough
+                                ? "bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30"
+                                : "text-[var(--muted-foreground)]/50 hover:text-rose-500 hover:bg-rose-500/10"
+                              }
+                            `}
+                            aria-label={isStruckThrough ? "Remove strikethrough" : "Strike through option"}
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M16 4H9a3 3 0 0 0 0 6h6" />
+                              <path d="M4 12h16" />
+                              <path d="M15 12a3 3 0 1 1 0 6H8" />
+                            </svg>
+                          </button>
+                        </Tooltip>
+                      )}
+
                       {/* Option content */}
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <div className="text-[var(--foreground)]">
+                      <div className={`flex-1 min-w-0 pt-0.5 transition-opacity duration-200 ${isStruckThrough ? "opacity-40" : ""}`}>
+                        <div className={`text-[var(--foreground)] ${isStruckThrough ? "line-through decoration-2 decoration-rose-500/70" : ""}`}>
                           <RichBlock block={opt.block} maxWidth="100%" />
                         </div>
 
