@@ -61,18 +61,9 @@ function shuffleWithMapping(array, seed) {
 function parseContent(content) {
   if (!content) return [];
   
-  // Preprocess: Convert literal \n strings to actual newlines
-  // This handles cases where content comes through with escaped newlines
-  let normalizedContent = content;
-  
-  // Replace literal \n (backslash followed by n) with actual newlines
-  // But be careful not to break actual escape sequences in code blocks
-  // We do a simple replacement since code blocks will be reparsed anyway
-  normalizedContent = normalizedContent.replace(/\\n/g, '\n');
-  
-  // Also handle \r\n and \r
-  normalizedContent = normalizedContent.replace(/\\r\\n/g, '\n');
-  normalizedContent = normalizedContent.replace(/\\r/g, '\n');
+  // Content should already have proper newlines from JSON parsing
+  // Only normalize Windows line endings
+  let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
@@ -528,7 +519,8 @@ function InlineContent({ text }) {
     if (!text) return [];
     
     const result = [];
-    let remaining = text;
+    // Convert \( ... \) to $ ... $ for consistent math handling
+    let remaining = text.replace(/\\\(\s*/g, '$').replace(/\s*\\\)/g, '$');
     let key = 0;
     
     // Process inline elements
