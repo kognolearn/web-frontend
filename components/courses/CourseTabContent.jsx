@@ -324,6 +324,7 @@ export default function CourseTabContent({
   onChatTabReturn,
   chatOpenRequest,
   onTabTitleChange,
+  onCurrentLessonChange,
   isActive = true
 }) {
   const router = useRouter();
@@ -341,6 +342,13 @@ export default function CourseTabContent({
       onTabTitleChange(selectedLesson.title);
     }
   }, [selectedLesson?.title, onTabTitleChange]);
+
+  // Report current lesson ID to parent for smart plan updates
+  useEffect(() => {
+    if (onCurrentLessonChange) {
+      onCurrentLessonChange(selectedLesson?.id || null);
+    }
+  }, [selectedLesson?.id, onCurrentLessonChange]);
 
   // Handle external chat open requests
   useEffect(() => {
@@ -2239,97 +2247,155 @@ export default function CourseTabContent({
                 </span>
               </button>
 
-              <OnboardingTooltip
-                id="course-content-types"
-                content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
-                position="top"
-                pointerPosition="center"
-                delay={800}
-                priority={8}
-              >
-                {/* Content type buttons */}
-                <div className="flex items-center gap-1.5">
-                  {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
-                    <>
-                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
-                      <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
-                    </>
-                  ) : (
-                    getAvailableContentTypes(selectedLesson.id).map((contentType) => {
-                      const isActive = selectedContentType?.type === contentType.value;
-                      const isCompleted = isContentCompleted(selectedLesson.id, contentType.value);
-                      
-                      // Icon for each content type
-                      const getIcon = () => {
-                        switch(contentType.value) {
-                          case 'reading':
-                            return (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                              </svg>
-                            );
-                          case 'video':
-                            return (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            );
-                          case 'flashcards':
-                            return (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                              </svg>
-                            );
-                          case 'mini_quiz':
-                            return (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                              </svg>
-                            );
-                          default:
-                            return (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                            );
+              {/* Content Type Navigation */}
+              {(() => {
+                const availableTypes = getAvailableContentTypes(selectedLesson.id);
+                const currentIndex = availableTypes.findIndex(type => type.value === selectedContentType?.type);
+                const prevType = currentIndex > 0 ? availableTypes[currentIndex - 1] : null;
+                const nextType = currentIndex < availableTypes.length - 1 ? availableTypes[currentIndex + 1] : null;
+
+                return (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (prevType) {
+                          setSelectedContentType({ lessonId: selectedLesson.id, type: prevType.value });
+                          fetchLessonContent(selectedLesson.id, [prevType.value]);
                         }
-                      };
-                      
-                      return (
-                        <button
-                          key={contentType.value}
-                          type="button"
-                          onClick={() => {
-                            setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
-                            fetchLessonContent(selectedLesson.id, [contentType.value]);
-                          }}
-                          className={`
-                            relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium
-                            transition-all duration-200
-                            ${isActive
-                              ? isCompleted
-                                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
-                                : 'bg-[var(--primary)] text-white shadow-md shadow-[var(--primary)]/25'
-                              : isCompleted
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                                : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
-                            }
-                          `}
-                          title={contentType.label}
-                        >
-                          {getIcon()}
-                          {isCompleted && !isActive && (
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </OnboardingTooltip>
+                      }}
+                      disabled={!prevType}
+                      className={`
+                        flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-all duration-200
+                        ${prevType
+                          ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                          : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                        }
+                      `}
+                      title={prevType ? `Previous: ${prevType.label}` : 'No previous content type'}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+
+                    <OnboardingTooltip
+                      id="course-content-types"
+                      content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
+                      position="top"
+                      pointerPosition="center"
+                      delay={800}
+                      priority={8}
+                    >
+                      {/* Content type buttons */}
+                      <div className="flex items-center gap-1.5">
+                        {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
+                          <>
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                          </>
+                        ) : (
+                          availableTypes.map((contentType) => {
+                            const isActive = selectedContentType?.type === contentType.value;
+                            const isCompleted = isContentCompleted(selectedLesson.id, contentType.value);
+                            
+                            // Icon for each content type
+                            const getIcon = () => {
+                              switch(contentType.value) {
+                                case 'reading':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                  );
+                                case 'video':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                  );
+                                case 'flashcards':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                  );
+                                case 'mini_quiz':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                    </svg>
+                                  );
+                                default:
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  );
+                              }
+                            };
+                            
+                            return (
+                              <button
+                                key={contentType.value}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
+                                  fetchLessonContent(selectedLesson.id, [contentType.value]);
+                                }}
+                                className={`
+                                  relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium
+                                  transition-all duration-200
+                                  ${isActive
+                                    ? isCompleted
+                                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+                                      : 'bg-[var(--primary)] text-white shadow-md shadow-[var(--primary)]/25'
+                                    : isCompleted
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                                      : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
+                                  }
+                                `}
+                                title={contentType.label}
+                              >
+                                {getIcon()}
+                                {isCompleted && !isActive && (
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </OnboardingTooltip>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (nextType) {
+                          setSelectedContentType({ lessonId: selectedLesson.id, type: nextType.value });
+                          fetchLessonContent(selectedLesson.id, [nextType.value]);
+                        }
+                      }}
+                      disabled={!nextType}
+                      className={`
+                        flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-all duration-200
+                        ${nextType
+                          ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                          : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                        }
+                      `}
+                      title={nextType ? `Next: ${nextType.label}` : 'No next content type'}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Next Lesson Button */}
               <button

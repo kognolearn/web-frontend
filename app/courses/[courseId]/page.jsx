@@ -29,6 +29,9 @@ export default function CoursePage() {
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const dragPreviewRef = useRef(null);
+  
+  // Track current lesson ID from CourseTabContent for smart plan updates
+  const currentLessonIdRef = useRef(null);
 
   // Tab State
   const [tabs, setTabs] = useState([
@@ -213,7 +216,66 @@ export default function CoursePage() {
         }));
         return { ...p, modules };
       };
-      setStudyPlan(unlockStudyPlan(json));
+      const newPlan = unlockStudyPlan(json);
+      
+      // Smart merge: preserve current lesson visibility when time decreases
+      setStudyPlan((prevPlan) => {
+        if (!prevPlan || !newPlan) return newPlan;
+        
+        const currentLessonId = currentLessonIdRef.current;
+        if (!currentLessonId) return newPlan;
+        
+        // Check if current lesson exists in new plan
+        const lessonInNewPlan = newPlan.modules?.some(m => 
+          m.lessons?.some(l => l.id === currentLessonId)
+        );
+        
+        if (lessonInNewPlan) {
+          // Current lesson is in new plan, safe to use new plan directly
+          return newPlan;
+        }
+        
+        // Current lesson was removed - find it in old plan and ensure it stays visible
+        let currentLessonData = null;
+        let currentModuleData = null;
+        for (const module of (prevPlan.modules || [])) {
+          const lesson = module.lessons?.find(l => l.id === currentLessonId);
+          if (lesson) {
+            currentLessonData = lesson;
+            currentModuleData = module;
+            break;
+          }
+        }
+        
+        if (!currentLessonData || !currentModuleData) {
+          // Couldn't find current lesson, just use new plan
+          return newPlan;
+        }
+        
+        // Merge: add the current lesson's module back if needed
+        const newModules = [...(newPlan.modules || [])];
+        const existingModuleIdx = newModules.findIndex(m => m.title === currentModuleData.title);
+        
+        if (existingModuleIdx >= 0) {
+          // Module exists, add the lesson if not present
+          const existingModule = newModules[existingModuleIdx];
+          const lessonExists = existingModule.lessons?.some(l => l.id === currentLessonId);
+          if (!lessonExists) {
+            newModules[existingModuleIdx] = {
+              ...existingModule,
+              lessons: [...(existingModule.lessons || []), currentLessonData]
+            };
+          }
+        } else {
+          // Module doesn't exist, add it with just the current lesson
+          newModules.push({
+            ...currentModuleData,
+            lessons: [currentLessonData]
+          });
+        }
+        
+        return { ...newPlan, modules: newModules };
+      });
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
@@ -231,10 +293,12 @@ export default function CoursePage() {
           seconds_to_complete: newSeconds
         })
       });
+      // Refresh study plan to add/remove modules based on new time
+      await refetchStudyPlan();
     } catch (e) {
       console.error('Failed to update timer:', e);
     }
-  }, [userId, courseId]);
+  }, [userId, courseId, refetchStudyPlan]);
 
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
@@ -245,6 +309,11 @@ export default function CoursePage() {
     setIsTimerExpiredModalOpen(false);
     await handleTimerUpdate(newSeconds);
   }, [secondsRemaining, handleTimerUpdate]);
+
+  // Callback for CourseTabContent to report current selected lesson
+  const handleCurrentLessonChange = useCallback((lessonId) => {
+    currentLessonIdRef.current = lessonId;
+  }, []);
 
   const handleTabTitleChange = useCallback((tabId, nextTitle) => {
     if (!nextTitle) return;
@@ -625,6 +694,7 @@ export default function CoursePage() {
                 isTimerPaused={isTimerPaused}
                 onPauseToggle={toggleTimerPause}
                 onTabTitleChange={getTabTitleChangeHandler(tab.id)}
+                onCurrentLessonChange={handleCurrentLessonChange}
                 isSettingsModalOpen={isSettingsModalOpen}
                 setIsSettingsModalOpen={setIsSettingsModalOpen}
                 isEditCourseModalOpen={isEditCourseModalOpen}
