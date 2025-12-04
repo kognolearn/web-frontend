@@ -307,6 +307,9 @@ function CreateCoursePageContent() {
   const [confirmedNoExamDetails, setConfirmedNoExamDetails] = useState(false);
   const [showConfirmNoExamModal, setShowConfirmNoExamModal] = useState(false);
   
+  // Study mode: "deep" (thorough understanding) or "cram" (high-yield exam focus)
+  const [studyMode, setStudyMode] = useState("deep");
+  
   useEffect(() => {
     // If the user adds any exam details, clear the 'no exam details' confirmation
     if (hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim())) {
@@ -507,6 +510,7 @@ function CreateCoursePageContent() {
       university: collegeName.trim() || undefined,
       finishByDate: finishByIso || undefined,
       syllabusText: syllabusText.trim() || "Not provided.",
+      mode: studyMode,
     };
 
     const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
@@ -678,6 +682,10 @@ function CreateCoursePageContent() {
     syllabusText,
     userId,
     confirmedNoExamDetails,
+    studyMode,
+    studyHours,
+    studyMinutes,
+    examDetailsProvided,
   ]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
@@ -988,10 +996,25 @@ function CreateCoursePageContent() {
     const redirectToDashboard = () => {
       if (navigationTriggered) return;
       navigationTriggered = true;
-      try {
-        window.dispatchEvent(new Event("courses:updated"));
-      } catch {}
+      
+      // Navigate to dashboard first
       router.push("/dashboard");
+      
+      // Dispatch multiple refresh events spaced 1 second apart to ensure the dashboard picks up the new course
+      // This is needed because on production, the initial event may fire before the dashboard is ready
+      const dispatchRefreshEvent = () => {
+        try {
+          window.dispatchEvent(new Event("courses:updated"));
+        } catch {}
+      };
+      
+      // Dispatch 5 refresh events, each 1 second apart
+      dispatchRefreshEvent();
+      setTimeout(dispatchRefreshEvent, 1000);
+      setTimeout(dispatchRefreshEvent, 2000);
+      setTimeout(dispatchRefreshEvent, 3000);
+      setTimeout(dispatchRefreshEvent, 4000);
+      setTimeout(dispatchRefreshEvent, 5000);
     };
 
     const safeSetCourseGenerationMessage = (message) => {
@@ -1030,6 +1053,7 @@ function CreateCoursePageContent() {
         syllabus_text: syllabusTextPayload,
         grok_draft: grokDraft,
         user_confidence_map: userConfidenceMap,
+        mode: studyMode,
         // Course metadata for downstream workers and DB. Keep top-level keys for backwards compatibility.
         courseMetadata: {
           title: className,
@@ -1087,11 +1111,20 @@ function CreateCoursePageContent() {
         throw new Error(body?.error || "Failed to create course. Please try again.");
       }
 
-      // Course created successfully - redirect to dashboard immediately
-      // The course will show as "pending" and the dashboard will poll for updates
-      try {
-        window.dispatchEvent(new Event("courses:updated"));
-      } catch {}
+      // Course created successfully - dispatch additional refresh events
+      // The redirect already happened earlier, but send more events to ensure dashboard refreshes
+      const dispatchRefreshEvent = () => {
+        try {
+          window.dispatchEvent(new Event("courses:updated"));
+        } catch {}
+      };
+      
+      // Dispatch 5 more refresh events after course creation completes
+      dispatchRefreshEvent();
+      setTimeout(dispatchRefreshEvent, 1000);
+      setTimeout(dispatchRefreshEvent, 2000);
+      setTimeout(dispatchRefreshEvent, 3000);
+      setTimeout(dispatchRefreshEvent, 4000);
     } catch (error) {
       console.log("[CreateCourse] ERROR:", error);
       if (!navigationTriggered) {
@@ -1115,6 +1148,9 @@ function CreateCoursePageContent() {
     generatedGrokDraft,
     resolveSubtopicConfidence,
     router,
+    studyMode,
+    studyHours,
+    studyMinutes,
   ]);
 
   // Floating Navigation Logic
@@ -1320,6 +1356,93 @@ function CreateCoursePageContent() {
                       Please enter more than 0 hours and 0 minutes.
                     </div>
                   )}
+                </div>
+
+                {/* Study Mode Selector */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1.5">
+                    Study Mode <span className="text-rose-500">*</span>
+                  </label>
+                  <p className="text-xs text-[var(--muted-foreground)] mb-3">Choose how you want to approach this course</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {/* Deep Study Option */}
+                    <button
+                      type="button"
+                      onClick={() => setStudyMode("deep")}
+                      className={`relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition-all ${
+                        studyMode === "deep"
+                          ? "border-[var(--primary)] bg-[var(--primary)]/5 shadow-md shadow-[var(--primary)]/10"
+                          : "border-[var(--border)] bg-[var(--surface-2)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
+                      }`}
+                    >
+                      {studyMode === "deep" && (
+                        <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--primary)]">
+                          <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)]/10">
+                        <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                      </div>
+                      <h4 className="font-semibold text-sm mb-1">Deep Study</h4>
+                      <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                        Thorough coverage with detailed explanations, more practice problems, and comprehensive reading materials. Best for mastering concepts.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                          Longer readings
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                          More quizzes
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                          Deep videos
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Cram Mode Option */}
+                    <button
+                      type="button"
+                      onClick={() => setStudyMode("cram")}
+                      className={`relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition-all ${
+                        studyMode === "cram"
+                          ? "border-[var(--primary)] bg-[var(--primary)]/5 shadow-md shadow-[var(--primary)]/10"
+                          : "border-[var(--border)] bg-[var(--surface-2)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
+                      }`}
+                    >
+                      {studyMode === "cram" && (
+                        <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--primary)]">
+                          <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+                        <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <h4 className="font-semibold text-sm mb-1">Cram Mode</h4>
+                      <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                        High-yield, exam-focused content. Prioritizes the most important topics and formats likely to appear on tests. Perfect for limited time.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          High-yield focus
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          Exam-style Qs
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          Quick review
+                        </span>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </div>
 
