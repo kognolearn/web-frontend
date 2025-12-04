@@ -468,41 +468,37 @@ export default function AdminPage() {
         };
     }, [rawUsageData, feedbackData, eventsData, startDate, endDate]);
 
+    // Separate loading state for date-range data
+    const [dateRangeLoading, setDateRangeLoading] = useState(false);
+
+    // Fetch date-independent data once on mount
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchInitialData = async () => {
             setLoading(true);
             setError(null);
             try {
-                // Get the current session for admin authentication
                 const { data: { session } } = await supabase.auth.getSession();
                 const headers = session?.access_token
                     ? { Authorization: `Bearer ${session.access_token}` }
                     : {};
 
-                // Fetch all data in parallel
-                const [usageRes, feedbackRes, eventsRes, usageByUserRes, usageByCourseRes] = await Promise.all([
+                // Fetch data that doesn't depend on date range
+                const [usageRes, feedbackRes, eventsRes] = await Promise.all([
                     fetch("/api/admin/analytics/usage", { headers }),
                     fetch("/api/admin/feedback", { headers }),
                     fetch("/api/admin/analytics/events", { headers }),
-                    fetch("/api/admin/analytics/usage-by-user?includeEmail=true", { headers }),
-                    fetch("/api/admin/analytics/usage-by-course?includeCourseName=true", { headers }),
                 ]);
 
-                const [usageData, feedbackResult, eventsResult, usageByUserResult, usageByCourseResult] = await Promise.all([
+                const [usageData, feedbackResult, eventsResult] = await Promise.all([
                     usageRes.json(),
                     feedbackRes.json(),
                     eventsRes.json(),
-                    usageByUserRes.json(),
-                    usageByCourseRes.json(),
                 ]);
 
-                // Store raw data - processing happens in useMemo based on date range
                 const usageRecords = usageData.success ? (usageData.usage || usageData.data || []) : [];
                 setRawUsageData(usageRecords);
                 setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
                 setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
-                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
-                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
             } catch (err) {
                 console.error("Error fetching admin data:", err);
                 setError("Failed to load admin data. Please try again.");
@@ -511,8 +507,43 @@ export default function AdminPage() {
             }
         };
 
-        fetchData();
+        fetchInitialData();
     }, []);
+
+    // Fetch date-range dependent data when dates change
+    useEffect(() => {
+        if (!startDate || !endDate) return;
+
+        const fetchDateRangeData = async () => {
+            setDateRangeLoading(true);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const headers = session?.access_token
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {};
+
+                const dateParams = `startDate=${startDate}&endDate=${endDate}`;
+                const [usageByUserRes, usageByCourseRes] = await Promise.all([
+                    fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
+                ]);
+
+                const [usageByUserResult, usageByCourseResult] = await Promise.all([
+                    usageByUserRes.json(),
+                    usageByCourseRes.json(),
+                ]);
+
+                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
+                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
+            } catch (err) {
+                console.error("Error fetching date-range data:", err);
+            } finally {
+                setDateRangeLoading(false);
+            }
+        };
+
+        fetchDateRangeData();
+    }, [startDate, endDate]);
 
     if (loading) {
         return (
@@ -801,13 +832,14 @@ export default function AdminPage() {
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Cost/Call</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Courses</th>
+                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Sources</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {usageByUserData.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className="py-8 text-center text-[var(--muted-foreground)]">
-                                                No user data available
+                                            <td colSpan={9} className="py-8 text-center text-[var(--muted-foreground)]">
+                                                {dateRangeLoading ? "Loading..." : "No user data available"}
                                             </td>
                                         </tr>
                                     ) : (
@@ -847,6 +879,20 @@ export default function AdminPage() {
                                                         <span className="inline-flex items-center rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--primary)]">
                                                             {user.courses?.length || 0}
                                                         </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-left max-w-[200px]">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {(user.sources || []).slice(0, 5).map((source, i) => (
+                                                                <span key={i} className="inline-flex items-center rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-xs text-[var(--muted-foreground)]">
+                                                                    {source}
+                                                                </span>
+                                                            ))}
+                                                            {(user.sources?.length || 0) > 5 && (
+                                                                <span className="text-xs text-[var(--muted-foreground)]">
+                                                                    +{user.sources.length - 5} more
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))
@@ -905,13 +951,14 @@ export default function AdminPage() {
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Cost/Call</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Tokens/Call</th>
+                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Sources</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {usageByCourseData.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className="py-8 text-center text-[var(--muted-foreground)]">
-                                                No course data available
+                                            <td colSpan={9} className="py-8 text-center text-[var(--muted-foreground)]">
+                                                {dateRangeLoading ? "Loading..." : "No course data available"}
                                             </td>
                                         </tr>
                                     ) : (
@@ -949,6 +996,20 @@ export default function AdminPage() {
                                                     </td>
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
                                                         {course.requestCount > 0 ? Math.round((course.totalTokens || 0) / course.requestCount).toLocaleString() : '0'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-left max-w-[200px]">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {(course.sources || []).slice(0, 5).map((source, i) => (
+                                                                <span key={i} className="inline-flex items-center rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-xs text-[var(--muted-foreground)]">
+                                                                    {source}
+                                                                </span>
+                                                            ))}
+                                                            {(course.sources?.length || 0) > 5 && (
+                                                                <span className="text-xs text-[var(--muted-foreground)]">
+                                                                    +{course.sources.length - 5} more
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))

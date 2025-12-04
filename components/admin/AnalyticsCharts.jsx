@@ -324,27 +324,51 @@ export function UsageBySourceChart({ data }) {
 export function CostBySourcePieChart({ data }) {
     const colors = useChartColors();
     
+    // Sort by cost and take top 8, group rest as "Other"
+    const sortedData = [...data].sort((a, b) => b.cost - a.cost);
+    const topItems = sortedData.slice(0, 8);
+    const otherItems = sortedData.slice(8);
+    
+    const chartData = otherItems.length > 0 
+        ? [...topItems, { 
+            source: `Other (${otherItems.length})`, 
+            cost: otherItems.reduce((sum, item) => sum + item.cost, 0),
+            percentage: otherItems.reduce((sum, item) => sum + (item.percentage || 0), 0)
+          }]
+        : topItems;
+    
     return (
-        <div className="h-[300px] w-full">
+        <div className="h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                     <Pie
-                        data={data}
+                        data={chartData}
                         cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ source, percent }) => `${source} (${(percent * 100).toFixed(0)}%)`}
-                        outerRadius={100}
+                        cy="45%"
+                        innerRadius={50}
+                        outerRadius={90}
                         fill="#8884d8"
                         dataKey="cost"
                         nameKey="source"
+                        paddingAngle={1}
                     >
-                        {data.map((entry, index) => (
+                        {chartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                     </Pie>
                     <Tooltip
                         content={<CustomTooltip formatter={(value) => `$${Number(value).toFixed(4)}`} />}
+                    />
+                    <Legend 
+                        layout="horizontal"
+                        align="center"
+                        verticalAlign="bottom"
+                        wrapperStyle={{ paddingTop: '15px', fontSize: '11px' }}
+                        formatter={(value, entry) => {
+                            const item = chartData.find(d => d.source === value);
+                            const pct = item ? ((item.cost / chartData.reduce((s, d) => s + d.cost, 0)) * 100).toFixed(0) : 0;
+                            return <span style={{ color: colors.foreground }}>{value} ({pct}%)</span>;
+                        }}
                     />
                 </PieChart>
             </ResponsiveContainer>
