@@ -331,6 +331,9 @@ function CreateCoursePageContent() {
 
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
+  
+  // RAG session ID returned from /courses/topics for context continuity
+  const [ragSessionId, setRagSessionId] = useState(null);
 
   const [courseGenerating, setCourseGenerating] = useState(false);
   const [courseGenerationError, setCourseGenerationError] = useState("");
@@ -500,6 +503,7 @@ function CreateCoursePageContent() {
     setOverviewTopics([]);
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
+    setRagSessionId(null);
     setModuleConfidenceState({});
     setOpenAccordions({});
 
@@ -648,9 +652,16 @@ function CreateCoursePageContent() {
           throw new Error("The model did not return any topics. Please try again.");
         }
 
+        // Store rag_session_id if returned by backend for use in course generation
+        const returnedRagSessionId = data?.rag_session_id || null;
+        if (returnedRagSessionId) {
+          console.log("Stored rag_session_id:", returnedRagSessionId);
+        }
+        
         // Success - update state and exit the retry loop
         setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
         setOverviewTopics(hydrated);
+        setRagSessionId(returnedRagSessionId);
         setTopicsError(null);
         setIsTopicsLoading(false);
         return; // Exit the function on success
@@ -1060,6 +1071,8 @@ function CreateCoursePageContent() {
           syllabus_text: syllabusTextPayload,
           exam_details: examDetailsPayload,
         },
+        // Pass rag_session_id if available from topics generation for RAG context continuity
+        ...(ragSessionId && { rag_session_id: ragSessionId }),
       };
 
       if (Object.keys(topicFamiliarityMap).length === 0) {
@@ -1146,6 +1159,7 @@ function CreateCoursePageContent() {
     examDetailsProvided,
     confirmedNoExamDetails,
     generatedGrokDraft,
+    ragSessionId,
     resolveSubtopicConfidence,
     router,
     studyMode,
