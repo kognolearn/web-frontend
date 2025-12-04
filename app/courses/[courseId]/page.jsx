@@ -224,11 +224,25 @@ export default function CoursePage() {
 
   const handleTabTitleChange = useCallback((tabId, nextTitle) => {
     if (!nextTitle) return;
-    setTabs((prev) => prev.map((tab) => {
-      if (tab.id !== tabId || tab.title === nextTitle) return tab;
-      return { ...tab, title: nextTitle };
-    }));
+    setTabs((prev) => {
+      // Check if update is actually needed to prevent unnecessary re-renders
+      const existingTab = prev.find(t => t.id === tabId);
+      if (!existingTab || existingTab.title === nextTitle) return prev;
+      return prev.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        return { ...tab, title: nextTitle };
+      });
+    });
   }, []);
+
+  // Create stable callbacks for each tab's title change handler
+  const tabTitleChangeHandlers = useRef({});
+  const getTabTitleChangeHandler = useCallback((tabId) => {
+    if (!tabTitleChangeHandlers.current[tabId]) {
+      tabTitleChangeHandlers.current[tabId] = (title) => handleTabTitleChange(tabId, title);
+    }
+    return tabTitleChangeHandlers.current[tabId];
+  }, [handleTabTitleChange]);
 
   const addTab = (type) => {
     const newId = `tab-${Date.now()}`;
@@ -586,7 +600,7 @@ export default function CoursePage() {
                 handleTimerUpdate={handleTimerUpdate}
                 isTimerPaused={isTimerPaused}
                 onPauseToggle={toggleTimerPause}
-                onTabTitleChange={(title) => handleTabTitleChange(tab.id, title)}
+                onTabTitleChange={getTabTitleChangeHandler(tab.id)}
                 isSettingsModalOpen={isSettingsModalOpen}
                 setIsSettingsModalOpen={setIsSettingsModalOpen}
                 isEditCourseModalOpen={isEditCourseModalOpen}

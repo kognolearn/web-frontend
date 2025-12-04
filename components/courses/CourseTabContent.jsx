@@ -329,13 +329,17 @@ export default function CourseTabContent({
   const chatBotRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
+  
+  // Track the last title we sent to avoid redundant calls
+  const lastTitleRef = useRef(null);
 
   // Update tab title when lesson changes
   useEffect(() => {
-    if (selectedLesson && onTabTitleChange) {
+    if (selectedLesson?.title && onTabTitleChange && selectedLesson.title !== lastTitleRef.current) {
+      lastTitleRef.current = selectedLesson.title;
       onTabTitleChange(selectedLesson.title);
     }
-  }, [selectedLesson, onTabTitleChange]);
+  }, [selectedLesson?.title, onTabTitleChange]);
 
   // Handle external chat open requests
   useEffect(() => {
@@ -1482,10 +1486,16 @@ export default function CourseTabContent({
                                 setSelectedLesson(lesson);
                                 setSelectedReviewModule(null);
                                 const availableTypes = getAvailableContentTypes(lesson.id);
-                                if (availableTypes.length > 0) {
+                                // For "Module Quiz" lessons, always open quiz content directly
+                                if (lesson.title === 'Module Quiz') {
+                                  setSelectedContentType({ lessonId: lesson.id, type: 'mini_quiz' });
+                                  fetchLessonContent(lesson.id, ['mini_quiz']);
+                                } else if (availableTypes.length > 0) {
                                   setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
+                                  fetchLessonContent(lesson.id, ['reading']);
+                                } else {
+                                  fetchLessonContent(lesson.id, ['reading']);
                                 }
-                                fetchLessonContent(lesson.id, ['reading']);
                                 setViewMode("topic");
                                 setCurrentViewingItem(null);
                               }}
@@ -2161,7 +2171,7 @@ export default function CourseTabContent({
           )}
         </div>
 
-        {viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' && (
+        {viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' && selectedLesson.title !== 'Module Quiz' && (
           <div 
             className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
             style={{ 
