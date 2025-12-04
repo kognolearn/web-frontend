@@ -4,7 +4,7 @@ const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.c
 
 export async function PATCH(request, { params }) {
   try {
-    const { courseId, nodeId } = params;
+    const { courseId, nodeId } = await params;
     
     // Parse request body
     const body = await request.json();

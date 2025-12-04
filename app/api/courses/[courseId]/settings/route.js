@@ -4,7 +4,7 @@ const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 
 async function updateSettings(request, { params }) {
   try {
-    const { courseId } = params;
+    const { courseId } = await params;
     
     if (!courseId) {
       return NextResponse.json({ error: "courseId is required" }, { status: 400 });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request, { params }) {
   try {
-    const { courseId } = params;
+    const { courseId } = await params;
     const body = await request.json();
     
     const { userId, prompt, lessonIds } = body;
