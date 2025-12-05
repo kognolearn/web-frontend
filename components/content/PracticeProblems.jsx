@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
+import { normalizeLatex } from "@/utils/richText";
 
 /**
  * Renders practice problems with collapsible solutions, rubrics, and self-assessment features
@@ -153,7 +154,7 @@ export default function PracticeProblems({ problems = [] }) {
               <div className="prose prose-invert max-w-none">
                 <MathJax dynamic>
                   <div className="whitespace-pre-wrap text-[var(--foreground)] leading-relaxed">
-                    {problem.question}
+                    {normalizeLatex(problem.question)}
                   </div>
                 </MathJax>
               </div>
@@ -261,7 +262,7 @@ export default function PracticeProblems({ problems = [] }) {
                                 <div className="flex-1 prose prose-invert prose-sm max-w-none">
                                   <MathJax dynamic>
                                     <span className="text-[var(--foreground)]">
-                                      {stepIdx < stepsRevealed ? step : "Click to reveal..."}
+                                      {stepIdx < stepsRevealed ? normalizeLatex(step) : "Click to reveal..."}
                                     </span>
                                   </MathJax>
                                 </div>
@@ -285,7 +286,7 @@ export default function PracticeProblems({ problems = [] }) {
                         <div className="prose prose-invert max-w-none">
                           <MathJax dynamic>
                             <div className="text-[var(--foreground)] font-medium">
-                              {problem.sample_answer.final_answer}
+                              {normalizeLatex(problem.sample_answer.final_answer)}
                             </div>
                           </MathJax>
                         </div>
@@ -308,7 +309,7 @@ export default function PracticeProblems({ problems = [] }) {
                               key={insightIdx}
                               className="p-3 rounded-lg bg-[var(--info)]/10 border border-[var(--info)]/30 text-sm text-[var(--foreground)]"
                             >
-                              <MathJax dynamic>{insight}</MathJax>
+                              <MathJax dynamic>{normalizeLatex(insight)}</MathJax>
                             </div>
                           ))}
                         </div>
@@ -329,7 +330,7 @@ export default function PracticeProblems({ problems = [] }) {
                           {problem.sample_answer.alternative_approaches.map((alt, altIdx) => (
                             <li key={altIdx} className="flex items-start gap-2">
                               <span className="text-[var(--primary)]">•</span>
-                              <MathJax dynamic>{alt}</MathJax>
+                              <MathJax dynamic>{normalizeLatex(alt)}</MathJax>
                             </li>
                           ))}
                         </ul>

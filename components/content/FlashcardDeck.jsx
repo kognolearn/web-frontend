@@ -5,6 +5,7 @@ import React, {
 import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 import Tooltip from "@/components/ui/Tooltip";
+import { normalizeLatex } from "@/utils/richText";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { updateFlashcardProgress, getFlashcardProgress } from "@/utils/lessonProgress";
 
@@ -348,7 +349,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
             <div className="flex-1 flex items-center justify-center overflow-auto">
               <MathJax dynamic>
                 <p className="text-xl sm:text-2xl font-semibold text-white leading-relaxed whitespace-pre-wrap text-center">
-                  {question}
+                  {normalizeLatex(question)}
                 </p>
               </MathJax>
             </div>
@@ -395,7 +396,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
             <div className="flex-1 flex flex-col justify-center items-center overflow-auto">
               <MathJax dynamic>
                 <p className="text-lg sm:text-xl font-medium text-[var(--foreground)] leading-relaxed whitespace-pre-wrap text-center">
-                  {answer}
+                  {normalizeLatex(answer)}
                 </p>
               </MathJax>
             </div>
@@ -412,7 +413,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
                   <div className="flex-1 min-w-0">
                     <MathJax dynamic>
                       <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
-                        {explanation}
+                        {normalizeLatex(explanation)}
                       </p>
                     </MathJax>
                   </div>

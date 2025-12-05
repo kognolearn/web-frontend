@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import RichBlock from "@/components/content/RichBlock";
-import { hasRichContent, toRichBlock } from "@/utils/richText";
+import { hasRichContent, toRichBlock, normalizeLatex } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";

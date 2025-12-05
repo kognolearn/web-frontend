@@ -65,6 +65,48 @@ function parseContent(content) {
   // Only normalize Windows line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
+  // Normalize double-escaped backslashes from JSON (\\( -> \(, \\[ -> \[, etc.)
+  // This handles cases where content has \\( instead of \( for inline math
+  normalizedContent = normalizedContent
+    .replace(/\\\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
+    .replace(/\\\\(\[|\])/g, '\\$1')  // \\[ -> \[, \\] -> \]
+    .replace(/\\\\mathbf/g, '\\mathbf')
+    .replace(/\\\\mathbb/g, '\\mathbb')
+    .replace(/\\\\lambda/g, '\\lambda')
+    .replace(/\\\\begin/g, '\\begin')
+    .replace(/\\\\end/g, '\\end')
+    .replace(/\\\\frac/g, '\\frac')
+    .replace(/\\\\sqrt/g, '\\sqrt')
+    .replace(/\\\\sum/g, '\\sum')
+    .replace(/\\\\int/g, '\\int')
+    .replace(/\\\\cdot/g, '\\cdot')
+    .replace(/\\\\times/g, '\\times')
+    .replace(/\\\\pm/g, '\\pm')
+    .replace(/\\\\neq/g, '\\neq')
+    .replace(/\\\\leq/g, '\\leq')
+    .replace(/\\\\geq/g, '\\geq')
+    .replace(/\\\\infty/g, '\\infty')
+    .replace(/\\\\alpha/g, '\\alpha')
+    .replace(/\\\\beta/g, '\\beta')
+    .replace(/\\\\gamma/g, '\\gamma')
+    .replace(/\\\\delta/g, '\\delta')
+    .replace(/\\\\theta/g, '\\theta')
+    .replace(/\\\\pi/g, '\\pi')
+    .replace(/\\\\sigma/g, '\\sigma')
+    .replace(/\\\\mu/g, '\\mu')
+    .replace(/\\\\epsilon/g, '\\epsilon')
+    .replace(/\\\\text/g, '\\text')
+    .replace(/\\\\quad/g, '\\quad')
+    .replace(/\\\\qquad/g, '\\qquad')
+    .replace(/\\\\left/g, '\\left')
+    .replace(/\\\\right/g, '\\right');
+  
+  // Convert \[...\] display math to $$...$$ for consistent handling
+  normalizedContent = normalizedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+  
+  // Convert \(...\) inline math to $...$ for consistent handling
+  normalizedContent = normalizedContent.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+  
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
   normalizedContent = normalizedContent.replace(/([^\n])(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
@@ -519,8 +561,17 @@ function InlineContent({ text }) {
     if (!text) return [];
     
     const result = [];
-    // Convert \( ... \) to $ ... $ for consistent math handling
-    let remaining = text.replace(/\\\(\s*/g, '$').replace(/\s*\\\)/g, '$');
+    // Normalize double-escaped backslashes and convert \( ... \) to $ ... $ for consistent math handling
+    let remaining = text
+      .replace(/\\\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
+      .replace(/\\\(\s*/g, '$').replace(/\s*\\\)/g, '$');
+    
+    // Detect bare LaTeX patterns (like X^{-1} or A_n) and wrap them in $ delimiters
+    // This handles cases where math content isn't wrapped in delimiters
+    remaining = remaining.replace(/([A-Za-z]+)(\^{[^}]+})/g, '$$$1$2$$');  // X^{...} -> $X^{...}$
+    remaining = remaining.replace(/([A-Za-z]+)(_{[^}]+})/g, '$$$1$2$$');   // X_{...} -> $X_{...}$
+    remaining = remaining.replace(/([A-Za-z])\^(-?\d+)/g, '$$$1^{$2}$$');  // X^2 or X^-1 -> $X^{2}$ or $X^{-1}$
+    
     let key = 0;
     
     // Process inline elements

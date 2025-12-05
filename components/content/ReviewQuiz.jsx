@@ -4,7 +4,7 @@ import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 import RichBlock from "@/components/content/RichBlock";
-import { hasRichContent, toRichBlock } from "@/utils/richText";
+import { hasRichContent, toRichBlock, normalizeLatex } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import { authFetch } from "@/lib/api";
 
@@ -490,7 +490,7 @@ export default function ReviewQuiz({
               <div className="text-lg font-medium text-[var(--foreground)] leading-relaxed flex-1">
                 {currentQuestion?.questionText ? (
                   <MathJax dynamic>
-                    <p>{currentQuestion.questionText}</p>
+                    <p>{normalizeLatex(currentQuestion.questionText)}</p>
                   </MathJax>
                 ) : (
                   <RichBlock block={currentQuestion?.block} maxWidth="100%" />
@@ -571,7 +571,7 @@ export default function ReviewQuiz({
                       <div className="text-[var(--foreground)]">
                         {opt.valueText ? (
                           <MathJax dynamic>
-                            <span>{opt.valueText}</span>
+                            <span>{normalizeLatex(opt.valueText)}</span>
                           </MathJax>
                         ) : (
                           <RichBlock block={opt.block} maxWidth="100%" />
@@ -621,7 +621,7 @@ export default function ReviewQuiz({
                               <div className="text-sm text-rose-700 dark:text-rose-300 leading-relaxed">
                                 {opt.explanationText ? (
                                   <MathJax dynamic>
-                                    <p>{opt.explanationText}</p>
+                                    <p>{normalizeLatex(opt.explanationText)}</p>
                                   </MathJax>
                                 ) : (
                                   <RichBlock block={opt.explanation} maxWidth="100%" />

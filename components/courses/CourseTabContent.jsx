@@ -51,7 +51,8 @@ function ItemContent({
   handleQuizCompleted,
   onReadingCompleted,
   onFlashcardsCompleted,
-  onVideoViewed
+  onVideoViewed,
+  moduleQuizTab
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
@@ -225,6 +226,14 @@ function ItemContent({
       );
     }
     case "mini_quiz": {
+      // Check if this is a Module Quiz with practice problems (has both quiz and practice)
+      const hasPractice = data?.practice_problems && data.practice_problems.length > 0;
+      const currentTab = moduleQuizTab || 'quiz';
+      
+      if (hasPractice && currentTab === 'practice') {
+        return <PracticeProblems problems={data.practice_problems} />;
+      }
+      
       return (
         <Quiz 
           questions={data?.questions || data} 
@@ -346,6 +355,9 @@ export default function CourseTabContent({
   const [selectedReviewModule, setSelectedReviewModule] = useState(null);
   const [reviewModulesExpanded, setReviewModulesExpanded] = useState(true); // Toggle visibility
   const [reviewModuleContentType, setReviewModuleContentType] = useState('reading'); // Active tab for review module
+  
+  // Module Quiz tab state - 'quiz' or 'practice'
+  const [moduleQuizTab, setModuleQuizTab] = useState('quiz');
 
   // Update ref whenever state changes
   useEffect(() => {
@@ -1550,6 +1562,7 @@ export default function CourseTabContent({
                                 // For "Module Quiz" lessons, always open quiz content directly
                                 if (lesson.title === 'Module Quiz') {
                                   setSelectedContentType({ lessonId: lesson.id, type: 'mini_quiz' });
+                                  setModuleQuizTab('quiz'); // Reset to quiz tab when opening Module Quiz
                                   fetchLessonContent(lesson.id, ['mini_quiz']);
                                 } else if (availableTypes.length > 0) {
                                   setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
@@ -2152,6 +2165,7 @@ export default function CourseTabContent({
                     onReadingCompleted={handleReadingCompleted}
                     onFlashcardsCompleted={handleFlashcardsCompleted}
                     onVideoViewed={handleVideoViewed}
+                    moduleQuizTab={moduleQuizTab}
                   />
                 )}
               </section>
@@ -2361,6 +2375,74 @@ export default function CourseTabContent({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom nav for Module Quiz lessons */}
+        {viewMode === "topic" && selectedLesson && selectedLesson.title === 'Module Quiz' && (
+          <div 
+            className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
+            style={{ 
+              left: !isMobile ? `${sidebarOffset}px` : 0,
+              right: isMobile ? 0 : `${chatBotWidth}px` 
+            }}
+          >
+            <div className="flex items-center justify-center px-4 py-3">
+              {(() => {
+                // Check if module quiz has practice problems
+                const cacheKeys = Object.keys(contentCache);
+                const lessonCacheKey = cacheKeys.find(key => key.includes(`:${selectedLesson.id}:`));
+                const cached = lessonCacheKey ? contentCache[lessonCacheKey] : null;
+                const data = cached?.data?.data;
+                const hasPractice = data?.practice_problems && data.practice_problems.length > 0;
+                const hasQuiz = data?.questions || data?.mcq || data?.frq;
+                
+                if (!hasPractice || !hasQuiz) {
+                  // No tabs needed if only one type of content
+                  return null;
+                }
+                
+                const tabs = [
+                  { value: 'quiz', label: '', icon: (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                  )},
+                  { value: 'practice', label: '', icon: (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  )}
+                ];
+                
+                return (
+                  <div className="flex items-center gap-1.5">
+                    {tabs.map((tab) => {
+                      const isActive = moduleQuizTab === tab.value;
+                      
+                      return (
+                        <button
+                          key={tab.value}
+                          type="button"
+                          onClick={() => setModuleQuizTab(tab.value)}
+                          className={`
+                            relative flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium
+                            transition-all duration-200
+                            ${isActive
+                              ? 'bg-[var(--primary)] text-white shadow-md shadow-[var(--primary)]/25'
+                              : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]'
+                            }
+                          `}
+                          title={tab.label}
+                        >
+                          {tab.icon}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

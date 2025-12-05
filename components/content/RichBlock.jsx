@@ -3,6 +3,7 @@
 
 import React from "react";
 import { MathJax } from "better-react-mathjax";
+import { normalizeLatex } from "@/utils/richText";
 
 /**
  * Props:
@@ -24,14 +25,14 @@ export default function RichBlock({
   
   // Check if it's the structured format or simple body text
   const items = Array.isArray(block["content"]) ? block["content"] : null;
-  const bodyText = block["body"] || block["reading"] || "";
+  const bodyText = normalizeLatex(block["body"] || block["reading"] || "");
 
   const Inner = items ? (
     <div className={`prose prose-invert max-w-none ${containerClassName}`}>
       <MathJax dynamic>
         {items.map((node, i) => {
           if ("text" in node) {
-            return <div key={i} className="whitespace-pre-wrap">{node.text}</div>;
+            return <div key={i} className="whitespace-pre-wrap">{normalizeLatex(node.text)}</div>;
           }
           if ("inline-math" in node) {
             return <span key={i}>{`$${node["inline-math"]}$`}</span>;
