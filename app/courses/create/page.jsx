@@ -487,11 +487,12 @@ function CreateCoursePageContent() {
     setOpenAccordions({});
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
+    const trimmedUniversity = collegeName.trim();
     const payload = {
       userId,
       courseTitle: trimmedTitle,
-      university: collegeName.trim() || undefined,
-      finishByDate: finishByIso || undefined,
+      university: trimmedUniversity || null,
+      finishByDate: finishByIso || null,
       syllabusText: syllabusText.trim() || "Not provided.",
       mode: studyMode,
     };
@@ -511,18 +512,28 @@ function CreateCoursePageContent() {
 
     const MAX_RETRIES = 3;
     let lastError = null;
+    
+    // Store a deep copy of the payload to ensure it's not mutated between retries
+    const payloadStr = JSON.stringify(payload);
+    console.log("Full payload being sent (will be reused for all retries):", payloadStr.slice(0, 500));
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         console.log(`Topic generation attempt ${attempt} of ${MAX_RETRIES}`);
+        console.log(`Attempt ${attempt} - courseTitle: "${payload.courseTitle}", university: "${payload.university}"`);
+        console.log(`Attempt ${attempt} - payload body length: ${payloadStr.length} chars`);
 
         const res = await authFetch("/api/courses/topics", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          headers: { 
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store",
+          },
+          body: payloadStr,
         });
 
         const data = await res.json().catch(() => ({}));
+        console.log(`Attempt ${attempt} - response status: ${res.status}`);
         if (!res.ok || data?.success === false) {
           throw new Error(data?.error || "Failed to build topics.");
         }

@@ -133,6 +133,7 @@ function DateRangeFilter({ startDate, endDate, onStartChange, onEndChange, onPre
 
 export default function AdminPage() {
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState("overview");
     const [rawUsageData, setRawUsageData] = useState([]);
@@ -471,43 +472,69 @@ export default function AdminPage() {
     // Separate loading state for date-range data
     const [dateRangeLoading, setDateRangeLoading] = useState(false);
 
-    // Fetch date-independent data once on mount
-    useEffect(() => {
-        const fetchInitialData = async () => {
+    // Fetch all data (used for initial load and refresh)
+    const fetchAllData = async (isRefresh = false) => {
+        if (isRefresh) {
+            setRefreshing(true);
+        } else {
             setLoading(true);
-            setError(null);
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                const headers = session?.access_token
-                    ? { Authorization: `Bearer ${session.access_token}` }
-                    : {};
+        }
+        setError(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers = session?.access_token
+                ? { Authorization: `Bearer ${session.access_token}` }
+                : {};
 
-                // Fetch data that doesn't depend on date range
-                const [usageRes, feedbackRes, eventsRes] = await Promise.all([
-                    fetch("/api/admin/analytics/usage", { headers }),
-                    fetch("/api/admin/feedback", { headers }),
-                    fetch("/api/admin/analytics/events", { headers }),
+            // Fetch data that doesn't depend on date range
+            const [usageRes, feedbackRes, eventsRes] = await Promise.all([
+                fetch("/api/admin/analytics/usage", { headers }),
+                fetch("/api/admin/feedback", { headers }),
+                fetch("/api/admin/analytics/events", { headers }),
+            ]);
+
+            const [usageData, feedbackResult, eventsResult] = await Promise.all([
+                usageRes.json(),
+                feedbackRes.json(),
+                eventsRes.json(),
+            ]);
+
+            const usageRecords = usageData.success ? (usageData.usage || usageData.data || []) : [];
+            setRawUsageData(usageRecords);
+            setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
+            setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
+
+            // Also fetch date-range dependent data on refresh
+            if (isRefresh && startDate && endDate) {
+                const dateParams = `startDate=${startDate}&endDate=${endDate}`;
+                const [usageByUserRes, usageByCourseRes] = await Promise.all([
+                    fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
                 ]);
 
-                const [usageData, feedbackResult, eventsResult] = await Promise.all([
-                    usageRes.json(),
-                    feedbackRes.json(),
-                    eventsRes.json(),
+                const [usageByUserResult, usageByCourseResult] = await Promise.all([
+                    usageByUserRes.json(),
+                    usageByCourseRes.json(),
                 ]);
 
-                const usageRecords = usageData.success ? (usageData.usage || usageData.data || []) : [];
-                setRawUsageData(usageRecords);
-                setFeedbackData(feedbackResult.success ? feedbackResult.feedback : []);
-                setEventsData(eventsResult.success ? (eventsResult.events || eventsResult.data || []) : []);
-            } catch (err) {
-                console.error("Error fetching admin data:", err);
-                setError("Failed to load admin data. Please try again.");
-            } finally {
+                setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
+                setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
+            }
+        } catch (err) {
+            console.error("Error fetching admin data:", err);
+            setError("Failed to load admin data. Please try again.");
+        } finally {
+            if (isRefresh) {
+                setRefreshing(false);
+            } else {
                 setLoading(false);
             }
-        };
+        }
+    };
 
-        fetchInitialData();
+    // Fetch date-independent data once on mount
+    useEffect(() => {
+        fetchAllData(false);
     }, []);
 
     // Fetch date-range dependent data when dates change
@@ -587,14 +614,32 @@ export default function AdminPage() {
                         )}
                     </p>
                 </div>
-                <DateRangeFilter
-                    startDate={startDate}
-                    endDate={endDate}
-                    onStartChange={(value) => handleCustomDateChange("start", value)}
-                    onEndChange={(value) => handleCustomDateChange("end", value)}
-                    onPresetSelect={handlePresetSelect}
-                    activePreset={activePreset}
-                />
+                <div className="flex items-center gap-3">
+                    <DateRangeFilter
+                        startDate={startDate}
+                        endDate={endDate}
+                        onStartChange={(value) => handleCustomDateChange("start", value)}
+                        onEndChange={(value) => handleCustomDateChange("end", value)}
+                        onPresetSelect={handlePresetSelect}
+                        activePreset={activePreset}
+                    />
+                    <button
+                        onClick={() => fetchAllData(true)}
+                        disabled={refreshing}
+                        className="flex items-center gap-1.5 rounded-md bg-[var(--surface-2)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface-3)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Refresh data"
+                    >
+                        <svg 
+                            className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {refreshing ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                </div>
             </div>
 
             {/* Tab Navigation */}

@@ -5,6 +5,24 @@ const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function POST(request) {
   try {
     const json = await request.json().catch(() => ({}));
+    
+    // Log the incoming request payload for debugging
+    console.log("Topics API received payload:", JSON.stringify({
+      courseTitle: json.courseTitle,
+      university: json.university,
+      mode: json.mode,
+      userId: json.userId ? "present" : "missing",
+      hasSyllabusText: !!json.syllabusText,
+      hasSyllabusFiles: !!json.syllabusFiles?.length,
+      hasExamFiles: !!json.examFiles?.length,
+      payloadKeys: Object.keys(json),
+    }));
+    
+    // Validate that required fields are present
+    if (!json.courseTitle) {
+      console.error("Topics API: Missing courseTitle in payload!");
+    }
+    
     const url = new URL("/courses/topics", BASE_URL);
 
     const headers = { "Content-Type": "application/json", Accept: "application/json" };
@@ -23,6 +41,7 @@ export async function POST(request) {
         body: JSON.stringify(json),
         signal: controller.signal,
       });
+      console.log(`Topics API backend response status: ${res.status}`);
       const bodyText = await res.text();
       let data;
       try {
@@ -32,11 +51,16 @@ export async function POST(request) {
         console.error("Invalid JSON from backend for", url.toString(), "-- response body:", bodyText, "error:", String(err));
         data = { error: "Invalid JSON from backend" };
       }
-      return NextResponse.json(data, { status: res.status });
+      const response = NextResponse.json(data, { status: res.status });
+      response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      return response;
     } finally {
       clearTimeout(timeout);
     }
   } catch (err) {
-    return NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 });
+    console.error("Topics API error:", String(err));
+    const response = NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 });
+    response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    return response;
   }
 }
