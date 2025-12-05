@@ -6,9 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
+import PracticeProblems from "@/components/content/PracticeProblems";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import TimerControls from "@/components/courses/TimerControls";
+import PersonalTimer, { FocusTimerDisplay, PersonalTimerControls } from "@/components/courses/PersonalTimer";
 import { 
   isContentTypeCompleted, 
   getLessonCompletionStatus, 
@@ -27,7 +29,6 @@ const normalizeFormat = (fmt) => {
   if (!fmt) return "";
   const f = String(fmt).trim().toLowerCase().replace(/[-\s]+/g, "_");
   if (f === "miniquiz" || f === "mini_quiz") return "mini_quiz";
-  if (f === "practiceexam" || f === "practice_exam") return "practice_exam";
   return f;
 };
 
@@ -111,7 +112,7 @@ function ItemContent({
   // Ensure effect hooks are defined before any early return so hook order remains stable
   useEffect(() => {
     if (!onQuizQuestionChange) return;
-    if (normalizeFormat(cachedEnvelope.format || fmt) !== "mini_quiz" && normalizeFormat(cachedEnvelope.format || fmt) !== "practice_exam") {
+    if (normalizeFormat(cachedEnvelope.format || fmt) !== "mini_quiz") {
       onQuizQuestionChange(null);
     }
   }, [cachedEnvelope.format, onQuizQuestionChange, fmt]);
@@ -235,59 +236,10 @@ function ItemContent({
         />
       );
     }
-    case "practice_exam": {
-      const problems = data?.practice_exam || data?.questions || [];
-      // Check if it's quiz format (has options) or practice problem format (has answer_key)
-      if (problems.length > 0 && problems[0].options) {
-        return (
-          <Quiz 
-            questions={problems} 
-            onQuestionChange={onQuizQuestionChange}
-            onQuizCompleted={handleQuizCompleted}
-            userId={userId}
-            courseId={courseId}
-            lessonId={id}
-          />
-        );
-      }
-      // Practice problems format with question, answer_key, rubric
-      return (
-        <div className="space-y-6">
-          {problems.map((problem, idx) => (
-            <div key={idx} className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl p-6 shadow-lg">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="px-2.5 py-1 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] text-xs font-semibold">
-                  Problem {idx + 1}
-                </span>
-                {problem.estimated_minutes && (
-                  <span className="text-xs text-[var(--muted-foreground)]">
-                    {problem.estimated_minutes} min
-                  </span>
-                )}
-              </div>
-              <div className="prose prose-invert max-w-none">
-                <ReadingRenderer content={problem.question} />
-              </div>
-              {(problem.answer_key || problem.rubric) && (
-                <details className="mt-6">
-                  <summary className="cursor-pointer text-sm font-medium text-[var(--primary)] hover:text-[var(--primary-active)] transition-colors">
-                    Show Answer
-                  </summary>
-                  <div className="mt-4 p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-                    {problem.answer_key && <ReadingRenderer content={problem.answer_key} />}
-                    {problem.rubric && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                        <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Rubric</p>
-                        <p className="text-sm text-[var(--muted-foreground)] whitespace-pre-wrap">{problem.rubric}</p>
-                      </div>
-                    )}
-                  </div>
-                </details>
-              )}
-            </div>
-          ))}
-        </div>
-      );
+    case "practice": {
+      // Practice problems with rubrics, step-by-step solutions, and self-grading
+      const practiceProblems = data?.practice_problems || [];
+      return <PracticeProblems problems={practiceProblems} />;
     }
     default:
       return (
@@ -325,12 +277,16 @@ export default function CourseTabContent({
   chatOpenRequest,
   onTabTitleChange,
   onCurrentLessonChange,
+  hasHiddenContent = false,
   isActive = true
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
+  const focusTimerRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
+  const [isFocusTimerModalOpen, setIsFocusTimerModalOpen] = useState(false);
+  const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
   
   // Track the last title we sent to avoid redundant calls
   const lastTitleRef = useRef(null);
@@ -632,15 +588,6 @@ export default function CourseTabContent({
     }
   }, [gradeExam]);
 
-  // Auto-fetch exam list when practice exam is selected
-  useEffect(() => {
-    if (selectedLesson?.type === 'practice_exam' && userId && courseId) {
-      const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
-      fetchExamList(examType);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLesson?.type, selectedLesson?.title, userId, courseId]);
-
   // Auto-select first lesson if available and not already selected
   useEffect(() => {
     if (studyPlan && !selectedLesson && viewMode === "syllabus") {
@@ -936,6 +883,7 @@ export default function CourseTabContent({
         if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
         if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
         if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
+        if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
       }
     }
     if (types.length === 0) {
@@ -1229,6 +1177,20 @@ export default function CourseTabContent({
           </button>
         )}
 
+        {/* Hidden Content Warning */}
+        {hasHiddenContent && secondsRemaining !== null && (
+          <div 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-amber-500/20 transition-colors"
+            onClick={() => setIsTimerControlsOpen(true)}
+            title="Add more time to see all content"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-xs font-medium whitespace-nowrap">Content hidden</span>
+          </div>
+        )}
+
         {/* Settings Button */}
         <OnboardingTooltip
           id="course-settings-button"
@@ -1251,6 +1213,60 @@ export default function CourseTabContent({
           </button>
         </OnboardingTooltip>
       </div>
+
+      {/* Focus Timer Display - Always visible below main timer */}
+      <div 
+        className="absolute top-[4.5rem] z-40"
+        style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
+      >
+        <FocusTimerDisplay
+          seconds={focusTimerState.seconds}
+          isRunning={focusTimerState.isRunning}
+          phase={focusTimerState.phase}
+          isCompleted={focusTimerState.isCompleted}
+          onTogglePause={() => focusTimerRef.current?.togglePause()}
+          onClick={() => setIsFocusTimerModalOpen(true)}
+          onDismissComplete={() => focusTimerRef.current?.dismissComplete()}
+        />
+      </div>
+
+      {/* PersonalTimer - always mounted to preserve state */}
+      <div className="hidden">
+        <PersonalTimer 
+          ref={focusTimerRef}
+          onStateChange={setFocusTimerState}
+        />
+      </div>
+
+      {/* Focus Timer Settings Modal */}
+      <AnimatePresence>
+        {isFocusTimerModalOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
+              onClick={() => setIsFocusTimerModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 pb-0">
+                <h3 className="text-base font-semibold">Focus Timer</h3>
+                <button onClick={() => setIsFocusTimerModalOpen(false)} className="p-1 hover:bg-[var(--surface-2)] rounded-lg">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <PersonalTimerControls timerRef={focusTimerRef} timerState={focusTimerState} />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
       {canRenderSidebar && (
@@ -1754,43 +1770,6 @@ export default function CourseTabContent({
                       </p>
                     </div>
                   </div>
-
-                  <h3 className="mb-4 text-base font-semibold text-[var(--foreground)]">Time by Content Type</h3>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    {(() => {
-                      const allLessons = studyPlan.modules.flatMap(m => m.lessons || []);
-                      const timeByType = allLessons.reduce((acc, lesson) => {
-                        const type = lesson.type || 'other';
-                        acc[type] = (acc[type] || 0) + (lesson.duration || 0);
-                        return acc;
-                      }, {});
-                      
-                      const colors = ['from-purple-500/30 to-purple-500/10', 'from-blue-500/30 to-blue-500/10', 'from-emerald-500/30 to-emerald-500/10', 'from-[var(--primary)]/30 to-[var(--primary)]/10'];
-                      const textColors = ['text-purple-400', 'text-blue-400', 'text-emerald-400', 'text-amber-400'];
-                      
-                      return Object.entries(timeByType).map(([type, minutes], idx) => (
-                        <div 
-                          key={type} 
-                          className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1"
-                        >
-                          <div className={`w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                            <svg className={`w-5 h-5 ${textColors[idx % textColors.length]}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                          </div>
-                          <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
-                            {prettyFormat(type)}
-                          </p>
-                          <p className="text-3xl font-bold text-[var(--foreground)]">
-                            {minutes}
-                          </p>
-                          <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                            minutes
-                          </p>
-                        </div>
-                      ));
-                    })()}
-                  </div>
                 </section>
               )}
             </>
@@ -1805,8 +1784,6 @@ export default function CourseTabContent({
                 if (payload.reading) availableTypes.push({ value: 'reading', label: 'Reading' });
                 if (payload.video?.length > 0) availableTypes.push({ value: 'video', label: 'Video' });
                 if (payload.quiz?.length > 0) availableTypes.push({ value: 'mini_quiz', label: 'Quiz' });
-                // Practice problems hidden for now
-                // if (payload.practice_exam?.length > 0) availableTypes.push({ value: 'practice_exam', label: 'Practice Problems' });
                 
                 const activeType = reviewModuleContentType;
                 
@@ -1839,40 +1816,6 @@ export default function CourseTabContent({
                     
                     {activeType === 'mini_quiz' && payload.quiz?.length > 0 && (
                       <Quiz questions={payload.quiz} />
-                    )}
-                    
-                    {activeType === 'practice_exam' && payload.practice_exam?.length > 0 && (
-                      <div className="space-y-6">
-                        {payload.practice_exam.map((problem, idx) => (
-                          <div key={idx} className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl p-6 shadow-lg">
-                            <div className="flex items-center gap-2 mb-4">
-                              <span className="px-2.5 py-1 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] text-xs font-semibold">
-                                Problem {idx + 1}
-                              </span>
-                              <span className="text-xs text-[var(--muted-foreground)]">
-                                {problem.estimated_minutes || 20} min
-                              </span>
-                            </div>
-                            <div className="prose prose-invert max-w-none">
-                              <ReadingRenderer content={problem.question} />
-                            </div>
-                            <details className="mt-6">
-                              <summary className="cursor-pointer text-sm font-medium text-[var(--primary)] hover:text-[var(--primary-active)] transition-colors">
-                                Show Answer
-                              </summary>
-                              <div className="mt-4 p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-                                <ReadingRenderer content={problem.answer_key} />
-                                {problem.rubric && (
-                                  <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                                    <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Rubric</p>
-                                    <p className="text-sm text-[var(--muted-foreground)] whitespace-pre-wrap">{problem.rubric}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </details>
-                          </div>
-                        ))}
-                      </div>
                     )}
                   </>
                 );
@@ -2438,8 +2381,6 @@ export default function CourseTabContent({
                   if (payload.reading) availableTypes.push({ value: 'reading', label: 'Reading' });
                   if (payload.video?.length > 0) availableTypes.push({ value: 'video', label: 'Video' });
                   if (payload.quiz?.length > 0) availableTypes.push({ value: 'mini_quiz', label: 'Quiz' });
-                  // Practice problems hidden for now
-                  // if (payload.practice_exam?.length > 0) availableTypes.push({ value: 'practice_exam', label: 'Practice Problems' });
                   
                   return (
                       <div className="flex items-center gap-1.5">
@@ -2465,12 +2406,6 @@ export default function CourseTabContent({
                                 return (
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                                  </svg>
-                                );
-                              case 'practice_exam':
-                                return (
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                   </svg>
                                 );
                               default:

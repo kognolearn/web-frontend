@@ -27,6 +27,7 @@ export default function CoursePage() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
+  const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const dragPreviewRef = useRef(null);
   
@@ -176,12 +177,25 @@ export default function CoursePage() {
         const json = await res.json();
         if (aborted) return;
         
+        // Update has_hidden_content state from API response
+        setHasHiddenContent(json.has_hidden_content === true);
+        
         const unlockStudyPlan = (p) => {
           if (!p) return p;
-          const modules = (p.modules || []).map((m) => ({
-            ...m,
-            lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
-          }));
+          // Filter out modules that only contain a Module Quiz (no real lessons)
+          const modules = (p.modules || [])
+            .map((m) => ({
+              ...m,
+              lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
+            }))
+            .filter((m) => {
+              const lessons = m.lessons || [];
+              // Keep module if it has more than just a Module Quiz, or is a special module
+              if (m.is_practice_exam_module) return true;
+              if (lessons.length === 0) return false;
+              if (lessons.length === 1 && lessons[0].title === 'Module Quiz') return false;
+              return true;
+            });
           return { ...p, modules };
         };
 
@@ -208,12 +222,26 @@ export default function CoursePage() {
         throw new Error(`Request failed: ${res.status}`);
       }
       const json = await res.json();
+      
+      // Update has_hidden_content state from API response
+      setHasHiddenContent(json.has_hidden_content === true);
+      
       const unlockStudyPlan = (p) => {
         if (!p) return p;
-        const modules = (p.modules || []).map((m) => ({
-          ...m,
-          lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
-        }));
+        // Filter out modules that only contain a Module Quiz (no real lessons)
+        const modules = (p.modules || [])
+          .map((m) => ({
+            ...m,
+            lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
+          }))
+          .filter((m) => {
+            const lessons = m.lessons || [];
+            // Keep module if it has more than just a Module Quiz, or is a special module
+            if (m.is_practice_exam_module) return true;
+            if (lessons.length === 0) return false;
+            if (lessons.length === 1 && lessons[0].title === 'Module Quiz') return false;
+            return true;
+          });
         return { ...p, modules };
       };
       const newPlan = unlockStudyPlan(json);
@@ -702,6 +730,7 @@ export default function CoursePage() {
                 onOpenChatTab={handleOpenChatTab}
                 onChatTabReturn={handleChatTabReturn}
                 chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
+                hasHiddenContent={hasHiddenContent}
               />
             ) : (
               <ChatTabContent

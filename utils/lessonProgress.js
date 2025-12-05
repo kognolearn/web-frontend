@@ -306,7 +306,6 @@ export function isContentTypeCompleted(courseId, lessonId, contentType) {
       return isFlashcardsCompleted(courseId, lessonId);
     case CONTENT_TYPES.QUIZ:
     case 'mini_quiz':
-    case 'practice_exam':
       return isQuizCompleted(courseId, lessonId);
     default:
       return false;

@@ -121,7 +121,7 @@ export async function GET(request) {
           ])
         }),
         
-        // Quiz questions (both mini_quiz and practice_exam format)
+        // Quiz questions
         // Handle both single quiz object and array of quiz questions
         ...(contentPayload.quiz && (() => {
           // Normalize quiz to array format
@@ -218,52 +218,10 @@ export async function GET(request) {
           };
         })()),
         
-        // Practice exam (if available)
-        ...(contentPayload.practice_exam && (() => {
-          const examArray = Array.isArray(contentPayload.practice_exam)
-            ? contentPayload.practice_exam
-            : [contentPayload.practice_exam];
-          
-          if (examArray.length === 0) return {};
-          
-          return {
-            practice_exam: examArray.map(q => {
-              const resolvedCorrectIndex = Number.isInteger(q.correct_index)
-                ? q.correct_index
-                : Number.isInteger(q.correctIndex)
-                ? q.correctIndex
-                : null;
-              const resolvedAnswer =
-                q.correct_answer ??
-                q.correctAnswer ??
-                q.answer ??
-                (resolvedCorrectIndex !== null && Array.isArray(q.options)
-                  ? q.options[resolvedCorrectIndex]
-                  : '');
-
-              return {
-                // Pass through the UUID from api.quiz_questions table
-                ...(q.id && { id: q.id }),
-                // Pass through the status (correct, incorrect, unattempted) from api.quiz_questions table
-                ...(q.status && { status: q.status }),
-                // Pass through the user's selected answer index from api.quiz_questions table
-                ...(q.selectedAnswer !== undefined && q.selectedAnswer !== null && { selectedAnswer: q.selectedAnswer }),
-                type: q.type || 'mcq',
-                question: q.question || q.prompt || '',
-                options: q.options || [],
-                answer: resolvedAnswer,
-                correctAnswer: resolvedAnswer,
-                correctIndex: resolvedCorrectIndex,
-                explanation: q.explanation || '',
-                ...(q.type === 'frq' && {
-                  prompt: q.prompt || q.question,
-                  model_answer: q.model_answer || q.answer,
-                  rubric: q.rubric || ''
-                })
-              };
-            })
-          };
-        })()),
+        // Practice problems (exam-style problems with rubrics and solutions)
+        ...(contentPayload.practice_problems && Array.isArray(contentPayload.practice_problems) && {
+          practice_problems: contentPayload.practice_problems
+        }),
       }
     };
 

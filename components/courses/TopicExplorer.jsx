@@ -1,7 +1,6 @@
 import { 
   moduleConfidenceOptions, 
   moduleConfidencePresets, 
-  importanceScoreToTag, 
   NEW_EXCEPTION_SCORE, 
   CONFIDENT_EXCEPTION_SCORE, 
   SOMEWHAT_KNOW_SCORE, 
@@ -396,10 +395,6 @@ function LessonCard({ subtopic, overviewId, moduleConfidenceState, resolveSubtop
                 <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">
                         <h4 className="text-sm font-semibold text-[var(--foreground)] break-words leading-snug">{subtopic.title}</h4>
-                        {subtopic.importanceScore !== undefined && (() => {
-                            const tag = importanceScoreToTag(subtopic.importanceScore);
-                            return <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tag.color} font-semibold whitespace-nowrap`}>{tag.label}</span>;
-                        })()}
                     </div>
                     {subtopic.description && (
                         <p className="text-xs text-[var(--muted-foreground)] line-clamp-2 mb-2">{subtopic.description}</p>

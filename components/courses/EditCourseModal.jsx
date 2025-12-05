@@ -19,6 +19,7 @@ export default function EditCourseModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'error' | null
   const [errorMessage, setErrorMessage] = useState("");
+  const [resultStats, setResultStats] = useState(null);
   const [selectedLessons, setSelectedLessons] = useState(new Set());
   const [expandedModules, setExpandedModules] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,6 +59,7 @@ export default function EditCourseModal({
       setModificationText("");
       setSubmitStatus(null);
       setErrorMessage("");
+      setResultStats(null);
       setSelectedLessons(new Set());
       setExpandedModules(new Set());
       setSearchQuery("");
@@ -127,6 +129,7 @@ export default function EditCourseModal({
       }
       
       const result = await response.json();
+      setResultStats(result.log?.stats || null);
       setSubmitStatus('success');
       setModificationText("");
       setSelectedLessons(new Set());
@@ -210,10 +213,10 @@ export default function EditCourseModal({
                 priority={10}
                 showCondition={isOpen}
               >
-                <p className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
+                <div className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
                   <span>Describe what changes you'd like to make. Optionally select specific lessons to target.</span>
                   <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, or changing analogies. If you select lessons, only those will be modified." position="bottom" />
-                </p>
+                </div>
               </OnboardingTooltip>
 
               {/* Modification Request Input */}
@@ -449,12 +452,54 @@ export default function EditCourseModal({
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-400 flex items-center gap-2"
+                    className="rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-400"
                   >
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Course updated successfully! Refreshing...</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-medium">Course updated successfully!</span>
+                    </div>
+                    {resultStats && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mt-2">
+                        {resultStats.modulesAdded > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-green-300">+{resultStats.modulesAdded}</span>
+                            <span className="text-green-400/70">module{resultStats.modulesAdded !== 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {resultStats.modulesRemoved > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-red-300">-{resultStats.modulesRemoved}</span>
+                            <span className="text-green-400/70">module{resultStats.modulesRemoved !== 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {resultStats.lessonsAdded > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-green-300">+{resultStats.lessonsAdded}</span>
+                            <span className="text-green-400/70">lesson{resultStats.lessonsAdded !== 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {resultStats.lessonsRemoved > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-red-300">-{resultStats.lessonsRemoved}</span>
+                            <span className="text-green-400/70">lesson{resultStats.lessonsRemoved !== 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {resultStats.lessonsEdited > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-blue-300">~{resultStats.lessonsEdited}</span>
+                            <span className="text-green-400/70">edited</span>
+                          </div>
+                        )}
+                        {(resultStats.workerSuccesses > 0 || resultStats.workerFailures > 0) && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-green-300">{resultStats.workerSuccesses}</span>
+                            <span className="text-green-400/70">/{resultStats.workerSuccesses + resultStats.workerFailures} tasks</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )}
                 

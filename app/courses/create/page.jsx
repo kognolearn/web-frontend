@@ -20,9 +20,7 @@ import {
   SOMEWHAT_GAP_SCORE,
   moduleConfidenceOptions,
   moduleConfidencePresets,
-  scoreToFamiliarityBand,
-  importanceScoreToTag,
-  formatStudyTime
+  scoreToFamiliarityBand
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
 import { motion } from "framer-motion";
@@ -137,10 +135,7 @@ function createSubtopic({
   familiarity = defaultTopicRating,
   source = "generated",
   id,
-  focus,
   bloomLevel,
-  estimatedStudyTimeMinutes,
-  importanceScore,
   examRelevanceReasoning,
 }) {
   return {
@@ -155,10 +150,7 @@ function createSubtopic({
     likelyOnExam: Boolean(likelyOnExam ?? true),
     familiarity: familiarity && Number.isFinite(familiarity) ? familiarity : defaultTopicRating,
     source,
-    focus,
     bloomLevel,
-    estimatedStudyTimeMinutes,
-    importanceScore,
     examRelevanceReasoning,
   };
 }
@@ -227,10 +219,7 @@ function buildGrokDraftPayload(overviewTopics) {
           overviewId,
           overviewTitle,
           source: subtopic?.source || "generated",
-          focus: subtopic?.focus,
           bloomLevel: subtopic?.bloomLevel,
-          estimatedStudyTimeMinutes: subtopic?.estimatedStudyTimeMinutes,
-          importanceScore: subtopic?.importanceScore,
           examRelevanceReasoning: subtopic?.examRelevanceReasoning,
         };
       })
@@ -253,18 +242,7 @@ function normalizeGrokDraftPayload(rawDraft) {
         overviewId: typeof topic?.overviewId === "string" ? topic.overviewId : undefined,
         overviewTitle: typeof topic?.overviewTitle === "string" ? topic.overviewTitle : undefined,
         source: typeof topic?.source === "string" ? topic.source : "generated",
-        focus: topic?.focus,
         bloomLevel: topic?.bloom_level || topic?.bloomLevel,
-        estimatedStudyTimeMinutes: Number.isFinite(topic?.estimatedStudyTimeMinutes)
-          ? topic.estimatedStudyTimeMinutes
-          : Number.isFinite(topic?.estimated_study_time_minutes)
-          ? topic.estimated_study_time_minutes
-          : undefined,
-        importanceScore: Number.isFinite(topic?.importanceScore)
-          ? topic.importanceScore
-          : Number.isFinite(topic?.importance_score)
-          ? topic.importance_score
-          : undefined,
         examRelevanceReasoning:
           topic?.exam_relevance_reasoning || topic?.examRelevanceReasoning || "",
       };
@@ -629,18 +607,7 @@ function CreateCoursePageContent() {
                 familiarity: Number.isFinite(subtopic?.familiarity)
                   ? subtopic.familiarity
                   : defaultTopicRating,
-                  // new metadata from backend
-                  focus: subtopic?.focus || subtopic?.focus || subtopic?.category || undefined,
                   bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
-                  estimatedStudyTimeMinutes: Number.isFinite(subtopic?.estimated_study_time_minutes)
-                    ? subtopic.estimated_study_time_minutes
-                    : Number.isFinite(subtopic?.estimatedStudyTimeMinutes)
-                    ? subtopic.estimatedStudyTimeMinutes
-                    : undefined,
-                  importanceScore:
-                    Number.isFinite(subtopic?.importance_score) || Number.isFinite(subtopic?.importanceScore)
-                      ? Number(subtopic?.importance_score ?? subtopic?.importanceScore)
-                      : undefined,
                   examRelevanceReasoning: subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
               })
             ),
@@ -880,10 +847,7 @@ function CreateCoursePageContent() {
         overviewId: manualOverviewId,
         familiarity: newTopicRating,
         source: "manual",
-        focus: "Manual",
         bloomLevel: "Understand",
-        estimatedStudyTimeMinutes: 20,
-        importanceScore: 5,
         examRelevanceReasoning: "",
       });
       setOverviewTopics((prev) => {

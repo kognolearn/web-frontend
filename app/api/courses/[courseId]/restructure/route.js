@@ -36,7 +36,10 @@ export async function POST(request, { params }) {
       requestBody.lessonIds = lessonIds;
     }
 
-    // Forward the request to the backend API
+    // Forward the request to the backend API with extended timeout (10 minutes)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+    
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
@@ -46,7 +49,10 @@ export async function POST(request, { params }) {
         }),
       },
       body: JSON.stringify(requestBody),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     // Check if the backend request was successful
     if (!response.ok) {
