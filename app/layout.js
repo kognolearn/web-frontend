@@ -20,11 +20,32 @@ export const metadata = {
 };
 
 const mathJaxConfig = {
-  loader: { load: ["[tex]/html"] },
+  loader: { load: ["[tex]/html", "[tex]/ams", "[tex]/newcommand"] },
   tex: {
-    packages: { "[+]": ["html"] },
+    packages: { "[+]": ["html", "ams", "newcommand"] },
     inlineMath: [["$", "$"], ["\\(", "\\)"]],
-    displayMath: [["$$", "$$"], ["\\[", "\\]"]]
+    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+    // Process escapes to handle \{ and \} properly
+    processEscapes: true,
+    macros: {
+      // Signal processing functions
+      rect: "\\operatorname{rect}",
+      tri: "\\operatorname{tri}",
+      sinc: "\\operatorname{sinc}",
+      sha: "\\operatorname{sha}",
+      sgn: "\\operatorname{sgn}",
+      // Fourier transform notation
+      F: "\\mathcal{F}",
+      Laplace: "\\mathcal{L}",
+      // Common operators
+      real: "\\operatorname{Re}",
+      imag: "\\operatorname{Im}",
+      // Probability/stats
+      Var: "\\operatorname{Var}",
+      Cov: "\\operatorname{Cov}",
+      E: "\\operatorname{E}",
+      Prob: "\\operatorname{P}",
+    }
   }
 };
 

@@ -58,68 +58,62 @@ export function toRichBlock(value) {
 
 /**
  * Normalizes LaTeX content by:
- * 1. Converting double-escaped backslashes to single (\\( -> \()
+ * 1. Converting double-escaped backslashes to single (\\command -> \command)
  * 2. Converting \[...\] display math to $$...$$
  * 3. Converting \(...\) inline math to $...$
- * 4. Detecting bare LaTeX patterns (X^{-1}) and wrapping them in $ delimiters
+ * 4. Fixing common LaTeX issues like broken delimiters
  */
 export function normalizeLatex(text) {
   if (!text || typeof text !== 'string') return text;
   
   let result = text;
   
-  // Normalize double-escaped backslashes from JSON
-  result = result
-    .replace(/\\\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
-    .replace(/\\\\(\[|\])/g, '\\$1')  // \\[ -> \[, \\] -> \]
-    .replace(/\\\\mathbf/g, '\\mathbf')
-    .replace(/\\\\mathbb/g, '\\mathbb')
-    .replace(/\\\\lambda/g, '\\lambda')
-    .replace(/\\\\begin/g, '\\begin')
-    .replace(/\\\\end/g, '\\end')
-    .replace(/\\\\frac/g, '\\frac')
-    .replace(/\\\\sqrt/g, '\\sqrt')
-    .replace(/\\\\sum/g, '\\sum')
-    .replace(/\\\\int/g, '\\int')
-    .replace(/\\\\cdot/g, '\\cdot')
-    .replace(/\\\\times/g, '\\times')
-    .replace(/\\\\pm/g, '\\pm')
-    .replace(/\\\\neq/g, '\\neq')
-    .replace(/\\\\leq/g, '\\leq')
-    .replace(/\\\\geq/g, '\\geq')
-    .replace(/\\\\infty/g, '\\infty')
-    .replace(/\\\\alpha/g, '\\alpha')
-    .replace(/\\\\beta/g, '\\beta')
-    .replace(/\\\\gamma/g, '\\gamma')
-    .replace(/\\\\delta/g, '\\delta')
-    .replace(/\\\\theta/g, '\\theta')
-    .replace(/\\\\pi/g, '\\pi')
-    .replace(/\\\\sigma/g, '\\sigma')
-    .replace(/\\\\mu/g, '\\mu')
-    .replace(/\\\\epsilon/g, '\\epsilon')
-    .replace(/\\\\text/g, '\\text')
-    .replace(/\\\\quad/g, '\\quad')
-    .replace(/\\\\qquad/g, '\\qquad')
-    .replace(/\\\\left/g, '\\left')
-    .replace(/\\\\right/g, '\\right');
+  // Step 1: Handle multiple levels of escaping that can occur from JSON parsing
+  // Only convert double backslash to single (\\omega -> \omega)
+  // Be careful not to affect content that already has single backslash
   
-  // Convert \[...\] display math to $$...$$
+  // Pattern: \\ followed by a LaTeX command (letters)
+  // This converts \\omega to \omega, \\sum to \sum, etc.
+  result = result.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
+  
+  // Step 2: Fix double-escaped special characters and delimiters
+  result = result
+    // 2 backslashes + delimiter -> 1 backslash + delimiter  
+    .replace(/\\\\(\(|\))/g, '\\$1')
+    .replace(/\\\\(\[|\])/g, '\\$1')
+    // Escaped braces
+    .replace(/\\\\\{/g, '\\{')
+    .replace(/\\\\\}/g, '\\}')
+    .replace(/\\\\_/g, '\\_')
+    .replace(/\\\\,/g, '\\,')
+    .replace(/\\\\;/g, '\\;')
+    .replace(/\\\\!/g, '\\!')
+    .replace(/\\\\ /g, '\\ ');
+  
+  // Step 3: Convert \[...\] display math to $$...$$
   result = result.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
   
-  // Convert \(...\) inline math to $...$
+  // Step 4: Convert \(...\) inline math to $...$
   result = result.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
   
-  // Detect bare LaTeX patterns and wrap them in $ delimiters
-  // Only apply to text not already in $ delimiters
-  result = result.replace(/([A-Za-z]+)(\^{[^}]+})/g, (match, p1, p2) => {
-    // Check if already wrapped in $ (look back for $)
-    return `$${p1}${p2}$`;
-  });
-  result = result.replace(/([A-Za-z]+)(_{[^}]+})/g, '$$$1$2$$');
-  result = result.replace(/([A-Za-z])\^(-?\d+)(?![}$])/g, '$$$1^{$2}$$');
+  // Step 5: Fix \mathcal, \mathscr etc. that might have issues
+  // Ensure proper spacing after commands that need arguments
+  result = result.replace(/\\(mathcal|mathscr|mathbb|mathbf|mathrm|mathit|text|operatorname)\s*\{/g, '\\$1{');
   
-  // Clean up any double-wrapped math ($$...$$ that got extra $)
-  result = result.replace(/\$\$\$\$/g, '$$$$');
+  // Step 6: Fix cases where command runs into number (e.g., \omega0 -> \omega_0)
+  // Common pattern: Greek letter followed immediately by digit should have underscore
+  const greekLetters = 'alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega';
+  const greekPattern = new RegExp(`\\\\(${greekLetters})(\\d)`, 'g');
+  result = result.replace(greekPattern, '\\$1_$2');
+  
+  // Step 7: Clean up any excessive dollar signs
+  result = result.replace(/\${3,}/g, '$$');
+  
+  // Step 8: Detect bare LaTeX patterns and wrap them in $ delimiters
+  // Only apply to text not already in $ delimiters
+  // Match patterns like X^{...} or X_{...} that aren't in math mode
+  result = result.replace(/(?<!\$)([A-Za-z])(\^|_)\{([^}]+)\}(?!\$)/g, '$$$1$2{$3}$$');
+  result = result.replace(/(?<!\$)([A-Za-z])(\^)(-?\d+)(?!\}|\$)/g, '$$$1$2{$3}$$');
   
   return result;
 }

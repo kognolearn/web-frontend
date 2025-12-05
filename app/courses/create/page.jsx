@@ -288,6 +288,11 @@ function CreateCoursePageContent() {
   
   // Study mode: "deep" (thorough understanding) or "cram" (high-yield exam focus)
   const [studyMode, setStudyMode] = useState("deep");
+  // For cram mode, let users pick between auto-generating topics or supplying their own list
+  const [cramTopicStrategy, setCramTopicStrategy] = useState("generate"); // "generate" | "manual"
+  const [manualTopicsInput, setManualTopicsInput] = useState("");
+  const isCramMode = studyMode === "cram";
+  const isCramManual = isCramMode && cramTopicStrategy === "manual";
   
   useEffect(() => {
     // If the user adds any exam details, clear the 'no exam details' confirmation
@@ -295,6 +300,13 @@ function CreateCoursePageContent() {
       setConfirmedNoExamDetails(false);
     }
   }, [hasExamMaterials, examFiles, examNotes]);
+
+  useEffect(() => {
+    if (!isCramMode && cramTopicStrategy !== "generate") {
+      setCramTopicStrategy("generate");
+      setManualTopicsInput("");
+    }
+  }, [isCramMode, cramTopicStrategy]);
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [userId, setUserId] = useState(null);
@@ -463,6 +475,80 @@ function CreateCoursePageContent() {
     setExamFiles((prev) => prev.filter((file) => file.name !== name));
   }, []);
 
+  const clearTopicsState = useCallback(() => {
+    setOverviewTopics([]);
+    setDeletedSubtopics([]);
+    setGeneratedGrokDraft(null);
+    setRagSessionId(null);
+    setModuleConfidenceState({});
+    setOpenAccordions({});
+    setTopicsError(null);
+  }, []);
+
+  const handleCramTopicStrategyChange = useCallback(
+    (strategy) => {
+      if (strategy === cramTopicStrategy) return;
+      const currentTopicsAsText = overviewTopics
+        .flatMap((overview) =>
+          overview.subtopics.map((subtopic) =>
+            typeof subtopic.title === "string" ? subtopic.title.trim() : ""
+          )
+        )
+        .filter(Boolean)
+        .join("\n");
+
+      setCramTopicStrategy(strategy);
+      setIsTopicsLoading(false);
+      setCourseGenerationError("");
+      setManualTopicsInput(strategy === "manual" ? currentTopicsAsText : "");
+      clearTopicsState();
+    },
+    [clearTopicsState, cramTopicStrategy, overviewTopics]
+  );
+
+  const handleApplyManualTopics = useCallback(() => {
+    const topics = manualTopicsInput
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (topics.length === 0) {
+      setTopicsError("Add at least one topic to continue.");
+      return;
+    }
+
+    const manualSubtopics = topics.map((title) =>
+      createSubtopic({
+        title,
+        overviewId: manualOverviewId,
+        familiarity: defaultTopicRating,
+        source: "manual",
+        bloomLevel: "Understand",
+        examRelevanceReasoning: "",
+      })
+    );
+
+    const manualOverview = [
+      {
+        id: manualOverviewId,
+        title: manualOverviewTitle,
+        description: "",
+        likelyOnExam: true,
+        subtopics: manualSubtopics,
+      },
+    ];
+
+    setOverviewTopics(manualOverview);
+    setGeneratedGrokDraft(buildGrokDraftPayload(manualOverview));
+    setDeletedSubtopics([]);
+    setModuleConfidenceState({});
+    setOpenAccordions({});
+    setTopicsError(null);
+    setCourseGenerationError("");
+    setIsTopicsLoading(false);
+    setRagSessionId(null);
+  }, [manualTopicsInput]);
+
   const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
     if (!userId) {
@@ -479,12 +565,7 @@ function CreateCoursePageContent() {
     setTopicsError(null);
     setIsTopicsLoading(true);
     setCourseGenerationError("");
-    setOverviewTopics([]);
-    setDeletedSubtopics([]);
-    setGeneratedGrokDraft(null);
-    setRagSessionId(null);
-    setModuleConfidenceState({});
-    setOpenAccordions({});
+    clearTopicsState();
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
@@ -676,6 +757,7 @@ function CreateCoursePageContent() {
     studyHours,
     studyMinutes,
     examDetailsProvided,
+    clearTopicsState,
   ]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
@@ -1775,7 +1857,90 @@ function CreateCoursePageContent() {
                   </div>
                 </div>
 
-              {!isTopicsLoading && totalSubtopics === 0 && (
+              {isCramMode && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Cram mode topic setup</h3>
+                      <p className="text-xs text-[var(--muted-foreground)]">Pick whether we generate a high-yield list or you paste the exact topics.</p>
+                    </div>
+                    <div className="inline-flex rounded-lg bg-[var(--surface-1)] p-1 border border-[var(--border)]">
+                      <button
+                        type="button"
+                        onClick={() => handleCramTopicStrategyChange("generate")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+                          cramTopicStrategy === "generate"
+                            ? "bg-[var(--primary)] text-white shadow-sm"
+                            : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                        }`}
+                      >
+                        Generate for me
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCramTopicStrategyChange("manual")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+                          cramTopicStrategy === "manual"
+                            ? "bg-amber-500 text-white shadow-sm"
+                            : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                        }`}
+                      >
+                        I'll input topics
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-[var(--muted-foreground)]">
+                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]"></div>
+                    <span>Switching options resets the current topic list so you can stay focused.</span>
+                  </div>
+                </div>
+              )}
+
+              {isCramManual && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Paste the topics you want to cram</h3>
+                      <p className="text-xs text-[var(--muted-foreground)]">One topic per line. We'll keep the same exam-focused format.</p>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300">Manual list</span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={manualTopicsInput}
+                    onChange={(event) => setManualTopicsInput(event.target.value)}
+                    placeholder="Derivatives
+Integrals
+Series & convergence"
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none"
+                  />
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-[10px] text-[var(--muted-foreground)]">We'll store these just like generated topics so course creation works the same.</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setManualTopicsInput("");
+                          clearTopicsState();
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyManualTopics}
+                        disabled={!manualTopicsInput.trim()}
+                        className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Use these topics
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!isTopicsLoading && totalSubtopics === 0 && !isCramManual && (
                 <div className="text-center py-10 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50">
                   <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)]/10">
                     <svg className="h-7 w-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1882,14 +2047,16 @@ function CreateCoursePageContent() {
                         Review and customize your learning path
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleGenerateTopics}
-                      className="btn btn-outline btn-sm"
-                      disabled={isTopicsLoading}
-                    >
-                      Regenerate
-                    </button>
+                    {!isCramManual && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateTopics}
+                        className="btn btn-outline btn-sm"
+                        disabled={isTopicsLoading}
+                      >
+                        Regenerate
+                      </button>
+                    )}
                   </div>
                   
                   <div className="max-h-[90vh] overflow-y-auto pr-2 -mr-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--surface-1)]">
