@@ -293,6 +293,14 @@ function CreateCoursePageContent() {
   const [manualTopicsInput, setManualTopicsInput] = useState("");
   const isCramMode = studyMode === "cram";
   const isCramManual = isCramMode && cramTopicStrategy === "manual";
+
+  useEffect(() => {
+    if (studyMode === "deep") {
+      setStudyHours(999);
+      setStudyMinutes(0);
+      setStudyTimeError(false);
+    }
+  }, [studyMode]);
   
   useEffect(() => {
     // If the user adds any exam details, clear the 'no exam details' confirmation
@@ -1405,30 +1413,32 @@ function CreateCoursePageContent() {
                   </div>
                 </div>
 
-                {/* Study Time */}
-                <div>
-                  <label className="block text-sm font-semibold mb-1.5">
-                    Time left to learn <span className="text-rose-500">*</span>
-                  </label>
-                  <DurationInput
-                    hours={studyHours}
-                    minutes={studyMinutes}
-                    onChange={({ hours, minutes }) => {
-                      setStudyHours(hours);
-                      setStudyMinutes(minutes);
-                      if (hours > 0 || minutes > 0) {
-                        setStudyTimeError(false);
-                      }
-                    }}
-                    hideSummary
-                    variant="minimal"
-                  />
-                  {studyTimeError && (
-                    <div className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-600 dark:text-rose-300">
-                      Please enter more than 0 hours and 0 minutes.
-                    </div>
-                  )}
-                </div>
+                {/* Study Time (Cram only) */}
+                {isCramMode && (
+                  <div>
+                    <label className="block text-sm font-semibold mb-1.5">
+                      Time left to learn <span className="text-rose-500">*</span>
+                    </label>
+                    <DurationInput
+                      hours={studyHours}
+                      minutes={studyMinutes}
+                      onChange={({ hours, minutes }) => {
+                        setStudyHours(hours);
+                        setStudyMinutes(minutes);
+                        if (hours > 0 || minutes > 0) {
+                          setStudyTimeError(false);
+                        }
+                      }}
+                      hideSummary
+                      variant="minimal"
+                    />
+                    {studyTimeError && (
+                      <div className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-600 dark:text-rose-300">
+                        Please enter more than 0 hours and 0 minutes.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Study Mode Selector */}
                 <div>

@@ -5,6 +5,19 @@ import React from "react";
 import { MathJax } from "better-react-mathjax";
 import { normalizeLatex } from "@/utils/richText";
 
+function wrapBareLatex(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  const hasLatexCommand = /\\[a-zA-Z]+/.test(trimmed);
+  const hasDelimiters = /\$|\\\(|\\\[|\\begin\{/.test(trimmed);
+  // Detect unescaped natural-language words (>=3 letters) to avoid wrapping full sentences
+  const hasPlainWords = /(^|[^\\])[A-Za-z]{3,}/.test(trimmed);
+  if (hasLatexCommand && !hasDelimiters && !hasPlainWords) {
+    return `\\(${value}\\)`;
+  }
+  return value;
+}
+
 /**
  * Props:
  * - block: { content: [ {"text"?:string} | {"inline-math"?:string} | {"block-math"?:string} ] }
@@ -25,14 +38,15 @@ export default function RichBlock({
   
   // Check if it's the structured format or simple body text
   const items = Array.isArray(block["content"]) ? block["content"] : null;
-  const bodyText = normalizeLatex(block["body"] || block["reading"] || "");
+  const bodyText = wrapBareLatex(normalizeLatex(block["body"] || block["reading"] || ""));
 
   const Inner = items ? (
     <div className={`prose prose-invert max-w-none ${containerClassName}`}>
       <MathJax dynamic>
         {items.map((node, i) => {
           if ("text" in node) {
-            return <div key={i} className="whitespace-pre-wrap">{normalizeLatex(node.text)}</div>;
+            const text = wrapBareLatex(normalizeLatex(node.text));
+            return <div key={i} className="whitespace-pre-wrap">{text}</div>;
           }
           if ("inline-math" in node) {
             return <span key={i}>{`$${node["inline-math"]}$`}</span>;

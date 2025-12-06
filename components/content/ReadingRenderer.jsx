@@ -101,11 +101,7 @@ function parseContent(content) {
     .replace(/\\\\left/g, '\\left')
     .replace(/\\\\right/g, '\\right');
   
-  // Convert \[...\] display math to $$...$$ for consistent handling
-  normalizedContent = normalizedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-  
-  // Convert \(...\) inline math to $...$ for consistent handling
-  normalizedContent = normalizedContent.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+  // Preserve existing math delimiters; only unescape above. Avoid converting to dollar math.
   
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
@@ -561,23 +557,24 @@ function InlineContent({ text }) {
     if (!text) return [];
     
     const result = [];
-    // Normalize double-escaped backslashes and convert \( ... \) to $ ... $ for consistent math handling
+    // Normalize double-escaped backslashes but keep original math delimiters intact
     let remaining = text
-      .replace(/\\\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
-      .replace(/\\\(\s*/g, '$').replace(/\s*\\\)/g, '$');
-    
-    // Detect bare LaTeX patterns (like X^{-1} or A_n) and wrap them in $ delimiters
-    // This handles cases where math content isn't wrapped in delimiters
-    remaining = remaining.replace(/([A-Za-z]+)(\^{[^}]+})/g, '$$$1$2$$');  // X^{...} -> $X^{...}$
-    remaining = remaining.replace(/([A-Za-z]+)(_{[^}]+})/g, '$$$1$2$$');   // X_{...} -> $X_{...}$
-    remaining = remaining.replace(/([A-Za-z])\^(-?\d+)/g, '$$$1^{$2}$$');  // X^2 or X^-1 -> $X^{2}$ or $X^{-1}$
+      .replace(/\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
+      .replace(/\\(\[|\])/g, '\\$1');  // \\[ -> \[, \\] -> \]
     
     let key = 0;
     
     // Process inline elements
     while (remaining.length > 0) {
-      // Inline math $...$
-      const mathMatch = remaining.match(/\$([^$]+)\$/);
+      // Inline math: support both $...$ and \(...\) without converting delimiters
+      const mathDollar = remaining.match(/\$([^$]+)\$/);
+      const mathParen = remaining.match(/\\\(([^)]*?)\\\)/);
+      const mathMatch = (() => {
+        if (mathDollar && mathParen) {
+          return mathDollar.index < mathParen.index ? mathDollar : mathParen;
+        }
+        return mathDollar || mathParen || null;
+      })();
       // Bold **...**
       const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
       // Italic _..._ (using underscore to avoid conflicts with math asterisks)
@@ -615,7 +612,8 @@ function InlineContent({ text }) {
       const m = earliest.match;
       switch (earliest.type) {
         case "math":
-          result.push({ type: "math", content: m[1], key: key++ });
+          // Preserve original delimiter form (either $...$ or \(...\))
+          result.push({ type: "math", content: m[0], key: key++ });
           break;
         case "bold":
           result.push({ type: "bold", content: m[1], key: key++ });
@@ -647,7 +645,7 @@ function InlineContent({ text }) {
           case "text":
             return <span key={part.key}>{part.content}</span>;
           case "math":
-            return <span key={part.key} className="inline-math">{`$${part.content}$`}</span>;
+            return <span key={part.key} className="inline-math">{part.content}</span>;
           case "bold":
             return <strong key={part.key} className="font-semibold">{part.content}</strong>;
           case "italic":

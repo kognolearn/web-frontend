@@ -300,11 +300,16 @@ function normalizeOption(option, index, optionExplanation = null) {
   const blockSource =
     option?.block ?? (option?.content ? { content: option.content } : option);
   const feedbackBlock = option?.feedback ? normalizeRichBlock(option.feedback) : null;
-  const block = normalizeRichBlock(blockSource);
+  let block = normalizeRichBlock(blockSource);
   const fallbackValue =
     typeof option === "string"
       ? option
       : option?.value ?? option?.text ?? (typeof option?.label === "string" ? option.label : null);
+
+  // If block lacks content but we have a string fallback, treat it as text content
+  if (!hasRichContent(block) && typeof fallbackValue === "string") {
+    block = normalizeRichBlock({ content: [{ text: fallbackValue }] });
+  }
   const plainText = extractPlainTextFromBlock(block);
   
   // Handle explanation - can come from option itself or from question-level array

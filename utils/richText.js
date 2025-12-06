@@ -59,9 +59,8 @@ export function toRichBlock(value) {
 /**
  * Normalizes LaTeX content by:
  * 1. Converting double-escaped backslashes to single (\\command -> \command)
- * 2. Converting \[...\] display math to $$...$$
- * 3. Converting \(...\) inline math to $...$
- * 4. Fixing common LaTeX issues like broken delimiters
+ * 2. Fixing common LaTeX delimiter escaping without altering delimiter style
+ * 3. Fixing common LaTeX issues like broken delimiters
  */
 export function normalizeLatex(text) {
   if (!text || typeof text !== 'string') return text;
@@ -90,30 +89,20 @@ export function normalizeLatex(text) {
     .replace(/\\\\!/g, '\\!')
     .replace(/\\\\ /g, '\\ ');
   
-  // Step 3: Convert \[...\] display math to $$...$$
-  result = result.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+  // Step 3: Preserve existing math delimiters; only unescape them above.
+  // Do not convert to dollar signs to avoid corrupting author-provided delimiters.
   
-  // Step 4: Convert \(...\) inline math to $...$
-  result = result.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-  
-  // Step 5: Fix \mathcal, \mathscr etc. that might have issues
+  // Step 4: Fix \mathcal, \mathscr etc. that might have issues
   // Ensure proper spacing after commands that need arguments
   result = result.replace(/\\(mathcal|mathscr|mathbb|mathbf|mathrm|mathit|text|operatorname)\s*\{/g, '\\$1{');
   
-  // Step 6: Fix cases where command runs into number (e.g., \omega0 -> \omega_0)
+  // Step 5: Fix cases where command runs into number (e.g., \omega0 -> \omega_0)
   // Common pattern: Greek letter followed immediately by digit should have underscore
   const greekLetters = 'alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega';
   const greekPattern = new RegExp(`\\\\(${greekLetters})(\\d)`, 'g');
   result = result.replace(greekPattern, '\\$1_$2');
   
-  // Step 7: Clean up any excessive dollar signs
-  result = result.replace(/\${3,}/g, '$$');
-  
-  // Step 8: Detect bare LaTeX patterns and wrap them in $ delimiters
-  // Only apply to text not already in $ delimiters
-  // Match patterns like X^{...} or X_{...} that aren't in math mode
-  result = result.replace(/(?<!\$)([A-Za-z])(\^|_)\{([^}]+)\}(?!\$)/g, '$$$1$2{$3}$$');
-  result = result.replace(/(?<!\$)([A-Za-z])(\^)(-?\d+)(?!\}|\$)/g, '$$$1$2{$3}$$');
+  // Step 6: Do not inject or clean dollar signs; keep author intent intact.
   
   return result;
 }

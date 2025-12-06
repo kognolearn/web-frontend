@@ -81,9 +81,14 @@ function getOptionLabel(option, index) {
 
 function normalizeOption(option, index, optionExplanation = null) {
   const blockSource = option?.block ?? (option?.content ? { content: option.content } : option);
-  const block = normalizeRichBlock(blockSource);
+  let block = normalizeRichBlock(blockSource);
   const fallbackValue = typeof option === "string" ? option : option?.value ?? option?.text ?? null;
   const plainText = extractPlainTextFromBlock(block);
+
+  // If no rich content but a string fallback exists, treat it as text content for rendering
+  if (!hasRichContent(block) && typeof fallbackValue === "string") {
+    block = normalizeRichBlock({ content: [{ text: fallbackValue }] });
+  }
   
   // Handle explanation - can be string or rich block
   let explanationBlock = null;
