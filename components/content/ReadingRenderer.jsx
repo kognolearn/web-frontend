@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { MathJax } from "better-react-mathjax";
 import MermaidDiagram from "./MermaidDiagram";
+import { normalizeLatex } from "@/utils/richText";
 import { 
   markReadingQuestionAnswered, 
   setReadingTotalQuestions, 
@@ -61,47 +62,16 @@ function shuffleWithMapping(array, seed) {
 function parseContent(content) {
   if (!content) return [];
   
+  console.log('ReadingRenderer raw content:', content.slice(0, 200));
+
   // Content should already have proper newlines from JSON parsing
   // Only normalize Windows line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
   // Normalize double-escaped backslashes from JSON (\\( -> \(, \\[ -> \[, etc.)
   // This handles cases where content has \\( instead of \( for inline math
-  normalizedContent = normalizedContent
-    .replace(/\\\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
-    .replace(/\\\\(\[|\])/g, '\\$1')  // \\[ -> \[, \\] -> \]
-    .replace(/\\\\mathbf/g, '\\mathbf')
-    .replace(/\\\\mathbb/g, '\\mathbb')
-    .replace(/\\\\lambda/g, '\\lambda')
-    .replace(/\\\\begin/g, '\\begin')
-    .replace(/\\\\end/g, '\\end')
-    .replace(/\\\\frac/g, '\\frac')
-    .replace(/\\\\sqrt/g, '\\sqrt')
-    .replace(/\\\\sum/g, '\\sum')
-    .replace(/\\\\int/g, '\\int')
-    .replace(/\\\\cdot/g, '\\cdot')
-    .replace(/\\\\times/g, '\\times')
-    .replace(/\\\\pm/g, '\\pm')
-    .replace(/\\\\neq/g, '\\neq')
-    .replace(/\\\\leq/g, '\\leq')
-    .replace(/\\\\geq/g, '\\geq')
-    .replace(/\\\\infty/g, '\\infty')
-    .replace(/\\\\alpha/g, '\\alpha')
-    .replace(/\\\\beta/g, '\\beta')
-    .replace(/\\\\gamma/g, '\\gamma')
-    .replace(/\\\\delta/g, '\\delta')
-    .replace(/\\\\theta/g, '\\theta')
-    .replace(/\\\\pi/g, '\\pi')
-    .replace(/\\\\sigma/g, '\\sigma')
-    .replace(/\\\\mu/g, '\\mu')
-    .replace(/\\\\epsilon/g, '\\epsilon')
-    .replace(/\\\\text/g, '\\text')
-    .replace(/\\\\quad/g, '\\quad')
-    .replace(/\\\\qquad/g, '\\qquad')
-    .replace(/\\\\left/g, '\\left')
-    .replace(/\\\\right/g, '\\right');
-  
-  // Preserve existing math delimiters; only unescape above. Avoid converting to dollar math.
+  // We use normalizeLatex for this now, which is more comprehensive
+  normalizedContent = normalizeLatex(normalizedContent);
   
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
@@ -234,23 +204,31 @@ function parseContent(content) {
       continue;
     }
     
-    // Block math ($$...$$)
-    if (trimmed.startsWith("$$")) {
-      if (trimmed.endsWith("$$") && trimmed.length > 4) {
+    // Block math ($$...$$ or \[...\])
+    const isDollarBlock = trimmed.startsWith("$$");
+    const isBracketBlock = trimmed.startsWith("\\[");
+    
+    if (isDollarBlock || isBracketBlock) {
+      const startMarker = isDollarBlock ? "$$" : "\\[";
+      const endMarker = isDollarBlock ? "$$" : "\\]";
+      const sliceStart = 2; // Both are 2 chars
+      const sliceEnd = -2; // Both are 2 chars
+
+      if (trimmed.endsWith(endMarker) && trimmed.length > 4) {
         // Single line block math
         blocks.push({
           type: "block-math",
-          content: trimmed.slice(2, -2).trim(),
+          content: trimmed.slice(sliceStart, sliceEnd).trim(),
         });
         i++;
         continue;
       } else {
         // Multi-line block math
-        const { collected, endIdx } = consumeUntil(i + 1, (l) => l.trim().endsWith("$$"));
-        const mathContent = [trimmed.slice(2), ...collected];
+        const { collected, endIdx } = consumeUntil(i + 1, (l) => l.trim().endsWith(endMarker));
+        const mathContent = [trimmed.slice(sliceStart), ...collected];
         if (endIdx < lines.length) {
           const lastLine = lines[endIdx].trim();
-          mathContent.push(lastLine.slice(0, -2));
+          mathContent.push(lastLine.slice(0, sliceEnd));
         }
         blocks.push({
           type: "block-math",
@@ -568,7 +546,8 @@ function InlineContent({ text }) {
     while (remaining.length > 0) {
       // Inline math: support both $...$ and \(...\) without converting delimiters
       const mathDollar = remaining.match(/\$([^$]+)\$/);
-      const mathParen = remaining.match(/\\\(([^)]*?)\\\)/);
+      // Allow right parentheses inside inline math by matching any chars until closing \)
+      const mathParen = remaining.match(/\\\(([\s\S]*?)\\\)/);
       const mathMatch = (() => {
         if (mathDollar && mathParen) {
           return mathDollar.index < mathParen.index ? mathDollar : mathParen;

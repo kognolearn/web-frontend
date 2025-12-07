@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "re
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
 import { authFetch } from "@/lib/api";
 
 // System prompt to guide the assistant's behavior
@@ -1439,9 +1440,13 @@ Instructions:
                     </div>
                   )}
                   
-                  <div className="text-[14px] whitespace-pre-wrap break-words leading-[1.6]">
-                    {displayVersion.content}
-                  </div>
+                  {message.role === 'assistant' ? (
+                    <MarkdownRenderer content={displayVersion.content} className="text-[14px] leading-[1.6]" />
+                  ) : (
+                    <div className="text-[14px] whitespace-pre-wrap break-words leading-[1.6]">
+                      {displayVersion.content}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions & Timestamp - Below the bubble */}
