@@ -9,6 +9,7 @@ import Quiz from "@/components/content/Quiz";
 import PracticeProblems from "@/components/content/PracticeProblems";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
+import Tooltip from "@/components/ui/Tooltip";
 import TimerControls from "@/components/courses/TimerControls";
 import PersonalTimer, { FocusTimerDisplay, PersonalTimerControls } from "@/components/courses/PersonalTimer";
 import { 
@@ -342,6 +343,8 @@ export default function CourseTabContent({
   // Lesson/module completion celebration state
   const [completionCelebration, setCompletionCelebration] = useState(null); // { type: 'lesson'|'module', title, status }
   const celebrationTimeoutRef = useRef(null);
+  const shareResetRef = useRef(null);
+  const [shareCopied, setShareCopied] = useState(false);
   
   // Practice exam state - fetched from API
   const [examState, setExamState] = useState({}); // { [examType]: { status, exams: [...], selectedExamNumber, error } }
@@ -371,6 +374,7 @@ export default function CourseTabContent({
       if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
       if (gradeAbortRef.current) gradeAbortRef.current.abort();
       if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+      if (shareResetRef.current) clearTimeout(shareResetRef.current);
     };
   }, []);
 
@@ -1084,6 +1088,25 @@ export default function CourseTabContent({
     }
   };
 
+  const handleShareCourse = useCallback(async () => {
+    const link = `https://www.kognolearn.com/share/${courseId}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        setShareCopied(true);
+      } else if (typeof window !== "undefined") {
+        window.open(link, "_blank", "noopener,noreferrer");
+      }
+    } catch (_) {
+      if (typeof window !== "undefined") {
+        window.open(link, "_blank", "noopener,noreferrer");
+      }
+    } finally {
+      if (shareResetRef.current) clearTimeout(shareResetRef.current);
+      shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
+    }
+  }, [courseId]);
+
   return (
     <div className="relative w-full h-full flex overflow-hidden">
       {canRenderSidebar && (
@@ -1202,6 +1225,32 @@ export default function CourseTabContent({
             <span className="text-xs font-medium whitespace-nowrap">Content hidden</span>
           </div>
         )}
+
+        {/* Share Button */}
+        <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShareCourse();
+            }}
+            className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
+            title="Share course"
+            aria-label="Share course"
+          >
+            {shareCopied ? (
+              <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
+              </svg>
+            )}
+          </button>
+        </Tooltip>
 
         {/* Settings Button */}
         <OnboardingTooltip

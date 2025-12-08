@@ -244,6 +244,11 @@ export default function ReviewQuiz({
   const isCompleted = currentQuestion ? completedQuestions.has(currentQuestion.id) : false;
   const isFlagged = currentQuestion ? flaggedQuestions.has(currentQuestion.id) : false;
 
+  // Explanations for display
+  const correctOption = currentQuestion?.shuffledOptions.find(opt => opt.correct);
+  const correctExplanationBlock = correctOption?.explanation || currentQuestion?.explanation || null;
+  const correctExplanationText = correctOption?.explanationText || null;
+
   // Get wrong attempts for current question
   const currentWrongAttempts = currentQuestion ? (wrongAttempts[currentQuestion.id] || new Set()) : new Set();
 
@@ -672,6 +677,30 @@ export default function ReviewQuiz({
                     </div>
                   </div>
                 </div>
+
+                {(correctExplanationBlock || correctExplanationText) && (
+                  <div className="p-5 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[var(--foreground)] mb-1">Explanation</p>
+                        <div className="text-sm text-[var(--muted-foreground)] leading-relaxed">
+                          {correctExplanationText ? (
+                            <MathJax dynamic>
+                              <p>{normalizeLatex(correctExplanationText)}</p>
+                            </MathJax>
+                          ) : (
+                            <RichBlock block={correctExplanationBlock} maxWidth="100%" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Flag option */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">

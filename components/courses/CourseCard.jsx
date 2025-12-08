@@ -1,14 +1,39 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
 
 export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete }) {
   const router = useRouter();
+  const shareLink = `https://www.kognolearn.com/share/${courseId}`;
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareResetRef = useRef(null);
 
   const handleDeleteClick = (e) => {
     e.stopPropagation();
     if (onDelete) onDelete();
+  };
+
+  const handleShareClick = (e) => {
+    e.stopPropagation();
+    const fallbackOpen = () => {
+      if (typeof window !== "undefined") {
+        window.open(shareLink, "_blank", "noopener,noreferrer");
+      }
+    };
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(shareLink)
+        .then(() => {
+          setShareCopied(true);
+          if (shareResetRef.current) clearTimeout(shareResetRef.current);
+          shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
+        })
+        .catch(fallbackOpen);
+    } else {
+      fallbackOpen();
+    }
   };
 
   const handleReviewClick = (e) => {
@@ -186,6 +211,25 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
             }`}>
               {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
             </span>
+          </Tooltip>
+          <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
+            <button
+              onClick={handleShareClick}
+              className="p-1.5 rounded-full hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+              aria-label="Share course"
+            >
+              {shareCopied ? (
+                <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
+                </svg>
+              )}
+            </button>
           </Tooltip>
           <Tooltip content="Delete this course" position="bottom">
             <button

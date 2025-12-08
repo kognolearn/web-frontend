@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 export default function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -47,9 +49,9 @@ export default function SignUpForm() {
         return;
       }
 
-      // If sign up is successful, redirect to dashboard
+      // If sign up is successful, redirect to target
       if (data.user) {
-        router.push("/dashboard");
+        router.push(redirectTo || "/dashboard");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

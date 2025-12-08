@@ -544,15 +544,14 @@ function InlineContent({ text }) {
     
     // Process inline elements
     while (remaining.length > 0) {
-      // Inline math: support both $...$ and \(...\) without converting delimiters
+      // Inline math: support $...$, \(...\), and \[...\] without converting delimiters
       const mathDollar = remaining.match(/\$([^$]+)\$/);
-      // Allow right parentheses inside inline math by matching any chars until closing \)
       const mathParen = remaining.match(/\\\(([\s\S]*?)\\\)/);
+      const mathBracket = remaining.match(/\\\[([\s\S]*?)\\\]/);
       const mathMatch = (() => {
-        if (mathDollar && mathParen) {
-          return mathDollar.index < mathParen.index ? mathDollar : mathParen;
-        }
-        return mathDollar || mathParen || null;
+        const candidates = [mathDollar, mathParen, mathBracket].filter(Boolean);
+        if (candidates.length === 0) return null;
+        return candidates.reduce((a, b) => (a.index < b.index ? a : b));
       })();
       // Bold **...**
       const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
@@ -941,38 +940,33 @@ export default function ReadingRenderer({ content, courseId, lessonId, onReading
   
   // Initialize total questions on mount and restore answered count from localStorage
   useEffect(() => {
-    if (courseId && lessonId) {
-      // Set total questions
-      setReadingTotalQuestions(courseId, lessonId, questionCount);
-      
-      // Restore answered count from localStorage
-      const progress = getReadingProgress(courseId, lessonId);
-      const savedAnsweredCount = Object.keys(progress?.questionsAnswered || {}).length;
-      setAnsweredCount(savedAnsweredCount);
-      
-      // Check if already completed
-      if (questionCount > 0 && savedAnsweredCount >= questionCount && onReadingCompleted) {
-        onReadingCompleted();
-      } else if (questionCount === 0 && onReadingCompleted) {
-        // No questions, reading is automatically completed when viewed
-        onReadingCompleted();
-      }
+    if (!courseId || !lessonId) return;
+
+    // Set total questions and restore answered count from localStorage
+    setReadingTotalQuestions(courseId, lessonId, questionCount);
+    const progress = getReadingProgress(courseId, lessonId);
+    const savedAnsweredCount = Object.keys(progress?.questionsAnswered || {}).length;
+    setAnsweredCount(savedAnsweredCount);
+  }, [courseId, lessonId, questionCount]);
+
+  // Fire completion callback after render to avoid setState during render warnings
+  useEffect(() => {
+    if (!courseId || !lessonId || !onReadingCompleted) return;
+
+    if (questionCount === 0) {
+      onReadingCompleted();
+      return;
     }
-  }, [courseId, lessonId, questionCount, onReadingCompleted]);
+
+    if (answeredCount >= questionCount) {
+      setReadingTotalQuestions(courseId, lessonId, questionCount);
+      onReadingCompleted();
+    }
+  }, [answeredCount, questionCount, courseId, lessonId, onReadingCompleted]);
   
-  const handleQuestionAnswered = useCallback(({ questionIndex, isCorrect }) => {
-    setAnsweredCount(prev => {
-      const newCount = prev + 1;
-      // Check if all questions are now answered
-      if (newCount >= questionCount && courseId && lessonId) {
-        setReadingTotalQuestions(courseId, lessonId, questionCount);
-        if (onReadingCompleted) {
-          onReadingCompleted();
-        }
-      }
-      return newCount;
-    });
-  }, [questionCount, courseId, lessonId, onReadingCompleted]);
+  const handleQuestionAnswered = useCallback(() => {
+    setAnsweredCount(prev => Math.min(prev + 1, questionCount || prev + 1));
+  }, [questionCount]);
   
   // Track question index for each question block
   let questionIndex = 0;

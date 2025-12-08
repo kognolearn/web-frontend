@@ -10,7 +10,8 @@ export const metadata = {
   description: "Access your courses and continue learning",
 };
 
-export default async function SignInPage() {
+export default async function SignInPage({ searchParams }) {
+  const redirectTo = searchParams?.redirectTo;
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -35,7 +36,7 @@ export default async function SignInPage() {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect("/dashboard");
+    redirect(redirectTo || "/dashboard");
   }
 
   return (
@@ -82,7 +83,10 @@ export default async function SignInPage() {
           <div className="mt-8 pt-6 border-t border-white/10 dark:border-white/5 text-center">
             <p className="text-sm text-[var(--muted-foreground)]">
               Don't have an account?{" "}
-              <Link href="/auth/create-account" className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors">
+              <Link
+                href={`/auth/create-account${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
+                className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors"
+              >
                 Sign up
               </Link>
             </p>
