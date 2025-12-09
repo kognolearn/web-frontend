@@ -437,6 +437,14 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const lastEmittedStateRef = useRef(null);
   const suppressStateSyncRef = useRef(false);
+
+  const adjustInputHeight = useCallback(() => {
+    if (!inputRef.current || useContentEditableInput) return;
+    const el = inputRef.current;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(el.scrollHeight, 120);
+    el.style.height = `${nextHeight}px`;
+  }, [useContentEditableInput]);
   
   const currentChat = chats.find(c => c.id === currentChatId);
 
@@ -490,6 +498,32 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     if (syncedState === lastEmittedStateRef.current) return;
     loadState(syncedState, { preserveCurrent: true });
   }, [syncedState, loadState]);
+
+  useEffect(() => {
+    if (useContentEditableInput) return undefined;
+    const el = inputRef.current;
+    if (!el) return undefined;
+
+    adjustInputHeight();
+
+    const observer = new ResizeObserver(() => adjustInputHeight());
+    observer.observe(el);
+    if (el.parentElement) {
+      observer.observe(el.parentElement);
+    }
+
+    const handleWindowResize = () => adjustInputHeight();
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, [adjustInputHeight, useContentEditableInput]);
+
+  useEffect(() => {
+    adjustInputHeight();
+  }, [adjustInputHeight, input, editingContent, editingMessageId]);
 
   const buildTransferPayload = useCallback(() => ({
     title: currentChat?.name || "New Chat",
@@ -1485,12 +1519,12 @@ Instructions:
                 <button
                   onClick={() => setCurrentChatId(chat.id)}
                   type="button"
-                  className="flex-1 text-left truncate"
+                  className="flex-1 min-w-0 text-left truncate"
                   title={chat.name}
                 >
                   {chat.name}
                 </button>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
                   <button
                     onClick={() => startRenameChat(chat.id, chat.name)}
                     type="button"
@@ -1760,7 +1794,7 @@ Instructions:
       {/* Input Area */}
       <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
         <div className="mx-auto max-w-3xl px-4 py-3">
-          <form className="flex items-center gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+          <form className="flex items-end gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
             <input
               ref={fileInputRef}
               type="file"
@@ -1772,7 +1806,7 @@ Instructions:
               onClick={() => fileInputRef.current?.click()}
               type="button"
               aria-label="Attach files"
-              className="flex-shrink-0 rounded-lg p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+              className="flex-shrink-0 rounded-lg p-2 mb-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
               title="Attach files"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1824,7 +1858,7 @@ Instructions:
                   spellCheck={false}
                   inputMode="text"
                   className="w-full rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
-                  style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}
+                  style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'hidden', whiteSpace: 'pre-wrap' }}
                 />
               ) : (
                 <textarea
@@ -1857,10 +1891,10 @@ Instructions:
                     maxHeight: '120px',
                     minHeight: '40px',
                     height: 'auto',
+                    overflow: 'hidden',
                   }}
                   onInput={(e) => {
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                    adjustInputHeight();
                   }}
                 />
               )}
@@ -1870,14 +1904,14 @@ Instructions:
               onClick={() => editingMessageId ? saveEdit() : sendMessage()}
               disabled={editingMessageId ? !editingContent.trim() : !input.trim() && attachedFiles.length === 0}
               type={editingMessageId ? "button" : "submit"}
-              className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              className="flex-shrink-0 rounded-lg bg-[var(--primary)] p-2 mb-2 text-[var(--primary-contrast)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
               title={editingMessageId ? "Save and resubmit" : "Send message"}
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 {editingMessageId ? (
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
                 )}
               </svg>
             </button>
@@ -1894,7 +1928,7 @@ Instructions:
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
       <div 
-        className={`flex items-center justify-between border-b border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 py-3 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
+        className={`flex h-14 items-center justify-between border-b border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseDown={isPopped ? handleDragStart : undefined}
         onDoubleClick={() => {
           if (isPopped) {
@@ -1923,12 +1957,12 @@ Instructions:
           }
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             type="button"
             aria-label="Toggle chat history"
-            className="no-drag rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+            className="no-drag flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-[var(--surface-2)] transition-colors"
             title="Toggle chat history"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1939,18 +1973,23 @@ Instructions:
             onClick={createNewChat}
             type="button"
             aria-label="New chat"
-            className="no-drag flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
+            className="no-drag flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] hover:opacity-90 transition-opacity"
             title="New chat"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
           </button>
-          <h2 className="text-sm font-semibold text-[var(--foreground)]">
-            {currentChat?.name || "ChatBot"}
-          </h2>
+          <div className="min-w-0">
+            <h2
+              className="truncate text-sm font-semibold text-[var(--foreground)]"
+              title={currentChat?.name || "ChatBot"}
+            >
+              {currentChat?.name || "ChatBot"}
+            </h2>
+          </div>
         </div>
-        <div className="no-drag flex items-center gap-2">
+        <div className="no-drag flex flex-shrink-0 items-center gap-2">
           {onOpenInTab && (
             <button
               onClick={() => {
@@ -1962,7 +2001,7 @@ Instructions:
               title="Open in new tab"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
               </svg>
             </button>
           )}
