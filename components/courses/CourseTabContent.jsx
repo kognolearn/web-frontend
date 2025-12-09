@@ -339,7 +339,7 @@ export default function CourseTabContent({
   const [chatBotWidth, setChatBotWidth] = useState(0);
   const [chatQuizContext, setChatQuizContext] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [viewMode, setViewMode] = useState("syllabus");
+  const [viewMode, setViewMode] = useState("topic");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -615,15 +615,6 @@ export default function CourseTabContent({
       fileInputRef.current.value = '';
     }
   }, [gradeExam]);
-
-  // Auto-select first lesson if available and not already selected
-  useEffect(() => {
-    if (studyPlan && !selectedLesson && viewMode === "syllabus") {
-      if (studyPlan?.modules?.[0]?.lessons?.[0]) {
-        setSelectedLesson(studyPlan.modules[0].lessons[0]);
-      }
-    }
-  }, [studyPlan, selectedLesson, viewMode]);
 
   // Track viewport for responsive adjustments
   useEffect(() => {
@@ -965,6 +956,20 @@ export default function CourseTabContent({
     fetchLessonContent(lesson.id, ['reading']);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-select first lesson if available and not already selected
+  useEffect(() => {
+    if (!studyPlan || selectedLesson) return;
+
+    const modules = studyPlan.modules || [];
+    const firstModule =
+      modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
+      modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
+
+    if (firstModule && firstModule.lessons[0]) {
+      navigateToLesson(firstModule.lessons[0]);
+    }
+  }, [studyPlan, selectedLesson, navigateToLesson]);
 
   // Check if all content types for a lesson are completed
   const isLessonFullyCompleted = useCallback((lessonId) => {
@@ -1394,7 +1399,16 @@ export default function CourseTabContent({
                   priority={6}
                 >
                   <div 
-                    onClick={() => setViewMode("syllabus")}
+                    onClick={() => {
+                      if (!studyPlan) return;
+                      const modules = studyPlan.modules || [];
+                      const firstModule =
+                        modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
+                        modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
+                      if (firstModule && firstModule.lessons[0]) {
+                        navigateToLesson(firstModule.lessons[0]);
+                      }
+                    }}
                     className="cursor-pointer hover:opacity-80 transition-opacity"
                   >
                     <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
@@ -1708,7 +1722,7 @@ export default function CourseTabContent({
       )}
 
       <main
-        className="flex-1 overflow-y-auto transition-all duration-200"
+        className="flex-1 overflow-y-auto scrollbar-none transition-all duration-200"
         style={{ 
           marginLeft: !isMobile ? `${sidebarOffset}px` : 0,
           marginRight: isMobile ? 0 : `${chatBotWidth}px` 
@@ -1790,63 +1804,6 @@ export default function CourseTabContent({
               <p className="text-sm text-[var(--muted-foreground)]">Study plan is not available yet.</p>
               <p className="text-xs text-[var(--muted-foreground)]/70 mt-1">Please try refreshing in a moment.</p>
             </div>
-          )}
-
-          {!loading && !error && studyPlan && viewMode === "syllabus" && (
-            <>
-              {studyPlan.modules && (
-                <section>
-                  <h2 className="mb-6 text-xl font-bold bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text text-transparent">Course Overview</h2>
-                  
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
-                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
-                        Total Lessons
-                      </p>
-                      <p className="text-3xl font-bold text-[var(--foreground)]">
-                        {studyPlan.modules.flatMap(m => m.lessons || []).length}
-                      </p>
-                    </div>
-
-                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <svg className="w-5 h-5 text-[var(--info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
-                        Total Time
-                      </p>
-                      <p className="text-3xl font-bold text-[var(--foreground)]">
-                        {studyPlan.total_minutes ? Math.round(studyPlan.total_minutes / 60) : 0}
-                      </p>
-                      <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                        hours
-                      </p>
-                    </div>
-
-                    <div className="group relative bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl px-4 py-6 text-center shadow-sm hover:shadow-md hover:border-[var(--primary)]/50 transition-all duration-300 hover:-translate-y-1">
-                      <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <svg className="w-5 h-5 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                      </div>
-                      <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-2">
-                        Modules
-                      </p>
-                      <p className="text-3xl font-bold text-[var(--foreground)]">
-                        {studyPlan.modules.length}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-              )}
-            </>
           )}
 
           {/* Review Module Content View */}
