@@ -35,6 +35,7 @@ const TABS = [
     { id: "courseBreakdown", label: "By Course", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     { id: "usage", label: "API & Costs", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { id: "feedback", label: "Feedback", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
+    { id: "exportCourse", label: "Export Course", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" },
 ];
 
 function StatCard({ title, value, subtitle, icon, trend, trendDirection, color = "primary", borderColor }) {
@@ -126,6 +127,205 @@ function DateRangeFilter({ startDate, endDate, onStartChange, onEndChange, onPre
                     onChange={(e) => onEndChange(e.target.value)}
                     className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                 />
+            </div>
+        </div>
+    );
+}
+
+function CourseExportTab({ usageByCourseData, dateRangeLoading }) {
+    const [searchQuery, setSearchQuery] = useState("");
+    const [exportingCourseId, setExportingCourseId] = useState(null);
+    const [copiedCourseId, setCopiedCourseId] = useState(null);
+    const [exportError, setExportError] = useState(null);
+
+    const filteredCourses = useMemo(() => {
+        if (!searchQuery.trim()) return usageByCourseData;
+        const query = searchQuery.toLowerCase();
+        return usageByCourseData.filter(
+            (course) =>
+                (course.courseName || "").toLowerCase().includes(query) ||
+                (course.courseId || "").toLowerCase().includes(query)
+        );
+    }, [usageByCourseData, searchQuery]);
+
+    const handleExportCourse = async (courseId) => {
+        setExportingCourseId(courseId);
+        setExportError(null);
+        setCopiedCourseId(null);
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers = session?.access_token
+                ? { Authorization: `Bearer ${session.access_token}` }
+                : {};
+
+            const response = await fetch(`/api/courses/${courseId}/export`, { headers });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to export course");
+            }
+
+            await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            setCopiedCourseId(courseId);
+            setTimeout(() => setCopiedCourseId(null), 2000);
+        } catch (err) {
+            console.error("Export error:", err);
+            setExportError(err.message);
+        } finally {
+            setExportingCourseId(null);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Search Header */}
+            <div className="card p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex-1">
+                        <label htmlFor="course-search" className="block text-sm font-medium mb-1">
+                            Search Courses
+                        </label>
+                        <div className="relative">
+                            <svg
+                                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)]"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                />
+                            </svg>
+                            <input
+                                id="course-search"
+                                type="text"
+                                placeholder="Search by course name or ID..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 rounded-md border border-[var(--border)] bg-[var(--surface-1)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                            />
+                        </div>
+                    </div>
+                    <div className="text-sm text-[var(--muted-foreground)]">
+                        {filteredCourses.length} of {usageByCourseData.length} courses
+                    </div>
+                </div>
+            </div>
+
+            {/* Error Alert */}
+            {exportError && (
+                <div className="p-4 rounded-md bg-[#EF4444]/10 border border-[#EF4444]/20">
+                    <div className="flex items-center gap-2 text-[#EF4444]">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span className="font-medium">Export Error:</span>
+                        <span>{exportError}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Course List */}
+            <div className="card">
+                <div className="p-4 border-b border-[var(--border)]">
+                    <h3 className="font-semibold">Course Export</h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                        Select a course to copy its full JSON export to clipboard
+                    </p>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                                <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Course</th>
+                                <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">API Calls</th>
+                                <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Tokens</th>
+                                <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
+                                <th className="text-center py-3 px-4 font-medium text-[var(--muted-foreground)]">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredCourses.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="py-8 text-center text-[var(--muted-foreground)]">
+                                        {dateRangeLoading
+                                            ? "Loading..."
+                                            : searchQuery
+                                            ? "No courses match your search"
+                                            : "No course data available"}
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredCourses
+                                    .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
+                                    .map((course, idx) => (
+                                        <tr
+                                            key={course.courseId || idx}
+                                            className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors"
+                                        >
+                                            <td className="py-3 px-4">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-[var(--foreground)]">
+                                                        {course.courseName || "Untitled Course"}
+                                                    </span>
+                                                    <span className="text-xs text-[var(--muted-foreground)] font-mono">
+                                                        {course.courseId}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-medium">
+                                                {(course.requestCount || 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-3 px-4 text-right">
+                                                {(course.totalTokens || 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-medium text-[#EF4444]">
+                                                ${(course.totalCost || 0).toFixed(4)}
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                <button
+                                                    onClick={() => handleExportCourse(course.courseId)}
+                                                    disabled={exportingCourseId === course.courseId}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                                        copiedCourseId === course.courseId
+                                                            ? "bg-[#34D399] text-white"
+                                                            : "bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)]"
+                                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                >
+                                                    {exportingCourseId === course.courseId ? (
+                                                        <>
+                                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                            </svg>
+                                                            Exporting...
+                                                        </>
+                                                    ) : copiedCourseId === course.courseId ? (
+                                                        <>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            Copied!
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                            Copy JSON
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -1260,6 +1460,10 @@ export default function AdminPage() {
                     {/* Feedback Table */}
                     <FeedbackTable feedback={data.feedback} />
                 </div>
+            )}
+
+            {activeTab === "exportCourse" && (
+                <CourseExportTab usageByCourseData={usageByCourseData} dateRangeLoading={dateRangeLoading} />
             )}
         </div>
     );
