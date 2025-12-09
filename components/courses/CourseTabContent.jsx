@@ -630,6 +630,25 @@ export default function CourseTabContent({
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  // Expose sidebar closed state to global layout via body class
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    if (!body) return;
+
+    if (isActive && !sidebarOpen) {
+      body.classList.add('course-sidebar-closed');
+    } else if (isActive) {
+      body.classList.remove('course-sidebar-closed');
+    }
+
+    return () => {
+      if (isActive) {
+        body.classList.remove('course-sidebar-closed');
+      }
+    };
+  }, [sidebarOpen, isActive]);
+
   // Fetch review modules on mount
   useEffect(() => {
     if (!userId || !courseId) return;

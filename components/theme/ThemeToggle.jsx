@@ -11,6 +11,7 @@ export default function ThemeToggle() {
   const { theme, toggleTheme, mounted } = useTheme();
   const pathname = usePathname();
   const [hasSession, setHasSession] = useState(false);
+  const [courseSidebarClosed, setCourseSidebarClosed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +35,26 @@ export default function ThemeToggle() {
     };
   }, []);
 
+  // Track when the course sidebar is closed via body class
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const updateStateFromBody = () => {
+      const body = document.body;
+      if (!body) return;
+      setCourseSidebarClosed(body.classList.contains("course-sidebar-closed"));
+    };
+
+    updateStateFromBody();
+
+    const observer = new MutationObserver(updateStateFromBody);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   const isPublicPage = useMemo(() => {
     if (!pathname) return false;
     return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -44,7 +65,7 @@ export default function ThemeToggle() {
   const isDark = theme === "dark";
 
   return (
-    <div className="fixed bottom-4 left-4 z-50">
+    <div className={`fixed left-4 z-50 ${courseSidebarClosed ? "bottom-[5rem]" : "bottom-4"}`}>
       <button
         type="button"
         onClick={toggleTheme}

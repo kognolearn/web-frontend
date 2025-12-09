@@ -61,6 +61,7 @@ export default function FeedbackWidget() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
+  const [sidebarClosedOnCourse, setSidebarClosedOnCourse] = useState(false);
   const pathname = usePathname();
   const isPublicPage = useMemo(() => {
     if (!pathname) return false;
@@ -117,6 +118,26 @@ export default function FeedbackWidget() {
     });
 
     return () => sub?.subscription?.unsubscribe?.();
+  }, []);
+
+  // Track when the course sidebar is closed via body class
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const updateStateFromBody = () => {
+      const body = document.body;
+      if (!body) return;
+      setSidebarClosedOnCourse(body.classList.contains("course-sidebar-closed"));
+    };
+
+    updateStateFromBody();
+
+    const observer = new MutationObserver(updateStateFromBody);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   // Close on outside click
@@ -181,7 +202,10 @@ export default function FeedbackWidget() {
   if (!mounted || (!user && !isPublicPage)) return null;
 
   return (
-    <div className="fixed bottom-4 left-[4.75rem] z-50" ref={panelRef}>
+    <div
+      className={`fixed left-[4.75rem] z-50 ${sidebarClosedOnCourse ? "bottom-[5rem]" : "bottom-4"}`}
+      ref={panelRef}
+    >
       <AnimatePresence>
         {isOpen && (
           <motion.div
