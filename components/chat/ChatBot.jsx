@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
@@ -297,7 +297,89 @@ const buildSanitizedHistory = (messages) => {
   return trimmed.map(sanitizeMessageForApi);
 };
 
-const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, mode = "docked", isActive = true }, ref) => {
+// Helpers for cloning/persisting chat state
+const generateStableId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const cloneAttachment = (attachment) => {
+  if (!attachment) return attachment;
+  const { file, ...rest } = attachment;
+  return { ...rest };
+};
+
+const cloneMessage = (message = {}) => {
+  const cloned = { ...message };
+  cloned.id = cloned.id || generateStableId();
+  if (Array.isArray(cloned.files)) {
+    cloned.files = cloned.files.map(cloneAttachment);
+  }
+  if (Array.isArray(cloned.versions)) {
+    cloned.versions = cloned.versions.map((version = {}) => {
+      const versionClone = { ...version };
+      if (Array.isArray(versionClone.files)) {
+        versionClone.files = versionClone.files.map(cloneAttachment);
+      }
+      return versionClone;
+    });
+  }
+  return cloned;
+};
+
+const createBlankChat = () => ({
+  id: generateStableId(),
+  name: "New Chat",
+  messages: [],
+});
+
+const normalizeChats = (incomingChats) => {
+  const list = Array.isArray(incomingChats) && incomingChats.length > 0
+    ? incomingChats
+    : [createBlankChat()];
+
+  return list.map((chat, index) => ({
+    id: chat?.id || generateStableId(),
+    name: chat?.name || `Chat ${index + 1}`,
+    messages: Array.isArray(chat?.messages)
+      ? chat.messages.map(cloneMessage)
+      : [],
+  }));
+};
+
+const buildMessageVersionMap = (chatList) => {
+  const map = {};
+  chatList.forEach((chat) => {
+    (chat.messages || []).forEach((msg) => {
+      if (Array.isArray(msg.versions) && msg.versions.length > 0) {
+        map[msg.id] = msg.versions.length - 1;
+      }
+    });
+  });
+  return map;
+};
+
+const snapshotChatState = (chats, currentChatId) => ({
+  chats: normalizeChats(chats),
+  currentChatId,
+});
+
+const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, onStateChange, onActiveChatChange, initialChats, initialChatId, syncedState, mode = "docked", isActive = true }, ref) => {
+  const initialChatDataRef = useRef(null);
+  const initialChatIdRef = useRef(null);
+
+  if (initialChatDataRef.current === null) {
+    const normalized = normalizeChats(initialChats);
+    initialChatDataRef.current = normalized;
+    const fallbackId = normalized[0]?.id || generateStableId();
+    const providedId = initialChatId && normalized.some((chat) => chat.id === initialChatId)
+      ? initialChatId
+      : fallbackId;
+    initialChatIdRef.current = providedId;
+  }
+
   const [isOpen, setIsOpen] = useState(false);
   const [isPopped, setIsPopped] = useState(false);
   const [width, setWidth] = useState(350); // Default width when docked
@@ -311,7 +393,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   const [isCompactDrag, setIsCompactDrag] = useState(false);
   
   // Chat state
-  const [chats, setChats] = useState([{ id: 1, name: "New Chat", messages: [] }]);
+  const [chats, setChats] = useState(initialChatDataRef.current);
 
   useImperativeHandle(ref, () => ({
     open: (options) => {
@@ -327,9 +409,15 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     },
     close: () => setIsOpen(false),
     toggle: () => setIsOpen(prev => !prev),
-    isOpen: isOpen
+    isOpen: isOpen,
+    loadState,
+    getState: captureState,
+    setActiveChat: (chatId) => {
+      if (!chatId) return;
+      setCurrentChatId(chatId);
+    }
   }));
-  const [currentChatId, setCurrentChatId] = useState(1);
+  const [currentChatId, setCurrentChatId] = useState(initialChatIdRef.current);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -341,14 +429,73 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   const [renamingValue, setRenamingValue] = useState("");
   
   // Track which version of each message is currently displayed
-  const [messageVersions, setMessageVersions] = useState({}); // { messageId: versionIndex }
+  const [messageVersions, setMessageVersions] = useState(() => buildMessageVersionMap(initialChatDataRef.current)); // { messageId: versionIndex }
   
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const lastEmittedStateRef = useRef(null);
+  const suppressStateSyncRef = useRef(false);
   
   const currentChat = chats.find(c => c.id === currentChatId);
+
+  const captureState = useCallback(() => snapshotChatState(chats, currentChatId), [chats, currentChatId]);
+
+  useEffect(() => {
+    if (onActiveChatChange && currentChatId) {
+      onActiveChatChange(currentChatId);
+    }
+  }, [currentChatId, onActiveChatChange]);
+
+  useEffect(() => {
+    if (!onStateChange) return;
+    if (suppressStateSyncRef.current) {
+      suppressStateSyncRef.current = false;
+      return;
+    }
+    const snapshot = captureState();
+    lastEmittedStateRef.current = snapshot;
+    onStateChange(snapshot);
+  }, [captureState, onStateChange]);
+
+  const loadState = useCallback((state, options = {}) => {
+    if (!state || !Array.isArray(state.chats) || state.chats.length === 0) {
+      return false;
+    }
+
+    const normalized = normalizeChats(state.chats);
+    suppressStateSyncRef.current = true;
+    setChats(normalized);
+
+    const fallbackId = normalized[0]?.id || generateStableId();
+    setCurrentChatId((prev) => {
+      if (options.preserveCurrent) {
+        if (prev && normalized.some((chat) => chat.id === prev)) {
+          return prev;
+        }
+        return fallbackId;
+      }
+      if (state.currentChatId && normalized.some((chat) => chat.id === state.currentChatId)) {
+        return state.currentChatId;
+      }
+      return fallbackId;
+    });
+    setMessageVersions(buildMessageVersionMap(normalized));
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (!syncedState) return;
+    if (syncedState === lastEmittedStateRef.current) return;
+    loadState(syncedState, { preserveCurrent: true });
+  }, [syncedState, loadState]);
+
+  const buildTransferPayload = useCallback(() => ({
+    title: currentChat?.name || "New Chat",
+    chatId: currentChat?.id || currentChatId,
+    chatState: captureState(),
+  }), [captureState, currentChat?.name, currentChat?.id, currentChatId]);
 
   // Helpers: chat recency sorting
   const getChatSortTime = (chat) => {
@@ -602,11 +749,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       
       // If dropped on tab bar (top 50px), convert to tab
       if (e.clientY < 50 && onOpenInTab) {
-        onOpenInTab({
-          title: currentChat?.name || "New Chat",
-          chatId: `tab-${Date.now()}`,
-          messages: currentChat?.messages || [],
-        });
+        onOpenInTab(buildTransferPayload());
         setIsOpen(false);
       }
     };
@@ -619,7 +762,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';
     };
-  }, [isDragging, isPopped, dragOffset, onOpenInTab, currentChat]);
+  }, [isDragging, isPopped, dragOffset, onOpenInTab, buildTransferPayload]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -647,11 +790,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     // First, clean up any existing empty chats
     const nonEmptyChats = chats.filter(c => c.messages.length > 0);
     
-    const newChat = {
-      id: Date.now(),
-      name: "New Chat",
-      messages: []
-    };
+    const newChat = createBlankChat();
     
     // Add new chat at the beginning (newest first)
     setChats([newChat, ...nonEmptyChats]);
@@ -662,7 +801,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     setChats(prev => {
       const next = prev.filter(c => c.id !== chatId);
       if (next.length === 0) {
-        const newChat = { id: Date.now(), name: "New Chat", messages: [] };
+        const newChat = createBlankChat();
         setCurrentChatId(newChat.id);
         return [newChat];
       }
@@ -1766,6 +1905,11 @@ Instructions:
         onDragStart={(e) => {
           if (!isPopped) {
             e.dataTransfer.setData('application/x-chat-tab', 'true');
+            try {
+              e.dataTransfer.setData('application/x-chat-tab-data', JSON.stringify(buildTransferPayload()));
+            } catch (_) {
+              // Ignore serialization issues; fall back to new chat behavior
+            }
             e.dataTransfer.effectAllowed = 'move';
           }
         }}
@@ -1810,11 +1954,7 @@ Instructions:
           {onOpenInTab && (
             <button
               onClick={() => {
-                onOpenInTab({
-                  title: currentChat?.name || "New Chat",
-                  chatId: `tab-${Date.now()}`,
-                  messages: currentChat?.messages || [],
-                });
+                onOpenInTab(buildTransferPayload());
               }}
               type="button"
               aria-label="Open in new tab"

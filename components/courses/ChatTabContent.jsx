@@ -7,18 +7,27 @@ export default function ChatTabContent({
   courseName,
   studyPlan,
   onClose,
-  isActive = true
+  isActive = true,
+  sharedChatState,
+  onSharedChatStateChange,
+  initialChatId,
+  onActiveChatIdChange,
 }) {
   return (
     <div className="w-full h-full">
-      <ChatBot 
+      <ChatBot
+        mode="full"
         isActive={isActive}
         pageContext={{
           courseId,
           courseName,
           studyPlan,
         }}
-        mode="full"
+        initialChats={sharedChatState?.chats}
+        initialChatId={initialChatId || sharedChatState?.currentChatId}
+        syncedState={sharedChatState}
+        onStateChange={onSharedChatStateChange}
+        onActiveChatChange={onActiveChatIdChange}
         onClose={onClose}
       />
     </div>

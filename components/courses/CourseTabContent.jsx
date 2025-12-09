@@ -288,7 +288,11 @@ export default function CourseTabContent({
   onTabTitleChange,
   onCurrentLessonChange,
   hasHiddenContent = false,
-  isActive = true
+  isActive = true,
+  sharedChatState,
+  onSharedChatStateChange,
+  activeChatId,
+  onActiveChatIdChange
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
@@ -318,10 +322,18 @@ export default function CourseTabContent({
 
   // Handle external chat open requests
   useEffect(() => {
-    if (chatOpenRequest && chatBotRef.current) {
-      chatBotRef.current.open({ mode: 'docked' });
+    if (!chatOpenRequest || !chatBotRef.current) return;
+    if (chatOpenRequest.chatId) {
+      chatBotRef.current.setActiveChat?.(chatOpenRequest.chatId);
+      onActiveChatIdChange?.(chatOpenRequest.chatId);
+    } else if (chatOpenRequest.state) {
+      chatBotRef.current.loadState?.(chatOpenRequest.state);
+      if (chatOpenRequest.state.currentChatId) {
+        onActiveChatIdChange?.(chatOpenRequest.state.currentChatId);
+      }
     }
-  }, [chatOpenRequest]);
+    chatBotRef.current.open({ mode: 'docked' });
+  }, [chatOpenRequest, onActiveChatIdChange]);
 
   const [contentCache, setContentCache] = useState({});
   const [chatBotWidth, setChatBotWidth] = useState(0);
@@ -2634,6 +2646,11 @@ export default function CourseTabContent({
           })() : null,
           quizContext: chatQuizContext
         }}
+        initialChats={sharedChatState?.chats}
+        initialChatId={activeChatId || sharedChatState?.currentChatId}
+        syncedState={sharedChatState}
+        onStateChange={onSharedChatStateChange}
+        onActiveChatChange={onActiveChatIdChange}
         onWidthChange={setChatBotWidth}
         onOpenInTab={onOpenChatTab}
       />

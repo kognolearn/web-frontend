@@ -13,6 +13,19 @@ import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch, getAuthHeaders } from "@/lib/api";
 
+const generateChatId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const createBlankChat = () => ({
+  id: generateChatId(),
+  name: "New Chat",
+  messages: [],
+});
+
 export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
@@ -29,15 +42,25 @@ export default function CoursePage() {
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
+  const [sharedChatState, setSharedChatState] = useState(() => {
+    const initialChat = createBlankChat();
+    return {
+      chats: [initialChat],
+      currentChatId: initialChat.id,
+    };
+  });
   const dragPreviewRef = useRef(null);
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
 
   // Tab State
-  const [tabs, setTabs] = useState([
-    { id: 'tab-1', type: 'course', title: 'Course Content' }
-  ]);
+  const [tabs, setTabs] = useState(() => {
+    const initialChatId = sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null;
+    return [
+      { id: 'tab-1', type: 'course', title: 'Course Content', activeChatId: initialChatId }
+    ];
+  });
   const [activeTabId, setActiveTabId] = useState('tab-1');
 
   useEffect(() => {
@@ -365,17 +388,96 @@ export default function CoursePage() {
     return tabTitleChangeHandlers.current[tabId];
   }, [handleTabTitleChange]);
 
-  const addTab = (type) => {
-    const newId = `tab-${Date.now()}`;
-    const title = type === 'course' ? 'Course Content' : 'Chat';
-    const newTabs = [...tabs, { id: newId, type, title }];
-    setTabs(newTabs);
+  const updateTabActiveChatId = useCallback((tabId, chatId) => {
+    if (!tabId) return;
+    const chatNameLookup = new Map((sharedChatState?.chats || []).map((chat) => [chat.id, chat.name || "Chat"]));
+    setTabs((prev) => {
+      let mutated = false;
+      const next = prev.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        let nextTab = tab;
+        if (tab.activeChatId !== chatId) {
+          nextTab = nextTab === tab ? { ...tab } : nextTab;
+          nextTab.activeChatId = chatId;
+        }
+        if (tab.type === 'chat' && chatId) {
+          const desiredTitle = chatNameLookup.get(chatId);
+          if (desiredTitle && nextTab.title !== desiredTitle) {
+            nextTab = nextTab === tab ? { ...tab } : nextTab;
+            nextTab.title = desiredTitle;
+          }
+        }
+        if (nextTab !== tab) {
+          mutated = true;
+        }
+        return nextTab;
+      });
+      return mutated ? next : prev;
+    });
+  }, [sharedChatState]);
+
+  const handleSharedChatStateChange = useCallback((state) => {
+    if (!state) return;
+    setSharedChatState(state);
+    if (!Array.isArray(state.chats) || state.chats.length === 0) return;
+    const chatNameLookup = new Map(state.chats.map((chat) => [chat.id, chat.name || "Chat"]));
+    setTabs((prev) => {
+      let mutated = false;
+      const next = prev.map((tab) => {
+        if (tab.type !== 'chat' || !tab.activeChatId) return tab;
+        const desiredTitle = chatNameLookup.get(tab.activeChatId);
+        if (!desiredTitle || tab.title === desiredTitle) return tab;
+        mutated = true;
+        return { ...tab, title: desiredTitle };
+      });
+      return mutated ? next : prev;
+    });
+  }, []);
+
+  const addTab = (type, options = {}) => {
+    const newId = options.id || `tab-${Date.now()}`;
+    const defaultTitle = options.title || (type === 'course' ? 'Course Content' : 'Chat');
+    const baseTab = { id: newId, type, title: defaultTitle };
+
+    if (type === 'chat') {
+      let targetChatId = options.chatId || null;
+      let inferredTitle = options.title || null;
+      if (!targetChatId) {
+        const newChat = createBlankChat();
+        targetChatId = newChat.id;
+        inferredTitle = inferredTitle || newChat.name;
+        setSharedChatState((prev) => {
+          const prevChats = Array.isArray(prev?.chats) ? prev.chats : [];
+          return {
+            ...prev,
+            chats: [newChat, ...prevChats],
+            currentChatId: newChat.id,
+          };
+        });
+      } else if (!inferredTitle) {
+        const existingChat = sharedChatState?.chats?.find((chat) => chat.id === targetChatId);
+        inferredTitle = existingChat?.name || null;
+      }
+      const nextTab = { ...baseTab, title: inferredTitle || defaultTitle, activeChatId: targetChatId };
+      setTabs((prev) => [...prev, nextTab]);
+    } else {
+      const fallbackChatId = options.chatId || sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null;
+      const nextTab = { ...baseTab, activeChatId: fallbackChatId };
+      setTabs((prev) => [...prev, nextTab]);
+    }
+
     setActiveTabId(newId);
+    return newId;
   };
 
-  const handleOpenChatTab = (data) => {
-    addTab('chat');
-    // In a future iteration, we could pass 'data' to the new tab to preserve state
+  const handleOpenChatTab = (payload) => {
+    if (payload?.chatState) {
+      setSharedChatState(payload.chatState);
+    }
+    addTab('chat', {
+      title: payload?.title || 'Chat',
+      chatId: payload?.chatId,
+    });
   };
 
   const closeTab = (e, id) => {
@@ -409,13 +511,39 @@ export default function CoursePage() {
     // Handle dropping a floating chat to create a new tab
     if (e.dataTransfer.types.includes('application/x-chat-tab')) {
       e.preventDefault();
-      addTab('chat');
+      let payload = null;
+      const rawData = e.dataTransfer.getData('application/x-chat-tab-data');
+      if (rawData) {
+        try {
+          payload = JSON.parse(rawData);
+        } catch (_) {
+          payload = null;
+        }
+      }
+      if (payload?.chatState) {
+        setSharedChatState(payload.chatState);
+      }
+      addTab('chat', {
+        title: payload?.title,
+        chatId: payload?.chatId,
+      });
       return;
     }
   };
 
   const handleChatTabReturn = (tabId) => {
+    const returningTab = tabs.find((t) => t.id === tabId);
+    const isChatTab = returningTab?.type === 'chat';
+    const preferredCourseTab = tabs.find((t) => t.id === activeTabId && t.type === 'course')
+      || tabs.find((t) => t.type === 'course');
     closeTab(null, tabId);
+    if (!isChatTab || !preferredCourseTab) return;
+    setChatOpenRequest({
+      tabId: preferredCourseTab.id,
+      timestamp: Date.now(),
+      state: sharedChatState,
+      chatId: returningTab?.activeChatId,
+    });
   };
 
   const [draggingTabId, setDraggingTabId] = useState(null);
@@ -531,7 +659,12 @@ export default function CoursePage() {
                     if (currentActiveTab && currentActiveTab.type === 'course') {
                       closeTab(null, tab.id);
                       // No need to switch tabs as we are already on the correct one
-                      setChatOpenRequest({ tabId: currentActiveTab.id, timestamp: Date.now() });
+                      setChatOpenRequest({
+                        tabId: currentActiveTab.id,
+                        timestamp: Date.now(),
+                        state: sharedChatState,
+                        chatId: tab.activeChatId,
+                      });
                     }
                   }
                 }}
@@ -731,6 +864,10 @@ export default function CoursePage() {
                 onChatTabReturn={handleChatTabReturn}
                 chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
                 hasHiddenContent={hasHiddenContent}
+                sharedChatState={sharedChatState}
+                onSharedChatStateChange={handleSharedChatStateChange}
+                activeChatId={tab.activeChatId}
+                onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
               />
             ) : (
               <ChatTabContent
@@ -739,6 +876,10 @@ export default function CoursePage() {
                 courseName={courseName}
                 studyPlan={studyPlan}
                 onClose={() => closeTab(null, tab.id)}
+                sharedChatState={sharedChatState}
+                onSharedChatStateChange={handleSharedChatStateChange}
+                initialChatId={tab.activeChatId}
+                onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
               />
             )}
           </div>
