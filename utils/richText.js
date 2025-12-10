@@ -97,7 +97,16 @@ export function normalizeLatex(text) {
   const greekPattern = new RegExp(`\\\\(${greekLetters})(\\d)`, 'g');
   result = result.replace(greekPattern, '\\$1_$2');
   
-  // Step 6: Escape stray single dollar signs so they are treated as text, not inline math
+  // Step 6: Escape special characters inside \text{} blocks
+  // & and # need to be escaped as \& and \# in LaTeX text mode
+  result = result.replace(/\\text\{([^}]*)\}/g, (match, content) => {
+    const escaped = content
+      .replace(/(?<!\\)&/g, '\\&')
+      .replace(/(?<!\\)#/g, '\\#');
+    return `\\text{${escaped}}`;
+  });
+  
+  // Step 7: Escape stray single dollar signs so they are treated as text, not inline math
   result = result.replace(/(?<!\$)\$(?!\$)/g, '\\$');
   
   return result;
