@@ -222,6 +222,11 @@ export async function GET(request) {
         ...(contentPayload.practice_problems && Array.isArray(contentPayload.practice_problems) && {
           practice_problems: contentPayload.practice_problems
         }),
+        
+        // Interactive practice (parsons, skeleton, matching, blackbox problems)
+        ...(contentPayload.interactive_practice && {
+          interactive_practice: contentPayload.interactive_practice
+        }),
       }
     };
 

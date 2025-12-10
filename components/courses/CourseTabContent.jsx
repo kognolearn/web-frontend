@@ -7,6 +7,7 @@ import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import PracticeProblems from "@/components/content/PracticeProblems";
+import InteractivePractice from "@/components/content/InteractivePractice";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
@@ -56,12 +57,12 @@ function ItemContent({
   moduleQuizTab
 }) {
   const normFmt = normalizeFormat(fmt);
-  const key = `${normFmt}:${id}:${userId || ''}:${courseId || ''}`;
+  const key = `${normFmt}:${id}:${userId}:${courseId}`;
   const cached = contentCache[key];
   const fetchInitiatedRef = useRef(new Set());
 
   useEffect(() => {
-    if (!normFmt || !id) return undefined;
+    if (!normFmt || !id || !userId || !courseId) return undefined;
     if (fetchInitiatedRef.current.has(key)) return undefined;
     const existing = contentCache[key];
     if (existing && (existing.status === "loaded" || existing.status === "loading")) return undefined;
@@ -251,6 +252,11 @@ function ItemContent({
       const practiceProblems = data?.practice_problems || [];
       return <PracticeProblems problems={practiceProblems} />;
     }
+    case "interactive_practice": {
+      // Interactive practice: Parsons, Skeleton, Matching, Blackbox problems
+      const interactivePractice = data?.interactive_practice || data || {};
+      return <InteractivePractice interactivePractice={interactivePractice} />;
+    }
     default:
       return (
         <article className="card rounded-[28px] px-6 py-6 sm:px-8">
@@ -373,6 +379,10 @@ export default function CourseTabContent({
   
   // Module Quiz tab state - 'quiz' or 'practice'
   const [moduleQuizTab, setModuleQuizTab] = useState('quiz');
+  
+  // Exam modification modal state
+  const [examModifyModal, setExamModifyModal] = useState({ open: false, examType: null, examNumber: null });
+  const [examModifyPrompt, setExamModifyPrompt] = useState('');
 
   // Update ref whenever state changes
   useEffect(() => {
@@ -604,6 +614,63 @@ export default function CourseTabContent({
     }
   }, [userId, courseId]);
 
+  // Modify exam (based on user prompt)
+  const modifyExam = useCallback(async (examType, examNumber, prompt) => {
+    if (!userId || !courseId || !examNumber || !prompt?.trim()) return;
+    
+    setExamState(prev => ({
+      ...prev,
+      [examType]: { ...prev[examType], status: 'modifying', error: null }
+    }));
+    
+    try {
+      const modifyRes = await authFetch(
+        `/api/courses/${courseId}/exams/${examType}/${examNumber}/modify`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, prompt: prompt.trim() })
+        }
+      );
+      
+      if (!modifyRes.ok) {
+        const errData = await modifyRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to modify exam (${modifyRes.status})`);
+      }
+      
+      const modData = await modifyRes.json();
+      
+      // Update the exam in the list with new URL
+      setExamState(prev => {
+        const exams = (prev[examType]?.exams || []).map(exam => {
+          if (exam.number === examNumber) {
+            return {
+              ...exam,
+              url: modData.url,
+              name: modData.name
+            };
+          }
+          return exam;
+        });
+        
+        return {
+          ...prev,
+          [examType]: {
+            ...prev[examType],
+            status: 'ready',
+            exams,
+            error: null
+          }
+        };
+      });
+    } catch (e) {
+      setExamState(prev => ({
+        ...prev,
+        [examType]: { ...prev[examType], status: 'error', error: e.message }
+      }));
+    }
+  }, [userId, courseId]);
+
   // Handle file input change for grading
   const handleGradeFileSelect = useCallback((examType, examNumber) => (e) => {
     const file = e.target.files?.[0];
@@ -755,9 +822,10 @@ export default function CourseTabContent({
   };
 
   const fetchLessonContent = (lessonId, formats = ['reading']) => {
+    if (!userId || !courseId) return; // Guard: don't fetch without userId/courseId
     formats.forEach(format => {
       const normFmt = normalizeFormat(format);
-      const key = `${normFmt}:${lessonId}:${userId || ''}:${courseId || ''}`;
+      const key = `${normFmt}:${lessonId}:${userId}:${courseId}`;
       if (contentCache[key]) return;
       
       setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
@@ -922,6 +990,11 @@ export default function CourseTabContent({
         if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
         if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
         if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
+        // Interactive practice: parsons, skeleton, matching, blackbox
+        const ip = data.interactive_practice;
+        if (ip && (ip.parsons?.length || ip.skeleton?.length || ip.matching?.length || ip.blackbox?.length)) {
+          types.push({ label: "Interactive", value: "interactive_practice" });
+        }
       }
     }
     if (types.length === 0) {
@@ -1899,8 +1972,8 @@ export default function CourseTabContent({
                       />
                     );
                     
-                    // Loading states (checking, generating, grading)
-                    if (['loading', 'generating', 'grading'].includes(currentExamState.status)) {
+                    // Loading states (checking, generating, grading, modifying)
+                    if (['loading', 'generating', 'grading', 'modifying'].includes(currentExamState.status)) {
                       return (
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                           {fileInput}
@@ -1912,10 +1985,12 @@ export default function CourseTabContent({
                             {currentExamState.status === 'loading' && 'Loading exams...'}
                             {currentExamState.status === 'generating' && 'Generating your exam...'}
                             {currentExamState.status === 'grading' && 'Grading your submission...'}
+                            {currentExamState.status === 'modifying' && 'Modifying your exam...'}
                           </p>
                           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                             {currentExamState.status === 'generating' && 'This usually takes 1-2 minutes'}
                             {currentExamState.status === 'grading' && 'Analyzing your answers...'}
+                            {currentExamState.status === 'modifying' && 'Applying your changes...'}
                           </p>
                         </div>
                       );
@@ -2034,7 +2109,20 @@ export default function CourseTabContent({
                         {selectedExam && (
                           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             {/* Actions Bar */}
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExamModifyPrompt('');
+                                  setExamModifyModal({ open: true, examType, examNumber: selectedExam.number });
+                                }}
+                                className="px-4 py-2 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-muted)] transition-all flex items-center gap-2 text-sm"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Modify Exam
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
@@ -2319,6 +2407,18 @@ export default function CourseTabContent({
                                   return (
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                    </svg>
+                                  );
+                                case 'practice':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                  );
+                                case 'interactive_practice':
+                                  return (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
                                   );
                                 default:
@@ -2630,6 +2730,68 @@ export default function CourseTabContent({
         onWidthChange={setChatBotWidth}
         onOpenInTab={onOpenChatTab}
       />
+
+      {/* Exam Modify Modal */}
+      <AnimatePresence>
+        {examModifyModal.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setExamModifyModal({ open: false, examType: null, examNumber: null })}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-[var(--border)]">
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">Modify Exam</h2>
+                <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                  Describe how you want to modify this exam
+                </p>
+              </div>
+              <div className="p-6 space-y-4">
+                <textarea
+                  value={examModifyPrompt}
+                  onChange={(e) => setExamModifyPrompt(e.target.value)}
+                  placeholder="e.g., Make the questions harder, add more conceptual questions, focus on chapter 3 topics, remove multiple choice and add short answer..."
+                  className="w-full h-32 px-4 py-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50"
+                  autoFocus
+                />
+              </div>
+              <div className="p-6 pt-0 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExamModifyModal({ open: false, examType: null, examNumber: null })}
+                  className="px-4 py-2 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-muted)] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!examModifyPrompt.trim()}
+                  onClick={() => {
+                    if (examModifyPrompt.trim() && examModifyModal.examType && examModifyModal.examNumber) {
+                      modifyExam(examModifyModal.examType, examModifyModal.examNumber, examModifyPrompt);
+                      setExamModifyModal({ open: false, examType: null, examNumber: null });
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] text-white font-medium shadow-lg shadow-[var(--primary)]/20 hover:shadow-[var(--primary)]/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Apply Changes
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
