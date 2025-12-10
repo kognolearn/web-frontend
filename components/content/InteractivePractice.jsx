@@ -26,21 +26,24 @@ function decodeHtmlEntities(text) {
 function ensureLatexDelimiters(text) {
   if (!text || typeof text !== 'string') return text;
   
+  // Decode HTML entities first
+  const decoded = decodeHtmlEntities(text);
+  
   // Already has delimiters
-  if (text.includes('\\(') || text.includes('\\[') || text.includes('$')) {
-    return normalizeLatex(text);
+  if (decoded.includes('\\(') || decoded.includes('\\[') || decoded.includes('$')) {
+    return normalizeLatex(decoded);
   }
   
   // Check if it looks like it contains LaTeX (has backslash commands)
-  const hasLatexCommands = /\\[a-zA-Z]+/.test(text);
-  const hasLatexSymbols = /[_^{}]/.test(text);
+  const hasLatexCommands = /\\[a-zA-Z]+/.test(decoded);
+  const hasLatexSymbols = /[_^{}]/.test(decoded);
   
   if (hasLatexCommands || hasLatexSymbols) {
     // Wrap the entire thing in inline math delimiters
-    return `\\(${normalizeLatex(text)}\\)`;
+    return `\\(${normalizeLatex(decoded)}\\)`;
   }
   
-  return normalizeLatex(text);
+  return normalizeLatex(decoded);
 }
 
 /**
@@ -50,16 +53,19 @@ function ensureLatexDelimiters(text) {
 function renderInlineMarkdown(text) {
   if (!text || typeof text !== 'string') return text;
   
+  // Decode HTML entities first
+  const decoded = decodeHtmlEntities(text);
+  
   const parts = [];
   const regex = /`([^`]+)`/g;
   let lastIndex = 0;
   let match;
   let keyIdx = 0;
   
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(decoded)) !== null) {
     // Add text before the code
     if (match.index > lastIndex) {
-      const textBefore = text.slice(lastIndex, match.index);
+      const textBefore = decoded.slice(lastIndex, match.index);
       parts.push(...renderTextWithLineBreaks(textBefore, keyIdx));
       keyIdx++;
     }
@@ -77,11 +83,11 @@ function renderInlineMarkdown(text) {
   }
   
   // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(...renderTextWithLineBreaks(text.slice(lastIndex), keyIdx));
+  if (lastIndex < decoded.length) {
+    parts.push(...renderTextWithLineBreaks(decoded.slice(lastIndex), keyIdx));
   }
   
-  return parts.length > 0 ? parts : text;
+  return parts.length > 0 ? parts : decoded;
 }
 
 /**
@@ -126,7 +132,7 @@ function ParsonsItem({ item, isDragging }) {
         </svg>
       </div>
       <MathJax className="flex-1 text-[var(--foreground)]">
-        {normalizeLatex(item.content)}
+        {normalizeLatex(decodeHtmlEntities(item.content))}
       </MathJax>
     </motion.div>
   );
@@ -229,7 +235,7 @@ function ParsonsProblem({ problem, onComplete }) {
                     )}
                   </div>
                   <MathJax className="flex-1 text-[var(--foreground)]">
-                    {normalizeLatex(item.content)}
+                    {normalizeLatex(decodeHtmlEntities(item.content))}
                   </MathJax>
                   {!submitted && (
                     <svg className="w-4 h-4 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1043,7 +1049,7 @@ function BlackboxProblem({ problem, onComplete }) {
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
               <span className="text-sm text-[var(--muted-foreground)]">The hidden rule is:</span>
               <MathJax className="text-lg font-medium text-emerald-600 dark:text-emerald-400 mt-1">
-                {normalizeLatex(problem.hidden_rule)}
+                {normalizeLatex(decodeHtmlEntities(problem.hidden_rule))}
               </MathJax>
             </div>
           </motion.div>

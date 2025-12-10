@@ -11,6 +11,27 @@ import {
 } from "@/utils/lessonProgress";
 
 /**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * Normalizes text by decoding HTML entities and then normalizing LaTeX
+ */
+function normalizeText(text) {
+  return normalizeLatex(decodeHtmlEntities(text));
+}
+
+/**
  * Seeded random number generator for consistent shuffling per question
  */
 function seededRandom(seed) {
@@ -56,6 +77,53 @@ function shuffleWithMapping(array, seed) {
 }
 
 /**
+ * Parse table row into cells, handling escaped pipes (\|) and pipes inside backticks
+ */
+function parseTableCells(rowContent) {
+  const cells = [];
+  let current = '';
+  let inBacktick = false;
+  let i = 0;
+  
+  while (i < rowContent.length) {
+    const char = rowContent[i];
+    
+    // Track backtick state for inline code
+    if (char === '`') {
+      inBacktick = !inBacktick;
+      current += char;
+      i++;
+      continue;
+    }
+    
+    // Handle escaped pipe
+    if (char === '\\' && i + 1 < rowContent.length && rowContent[i + 1] === '|') {
+      current += '|';
+      i += 2;
+      continue;
+    }
+    
+    // Handle cell delimiter (only when not inside backticks)
+    if (char === '|' && !inBacktick) {
+      cells.push(current.trim());
+      current = '';
+      i++;
+      continue;
+    }
+    
+    current += char;
+    i++;
+  }
+  
+  // Don't forget the last cell
+  if (current.length > 0 || cells.length > 0) {
+    cells.push(current.trim());
+  }
+  
+  return cells;
+}
+
+/**
  * Parse content string into structured blocks for rendering
  * Handles: headings, paragraphs, lists, code blocks, math, questions, emphasis
  */
@@ -68,10 +136,10 @@ function parseContent(content) {
   // Only normalize Windows line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
-  // Normalize double-escaped backslashes from JSON (\\( -> \(, \\[ -> \[, etc.)
+  // Normalize double-escaped backslashes from JSON and decode HTML entities
   // This handles cases where content has \\( instead of \( for inline math
-  // We use normalizeLatex for this now, which is more comprehensive
-  normalizedContent = normalizeLatex(normalizedContent);
+  // We use normalizeText for this now, which handles both HTML entities and LaTeX
+  normalizedContent = normalizeText(normalizedContent);
   
   // Ensure code block closing markers are on their own line
   // This handles cases like "```\n**Check Your Understanding**" where there's no blank line
@@ -181,8 +249,8 @@ function parseContent(content) {
             i++;
             continue;
           }
-          // Parse cells
-          const cells = currentLine.slice(1, -1).split("|").map(c => c.trim());
+          // Parse cells - handle escaped pipes and pipes inside backticks
+          const cells = parseTableCells(currentLine.slice(1, -1));
           tableRows.push(cells);
           i++;
         } else {

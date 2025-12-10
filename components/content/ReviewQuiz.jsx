@@ -9,6 +9,27 @@ import Tooltip from "@/components/ui/Tooltip";
 import { authFetch } from "@/lib/api";
 
 /**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * Normalizes text by decoding HTML entities and then normalizing LaTeX
+ */
+function normalizeText(text) {
+  return normalizeLatex(decodeHtmlEntities(text));
+}
+
+/**
  * Seeded random number generator for consistent shuffling per question
  */
 function seededRandom(seed) {
@@ -500,7 +521,7 @@ export default function ReviewQuiz({
               <div className="text-lg font-medium text-[var(--foreground)] leading-relaxed flex-1">
                 {currentQuestion?.questionText ? (
                   <MathJax dynamic>
-                    <p>{normalizeLatex(currentQuestion.questionText)}</p>
+                    <p>{normalizeText(currentQuestion.questionText)}</p>
                   </MathJax>
                 ) : (
                   <RichBlock block={currentQuestion?.block} maxWidth="100%" />
@@ -581,7 +602,7 @@ export default function ReviewQuiz({
                       <div className="text-[var(--foreground)]">
                         {opt.valueText ? (
                           <MathJax dynamic>
-                            <span>{normalizeLatex(opt.valueText)}</span>
+                            <span>{normalizeText(opt.valueText)}</span>
                           </MathJax>
                         ) : (
                           <RichBlock block={opt.block} maxWidth="100%" />
@@ -631,7 +652,7 @@ export default function ReviewQuiz({
                               <div className="text-sm text-rose-700 dark:text-rose-300 leading-relaxed">
                                 {opt.explanationText ? (
                                   <MathJax dynamic>
-                                    <p>{normalizeLatex(opt.explanationText)}</p>
+                                    <p>{normalizeText(opt.explanationText)}</p>
                                   </MathJax>
                                 ) : (
                                   <RichBlock block={opt.explanation} maxWidth="100%" />
@@ -691,7 +712,7 @@ export default function ReviewQuiz({
                         <div className="text-sm text-[var(--muted-foreground)] leading-relaxed">
                           {correctExplanationText ? (
                             <MathJax dynamic>
-                              <p>{normalizeLatex(correctExplanationText)}</p>
+                              <p>{normalizeText(correctExplanationText)}</p>
                             </MathJax>
                           ) : (
                             <RichBlock block={correctExplanationBlock} maxWidth="100%" />

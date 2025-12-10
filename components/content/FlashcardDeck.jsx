@@ -9,6 +9,27 @@ import { normalizeLatex } from "@/utils/richText";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { updateFlashcardProgress, getFlashcardProgress } from "@/utils/lessonProgress";
 
+/**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * Normalizes text by decoding HTML entities and then normalizing LaTeX
+ */
+function normalizeText(text) {
+  return normalizeLatex(decodeHtmlEntities(text));
+}
+
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
 export default function FlashcardDeck({ data = {}, onCardChange, courseId, lessonId, onFlashcardsCompleted }) {
   const cards = useMemo(
@@ -349,7 +370,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
             <div className="flex-1 flex items-center justify-center overflow-auto">
               <MathJax dynamic>
                 <p className="text-xl sm:text-2xl font-semibold text-white leading-relaxed whitespace-pre-wrap text-center">
-                  {normalizeLatex(question)}
+                  {normalizeText(question)}
                 </p>
               </MathJax>
             </div>
@@ -396,7 +417,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
             <div className="flex-1 flex flex-col justify-center items-center overflow-auto">
               <MathJax dynamic>
                 <p className="text-lg sm:text-xl font-medium text-[var(--foreground)] leading-relaxed whitespace-pre-wrap text-center">
-                  {normalizeLatex(answer)}
+                  {normalizeText(answer)}
                 </p>
               </MathJax>
             </div>
@@ -413,7 +434,7 @@ const FlipCard = forwardRef(function FlipCard({ num, tuple }, ref) {
                   <div className="flex-1 min-w-0">
                     <MathJax dynamic>
                       <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
-                        {normalizeLatex(explanation)}
+                        {normalizeText(explanation)}
                       </p>
                     </MathJax>
                   </div>

@@ -19,6 +19,12 @@ export async function GET(request, { params }) {
   const lessons = searchParams.get("lessons");
   if (lessons) queryParams.set("lessons", lessons);
 
+  const includeUploaded = searchParams.get("include_uploaded");
+  if (includeUploaded) queryParams.set("include_uploaded", includeUploaded);
+
+  const uploadedOnly = searchParams.get("uploaded_only");
+  if (uploadedOnly) queryParams.set("uploaded_only", uploadedOnly);
+
   try {
     const headers = { "Content-Type": "application/json" };
     const authHeader = request.headers.get("Authorization");

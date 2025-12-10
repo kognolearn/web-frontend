@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,13 +16,13 @@ function getConfidenceIntervals(secondsRemaining) {
   const minutesRemaining = Math.max(secondsRemaining / 60, 60); // min 1 hour worth
   
   // Spaced repetition intervals as percentage of remaining time:
-  // again: ~0.1% - review very soon
-  // hard: ~1% - short interval
+  // again: fixed 1 minute - review very soon
+  // hard: fixed 10 minutes - short interval
   // good: ~10% - medium interval
   // easy: ~25% - long interval (confident, space it out)
   return {
-    again: Math.max(1, Math.round(minutesRemaining * 0.001)),      // min 1 minute
-    hard: Math.max(5, Math.round(minutesRemaining * 0.01)),        // min 5 minutes
+    again: 1,                                                      // fixed 1 minute
+    hard: 10,                                                      // fixed 10 minutes
     good: Math.max(30, Math.round(minutesRemaining * 0.1)),        // min 30 minutes
     easy: Math.max(60, Math.round(minutesRemaining * 0.25)),       // min 1 hour
   };
@@ -63,6 +63,13 @@ export default function ReviewPage() {
   const [flashcardStudyMode, setFlashcardStudyMode] = useState(false);
   const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  
+  // Uploaded flashcards state
+  const [uploadedDecks, setUploadedDecks] = useState([]);
+  const [includeUploadedCards, setIncludeUploadedCards] = useState(false);
+  const [studyOnlyUploaded, setStudyOnlyUploaded] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   
   // Course data
   const [courseName, setCourseName] = useState("");
@@ -171,6 +178,48 @@ export default function ReviewPage() {
         ? prev.filter(id => id !== lessonId)
         : [...prev, lessonId]
     );
+    // Reset study only uploaded when selecting lessons
+    if (!selectedLessons.includes(lessonId)) {
+      setStudyOnlyUploaded(false);
+    }
+  };
+
+  // Handle Anki file upload
+  const handleAnkiUpload = async (file) => {
+    if (!file || !userId) return;
+    
+    setUploading(true);
+    setUploadError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append("ankiFile", file);
+      formData.append("userId", userId);
+      
+      const res = await authFetch(`/api/courses/${courseId}/flashcards/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setUploadedDecks(prev => [...prev, {
+          deckName: data.deckName,
+          imported: data.imported,
+          nodeId: data.nodeId,
+          uploadedAt: new Date().toISOString(),
+        }]);
+        setIncludeUploadedCards(true);
+      } else {
+        setUploadError(data.error || "Failed to upload deck");
+      }
+    } catch (err) {
+      console.error("Error uploading Anki deck:", err);
+      setUploadError("An error occurred while uploading");
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Select all lessons
@@ -205,14 +254,34 @@ export default function ReviewPage() {
 
   // Fetch flashcards for selected lessons and start study
   const startFlashcardStudy = async () => {
-    if (!selectedLessons.length || !userId) return;
+    if ((!selectedLessons.length && !includeUploadedCards) || !userId) return;
     
     setFlashcardsLoading(true);
     try {
       const now = new Date().toISOString();
-      const lessonsParam = selectedLessons.join(",");
+      const queryParams = new URLSearchParams({
+        userId,
+        current_timestamp: now,
+      });
+      
+      // Add lessons if not studying only uploaded cards
+      if (!studyOnlyUploaded && selectedLessons.length > 0) {
+        queryParams.set("lessons", selectedLessons.join(","));
+      }
+      
+      // Include uploaded cards flag
+      if (includeUploadedCards || studyOnlyUploaded) {
+        queryParams.set("include_uploaded", "true");
+      }
+      
+      // If studying only uploaded, don't pass lessons
+      if (studyOnlyUploaded) {
+        queryParams.delete("lessons");
+        queryParams.set("uploaded_only", "true");
+      }
+      
       const res = await authFetch(
-        `/api/courses/${courseId}/flashcards?userId=${encodeURIComponent(userId)}&current_timestamp=${encodeURIComponent(now)}&lessons=${encodeURIComponent(lessonsParam)}`
+        `/api/courses/${courseId}/flashcards?${queryParams.toString()}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -495,6 +564,14 @@ export default function ReviewPage() {
                 onStart={startFlashcardStudy}
                 loading={studyPlanLoading}
                 fetchingFlashcards={flashcardsLoading}
+                uploadedDecks={uploadedDecks}
+                includeUploadedCards={includeUploadedCards}
+                setIncludeUploadedCards={setIncludeUploadedCards}
+                studyOnlyUploaded={studyOnlyUploaded}
+                setStudyOnlyUploaded={setStudyOnlyUploaded}
+                onUpload={handleAnkiUpload}
+                uploading={uploading}
+                uploadError={uploadError}
               />
             </motion.div>
           )}
@@ -661,7 +738,36 @@ function FlashcardLessonSelector({
   onStart, 
   loading,
   fetchingFlashcards,
+  uploadedDecks = [],
+  includeUploadedCards,
+  setIncludeUploadedCards,
+  studyOnlyUploaded,
+  setStudyOnlyUploaded,
+  onUpload,
+  uploading,
+  uploadError,
 }) {
+  const fileInputRef = React.useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUpload(file);
+      e.target.value = "";
+    }
+  };
+
+  const handleStudyOnlyUploaded = () => {
+    setStudyOnlyUploaded(true);
+    setIncludeUploadedCards(true);
+    clearAll();
+  };
+
+  const handleIncludeWithLessons = () => {
+    setStudyOnlyUploaded(false);
+    setIncludeUploadedCards(true);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -700,8 +806,154 @@ function FlashcardLessonSelector({
 
   return (
     <div className="space-y-6">
+      {/* Uploaded Anki Decks Section */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+        <div className="px-4 py-3 bg-gradient-to-r from-violet-500/10 to-purple-500/5 border-b border-[var(--border)] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm text-[var(--foreground)]">Uploaded Anki Decks</h3>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {uploadedDecks.length > 0 
+                  ? `${uploadedDecks.length} deck${uploadedDecks.length !== 1 ? 's' : ''} uploaded` 
+                  : "Import your Anki flashcards"}
+              </p>
+            </div>
+          </div>
+          
+          {/* Upload button */}
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".apkg"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? (
+                <>
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Upload .apkg
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+        
+        {/* Upload error */}
+        {uploadError && (
+          <div className="px-4 py-3 bg-rose-500/10 border-b border-rose-500/20 flex items-center gap-2 text-rose-600 dark:text-rose-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm">{uploadError}</span>
+          </div>
+        )}
+        
+        {/* Uploaded decks list */}
+        {uploadedDecks.length > 0 && (
+          <div className="p-4 space-y-3">
+            {uploadedDecks.map((deck, idx) => (
+              <div 
+                key={deck.nodeId || idx}
+                className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-2)]/50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">{deck.deckName}</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">{deck.imported} cards imported</p>
+                  </div>
+                </div>
+                <div className="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                  Ready
+                </div>
+              </div>
+            ))}
+            
+            {/* Study options for uploaded cards */}
+            <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-2">
+              <label className="flex items-center gap-3 p-3 rounded-xl hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={includeUploadedCards && !studyOnlyUploaded}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      handleIncludeWithLessons();
+                    } else {
+                      setIncludeUploadedCards(false);
+                      setStudyOnlyUploaded(false);
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-2 border-[var(--border)] text-violet-500 focus:ring-violet-500"
+                />
+                <div>
+                  <p className="text-sm font-medium">Include with lesson flashcards</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">Study uploaded cards mixed with lesson content</p>
+                </div>
+              </label>
+              
+              <button
+                onClick={handleStudyOnlyUploaded}
+                className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl font-medium text-sm transition-all ${
+                  studyOnlyUploaded
+                    ? "bg-violet-500 text-white"
+                    : "bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {studyOnlyUploaded ? "Studying uploaded cards only" : "Study only uploaded cards"}
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Empty state */}
+        {uploadedDecks.length === 0 && (
+          <div className="p-6 text-center">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Upload an Anki deck (.apkg file) to study your own flashcards alongside course content.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Divider with OR */}
+      {uploadedDecks.length > 0 && lessons.length > 0 && !studyOnlyUploaded && (
+        <div className="flex items-center gap-4">
+          <div className="flex-1 h-px bg-[var(--border)]" />
+          <span className="text-sm text-[var(--muted-foreground)] font-medium">AND / OR</span>
+          <div className="flex-1 h-px bg-[var(--border)]" />
+        </div>
+      )}
+
       {/* Header with stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {!studyOnlyUploaded && (
+        <>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--foreground)]">Select lessons to study</h2>
           <p className="text-sm text-[var(--muted-foreground)] mt-1">
@@ -851,20 +1103,24 @@ function FlashcardLessonSelector({
           );
         })}
       </div>
+      </>
+      )}
 
       {/* Start button - sticky at bottom */}
       <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent">
         <motion.button
-          whileHover={{ scale: selectedCount > 0 ? 1.01 : 1 }}
-          whileTap={{ scale: selectedCount > 0 ? 0.99 : 1 }}
+          whileHover={{ scale: (selectedCount > 0 || studyOnlyUploaded) ? 1.01 : 1 }}
+          whileTap={{ scale: (selectedCount > 0 || studyOnlyUploaded) ? 0.99 : 1 }}
           onClick={onStart}
-          disabled={selectedCount === 0 || fetchingFlashcards}
+          disabled={(selectedCount === 0 && !studyOnlyUploaded) || fetchingFlashcards}
           className={`
             w-full py-4 rounded-2xl font-semibold text-lg
             flex items-center justify-center gap-3
             transition-all duration-200 shadow-lg
-            ${selectedCount > 0 
-              ? 'bg-[var(--primary)] text-white hover:shadow-xl hover:shadow-[var(--primary)]/20' 
+            ${(selectedCount > 0 || studyOnlyUploaded)
+              ? studyOnlyUploaded 
+                ? 'bg-violet-500 text-white hover:shadow-xl hover:shadow-violet-500/20'
+                : 'bg-[var(--primary)] text-white hover:shadow-xl hover:shadow-[var(--primary)]/20' 
               : 'bg-[var(--surface-2)] text-[var(--muted-foreground)] cursor-not-allowed'
             }
             disabled:opacity-50 disabled:cursor-not-allowed
@@ -875,6 +1131,14 @@ function FlashcardLessonSelector({
               <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
               Loading flashcards...
             </>
+          ) : studyOnlyUploaded ? (
+            <>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Start Studying Uploaded Cards
+            </>
           ) : selectedCount > 0 ? (
             <>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -883,7 +1147,7 @@ function FlashcardLessonSelector({
               </svg>
               Start Studying
               <span className="px-2 py-0.5 rounded-full bg-white/20 text-sm">
-                {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}
+                {selectedCount} lesson{selectedCount !== 1 ? 's' : ''}{includeUploadedCards ? ' + uploaded' : ''}
               </span>
             </>
           ) : (
@@ -891,7 +1155,7 @@ function FlashcardLessonSelector({
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              Select at least one lesson
+              Select at least one lesson or upload a deck
             </>
           )}
         </motion.button>
