@@ -49,12 +49,28 @@ function ensureLatexDelimiters(text) {
 /**
  * Renders text with inline markdown code (`code`) converted to styled <code> elements.
  * Also handles newlines by converting them to <br /> elements.
+ * Handles HTML tags by using dangerouslySetInnerHTML for HTML content.
  */
 function renderInlineMarkdown(text) {
   if (!text || typeof text !== 'string') return text;
   
-  // Decode HTML entities first
-  const decoded = decodeHtmlEntities(text);
+  // Apply normalizeLatex first to handle \n -> newline and other LaTeX normalization
+  let processed = normalizeLatex(text);
+  
+  // Decode HTML entities 
+  processed = decodeHtmlEntities(processed);
+  
+  // Check if the text contains HTML tags (other than just angle brackets in math)
+  const hasHtmlTags = /<(br|ul|ol|li|b|strong|i|em|p|div|span|code)\b[^>]*>/i.test(processed);
+  
+  if (hasHtmlTags) {
+    // For HTML content, we need to use dangerouslySetInnerHTML
+    // But we still want to process backtick code blocks
+    processed = processed.replace(/`([^`]+)`/g, 
+      '<code class="px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--primary)] font-mono text-[0.9em]">$1</code>'
+    );
+    return <span dangerouslySetInnerHTML={{ __html: processed }} />;
+  }
   
   const parts = [];
   const regex = /`([^`]+)`/g;
@@ -62,10 +78,10 @@ function renderInlineMarkdown(text) {
   let match;
   let keyIdx = 0;
   
-  while ((match = regex.exec(decoded)) !== null) {
+  while ((match = regex.exec(processed)) !== null) {
     // Add text before the code
     if (match.index > lastIndex) {
-      const textBefore = decoded.slice(lastIndex, match.index);
+      const textBefore = processed.slice(lastIndex, match.index);
       parts.push(...renderTextWithLineBreaks(textBefore, keyIdx));
       keyIdx++;
     }
@@ -83,15 +99,16 @@ function renderInlineMarkdown(text) {
   }
   
   // Add remaining text
-  if (lastIndex < decoded.length) {
-    parts.push(...renderTextWithLineBreaks(decoded.slice(lastIndex), keyIdx));
+  if (lastIndex < processed.length) {
+    parts.push(...renderTextWithLineBreaks(processed.slice(lastIndex), keyIdx));
   }
   
-  return parts.length > 0 ? parts : decoded;
+  return parts.length > 0 ? parts : processed;
 }
 
 /**
  * Helper to convert newlines to <br /> elements within text
+ * Note: normalizeLatex should already be applied to the text before calling this
  */
 function renderTextWithLineBreaks(text, baseKey) {
   const lines = text.split('\n');
@@ -101,7 +118,7 @@ function renderTextWithLineBreaks(text, baseKey) {
       result.push(<br key={`br-${baseKey}-${idx}`} />);
     }
     if (line) {
-      result.push(<span key={`text-${baseKey}-${idx}`}>{normalizeLatex(line)}</span>);
+      result.push(<span key={`text-${baseKey}-${idx}`}>{line}</span>);
     }
   });
   return result;
