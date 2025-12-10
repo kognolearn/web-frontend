@@ -6,6 +6,20 @@ import { MathJax } from "better-react-mathjax";
 import { normalizeLatex } from "@/utils/richText";
 
 /**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
  * Ensures LaTeX content is properly wrapped for MathJax rendering.
  * If content contains LaTeX commands but no delimiters, wraps in \(...\)
  */
@@ -27,6 +41,64 @@ function ensureLatexDelimiters(text) {
   }
   
   return normalizeLatex(text);
+}
+
+/**
+ * Renders text with inline markdown code (`code`) converted to styled <code> elements.
+ * Also handles newlines by converting them to <br /> elements.
+ */
+function renderInlineMarkdown(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  const parts = [];
+  const regex = /`([^`]+)`/g;
+  let lastIndex = 0;
+  let match;
+  let keyIdx = 0;
+  
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the code
+    if (match.index > lastIndex) {
+      const textBefore = text.slice(lastIndex, match.index);
+      parts.push(...renderTextWithLineBreaks(textBefore, keyIdx));
+      keyIdx++;
+    }
+    // Add the code element
+    parts.push(
+      <code 
+        key={`code-${keyIdx}`}
+        className="px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--primary)] font-mono text-[0.9em]"
+      >
+        {match[1]}
+      </code>
+    );
+    keyIdx++;
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(...renderTextWithLineBreaks(text.slice(lastIndex), keyIdx));
+  }
+  
+  return parts.length > 0 ? parts : text;
+}
+
+/**
+ * Helper to convert newlines to <br /> elements within text
+ */
+function renderTextWithLineBreaks(text, baseKey) {
+  const lines = text.split('\n');
+  const result = [];
+  lines.forEach((line, idx) => {
+    if (idx > 0) {
+      result.push(<br key={`br-${baseKey}-${idx}`} />);
+    }
+    if (line) {
+      result.push(<span key={`text-${baseKey}-${idx}`}>{normalizeLatex(line)}</span>);
+    }
+  });
+  return result;
 }
 
 // ============================================================================
@@ -102,7 +174,7 @@ function ParsonsProblem({ problem, onComplete }) {
         <div>
           <span className="text-xs font-medium text-[var(--primary)] uppercase tracking-wide">Ordering</span>
           <MathJax className="text-[var(--foreground)] font-medium mt-1">
-            {normalizeLatex(problem.prompt)}
+            {renderInlineMarkdown(problem.prompt)}
           </MathJax>
         </div>
       </div>
@@ -276,7 +348,7 @@ function SkeletonGap({ gap, value, onChange, submitted, isCorrect }) {
         `}
       >
         <MathJax className="flex-1 text-left">
-          {value ? normalizeLatex(value) : 'Select...'}
+          {value ? normalizeLatex(decodeHtmlEntities(value)) : 'Select...'}
         </MathJax>
         {!submitted && (
           <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,7 +379,7 @@ function SkeletonGap({ gap, value, onChange, submitted, isCorrect }) {
                   }
                 `}
               >
-                <MathJax>{normalizeLatex(opt)}</MathJax>
+                <MathJax>{normalizeLatex(decodeHtmlEntities(opt))}</MathJax>
               </button>
             ))}
           </motion.div>
@@ -316,7 +388,7 @@ function SkeletonGap({ gap, value, onChange, submitted, isCorrect }) {
       
       {submitted && !isCorrect && (
         <span className="ml-2 text-xs text-emerald-500 inline-flex items-center gap-1">
-          → <MathJax className="inline">{normalizeLatex(gap.correct_value)}</MathJax>
+          → <MathJax className="inline">{normalizeLatex(decodeHtmlEntities(gap.correct_value))}</MathJax>
         </span>
       )}
     </span>
@@ -396,16 +468,16 @@ function SkeletonProblem({ problem, onComplete }) {
         <div>
           <span className="text-xs font-medium text-amber-500 uppercase tracking-wide">Fill in the Gaps</span>
           <MathJax className="text-[var(--foreground)] font-medium mt-1">
-            {normalizeLatex(problem.context)}
+            {renderInlineMarkdown(problem.context)}
           </MathJax>
         </div>
       </div>
 
       <div className="p-6 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)]">
-        <MathJax className="text-lg leading-relaxed text-[var(--foreground)] flex flex-wrap items-baseline">
+        <MathJax className="text-lg leading-relaxed text-[var(--foreground)] flex flex-wrap items-baseline gap-1">
           {renderTemplate.map((part, idx) => (
             part.type === 'text' ? (
-              <span key={idx}>{normalizeLatex(part.content)}</span>
+              <React.Fragment key={idx}>{renderInlineMarkdown(part.content)}</React.Fragment>
             ) : (
               <SkeletonGap
                 key={idx}
@@ -612,7 +684,7 @@ function MatchingProblem({ problem, onComplete }) {
         <div>
           <span className="text-xs font-medium text-blue-500 uppercase tracking-wide">Matching</span>
           <MathJax className="text-[var(--foreground)] font-medium mt-1">
-            {normalizeLatex(problem.prompt)}
+            {renderInlineMarkdown(problem.prompt)}
           </MathJax>
         </div>
       </div>
@@ -820,7 +892,7 @@ function BlackboxProblem({ problem, onComplete }) {
     <div className="space-y-4">
       {/* Question prompt */}
       <MathJax className="text-[var(--foreground)] font-medium text-lg">
-        {normalizeLatex(problem.question)}
+        {renderInlineMarkdown(problem.question)}
       </MathJax>
 
       {/* Black box visualization */}

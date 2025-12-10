@@ -821,14 +821,19 @@ export default function CourseTabContent({
     setExpandedLessons(newExpanded);
   };
 
-  const fetchLessonContent = (lessonId, formats = ['reading']) => {
+  const fetchLessonContent = useCallback((lessonId, formats = ['reading']) => {
     if (!userId || !courseId) return; // Guard: don't fetch without userId/courseId
     formats.forEach(format => {
       const normFmt = normalizeFormat(format);
       const key = `${normFmt}:${lessonId}:${userId}:${courseId}`;
-      if (contentCache[key]) return;
       
-      setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
+      setContentCache((prev) => {
+        // Skip if already loading or loaded
+        if (prev[key]?.status === "loading" || prev[key]?.status === "loaded") {
+          return prev;
+        }
+        return { ...prev, [key]: { status: "loading" } };
+      });
       
       (async () => {
         try {
@@ -836,8 +841,8 @@ export default function CourseTabContent({
             format: normFmt, 
             id: String(lessonId) 
           });
-          if (userId) params.set("userId", String(userId));
-          if (courseId) params.set("courseId", String(courseId));
+          params.set("userId", String(userId));
+          params.set("courseId", String(courseId));
           const url = `/api/content?${params.toString()}`;
           const res = await authFetch(url);
           let data;
@@ -856,7 +861,7 @@ export default function CourseTabContent({
         }
       })();
     });
-  };
+  }, [userId, courseId]);
 
   const handleContentTypeClick = (lesson, contentType) => {
     setSelectedLesson(lesson);
@@ -1044,10 +1049,8 @@ export default function CourseTabContent({
     setSelectedReviewModule(null);
     setViewMode("topic");
     setCurrentViewingItem(null);
-    // Note: fetchLessonContent is not in deps as it's a stable function that uses state setters
     fetchLessonContent(lesson.id, ['reading']);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchLessonContent]);
 
   // Auto-select first lesson if available and not already selected
   useEffect(() => {
@@ -1786,19 +1789,27 @@ export default function CourseTabContent({
                 );
               })}
 
-              {/* Review Section - Bottom of Sidebar */}
-              <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              {/* Review & Cheatsheet Section - Bottom of Sidebar */}
+              <div className="mt-4 pt-4 border-t border-[var(--border)] flex gap-2">
                 <a
                   href={`/courses/${courseId}/review`}
-                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                  title="Review Mode"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  <span className="text-sm font-medium">Review Mode</span>
-                  <svg className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  <span className="text-sm font-medium">Review</span>
+                </a>
+                <a
+                  href={`/courses/${courseId}/cheatsheet`}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                  title="Cheatsheet"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
+                  <span className="text-sm font-medium">Cheatsheet</span>
                 </a>
               </div>
             </nav>

@@ -73,9 +73,17 @@ function parseContent(content) {
   // We use normalizeLatex for this now, which is more comprehensive
   normalizedContent = normalizeLatex(normalizedContent);
   
+  // Ensure code block closing markers are on their own line
+  // This handles cases like "```\n**Check Your Understanding**" where there's no blank line
+  normalizedContent = normalizedContent.replace(/(```)\s*(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
+  
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
   normalizedContent = normalizedContent.replace(/([^\n])(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
+  
+  // Also ensure there's a blank line after code blocks before Check Your Understanding
+  // Handles: ```\nsome content\n```\n**Check -> need blank line before **Check
+  normalizedContent = normalizedContent.replace(/(```\n)(\*\*Check Your Understanding\*\*)/gi, '$1\n$2');
   
   const blocks = [];
   const lines = normalizedContent.split("\n");
@@ -194,13 +202,24 @@ function parseContent(content) {
     // Code blocks
     if (trimmed.startsWith("```")) {
       const lang = trimmed.slice(3).trim();
-      const { collected, endIdx } = consumeUntil(i + 1, (l) => l.trim().startsWith("```"));
+      // Stop code block at ``` OR if we encounter a "Check Your Understanding" section
+      // This prevents runaway code blocks from swallowing question content
+      const { collected, endIdx } = consumeUntil(i + 1, (l) => {
+        const t = l.trim();
+        return t.startsWith("```") || /^\*\*Check Your Understanding\*\*/i.test(t);
+      });
+      
+      // Check if we stopped at Check Your Understanding (means no closing ```)
+      const stoppedAtQuestion = endIdx < lines.length && /^\*\*Check Your Understanding\*\*/i.test(lines[endIdx].trim());
+      
       blocks.push({
         type: "code",
         language: lang,
         content: collected.join("\n"),
       });
-      i = endIdx + 1;
+      
+      // If we stopped at ```, skip past it; if at question, don't skip (let it be parsed)
+      i = stoppedAtQuestion ? endIdx : endIdx + 1;
       continue;
     }
     
