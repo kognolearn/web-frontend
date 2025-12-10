@@ -66,14 +66,28 @@ export function toRichBlock(value) {
 export function normalizeLatex(text) {
   if (!text || typeof text !== 'string') return text;
   
-  let result = text;
+  // Step 0: Protect backtick code blocks from LaTeX processing
+  // Extract code blocks, process the rest, then restore
+  const codeBlocks = [];
+  let result = text.replace(/`([^`]+)`/g, (match, code) => {
+    const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+    // Inside code blocks, convert \( and \) back to $ (they may have been escaped)
+    const fixedCode = code
+      .replace(/\\\(/g, '$')
+      .replace(/\\\)/g, '$');
+    codeBlocks.push(fixedCode);
+    return placeholder;
+  });
   
-  // Step 1: Handle multiple levels of escaping that can occur from JSON parsing
+  // Step 1: Convert literal \\n to actual newlines
+  result = result.replace(/\\n/g, '\n');
+  
+  // Step 2: Handle multiple levels of escaping that can occur from JSON parsing
   // Only convert double backslash to single (\\omega -> \omega)
   // Use \\\\ to match double backslash in regex
   result = result.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
   
-  // Step 2: Fix double-escaped special characters and delimiters
+  // Step 3: Fix double-escaped special characters and delimiters
   result = result
     // 2 backslashes + delimiter -> 1 backslash + delimiter  
     .replace(/\\\\(\(|\))/g, '\\$1')
@@ -86,18 +100,18 @@ export function normalizeLatex(text) {
     .replace(/\\\\;/g, '\\;')
     .replace(/\\\\!/g, '\\!');
   
-  // Step 3: Convert \[...\] display math to $$...$$
+  // Step 4: Convert \[...\] display math to $$...$$
   result = result.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
   
-  // Step 4: Fix \mathcal, \mathscr etc. that might have issues
+  // Step 5: Fix \mathcal, \mathscr etc. that might have issues
   result = result.replace(/\\(mathcal|mathscr|mathbb|mathbf|mathrm|mathit|text|operatorname)\s*\{/g, '\\$1{');
   
-  // Step 5: Fix cases where command runs into number (e.g., \omega0 -> \omega_0)
+  // Step 6: Fix cases where command runs into number (e.g., \omega0 -> \omega_0)
   const greekLetters = 'alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega';
   const greekPattern = new RegExp(`\\\\(${greekLetters})(\\d)`, 'g');
   result = result.replace(greekPattern, '\\$1_$2');
   
-  // Step 6: Escape special characters inside \text{} blocks
+  // Step 7: Escape special characters inside \text{} blocks
   // & and # need to be escaped as \& and \# in LaTeX text mode
   result = result.replace(/\\text\{([^}]*)\}/g, (match, content) => {
     const escaped = content
@@ -106,8 +120,14 @@ export function normalizeLatex(text) {
     return `\\text{${escaped}}`;
   });
   
-  // Step 7: Escape stray single dollar signs so they are treated as text, not inline math
+  // Step 8: Escape stray single dollar signs so they are treated as text, not inline math
+  // But only outside of code blocks (which are already protected)
   result = result.replace(/(?<!\$)\$(?!\$)/g, '\\$');
+  
+  // Step 9: Restore code blocks
+  codeBlocks.forEach((code, i) => {
+    result = result.replace(`__CODE_BLOCK_${i}__`, `\`${code}\``);
+  });
   
   return result;
 }
