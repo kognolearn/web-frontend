@@ -6,6 +6,27 @@ import { MathJax } from "better-react-mathjax";
 import { normalizeLatex } from "@/utils/richText";
 
 /**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * Normalizes text by decoding HTML entities and then normalizing LaTeX
+ */
+function normalizeText(text) {
+  return normalizeLatex(decodeHtmlEntities(text));
+}
+
+/**
  * Renders practice problems with one-at-a-time navigation, collapsible solutions,
  * rubrics, and self-assessment features
  * 
@@ -306,7 +327,7 @@ export default function PracticeProblems({ problems = [] }) {
             <div className="prose prose-invert max-w-none">
               <MathJax dynamic>
                 <div className="whitespace-pre-wrap text-[var(--foreground)] leading-relaxed">
-                  {normalizeLatex(currentProblem.question)}
+                  {normalizeText(currentProblem.question)}
                 </div>
               </MathJax>
             </div>
@@ -438,7 +459,7 @@ export default function PracticeProblems({ problems = [] }) {
                               <div className="flex-1 prose prose-invert prose-sm max-w-none">
                                 <MathJax dynamic>
                                   <span className="text-[var(--foreground)]">
-                                    {stepIdx < stepsRevealed ? normalizeLatex(step) : "Click to reveal..."}
+                                    {stepIdx < stepsRevealed ? normalizeText(step) : "Click to reveal..."}
                                   </span>
                                 </MathJax>
                               </div>
@@ -462,7 +483,7 @@ export default function PracticeProblems({ problems = [] }) {
                       <div className="prose prose-invert max-w-none">
                         <MathJax dynamic>
                           <div className="text-[var(--foreground)] font-medium">
-                            {normalizeLatex(currentProblem.sample_answer.final_answer)}
+                            {normalizeText(currentProblem.sample_answer.final_answer)}
                           </div>
                         </MathJax>
                       </div>
@@ -485,7 +506,7 @@ export default function PracticeProblems({ problems = [] }) {
                             key={insightIdx}
                             className="p-3 rounded-lg bg-[var(--info)]/10 border border-[var(--info)]/30 text-sm text-[var(--foreground)]"
                           >
-                            <MathJax dynamic>{normalizeLatex(insight)}</MathJax>
+                            <MathJax dynamic>{normalizeText(insight)}</MathJax>
                           </div>
                         ))}
                       </div>
@@ -506,7 +527,7 @@ export default function PracticeProblems({ problems = [] }) {
                         {currentProblem.sample_answer.alternative_approaches.map((alt, altIdx) => (
                           <li key={altIdx} className="flex items-start gap-2">
                             <span className="text-[var(--primary)]">•</span>
-                            <MathJax dynamic>{normalizeLatex(alt)}</MathJax>
+                            <MathJax dynamic>{normalizeText(alt)}</MathJax>
                           </li>
                         ))}
                       </ul>
@@ -603,7 +624,7 @@ export default function PracticeProblems({ problems = [] }) {
                             <div className="flex-1">
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-sm font-medium text-[var(--foreground)]">
-                                  {criterion.criterion}
+                                  {decodeHtmlEntities(criterion.criterion)}
                                 </span>
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                                   isChecked 
@@ -621,7 +642,7 @@ export default function PracticeProblems({ problems = [] }) {
                                   </p>
                                   <ul className="text-xs text-[var(--muted-foreground)] space-y-0.5">
                                     {criterion.common_errors.map((err, errIdx) => (
-                                      <li key={errIdx}>• {err}</li>
+                                      <li key={errIdx}>• {decodeHtmlEntities(err)}</li>
                                     ))}
                                   </ul>
                                 </div>
@@ -636,7 +657,7 @@ export default function PracticeProblems({ problems = [] }) {
                   {currentProblem.rubric.partial_credit_policy && (
                     <div className="mt-4 p-3 rounded-lg bg-[var(--info)]/10 border border-[var(--info)]/30">
                       <p className="text-xs text-[var(--info)]">
-                        <span className="font-semibold">Partial Credit Policy:</span> {currentProblem.rubric.partial_credit_policy}
+                        <span className="font-semibold">Partial Credit Policy:</span> {decodeHtmlEntities(currentProblem.rubric.partial_credit_policy)}
                       </p>
                     </div>
                   )}
