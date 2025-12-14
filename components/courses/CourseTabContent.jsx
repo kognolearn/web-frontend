@@ -11,8 +11,6 @@ import InteractivePractice from "@/components/content/InteractivePractice";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
-import TimerControls from "@/components/courses/TimerControls";
-import PersonalTimer, { FocusTimerDisplay, PersonalTimerControls } from "@/components/courses/PersonalTimer";
 import { 
   isContentTypeCompleted, 
   getLessonCompletionStatus, 
@@ -285,6 +283,8 @@ export default function CourseTabContent({
   onPauseToggle,
   isSettingsModalOpen,
   setIsSettingsModalOpen,
+  isTimerControlsOpen,
+  setIsTimerControlsOpen,
   isEditCourseModalOpen,
   setIsEditCourseModalOpen,
   onOpenChatTab,
@@ -299,15 +299,13 @@ export default function CourseTabContent({
   onSharedChatStateChange,
   activeChatId,
   onActiveChatIdChange,
-  onChatOpenRequestHandled
+  onChatOpenRequestHandled,
+  focusTimerRef,
+  focusTimerState
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
-  const focusTimerRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
-  const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
-  const [isFocusTimerModalOpen, setIsFocusTimerModalOpen] = useState(false);
-  const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
   
   // Track the last title we sent to avoid redundant calls
   const lastTitleRef = useRef(null);
@@ -1240,47 +1238,12 @@ export default function CourseTabContent({
         </motion.button>
       )}
 
-      {/* Timer Controls Modal */}
-      <AnimatePresence>
-        {isTimerControlsOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
-              onClick={() => setIsTimerControlsOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Timer Controls</h3>
-                <button onClick={() => setIsTimerControlsOpen(false)} className="p-1 hover:bg-[var(--surface-2)] rounded-lg">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <TimerControls 
-                currentSeconds={secondsRemaining}
-                onTimerUpdate={handleTimerUpdate}
-                isTimerPaused={isTimerPaused}
-                onPauseToggle={onPauseToggle}
-              />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
       {/* Top Right Controls: Pause, Timer, Settings */}
       <div 
         className="absolute top-4 z-50 flex items-center gap-2"
         style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
       >
-        {/* Pause/Play Button */}
+        {/* Pause/Play Button for Study Timer */}
         {secondsRemaining !== null && (
           <button
             type="button"
@@ -1300,12 +1263,13 @@ export default function CourseTabContent({
           </button>
         )}
 
-        {/* Timer Display (Clickable) */}
+        {/* Combined Timer Display Card (Clickable) */}
         {secondsRemaining !== null && (
           <button
             onClick={() => setIsTimerControlsOpen(true)}
             className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
           >
+            {/* Study Timer */}
             <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -1323,6 +1287,82 @@ export default function CourseTabContent({
                 );
               })()}
             </div>
+            
+            {/* Focus Timer - shown when active */}
+            {focusTimerState && (focusTimerState.seconds > 0 || focusTimerState.isRunning || focusTimerState.isCompleted) && (
+              <>
+                {/* Divider */}
+                <span className="text-[var(--border)] mx-1">|</span>
+                
+                {/* Focus Timer Display */}
+                {focusTimerState.isCompleted ? (
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-green-500">Done</span>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <div className="flex items-baseline gap-0.5">
+                      {(() => {
+                        const m = Math.floor(focusTimerState.seconds / 60);
+                        const s = focusTimerState.seconds % 60;
+                        return (
+                          <>
+                            <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                            <span className="text-[10px] text-[var(--muted-foreground)]">:</span>
+                            <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
+                            {focusTimerState.phase && focusTimerState.phase !== "work" && (
+                              <span className="ml-1 text-[9px] text-amber-500 font-medium uppercase">
+                                {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Focus Timer Pause/Play - only shown when focus timer is active */}
+        {focusTimerState && (focusTimerState.seconds > 0 || focusTimerState.isRunning) && !focusTimerState.isCompleted && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.togglePause?.(); }}
+            className="flex items-center justify-center w-9 h-9 rounded-xl border border-amber-500/30 bg-amber-500/10 shadow-md backdrop-blur-xl transition-all hover:bg-amber-500/20"
+            title={focusTimerState.isRunning ? "Pause Focus Timer" : "Resume Focus Timer"}
+          >
+            {focusTimerState.isRunning ? (
+              <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+        )}
+
+        {/* Focus Timer Complete Dismiss Button */}
+        {focusTimerState?.isCompleted && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.dismissComplete?.(); }}
+            className="flex items-center justify-center w-9 h-9 rounded-xl border border-green-500/30 bg-green-500/10 shadow-md backdrop-blur-xl transition-all hover:bg-green-500/20"
+            title="Dismiss"
+          >
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         )}
 
@@ -1388,60 +1428,6 @@ export default function CourseTabContent({
           </button>
         </OnboardingTooltip>
       </div>
-
-      {/* Focus Timer Display - Always visible below main timer */}
-      <div 
-        className="absolute top-[4.5rem] z-40"
-        style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
-      >
-        <FocusTimerDisplay
-          seconds={focusTimerState.seconds}
-          isRunning={focusTimerState.isRunning}
-          phase={focusTimerState.phase}
-          isCompleted={focusTimerState.isCompleted}
-          onTogglePause={() => focusTimerRef.current?.togglePause()}
-          onClick={() => setIsFocusTimerModalOpen(true)}
-          onDismissComplete={() => focusTimerRef.current?.dismissComplete()}
-        />
-      </div>
-
-      {/* PersonalTimer - always mounted to preserve state */}
-      <div className="hidden">
-        <PersonalTimer 
-          ref={focusTimerRef}
-          onStateChange={setFocusTimerState}
-        />
-      </div>
-
-      {/* Focus Timer Settings Modal */}
-      <AnimatePresence>
-        {isFocusTimerModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
-              onClick={() => setIsFocusTimerModalOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-4 pb-0">
-                <h3 className="text-base font-semibold">Focus Timer</h3>
-                <button onClick={() => setIsFocusTimerModalOpen(false)} className="p-1 hover:bg-[var(--surface-2)] rounded-lg">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <PersonalTimerControls timerRef={focusTimerRef} timerState={focusTimerState} />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Sidebar */}
       {canRenderSidebar && (

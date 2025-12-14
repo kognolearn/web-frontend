@@ -8,9 +8,11 @@ import { supabase } from "@/lib/supabase/client";
 import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
 import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
+import TimerControlsModal from "@/components/courses/TimerControlsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch, getAuthHeaders } from "@/lib/api";
 
 const generateChatId = () => {
@@ -78,6 +80,7 @@ export default function CoursePage() {
   const [initialSeconds, setInitialSeconds] = useState(null);
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
@@ -91,6 +94,10 @@ export default function CoursePage() {
     };
   });
   const dragPreviewRef = useRef(null);
+  
+  // Focus timer state - lifted from CourseTabContent
+  const focusTimerRef = useRef(null);
+  const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
@@ -904,6 +911,8 @@ export default function CoursePage() {
                 onCurrentLessonChange={handleCurrentLessonChange}
                 isSettingsModalOpen={isSettingsModalOpen}
                 setIsSettingsModalOpen={setIsSettingsModalOpen}
+                isTimerControlsOpen={isTimerControlsOpen}
+                setIsTimerControlsOpen={setIsTimerControlsOpen}
                 isEditCourseModalOpen={isEditCourseModalOpen}
                 setIsEditCourseModalOpen={setIsEditCourseModalOpen}
                 onOpenChatTab={handleOpenChatTab}
@@ -915,6 +924,8 @@ export default function CoursePage() {
                 onSharedChatStateChange={handleSharedChatStateChange}
                 activeChatId={tab.activeChatId}
                 onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
+                focusTimerRef={focusTimerRef}
+                focusTimerState={focusTimerState}
               />
             ) : (
               <ChatTabContent
@@ -934,6 +945,17 @@ export default function CoursePage() {
       </div>
 
       {/* Global Modals */}
+      <TimerControlsModal
+        isOpen={isTimerControlsOpen}
+        onClose={() => setIsTimerControlsOpen(false)}
+        secondsRemaining={secondsRemaining}
+        onTimerUpdate={handleTimerUpdate}
+        isTimerPaused={isTimerPaused}
+        onPauseToggle={toggleTimerPause}
+        focusTimerRef={focusTimerRef}
+        focusTimerState={focusTimerState}
+      />
+
       <CourseSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
@@ -942,7 +964,17 @@ export default function CoursePage() {
         courseName={courseName}
         isTimerPaused={isTimerPaused}
         onPauseToggle={toggleTimerPause}
+        focusTimerRef={focusTimerRef}
+        focusTimerState={focusTimerState}
       />
+
+      {/* PersonalTimer - always mounted to preserve focus timer state */}
+      <div className="hidden">
+        <PersonalTimer 
+          ref={focusTimerRef}
+          onStateChange={setFocusTimerState}
+        />
+      </div>
 
       <EditCourseModal
         isOpen={isEditCourseModalOpen}

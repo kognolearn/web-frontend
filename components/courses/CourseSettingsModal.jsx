@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import TimerControls from "./TimerControls";
+import { PersonalTimerControls } from "./PersonalTimer";
 
 export default function CourseSettingsModal({ 
   isOpen, 
@@ -12,7 +13,9 @@ export default function CourseSettingsModal({
   onTimerUpdate,
   courseName,
   isTimerPaused,
-  onPauseToggle
+  onPauseToggle,
+  focusTimerRef,
+  focusTimerState
 }) {
   if (!isOpen) return null;
 
@@ -81,7 +84,7 @@ export default function CourseSettingsModal({
                     showCondition={isOpen}
                   >
                     <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                      Timer Controls
+                      Study Timer
                       <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
                     </h3>
                   </OnboardingTooltip>
@@ -94,6 +97,23 @@ export default function CourseSettingsModal({
                   onPauseToggle={onPauseToggle}
                 />
               </div>
+
+              {/* Focus Timer Section */}
+              {focusTimerRef && (
+                <div className="space-y-4 border-t border-[var(--border)] pt-6">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                      Focus Timer
+                      <InfoTooltip content="Use a focus timer to stay on task. Choose custom countdown or Pomodoro technique." position="right" />
+                    </h3>
+                  </div>
+
+                  <PersonalTimerControls timerRef={focusTimerRef} timerState={focusTimerState} />
+                </div>
+              )}
             </div>
           </motion.div>
         </>

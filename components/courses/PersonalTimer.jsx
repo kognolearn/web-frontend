@@ -36,7 +36,7 @@ export function PersonalTimerControls({ timerRef, timerState }) {
   };
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="space-y-4">
       {/* Mode Toggle */}
       <div className="flex gap-1 p-1 rounded-xl bg-[var(--surface-2)]">
         <button
@@ -157,7 +157,7 @@ function CustomTimerSetup({ timerRef, customInput }) {
   }, [hours, minutes, timerRef]);
 
   return (
-    <div className="space-y-2">
+    <div>
       <div className="flex gap-2">
         <div className="flex-1">
           <label className="block text-[10px] text-[var(--muted-foreground)] mb-0.5">Hours</label>
@@ -182,13 +182,18 @@ function CustomTimerSetup({ timerRef, customInput }) {
           />
         </div>
       </div>
-      <button
-        onClick={() => timerRef.current?.startCustomTimer()}
-        disabled={hours === 0 && minutes === 0}
-        className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        Start Timer
-      </button>
+      <div className="mt-4">
+        <button
+          onClick={() => timerRef.current?.startCustomTimer()}
+          disabled={hours === 0 && minutes === 0}
+          className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          Start Timer
+        </button>
+      </div>
     </div>
   );
 }
@@ -201,31 +206,38 @@ function PomodoroSetup({ timerRef, pomodoroPreset }) {
   }, [preset, timerRef]);
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-1.5">
-        {Object.entries(POMODORO_PRESETS).map(([key, presetData]) => (
-          <button
-            key={key}
-            onClick={() => setPreset(key)}
-            className={`py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
-              preset === key
-                ? "bg-[var(--primary)] text-white"
-                : "border border-[var(--border)] bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
-            }`}
-          >
-            {presetData.label}
-          </button>
-        ))}
+    <div>
+      <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-1.5">
+          {Object.entries(POMODORO_PRESETS).map(([key, presetData]) => (
+            <button
+              key={key}
+              onClick={() => setPreset(key)}
+              className={`py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                preset === key
+                  ? "bg-[var(--primary)] text-white"
+                  : "border border-[var(--border)] bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+              }`}
+            >
+              {presetData.label}
+            </button>
+          ))}
+        </div>
+        <div className="text-[10px] text-[var(--muted-foreground)] text-center">
+          {POMODORO_PRESETS[preset].work / 60}m focus, {POMODORO_PRESETS[preset].break / 60}m break
+        </div>
       </div>
-      <div className="text-[10px] text-[var(--muted-foreground)] text-center">
-        {POMODORO_PRESETS[preset].work / 60}m focus, {POMODORO_PRESETS[preset].break / 60}m break
+      <div className="mt-4">
+        <button
+          onClick={() => timerRef.current?.startPomodoro()}
+          className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary)]/90 transition-colors inline-flex items-center justify-center gap-2"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          Start Pomodoro
+        </button>
       </div>
-      <button
-        onClick={() => timerRef.current?.startPomodoro()}
-        className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary)]/90 transition-colors"
-      >
-        Start Pomodoro
-      </button>
     </div>
   );
 }
