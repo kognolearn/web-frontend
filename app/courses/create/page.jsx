@@ -26,8 +26,14 @@ import TopicExplorer from "@/components/courses/TopicExplorer";
 import { motion } from "framer-motion";
 
 const searchDebounceMs = 350;
-const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt";
+const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
 const nestedPayloadKeys = ["data", "result", "payload", "response", "content"];
+const acceptedAttachmentExtensions = new Set(
+  syllabusFileTypes
+    .split(",")
+    .map((ext) => ext.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 /**
  * @typedef {Object} Subtopic
@@ -266,6 +272,8 @@ function CreateCoursePageContent() {
   const [studyTimeError, setStudyTimeError] = useState(false);
   const syllabusInputId = useId();
   const examInputId = useId();
+  const [isSyllabusDragActive, setIsSyllabusDragActive] = useState(false);
+  const [isExamDragActive, setIsExamDragActive] = useState(false);
 
   // Multi-step wizard state
   const [currentStep, setCurrentStep] = useState(1);
@@ -461,27 +469,138 @@ function CreateCoursePageContent() {
 
   // selection handlers removed — user types university and course name directly
 
-  const handleSyllabusFileChange = useCallback((event) => {
-    if (!event.target.files) return;
-    const files = Array.from(event.target.files);
-    setSyllabusFiles((prev) => [...prev, ...files]);
-    event.target.value = "";
+  const filterAcceptedFiles = useCallback((files) => {
+    return files.filter((file) => {
+      const name = typeof file?.name === "string" ? file.name : "";
+      if (!name.includes(".")) return true;
+      const extension = `.${name.split(".").pop().toLowerCase()}`;
+      return acceptedAttachmentExtensions.has(extension);
+    });
   }, []);
+
+  const handleSyllabusFileChange = useCallback(
+    (event) => {
+      if (!event.target.files) return;
+      const files = filterAcceptedFiles(Array.from(event.target.files));
+      if (files.length) {
+        setSyllabusFiles((prev) => [...prev, ...files]);
+      }
+      event.target.value = "";
+    },
+    [filterAcceptedFiles]
+  );
 
   const handleRemoveSyllabusFile = useCallback((name) => {
     setSyllabusFiles((prev) => prev.filter((file) => file.name !== name));
   }, []);
 
-  const handleExamFileChange = useCallback((event) => {
-    if (!event.target.files) return;
-    const files = Array.from(event.target.files);
-    setExamFiles((prev) => [...prev, ...files]);
-    event.target.value = "";
+  const handleSyllabusDragEnter = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsSyllabusDragActive(true);
   }, []);
+
+  const handleSyllabusDragOver = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      if (!isSyllabusDragActive) {
+        setIsSyllabusDragActive(true);
+      }
+    },
+    [isSyllabusDragActive]
+  );
+
+  const handleSyllabusDragLeave = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const related = event.relatedTarget;
+    if (
+      typeof Node !== "undefined" &&
+      related instanceof Node &&
+      event.currentTarget.contains(related)
+    ) {
+      return;
+    }
+    setIsSyllabusDragActive(false);
+  }, []);
+
+  const handleSyllabusDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsSyllabusDragActive(false);
+      const droppedFiles = filterAcceptedFiles(Array.from(event.dataTransfer?.files || []));
+      if (!droppedFiles.length) return;
+      setSyllabusFiles((prev) => [...prev, ...droppedFiles]);
+    },
+    [filterAcceptedFiles]
+  );
+
+  const handleExamFileChange = useCallback(
+    (event) => {
+      if (!event.target.files) return;
+      const files = filterAcceptedFiles(Array.from(event.target.files));
+      if (files.length) {
+        setExamFiles((prev) => [...prev, ...files]);
+      }
+      event.target.value = "";
+    },
+    [filterAcceptedFiles]
+  );
 
   const handleRemoveExamFile = useCallback((name) => {
     setExamFiles((prev) => prev.filter((file) => file.name !== name));
   }, []);
+
+  const handleExamDragEnter = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsExamDragActive(true);
+  }, []);
+
+  const handleExamDragOver = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      if (!isExamDragActive) {
+        setIsExamDragActive(true);
+      }
+    },
+    [isExamDragActive]
+  );
+
+  const handleExamDragLeave = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const related = event.relatedTarget;
+    if (
+      typeof Node !== "undefined" &&
+      related instanceof Node &&
+      event.currentTarget.contains(related)
+    ) {
+      return;
+    }
+    setIsExamDragActive(false);
+  }, []);
+
+  const handleExamDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsExamDragActive(false);
+      const droppedFiles = filterAcceptedFiles(Array.from(event.dataTransfer?.files || []));
+      if (!droppedFiles.length) return;
+      setExamFiles((prev) => [...prev, ...droppedFiles]);
+    },
+    [filterAcceptedFiles]
+  );
 
   const clearTopicsState = useCallback(() => {
     setOverviewTopics([]);
@@ -1645,13 +1764,21 @@ function CreateCoursePageContent() {
                     />
                     <label
                       htmlFor={syllabusInputId}
-                      className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--surface-2)]/50"
+                      onDragEnter={handleSyllabusDragEnter}
+                      onDragOver={handleSyllabusDragOver}
+                      onDragLeave={handleSyllabusDragLeave}
+                      onDrop={handleSyllabusDrop}
+                      className={`flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--surface-2)]/50 ${
+                        isSyllabusDragActive
+                          ? "border-[var(--primary)] bg-[var(--primary)]/10"
+                          : "border-[var(--border)] bg-[var(--surface-1)]"
+                      }`}
                     >
                       <svg className="h-8 w-8 text-[var(--muted-foreground)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                       </svg>
                       <p className="text-sm font-medium text-[var(--foreground)] mb-1">Click to upload or drag and drop</p>
-                      <p className="text-xs text-[var(--muted-foreground)]">PDF, DOC, DOCX, PPT, PPTX, or TXT</p>
+                      <p className="text-xs text-[var(--muted-foreground)]">PDF, DOC, DOCX, PPT, PPTX, TXT, PNG, JPG, JPEG, GIF, WEBP, or HEIC</p>
                     </label>
                     
                     {syllabusFiles.length > 0 && (
@@ -1736,14 +1863,22 @@ function CreateCoursePageContent() {
                     />
                     <label
                       htmlFor={examInputId}
-                      className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-[var(--primary)]/40 bg-[var(--surface-1)] px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--primary)]/10"
+                      onDragEnter={handleExamDragEnter}
+                      onDragOver={handleExamDragOver}
+                      onDragLeave={handleExamDragLeave}
+                      onDrop={handleExamDrop}
+                      className={`flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed px-4 py-6 cursor-pointer transition hover:border-[var(--primary)] hover:bg-[var(--primary)]/10 ${
+                        isExamDragActive
+                          ? "border-[var(--primary)] bg-[var(--primary)]/15"
+                          : "border-[var(--primary)]/40 bg-[var(--surface-1)]"
+                      }`}
                     >
                       <svg className="h-10 w-10 text-[var(--primary)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
                       <p className="text-sm font-medium text-[var(--foreground)] mb-1">Upload Practice Exams</p>
                       <p className="text-xs text-[var(--muted-foreground)] text-center">Past exams, practice tests, sample questions, or old midterms/finals</p>
-                      <p className="text-[10px] text-[var(--muted-foreground)] mt-1">PDF, DOC, DOCX, PPT, PPTX, or TXT</p>
+                      <p className="text-[10px] text-[var(--muted-foreground)] mt-1">PDF, DOC, DOCX, PPT, PPTX, TXT, PNG, JPG, JPEG, GIF, WEBP, or HEIC</p>
                     </label>
                     
                     {examFiles.length > 0 && (

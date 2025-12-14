@@ -329,6 +329,47 @@ const cloneMessage = (message = {}) => {
   return cloned;
 };
 
+const cloneDraftFiles = (files) => {
+  if (!Array.isArray(files)) return [];
+  return files
+    .filter(Boolean)
+    .map((file) => ({ ...file }));
+};
+
+const normalizeDrafts = (chats, drafts) => {
+  const source = drafts && typeof drafts === "object" ? drafts : {};
+  const map = {};
+  (chats || []).forEach((chat) => {
+    if (!chat?.id) return;
+    const draft = source[chat.id];
+    map[chat.id] = {
+      input: typeof draft?.input === "string" ? draft.input : "",
+      attachedFiles: cloneDraftFiles(draft?.attachedFiles),
+    };
+  });
+  return map;
+};
+
+const areDraftFilesEqual = (a = [], b = []) => {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const fileA = a[i];
+    const fileB = b[i];
+    if (!fileA || !fileB) return false;
+    if (
+      fileA.id !== fileB.id ||
+      fileA.name !== fileB.name ||
+      fileA.size !== fileB.size ||
+      fileA.type !== fileB.type
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const createBlankChat = () => ({
   id: generateStableId(),
   name: "New Chat",
@@ -361,10 +402,14 @@ const buildMessageVersionMap = (chatList) => {
   return map;
 };
 
-const snapshotChatState = (chats, currentChatId) => ({
-  chats: normalizeChats(chats),
-  currentChatId,
-});
+const snapshotChatState = (chats, currentChatId, drafts) => {
+  const normalizedChats = normalizeChats(chats);
+  return {
+    chats: normalizedChats,
+    currentChatId,
+    drafts: normalizeDrafts(normalizedChats, drafts),
+  };
+};
 
 const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, onStateChange, onActiveChatChange, initialChats, initialChatId, syncedState, mode = "docked", isActive = true }, ref) => {
   const initialChatDataRef = useRef(null);
@@ -394,6 +439,11 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   
   // Chat state
   const [chats, setChats] = useState(initialChatDataRef.current);
+  const initialDraftsRef = useRef(null);
+  if (initialDraftsRef.current === null) {
+    initialDraftsRef.current = normalizeDrafts(initialChatDataRef.current, syncedState?.drafts);
+  }
+  const [drafts, setDrafts] = useState(initialDraftsRef.current);
 
   useImperativeHandle(ref, () => ({
     open: (options) => {
@@ -418,10 +468,18 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     }
   }));
   const [currentChatId, setCurrentChatId] = useState(initialChatIdRef.current);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const initialDraft = initialDraftsRef.current?.[initialChatIdRef.current] || { input: "", attachedFiles: [] };
+  const [input, setInput] = useState(initialDraft.input || "");
+  const createPendingAssistantMessage = useCallback(() => ({
+    id: generateStableId(),
+    role: "assistant",
+    content: "",
+    timestamp: new Date().toISOString(),
+    isPending: true,
+  }), []);
   const [selectedText, setSelectedText] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState([]);
+  const [attachedFiles, setAttachedFiles] = useState(() => cloneDraftFiles(initialDraft.attachedFiles));
+  const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingContent, setEditingContent] = useState("");
@@ -445,10 +503,35 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     const nextHeight = Math.min(el.scrollHeight, 120);
     el.style.height = `${nextHeight}px`;
   }, [useContentEditableInput]);
-  
+
   const currentChat = chats.find(c => c.id === currentChatId);
 
-  const captureState = useCallback(() => snapshotChatState(chats, currentChatId), [chats, currentChatId]);
+  const updateDraft = useCallback((chatId, partial = {}) => {
+    if (!chatId) return;
+    setDrafts((prev) => {
+      const existing = prev[chatId] || { input: "", attachedFiles: [] };
+      const nextInput = partial.input !== undefined ? partial.input : existing.input;
+      const nextFiles =
+        partial.attachedFiles !== undefined
+          ? cloneDraftFiles(partial.attachedFiles)
+          : existing.attachedFiles;
+      if (existing.input === nextInput && areDraftFilesEqual(existing.attachedFiles, nextFiles)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [chatId]: {
+          input: nextInput,
+          attachedFiles: nextFiles,
+        },
+      };
+    });
+  }, []);
+
+  const captureState = useCallback(
+    () => snapshotChatState(chats, currentChatId, drafts),
+    [chats, currentChatId, drafts]
+  );
 
   useEffect(() => {
     if (onActiveChatChange && currentChatId) {
@@ -473,25 +556,34 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     }
 
     const normalized = normalizeChats(state.chats);
+    const normalizedDrafts = normalizeDrafts(normalized, state.drafts);
     suppressStateSyncRef.current = true;
     setChats(normalized);
+    setDrafts(normalizedDrafts);
 
     const fallbackId = normalized[0]?.id || generateStableId();
-    setCurrentChatId((prev) => {
-      if (options.preserveCurrent) {
-        if (prev && normalized.some((chat) => chat.id === prev)) {
-          return prev;
-        }
-        return fallbackId;
+    let resolvedChatId = fallbackId;
+    if (options.preserveCurrent) {
+      if (currentChatId && normalized.some((chat) => chat.id === currentChatId)) {
+        resolvedChatId = currentChatId;
       }
-      if (state.currentChatId && normalized.some((chat) => chat.id === state.currentChatId)) {
-        return state.currentChatId;
-      }
-      return fallbackId;
-    });
+    } else if (state.currentChatId && normalized.some((chat) => chat.id === state.currentChatId)) {
+      resolvedChatId = state.currentChatId;
+    }
+
+    setCurrentChatId(resolvedChatId);
     setMessageVersions(buildMessageVersionMap(normalized));
+
+    const nextDraft = normalizedDrafts[resolvedChatId] || { input: "", attachedFiles: [] };
+    if (!editingMessageId) {
+      const desiredInput = nextDraft.input || "";
+      setInput((prev) => (prev === desiredInput ? prev : desiredInput));
+    }
+    const desiredFiles = cloneDraftFiles(nextDraft.attachedFiles);
+    setAttachedFiles((prev) => (areDraftFilesEqual(prev, desiredFiles) ? prev : desiredFiles));
+
     return true;
-  }, []);
+  }, [currentChatId, editingMessageId]);
 
   useEffect(() => {
     if (!syncedState) return;
@@ -524,6 +616,41 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   useEffect(() => {
     adjustInputHeight();
   }, [adjustInputHeight, input, editingContent, editingMessageId]);
+
+  useEffect(() => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      const chatIds = new Set();
+      chats.forEach((chat) => {
+        if (!chat?.id) return;
+        chatIds.add(chat.id);
+        if (!next[chat.id]) {
+          next[chat.id] = { input: "", attachedFiles: [] };
+          changed = true;
+        }
+      });
+      for (const draftId of Object.keys(next)) {
+        if (!chatIds.has(draftId)) {
+          delete next[draftId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [chats]);
+
+  useEffect(() => {
+    if (!currentChatId) return;
+    const draft = drafts[currentChatId];
+    if (!draft) return;
+    if (!editingMessageId) {
+      const desiredInput = draft.input || "";
+      setInput((prev) => (prev === desiredInput ? prev : desiredInput));
+    }
+    const desiredFiles = cloneDraftFiles(draft.attachedFiles);
+    setAttachedFiles((prev) => (areDraftFilesEqual(prev, desiredFiles) ? prev : desiredFiles));
+  }, [currentChatId, drafts, editingMessageId]);
 
   const buildTransferPayload = useCallback(() => ({
     title: currentChat?.name || "New Chat",
@@ -805,20 +932,71 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     }
   }, [currentChat?.messages]);
 
-  const handleFileAttachment = (files) => {
-    const newFiles = files.map(file => ({
+  const handleFileAttachment = useCallback((files) => {
+    const normalizedFiles = Array.from(files || []);
+    if (!normalizedFiles.length) return;
+    const newFiles = normalizedFiles.map(file => ({
       id: Date.now() + Math.random(),
       name: file.name,
       size: file.size,
       type: file.type,
       file
     }));
-    setAttachedFiles(prev => [...prev, ...newFiles]);
-  };
+    setAttachedFiles(prev => {
+      const next = [...prev, ...newFiles];
+      updateDraft(currentChatId, { attachedFiles: next });
+      return next;
+    });
+  }, [currentChatId, updateDraft]);
 
-  const removeAttachedFile = (fileId) => {
-    setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
-  };
+  const handleComposerDragEnter = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsComposerDragActive(true);
+  }, []);
+
+  const handleComposerDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setIsComposerDragActive(true);
+  }, []);
+
+  const handleComposerDragLeave = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const related = event.relatedTarget;
+    if (
+      typeof Node !== "undefined" &&
+      related instanceof Node &&
+      event.currentTarget.contains(related)
+    ) {
+      return;
+    }
+    setIsComposerDragActive(false);
+  }, []);
+
+  const handleComposerDrop = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsComposerDragActive(false);
+    const droppedFiles = Array.from(event.dataTransfer?.files || []);
+    if (!droppedFiles.length) return;
+    handleFileAttachment(droppedFiles);
+  }, [handleFileAttachment]);
+
+  const removeAttachedFile = useCallback((fileId) => {
+    setAttachedFiles(prev => {
+      const next = prev.filter(f => f.id !== fileId);
+      if (next.length === prev.length) {
+        return prev;
+      }
+      updateDraft(currentChatId, { attachedFiles: next });
+      return next;
+    });
+  }, [currentChatId, updateDraft]);
 
   const createNewChat = () => {
     // First, clean up any existing empty chats
@@ -876,6 +1054,8 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
 
   const sendMessage = async (messageContent = input, fromEdit = false, editedMessageId = null) => {
     if (!messageContent.trim() && attachedFiles.length === 0) return;
+
+    const pendingAssistant = createPendingAssistantMessage();
 
     let userMessage;
     let updatedMessagesForApi = [];
@@ -937,7 +1117,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
         if (chat.id === currentChatId) {
           return {
             ...chat,
-            messages: [...chat.messages.slice(0, messageIndex), userMessage]
+            messages: [...chat.messages.slice(0, messageIndex), userMessage, pendingAssistant]
           };
         }
         return chat;
@@ -969,7 +1149,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       // Add new message
       setChats(prev => sortChatsByRecency(prev.map(chat => {
         if (chat.id === currentChatId) {
-          const updatedMessages = [...chat.messages, userMessage];
+          const updatedMessages = [...chat.messages, userMessage, pendingAssistant];
           // Auto-name the chat based on first user message if still "New Chat"
           const newName = chat.name === "New Chat" && updatedMessages.filter(m => m.role === 'user').length === 1
             ? generateChatName(messageContent)
@@ -982,8 +1162,8 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
 
     setInput("");
     setAttachedFiles([]);
+    updateDraft(currentChatId, { input: "", attachedFiles: [] });
     setSelectedText("");
-    setIsLoading(true);
     // contentEditable text will be synced by the effect above
 
     try {
@@ -1123,34 +1303,48 @@ Instructions:
 
       const data = await response.json();
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: data?.content || "",
-        timestamp: new Date().toISOString()
-      };
-
-      setChats(prev => sortChatsByRecency(prev.map(chat => 
-        chat.id === currentChatId
-          ? { ...chat, messages: [...chat.messages, assistantMessage] }
-          : chat
-      )));
+      setChats(prev => sortChatsByRecency(prev.map(chat => {
+        if (chat.id !== currentChatId) return chat;
+        const replaced = (chat.messages || []).map((msg) => {
+          if (msg?.id !== pendingAssistant.id) return msg;
+          return {
+            ...msg,
+            content: data?.content || "",
+            timestamp: new Date().toISOString(),
+            isPending: false,
+            isError: false,
+          };
+        });
+        const hasPending = (chat.messages || []).some((m) => m?.id === pendingAssistant.id);
+        return hasPending
+          ? { ...chat, messages: replaced }
+          : {
+              ...chat,
+              messages: [...(chat.messages || []), {
+                id: pendingAssistant.id,
+                role: "assistant",
+                content: data?.content || "",
+                timestamp: new Date().toISOString(),
+              }]
+            };
+      })));
     } catch (error) {
       console.error("Error sending message:", error);
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date().toISOString(),
-        isError: true
-      };
-      setChats(prev => sortChatsByRecency(prev.map(chat => 
-        chat.id === currentChatId
-          ? { ...chat, messages: [...chat.messages, errorMessage] }
-          : chat
-      )));
-    } finally {
-      setIsLoading(false);
+      setChats(prev => sortChatsByRecency(prev.map(chat => {
+        if (chat.id !== currentChatId) return chat;
+        const replaced = (chat.messages || []).map((msg) => {
+          if (msg?.id !== pendingAssistant.id) return msg;
+          return {
+            ...msg,
+            content: "Sorry, I encountered an error. Please try again.",
+            timestamp: new Date().toISOString(),
+            isPending: false,
+            isError: true,
+          };
+        });
+        const hasPending = (chat.messages || []).some((m) => m?.id === pendingAssistant.id);
+        return hasPending ? { ...chat, messages: replaced } : chat;
+      })));
     }
   };
 
@@ -1201,12 +1395,14 @@ Instructions:
     
     if (!previousUserMessage || previousUserMessage.role !== 'user') return;
 
-    // Remove the assistant message we're retrying
+    const pendingAssistant = createPendingAssistantMessage();
+
+    // Remove the assistant message we're retrying and add pending indicator
     setChats(prev => prev.map(chat => {
       if (chat.id === currentChatId) {
         return {
           ...chat,
-          messages: chat.messages.slice(0, messageIndex)
+          messages: [...chat.messages.slice(0, messageIndex), pendingAssistant]
         };
       }
       return chat;
@@ -1226,8 +1422,6 @@ Instructions:
     if (messageVersion.files && messageVersion.files.length > 0) {
       setAttachedFiles(messageVersion.files);
     }
-
-    setIsLoading(true);
 
     try {
       // Prepare attachments for API
@@ -1369,34 +1563,24 @@ Instructions:
 
       const data = await response.json();
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: data?.content || "",
-        timestamp: new Date().toISOString()
-      };
-
-      setChats(prev => sortChatsByRecency(prev.map(chat => 
-        chat.id === currentChatId
-          ? { ...chat, messages: [...chat.messages, assistantMessage] }
-          : chat
-      )));
+      setChats(prev => sortChatsByRecency(prev.map(chat => {
+        if (chat.id !== currentChatId) return chat;
+        const replaced = (chat.messages || []).map((msg) => {
+          if (msg?.id !== pendingAssistant.id) return msg;
+          return {
+            ...msg,
+            content: data?.content || "",
+            timestamp: new Date().toISOString(),
+            isPending: false,
+            isError: false,
+          };
+        });
+        const hasPending = (chat.messages || []).some((m) => m?.id === pendingAssistant.id);
+        return hasPending ? { ...chat, messages: replaced } : chat;
+      })));
     } catch (error) {
       console.error("Error retrying message:", error);
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date().toISOString(),
-        isError: true
-      };
-      setChats(prev => sortChatsByRecency(prev.map(chat => 
-        chat.id === currentChatId
-          ? { ...chat, messages: [...chat.messages, errorMessage] }
-          : chat
-      )));
     } finally {
-      setIsLoading(false);
       // Restore original context
       setSelectedText(originalSelectedText);
       setAttachedFiles(originalAttachedFiles);
@@ -1612,8 +1796,17 @@ Instructions:
                       ))}
                     </div>
                   )}
-                  
-                  {message.role === 'assistant' ? (
+
+                  {message.isPending ? (
+                    <div className="flex items-center gap-2" role="status" aria-live="polite">
+                      <div className="flex gap-1">
+                        <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                      <span className="text-xs text-[var(--muted-foreground)]">Thinking...</span>
+                    </div>
+                  ) : message.role === 'assistant' ? (
                     <MarkdownRenderer content={displayVersion.content} className="text-[14px] leading-[1.6]" />
                   ) : (
                     <div className="text-[14px] whitespace-pre-wrap break-words leading-[1.6]">
@@ -1669,7 +1862,7 @@ Instructions:
                         </svg>
                       </button>
                     )}
-                    {message.role === 'assistant' && (
+                    {message.role === 'assistant' && !message.isPending && (
                       <button
                         onClick={() => retryMessage(message.id)}
                         type="button"
@@ -1696,26 +1889,6 @@ Instructions:
               </div>
             );
           })}
-          
-          {isLoading && (
-            <div className="flex justify-start">
-              <div 
-                data-chat-message="true"
-                className="max-w-[85%] md:max-w-[75%] rounded-2xl rounded-bl-md bg-[var(--surface-1)] border border-[var(--border)] px-4 py-3 shadow-sm" 
-                role="status" 
-                aria-live="polite"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                  <span className="text-xs text-[var(--muted-foreground)]">Thinking...</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1793,14 +1966,24 @@ Instructions:
 
       {/* Input Area */}
       <div className="border-t border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80">
-        <div className="mx-auto max-w-3xl px-4 py-3">
+        <div
+          className={`mx-auto max-w-3xl px-4 py-3 border rounded-xl transition-colors ${
+            isComposerDragActive
+              ? "border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/5"
+              : "border-transparent"
+          }`}
+          onDragEnter={handleComposerDragEnter}
+          onDragOver={handleComposerDragOver}
+          onDragLeave={handleComposerDragLeave}
+          onDrop={handleComposerDrop}
+        >
           <form className="flex items-end gap-2" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
             <input
               ref={fileInputRef}
               type="file"
               multiple
               className="hidden"
-              onChange={(e) => handleFileAttachment(Array.from(e.target.files || []))}
+              onChange={(e) => handleFileAttachment(e.target.files)}
             />
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -1838,6 +2021,7 @@ Instructions:
                       setEditingContent(text);
                     } else {
                       setInput(text);
+                      updateDraft(currentChatId, { input: text });
                     }
                   }}
                   onKeyDown={(e) => {
@@ -1864,7 +2048,14 @@ Instructions:
                 <textarea
                   ref={inputRef}
                   value={editingMessageId ? editingContent : input}
-                  onChange={(e) => editingMessageId ? setEditingContent(e.target.value) : setInput(e.target.value)}
+                  onChange={(e) => {
+                    if (editingMessageId) {
+                      setEditingContent(e.target.value);
+                    } else {
+                      setInput(e.target.value);
+                      updateDraft(currentChatId, { input: e.target.value });
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();

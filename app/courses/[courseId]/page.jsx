@@ -26,6 +26,46 @@ const createBlankChat = () => ({
   messages: [],
 });
 
+const mergeChatStates = (base, incoming) => {
+  const prev = base || {};
+  const next = incoming || {};
+    const hasRealFiles = (files) =>
+      Array.isArray(files) && files.some((f) => typeof File !== "undefined" && f?.file instanceof File);
+  const merged = {
+    chats: Array.isArray(next.chats) && next.chats.length > 0 ? next.chats : (prev.chats || []),
+    currentChatId: next.currentChatId ?? prev.currentChatId ?? null,
+    drafts: { ...(prev.drafts || {}) },
+  };
+
+  if (next.drafts && typeof next.drafts === "object") {
+    for (const [chatId, draft] of Object.entries(next.drafts)) {
+      const prevDraft = merged.drafts[chatId];
+        const incomingHasFiles = hasRealFiles(draft?.attachedFiles);
+        const prevHasFiles = hasRealFiles(prevDraft?.attachedFiles);
+      const incomingAttachedFilesArray = Array.isArray(draft?.attachedFiles) ? draft.attachedFiles : undefined;
+      const incomingExplicitlyClearsFiles = Array.isArray(incomingAttachedFilesArray) && incomingAttachedFilesArray.length === 0;
+      merged.drafts[chatId] = {
+        input: draft?.input ?? prevDraft?.input ?? "",
+        attachedFiles:
+          incomingExplicitlyClearsFiles
+            ? []
+            : incomingHasFiles || !prevHasFiles
+              ? (incomingAttachedFilesArray || [])
+              : prevDraft?.attachedFiles || [],
+      };
+    }
+  }
+
+  // Ensure every chat has a draft bucket
+  (merged.chats || []).forEach((chat) => {
+    if (chat?.id && !merged.drafts[chat.id]) {
+      merged.drafts[chat.id] = { input: "", attachedFiles: [] };
+    }
+  });
+
+  return merged;
+};
+
 export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
@@ -47,6 +87,7 @@ export default function CoursePage() {
     return {
       chats: [initialChat],
       currentChatId: initialChat.id,
+      drafts: { [initialChat.id]: { input: "", attachedFiles: [] } },
     };
   });
   const dragPreviewRef = useRef(null);
@@ -418,7 +459,7 @@ export default function CoursePage() {
 
   const handleSharedChatStateChange = useCallback((state) => {
     if (!state) return;
-    setSharedChatState(state);
+    setSharedChatState((prev) => mergeChatStates(prev, state));
     if (!Array.isArray(state.chats) || state.chats.length === 0) return;
     const chatNameLookup = new Map(state.chats.map((chat) => [chat.id, chat.name || "Chat"]));
     setTabs((prev) => {
@@ -447,11 +488,16 @@ export default function CoursePage() {
         targetChatId = newChat.id;
         inferredTitle = inferredTitle || newChat.name;
         setSharedChatState((prev) => {
-          const prevChats = Array.isArray(prev?.chats) ? prev.chats : [];
+          const merged = mergeChatStates(prev, prev);
+          const prevChats = Array.isArray(merged?.chats) ? merged.chats : [];
           return {
-            ...prev,
+            ...merged,
             chats: [newChat, ...prevChats],
             currentChatId: newChat.id,
+            drafts: {
+              ...(merged?.drafts || {}),
+              [newChat.id]: merged?.drafts?.[newChat.id] || { input: "", attachedFiles: [] },
+            },
           };
         });
       } else if (!inferredTitle) {
@@ -472,7 +518,7 @@ export default function CoursePage() {
 
   const handleOpenChatTab = (payload) => {
     if (payload?.chatState) {
-      setSharedChatState(payload.chatState);
+      setSharedChatState((prev) => mergeChatStates(prev, payload.chatState));
     }
     addTab('chat', {
       title: payload?.title || 'Chat',
@@ -521,7 +567,7 @@ export default function CoursePage() {
         }
       }
       if (payload?.chatState) {
-        setSharedChatState(payload.chatState);
+        setSharedChatState((prev) => mergeChatStates(prev, payload.chatState));
       }
       addTab('chat', {
         title: payload?.title,
