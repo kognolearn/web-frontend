@@ -294,6 +294,7 @@ export default function CourseTabContent({
   onTabTitleChange,
   onCurrentLessonChange,
   hasHiddenContent = false,
+  onHiddenContentClick,
   isActive = true,
   sharedChatState,
   onSharedChatStateChange,
@@ -301,7 +302,8 @@ export default function CourseTabContent({
   onActiveChatIdChange,
   onChatOpenRequestHandled,
   focusTimerRef,
-  focusTimerState
+  focusTimerState,
+  isDeepStudyCourse = false
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
@@ -1219,6 +1221,16 @@ export default function CourseTabContent({
     }
   }, [courseId]);
 
+  const settingsTooltipContent = isDeepStudyCourse
+    ? "Deep Study courses already include unlimited time. Open settings for focus timer controls and other options."
+    : "Click here to adjust your study time. You can add or subtract time, or set a custom study duration for this course.";
+
+  const isFocusTimerVisible = !!(
+    focusTimerState &&
+    (focusTimerState.seconds > 0 || focusTimerState.isRunning || focusTimerState.isCompleted)
+  );
+  const shouldShowTimerCard = (!isDeepStudyCourse && secondsRemaining !== null) || isFocusTimerVisible;
+
   return (
     <div className="relative w-full h-full flex overflow-hidden">
       {canRenderSidebar && (
@@ -1244,7 +1256,7 @@ export default function CourseTabContent({
         style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
       >
         {/* Pause/Play Button for Study Timer */}
-        {secondsRemaining !== null && (
+        {!isDeepStudyCourse && secondsRemaining !== null && (
           <button
             type="button"
             onClick={onPauseToggle}
@@ -1264,92 +1276,83 @@ export default function CourseTabContent({
         )}
 
         {/* Combined Timer Display Card (Clickable) */}
-        {secondsRemaining !== null && (
-          <button
-            onClick={() => setIsTimerControlsOpen(true)}
-            className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-          >
-            {/* Study Timer */}
-            <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="flex items-baseline gap-0.5">
-              {(() => {
-                const h = Math.floor(secondsRemaining / 3600);
-                const m = Math.floor((secondsRemaining % 3600) / 60);
-                return (
+        {shouldShowTimerCard && (
+          (() => {
+            const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
+            const containerProps = !isDeepStudyCourse && secondsRemaining !== null
+              ? {
+                  type: 'button',
+                  onClick: () => setIsTimerControlsOpen(true),
+                  className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+                }
+              : {
+                  className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl"
+                };
+            return (
+              <Container {...containerProps}>
+                {!isDeepStudyCourse && secondsRemaining !== null && (
                   <>
-                    <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
-                    <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
-                    <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
-                    <span className="text-[10px] text-[var(--muted-foreground)]">m</span>
-                  </>
-                );
-              })()}
-            </div>
-            
-            {/* Focus Timer - shown when active */}
-            {focusTimerState && (focusTimerState.seconds > 0 || focusTimerState.isRunning || focusTimerState.isCompleted) && (
-              <>
-                {/* Divider */}
-                <span className="text-[var(--border)] mx-1">|</span>
-                
-                {/* Focus Timer Display */}
-                {focusTimerState.isCompleted ? (
-                  <div className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                    </svg>
-                    <span className="text-sm font-semibold text-green-500">Done</span>
-                  </div>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div className="flex items-baseline gap-0.5">
                       {(() => {
-                        const m = Math.floor(focusTimerState.seconds / 60);
-                        const s = focusTimerState.seconds % 60;
+                        const h = Math.floor(secondsRemaining / 3600);
+                        const m = Math.floor((secondsRemaining % 3600) / 60);
                         return (
                           <>
+                            <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
+                            <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
                             <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
-                            <span className="text-[10px] text-[var(--muted-foreground)]">:</span>
-                            <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
-                            {focusTimerState.phase && focusTimerState.phase !== "work" && (
-                              <span className="ml-1 text-[9px] text-amber-500 font-medium uppercase">
-                                {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
-                              </span>
-                            )}
+                            <span className="text-[10px] text-[var(--muted-foreground)]">m</span>
                           </>
                         );
                       })()}
                     </div>
                   </>
                 )}
-              </>
-            )}
-          </button>
-        )}
 
-        {/* Focus Timer Pause/Play - only shown when focus timer is active */}
-        {focusTimerState && (focusTimerState.seconds > 0 || focusTimerState.isRunning) && !focusTimerState.isCompleted && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.togglePause?.(); }}
-            className="flex items-center justify-center w-9 h-9 rounded-xl border border-amber-500/30 bg-amber-500/10 shadow-md backdrop-blur-xl transition-all hover:bg-amber-500/20"
-            title={focusTimerState.isRunning ? "Pause Focus Timer" : "Resume Focus Timer"}
-          >
-            {focusTimerState.isRunning ? (
-              <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
+                {(!isDeepStudyCourse && secondsRemaining !== null && isFocusTimerVisible) && (
+                  <span className="text-[var(--border)] mx-1">|</span>
+                )}
+
+                {isFocusTimerVisible && (
+                  focusTimerState.isCompleted ? (
+                    <div className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-green-500">Done</span>
+                    </div>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <div className="flex items-baseline gap-0.5">
+                        {(() => {
+                          const m = Math.floor(focusTimerState.seconds / 60);
+                          const s = focusTimerState.seconds % 60;
+                          return (
+                            <>
+                              <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                              <span className="text-[10px] text-[var(--muted-foreground)]">:</span>
+                              <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
+                              {focusTimerState.phase && focusTimerState.phase !== "work" && (
+                                <span className="ml-1 text-[9px] text-amber-500 font-medium uppercase">
+                                  {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </>
+                  )
+                )}
+              </Container>
+            );
+          })()
         )}
 
         {/* Focus Timer Complete Dismiss Button */}
@@ -1366,18 +1369,20 @@ export default function CourseTabContent({
           </button>
         )}
 
-        {/* Hidden Content Warning */}
-        {hasHiddenContent && secondsRemaining !== null && (
-          <div 
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-pointer hover:bg-amber-500/20 transition-colors"
-            onClick={() => setIsTimerControlsOpen(true)}
-            title="Add more time to see all content"
-          >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span className="text-xs font-medium whitespace-nowrap">Content hidden</span>
-          </div>
+        {/* Hidden Content Warning - subtle indicator */}
+        {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
+          <Tooltip content="Some content is hidden. Add more time to see all content." position="bottom">
+            <button
+              type="button"
+              onClick={() => onHiddenContentClick?.()}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-lg backdrop-blur-xl transition-all hover:bg-amber-500/20"
+              title="Content hidden - click to add time"
+            >
+              <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+            </button>
+          </Tooltip>
         )}
 
         {/* Share Button */}
@@ -1409,7 +1414,7 @@ export default function CourseTabContent({
         {/* Settings Button */}
         <OnboardingTooltip
           id="course-settings-button"
-          content="Click here to adjust your study time. You can add or subtract time, or set a custom study duration for this course."
+          content={settingsTooltipContent}
           position="bottom"
           pointerPosition="right"
           delay={800}

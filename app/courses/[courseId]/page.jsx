@@ -15,6 +15,16 @@ import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch, getAuthHeaders } from "@/lib/api";
 
+const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
+
+const normalizeCourseMode = (value) => {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized.startsWith("deep")) return "deep";
+  if (normalized.startsWith("cram")) return "cram";
+  return normalized || null;
+};
+
 const generateChatId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -76,6 +86,7 @@ export default function CoursePage() {
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
   const [studyPlan, setStudyPlan] = useState(null);
+  const [courseMode, setCourseMode] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(null);
   const [initialSeconds, setInitialSeconds] = useState(null);
   const [isTimerPaused, setIsTimerPaused] = useState(false);
@@ -83,6 +94,7 @@ export default function CoursePage() {
   const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
+  const [isHiddenContentModalOpen, setIsHiddenContentModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const [sharedChatState, setSharedChatState] = useState(() => {
@@ -98,9 +110,17 @@ export default function CoursePage() {
   // Focus timer state - lifted from CourseTabContent
   const focusTimerRef = useRef(null);
   const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
+  const deepSyncRef = useRef(false);
+  const isDeepStudyCourse = courseMode === "deep";
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
+
+  useEffect(() => {
+    if (isDeepStudyCourse) {
+      setIsTimerControlsOpen(false);
+    }
+  }, [isDeepStudyCourse]);
 
   // Tab State
   const [tabs, setTabs] = useState(() => {
@@ -138,7 +158,7 @@ export default function CoursePage() {
 
   // Countdown timer effect
   useEffect(() => {
-    if (isTimerPaused || secondsRemaining === null || secondsRemaining <= 0) return;
+    if (isDeepStudyCourse || isTimerPaused || secondsRemaining === null || secondsRemaining <= 0) return;
 
     const intervalId = setInterval(() => {
       setSecondsRemaining(prev => {
@@ -148,13 +168,14 @@ export default function CoursePage() {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [isTimerPaused, secondsRemaining]);
+  }, [isDeepStudyCourse, isTimerPaused, secondsRemaining]);
 
   // Show timer expired modal when timer hits 0
   const prevSecondsRef = useRef(secondsRemaining);
   useEffect(() => {
     // Only show modal if timer transitioned from positive to 0 (not on initial load)
     if (
+      !isDeepStudyCourse &&
       prevSecondsRef.current !== null &&
       prevSecondsRef.current > 0 &&
       secondsRemaining === 0 &&
@@ -163,7 +184,7 @@ export default function CoursePage() {
       setIsTimerExpiredModalOpen(true);
     }
     prevSecondsRef.current = secondsRemaining;
-  }, [secondsRemaining, isTimerPaused]);
+  }, [isDeepStudyCourse, secondsRemaining, isTimerPaused]);
 
   // Use ref to track current secondsRemaining for beforeunload without re-running effect
   const secondsRemainingRef = useRef(secondsRemaining);
@@ -217,6 +238,7 @@ export default function CoursePage() {
   useEffect(() => {
     if (!userId || !courseId) return;
     let aborted = false;
+    let detectedMode = null;
     setLoading(true);
     setError("");
     (async () => {
@@ -231,8 +253,18 @@ export default function CoursePage() {
           if (!aborted && courseMeta) {
             const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
             if (title) setCourseName(title);
-            
-            if (typeof courseMeta.seconds_to_complete === 'number') {
+
+            const metaMode = normalizeCourseMode(
+              courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
+            );
+            if (metaMode) {
+              detectedMode = metaMode;
+              setCourseMode(metaMode);
+            }
+            if (metaMode === "deep") {
+              setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+              setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+            } else if (typeof courseMeta.seconds_to_complete === 'number') {
               setSecondsRemaining(courseMeta.seconds_to_complete);
               setInitialSeconds(courseMeta.seconds_to_complete);
             }
@@ -247,9 +279,23 @@ export default function CoursePage() {
         }
         const json = await res.json();
         if (aborted) return;
-        
-        // Update has_hidden_content state from API response
-        setHasHiddenContent(json.has_hidden_content === true);
+
+        const planMode = normalizeCourseMode(
+          json?.mode || json?.course_mode || json?.study_mode || json?.studyMode
+        );
+        if (planMode) {
+          detectedMode = planMode;
+          setCourseMode(planMode);
+        } else if (detectedMode) {
+          setCourseMode(detectedMode);
+        }
+
+        const isDeepCourse = (planMode || detectedMode) === "deep";
+        setHasHiddenContent(isDeepCourse ? false : json.has_hidden_content === true);
+        if (isDeepCourse) {
+          setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+          setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+        }
         
         const unlockStudyPlan = (p) => {
           if (!p) return p;
@@ -282,7 +328,7 @@ export default function CoursePage() {
     return () => {
       aborted = true;
     };
-  }, [userId, courseId]);
+  }, [userId, courseId, courseMode]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
@@ -293,9 +339,19 @@ export default function CoursePage() {
         throw new Error(`Request failed: ${res.status}`);
       }
       const json = await res.json();
-      
-      // Update has_hidden_content state from API response
-      setHasHiddenContent(json.has_hidden_content === true);
+
+      const planMode = normalizeCourseMode(
+        json?.mode || json?.course_mode || json?.study_mode || json?.studyMode
+      );
+      if (planMode) {
+        setCourseMode(planMode);
+      }
+      const isDeepCourse = planMode === "deep" || courseMode === "deep";
+      setHasHiddenContent(isDeepCourse ? false : json.has_hidden_content === true);
+      if (isDeepCourse) {
+        setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+        setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+      }
       
       const unlockStudyPlan = (p) => {
         if (!p) return p;
@@ -378,18 +434,19 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
-  }, [userId, courseId]);
+  }, [userId, courseId, courseMode]);
 
   const handleTimerUpdate = useCallback(async (newSeconds) => {
     if (!userId || !courseId) return;
-    setSecondsRemaining(newSeconds);
+    const nextSeconds = isDeepStudyCourse ? MAX_DEEP_STUDY_SECONDS : newSeconds;
+    setSecondsRemaining(nextSeconds);
     try {
       await authFetch(`/api/courses/${courseId}/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          seconds_to_complete: newSeconds
+          seconds_to_complete: nextSeconds
         })
       });
       // Refresh study plan to add/remove modules based on new time
@@ -397,7 +454,7 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to update timer:', e);
     }
-  }, [userId, courseId, refetchStudyPlan]);
+  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse]);
 
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
@@ -406,6 +463,8 @@ export default function CoursePage() {
   const handleAddTimeFromModal = useCallback(async (additionalSeconds) => {
     const newSeconds = (secondsRemaining || 0) + additionalSeconds;
     setIsTimerExpiredModalOpen(false);
+    setIsHiddenContentModalOpen(false);
+    setHasHiddenContent(false);
     await handleTimerUpdate(newSeconds);
   }, [secondsRemaining, handleTimerUpdate]);
 
@@ -920,12 +979,14 @@ export default function CoursePage() {
                 chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
                 onChatOpenRequestHandled={() => setChatOpenRequest(null)}
                 hasHiddenContent={hasHiddenContent}
+                onHiddenContentClick={() => setIsHiddenContentModalOpen(true)}
                 sharedChatState={sharedChatState}
                 onSharedChatStateChange={handleSharedChatStateChange}
                 activeChatId={tab.activeChatId}
                 onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
                 focusTimerRef={focusTimerRef}
                 focusTimerState={focusTimerState}
+                isDeepStudyCourse={isDeepStudyCourse}
               />
             ) : (
               <ChatTabContent
@@ -945,16 +1006,18 @@ export default function CoursePage() {
       </div>
 
       {/* Global Modals */}
-      <TimerControlsModal
-        isOpen={isTimerControlsOpen}
-        onClose={() => setIsTimerControlsOpen(false)}
-        secondsRemaining={secondsRemaining}
-        onTimerUpdate={handleTimerUpdate}
-        isTimerPaused={isTimerPaused}
-        onPauseToggle={toggleTimerPause}
-        focusTimerRef={focusTimerRef}
-        focusTimerState={focusTimerState}
-      />
+      {!isDeepStudyCourse && (
+        <TimerControlsModal
+          isOpen={isTimerControlsOpen}
+          onClose={() => setIsTimerControlsOpen(false)}
+          secondsRemaining={secondsRemaining}
+          onTimerUpdate={handleTimerUpdate}
+          isTimerPaused={isTimerPaused}
+          onPauseToggle={toggleTimerPause}
+          focusTimerRef={focusTimerRef}
+          focusTimerState={focusTimerState}
+        />
+      )}
 
       <CourseSettingsModal
         isOpen={isSettingsModalOpen}
@@ -966,6 +1029,7 @@ export default function CoursePage() {
         onPauseToggle={toggleTimerPause}
         focusTimerRef={focusTimerRef}
         focusTimerState={focusTimerState}
+        isDeepStudyCourse={isDeepStudyCourse}
       />
 
       {/* PersonalTimer - always mounted to preserve focus timer state */}
@@ -990,6 +1054,13 @@ export default function CoursePage() {
         isOpen={isTimerExpiredModalOpen}
         onClose={() => setIsTimerExpiredModalOpen(false)}
         onAddTime={handleAddTimeFromModal}
+      />
+
+      <TimerExpiredModal
+        isOpen={isHiddenContentModalOpen}
+        onClose={() => setIsHiddenContentModalOpen(false)}
+        onAddTime={handleAddTimeFromModal}
+        variant="hidden-content"
       />
 
       {/* Hidden Drag Preview Source (for setDragImage) */}
