@@ -298,7 +298,8 @@ export default function CourseTabContent({
   sharedChatState,
   onSharedChatStateChange,
   activeChatId,
-  onActiveChatIdChange
+  onActiveChatIdChange,
+  onChatOpenRequestHandled
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
@@ -339,7 +340,8 @@ export default function CourseTabContent({
       }
     }
     chatBotRef.current.open({ mode: 'docked' });
-  }, [chatOpenRequest, onActiveChatIdChange]);
+    onChatOpenRequestHandled?.(chatOpenRequest.tabId ?? null);
+  }, [chatOpenRequest, onActiveChatIdChange, onChatOpenRequestHandled]);
 
   const [contentCache, setContentCache] = useState({});
   const [chatBotWidth, setChatBotWidth] = useState(0);

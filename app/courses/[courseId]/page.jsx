@@ -909,6 +909,7 @@ export default function CoursePage() {
                 onOpenChatTab={handleOpenChatTab}
                 onChatTabReturn={handleChatTabReturn}
                 chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
+                onChatOpenRequestHandled={() => setChatOpenRequest(null)}
                 hasHiddenContent={hasHiddenContent}
                 sharedChatState={sharedChatState}
                 onSharedChatStateChange={handleSharedChatStateChange}
