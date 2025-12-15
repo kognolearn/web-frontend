@@ -56,6 +56,8 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     router.push(`/courses/${courseId}`);
   };
 
+  const MAX_VISIBLE_SECONDS = 100 * 60 * 60;
+
   const formatTimeRemaining = (seconds) => {
     if (!seconds || seconds <= 0) return "Completed";
     const hours = Math.floor(seconds / 3600);
@@ -67,6 +69,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const isCompleted = !secondsToComplete || secondsToComplete <= 0;
+  const shouldShowTimeRemaining = !isCompleted && typeof secondsToComplete === "number" && secondsToComplete <= MAX_VISIBLE_SECONDS;
   const isPending = status === 'pending';
   const needsAttention = status === 'needs_attention';
 
@@ -177,7 +180,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 h-44">
       <div
         role="button"
         tabIndex={0}
@@ -189,114 +192,97 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           }
         }}
         aria-label={`Open course ${courseCode}`}
-        className="relative rounded-2xl p-5 h-40 flex flex-col cursor-pointer overflow-hidden group transition-all duration-300 hover:shadow-2xl backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg"
+        className="relative flex-1 rounded-2xl p-5 flex flex-col justify-between cursor-pointer overflow-hidden group transition-all duration-300 hover:shadow-xl backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-sm"
       >
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/10 via-transparent to-[var(--primary)]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        {/* Background Decor */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--primary)]/5 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100" />
 
-      {/* Shine effect on hover */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-        <div className="absolute -inset-full top-0 block w-1/2 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 group-hover:animate-shine" />
-      </div>
-
-      <div className="relative z-10 flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 transition-colors">
-          <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
+        {/* Top Row: Title & Actions */}
+        <div className="flex justify-between items-start gap-4 z-10">
+          <h3 className="font-bold text-lg leading-snug text-[var(--foreground)] line-clamp-2 group-hover:text-[var(--primary)] transition-colors">
+            {courseCode}
+          </h3>
+          
+          <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-200">
+            <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
+              <button
+                onClick={handleShareClick}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                aria-label="Share course"
+              >
+                {shareCopied ? (
+                  <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
+                  </svg>
+                )}
+              </button>
+            </Tooltip>
+            <Tooltip content="Delete this course" position="bottom">
+              <button
+                onClick={handleDeleteClick}
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </Tooltip>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Bottom Row: Status & Time */}
+        <div className="flex items-end justify-between z-10">
           <Tooltip content={needsAttention ? 'Course generation encountered an issue' : isCompleted ? 'You\'ve finished this course!' : 'Time remaining to complete this course'} position="bottom">
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+            <div className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
               needsAttention 
-                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
                 : isCompleted 
-                ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
+                ? 'bg-green-500/10 text-green-600 dark:text-green-400' 
                 : 'bg-[var(--primary)]/10 text-[var(--primary)]'
             }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                needsAttention ? 'bg-rose-500' : isCompleted ? 'bg-green-500' : 'bg-[var(--primary)]'
+              }`} />
               {needsAttention ? 'Needs Attention' : isCompleted ? 'Complete' : 'In Progress'}
-            </span>
+            </div>
           </Tooltip>
-          <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
-            <button
-              onClick={handleShareClick}
-              className="p-1.5 rounded-full hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-              aria-label="Share course"
-            >
-              {shareCopied ? (
-                <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
-                </svg>
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip content="Delete this course" position="bottom">
-            <button
-              onClick={handleDeleteClick}
-              className="p-1.5 rounded-full hover:bg-red-500/10 text-[var(--muted-foreground)] hover:text-red-500 transition-colors z-20"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+
+          {(shouldShowTimeRemaining || isCompleted) && (
+            <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-            </button>
-          </Tooltip>
+              <span>{isCompleted ? "Completed" : formatTimeRemaining(secondsToComplete)}</span>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Title */}
-      <div className="relative z-10 flex-1">
-        <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 group-hover:text-[var(--primary)] transition-colors duration-200 leading-snug">
-          {courseCode}
-        </h3>
-        {needsAttention && (
-          <p className="text-xs text-rose-500 mt-1">
-            There was an issue generating this course
-          </p>
-        )}
-      </div>
-
-      {/* Bottom section with time and action */}
-      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-[var(--border)]">
-        <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="font-medium">{formatTimeRemaining(secondsToComplete)}</span>
-        </div>
-        <div className="flex items-center gap-1 text-sm font-medium text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors duration-200">
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">Study</span>
-          <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-      </div>
-    </div>
     
-      {/* Review & Cheatsheet Tabs - sits below the card */}
-      <div className="flex gap-2">
-        <button
-          onClick={handleReviewClick}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--primary)] text-[var(--muted-foreground)] hover:text-white border border-[var(--border)] hover:border-[var(--primary)] transition-all duration-200 text-sm font-medium"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Review
-        </button>
+      {/* Review & Cheatsheet Tabs */}
+      <div className="flex gap-2 h-[38px] shrink-0">
         <button
           onClick={handleCheatsheetClick}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--primary)] text-[var(--muted-foreground)] hover:text-white border border-[var(--border)] hover:border-[var(--primary)] transition-all duration-200 text-sm font-medium"
+          className="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl bg-[var(--surface-2)]/50 hover:bg-[var(--primary)] text-[var(--muted-foreground)] hover:text-white border border-[var(--border)] hover:border-[var(--primary)] transition-all duration-200 text-xs font-medium group/btn"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5 opacity-70 group-hover/btn:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Cheatsheet
+        </button>
+        <button
+          onClick={handleReviewClick}
+          className="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl bg-[var(--surface-2)]/50 hover:bg-[var(--primary)] text-[var(--muted-foreground)] hover:text-white border border-[var(--border)] hover:border-[var(--primary)] transition-all duration-200 text-xs font-medium group/btn"
+        >
+          <svg className="w-3.5 h-3.5 opacity-70 group-hover/btn:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Review
         </button>
       </div>
     </div>
