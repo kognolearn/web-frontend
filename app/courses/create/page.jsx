@@ -307,6 +307,10 @@ function CreateCoursePageContent() {
       setStudyHours(999);
       setStudyMinutes(0);
       setStudyTimeError(false);
+    } else if (studyMode === "cram") {
+      setStudyHours(5);
+      setStudyMinutes(0);
+      setStudyTimeError(false);
     }
   }, [studyMode]);
   
@@ -2171,11 +2175,8 @@ Series & convergence"
 
               {/* Topics Explorer Inline */}
               {totalSubtopics > 0 && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="flex flex-col"
-                >
+                <div className="flex flex-col">
+                
                   <div className="flex items-center justify-between mb-4 flex-shrink-0">
                     <div>
                       <OnboardingTooltip
@@ -2227,7 +2228,7 @@ Series & convergence"
                       inline={true}
                     />
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Navigation - Sticky Bottom */}
