@@ -2310,28 +2310,30 @@ export default function CourseTabContent({
               right: isMobile ? 0 : `${chatBotWidth}px` 
             }}
           >
-            <div className="flex items-center justify-between px-4 py-3">
-              {/* Previous Lesson Button */}
-              <button
-                type="button"
-                onClick={() => navigateToLesson(prevLesson)}
-                disabled={!prevLesson}
-                className={`
-                  flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
-                  ${prevLesson
-                    ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
-                    : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
-                  }
-                `}
-                title={prevLesson ? `Previous: ${prevLesson.title}` : 'No previous lesson'}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="hidden sm:inline max-w-[120px] truncate">
-                  {prevLesson ? prevLesson.title : 'Previous'}
-                </span>
-              </button>
+            <div className={`flex items-center ${isMobile ? 'justify-center' : 'justify-between'} px-4 py-3`}>
+              {/* Previous Lesson Button - hidden on mobile */}
+              {!isMobile && (
+                <button
+                  type="button"
+                  onClick={() => navigateToLesson(prevLesson)}
+                  disabled={!prevLesson}
+                  className={`
+                    flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                    ${prevLesson
+                      ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                      : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                    }
+                  `}
+                  title={prevLesson ? `Previous: ${prevLesson.title}` : 'No previous lesson'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span className="hidden sm:inline max-w-[120px] truncate">
+                    {prevLesson ? prevLesson.title : 'Previous'}
+                  </span>
+                </button>
+              )}
 
               {/* Content Type Navigation */}
               {(() => {
@@ -2341,7 +2343,8 @@ export default function CourseTabContent({
                 const nextType = currentIndex < availableTypes.length - 1 ? availableTypes[currentIndex + 1] : null;
 
                 return (
-                  <div className="flex items-center gap-1">
+                  <div className={`flex items-center ${isMobile ? 'flex-1 justify-between' : 'gap-1'}`}>
+                    {/* Previous Content Type Button */}
                     <button
                       type="button"
                       onClick={() => {
@@ -2352,10 +2355,16 @@ export default function CourseTabContent({
                       }}
                       disabled={!prevType}
                       className={`
-                        flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-all duration-200
-                        ${prevType
-                          ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
-                          : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                        flex items-center justify-center transition-all duration-200
+                        ${isMobile 
+                          ? `flex-shrink-0 px-3 py-2 rounded-xl text-sm font-medium ${prevType
+                              ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                              : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                            }`
+                          : `w-8 h-8 rounded-lg text-sm ${prevType
+                              ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                              : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                            }`
                         }
                       `}
                       title={prevType ? `Previous: ${prevType.label}` : 'No previous content type'}
@@ -2374,12 +2383,12 @@ export default function CourseTabContent({
                       priority={8}
                     >
                       {/* Content type buttons */}
-                      <div className="flex items-center gap-1.5">
+                      <div className={`flex items-center gap-1.5 ${isMobile ? 'overflow-x-auto mx-2 px-1 scrollbar-hide' : ''}`}>
                         {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
                           <>
-                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
-                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
-                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse" />
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse flex-shrink-0" />
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse flex-shrink-0" />
+                            <div className="w-20 h-9 rounded-xl bg-[var(--surface-muted)] animate-pulse flex-shrink-0" />
                           </>
                         ) : (
                           availableTypes.map((contentType) => {
@@ -2443,7 +2452,7 @@ export default function CourseTabContent({
                                   fetchLessonContent(selectedLesson.id, [contentType.value]);
                                 }}
                                 className={`
-                                  relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium
+                                  relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-medium flex-shrink-0
                                   transition-all duration-200
                                   ${isActive
                                     ? isCompleted
@@ -2469,6 +2478,7 @@ export default function CourseTabContent({
                       </div>
                     </OnboardingTooltip>
 
+                    {/* Next Content Type Button */}
                     <button
                       type="button"
                       onClick={() => {
@@ -2479,10 +2489,16 @@ export default function CourseTabContent({
                       }}
                       disabled={!nextType}
                       className={`
-                        flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-all duration-200
-                        ${nextType
-                          ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
-                          : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                        flex items-center justify-center transition-all duration-200
+                        ${isMobile 
+                          ? `flex-shrink-0 px-3 py-2 rounded-xl text-sm font-medium ${nextType
+                              ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                              : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                            }`
+                          : `w-8 h-8 rounded-lg text-sm ${nextType
+                              ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                              : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                            }`
                         }
                       `}
                       title={nextType ? `Next: ${nextType.label}` : 'No next content type'}
@@ -2495,27 +2511,29 @@ export default function CourseTabContent({
                 );
               })()}
 
-              {/* Next Lesson Button */}
-              <button
-                type="button"
-                onClick={() => navigateToLesson(nextLesson)}
-                disabled={!nextLesson}
-                className={`
-                  flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
-                  ${nextLesson
-                    ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
-                    : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
-                  }
-                `}
-                title={nextLesson ? `Next: ${nextLesson.title}` : 'No next lesson'}
-              >
-                <span className="hidden sm:inline max-w-[120px] truncate">
-                  {nextLesson ? nextLesson.title : 'Next'}
-                </span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+              {/* Next Lesson Button - hidden on mobile */}
+              {!isMobile && (
+                <button
+                  type="button"
+                  onClick={() => navigateToLesson(nextLesson)}
+                  disabled={!nextLesson}
+                  className={`
+                    flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                    ${nextLesson
+                      ? 'bg-[var(--surface-2)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50'
+                      : 'bg-[var(--surface-2)]/50 text-[var(--muted-foreground)]/50 border border-[var(--border)]/50 cursor-not-allowed'
+                    }
+                  `}
+                  title={nextLesson ? `Next: ${nextLesson.title}` : 'No next lesson'}
+                >
+                  <span className="hidden sm:inline max-w-[120px] truncate">
+                    {nextLesson ? nextLesson.title : 'Next'}
+                  </span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         )}
