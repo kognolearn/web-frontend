@@ -62,6 +62,8 @@ export default function FeedbackWidget() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
   const [sidebarClosedOnCourse, setSidebarClosedOnCourse] = useState(false);
+  const [hasCourseSidebar, setHasCourseSidebar] = useState(false);
+  const [courseUiReady, setCourseUiReady] = useState(false);
   const pathname = usePathname();
   const isPublicPage = useMemo(() => {
     if (!pathname) return false;
@@ -127,7 +129,11 @@ export default function FeedbackWidget() {
     const updateStateFromBody = () => {
       const body = document.body;
       if (!body) return;
+      const hasSidebar = body.classList.contains("has-course-sidebar");
+      const isReady = body.classList.contains("course-ui-ready");
       setSidebarClosedOnCourse(body.classList.contains("course-sidebar-closed"));
+      setHasCourseSidebar(hasSidebar);
+      setCourseUiReady(isReady);
     };
 
     updateStateFromBody();
@@ -200,10 +206,19 @@ export default function FeedbackWidget() {
   };
 
   if (!mounted || (!user && !isPublicPage)) return null;
+  
+  // Don't show on course pages until UI is ready
+  if (hasCourseSidebar && !courseUiReady) return null;
+
+  const shouldShift = hasCourseSidebar && !sidebarClosedOnCourse;
 
   return (
     <div
-      className={`fixed left-[4.75rem] z-50 ${sidebarClosedOnCourse ? "bottom-[5rem]" : "bottom-4"}`}
+      className="fixed z-50 transition-all duration-200 ease-in-out"
+      style={{
+        left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 4.75rem)' : '4.75rem',
+        bottom: hasCourseSidebar ? '5rem' : '1rem'
+      }}
       ref={panelRef}
     >
       <AnimatePresence>

@@ -12,6 +12,8 @@ export default function ThemeToggle() {
   const pathname = usePathname();
   const [hasSession, setHasSession] = useState(false);
   const [courseSidebarClosed, setCourseSidebarClosed] = useState(false);
+  const [hasCourseSidebar, setHasCourseSidebar] = useState(false);
+  const [courseUiReady, setCourseUiReady] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,7 +44,11 @@ export default function ThemeToggle() {
     const updateStateFromBody = () => {
       const body = document.body;
       if (!body) return;
+      const hasSidebar = body.classList.contains("has-course-sidebar");
+      const isReady = body.classList.contains("course-ui-ready");
       setCourseSidebarClosed(body.classList.contains("course-sidebar-closed"));
+      setHasCourseSidebar(hasSidebar);
+      setCourseUiReady(isReady);
     };
 
     updateStateFromBody();
@@ -61,11 +67,21 @@ export default function ThemeToggle() {
   }, [pathname]);
 
   if (!mounted || (!hasSession && !isPublicPage)) return null;
+  
+  // Don't show on course pages until UI is ready
+  if (hasCourseSidebar && !courseUiReady) return null;
 
   const isDark = theme === "dark";
+  const shouldShift = hasCourseSidebar && !courseSidebarClosed;
 
   return (
-    <div className={`fixed left-4 z-50 ${courseSidebarClosed ? "bottom-[5rem]" : "bottom-4"}`}>
+    <div 
+      className="fixed z-50 transition-all duration-200 ease-in-out"
+      style={{ 
+        left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 1rem)' : '1rem',
+        bottom: hasCourseSidebar ? '5rem' : '1rem'
+      }}
+    >
       <button
         type="button"
         onClick={toggleTheme}

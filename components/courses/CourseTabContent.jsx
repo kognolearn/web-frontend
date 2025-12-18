@@ -699,24 +699,83 @@ export default function CourseTabContent({
     return () => mq.removeEventListener('change', update);
   }, []);
 
-  // Expose sidebar closed state to global layout via body class
+  // Expose course UI presence to global layout (lifecycle)
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
     if (!body) return;
 
-    if (isActive && !sidebarOpen) {
-      body.classList.add('course-sidebar-closed');
-    } else if (isActive) {
-      body.classList.remove('course-sidebar-closed');
-    }
+    if (!isActive) return;
+
+    body.classList.add('has-course-sidebar');
 
     return () => {
-      if (isActive) {
-        body.classList.remove('course-sidebar-closed');
-      }
+      // Only clean up when leaving the course UI, not on sidebar toggles.
+      body.classList.remove('course-sidebar-closed');
+      body.classList.remove('has-course-sidebar');
+      body.classList.remove('course-ui-ready');
+      body.style.removeProperty('--course-sidebar-width');
     };
-  }, [sidebarOpen, isActive]);
+  }, [isActive]);
+
+  // Expose sidebar state to global layout via body class and CSS variable
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!isActive) return;
+    const body = document.body;
+    if (!body) return;
+
+    const currentWidth = isMobile ? 280 : sidebarWidth;
+    body.style.setProperty('--course-sidebar-width', `${currentWidth}px`);
+
+    if (!sidebarOpen) {
+      body.classList.add('course-sidebar-closed');
+    } else {
+      body.classList.remove('course-sidebar-closed');
+    }
+  }, [sidebarOpen, isActive, sidebarWidth, isMobile]);
+
+  // Mark course UI as "ready" only after sidebar + bottom bar have mounted
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!isActive) return;
+    const body = document.body;
+    if (!body) return;
+
+    // Keep this sticky once set so global floating buttons can animate smoothly
+    // without being unmounted/remounted on sidebar toggles.
+    if (body.classList.contains('course-ui-ready')) return;
+
+    let cancelled = false;
+    const startedAt = performance.now();
+
+    const tick = () => {
+      if (cancelled) return;
+
+      const sidebarEl = document.querySelector('[data-course-sidebar="true"]');
+      const bottomBarEl = document.querySelector('[data-course-bottom-bar="true"]');
+
+      // Prefer waiting for both; but don't block forever if a bottom bar isn't rendered in current view.
+      if (sidebarEl && bottomBarEl) {
+        body.classList.add('course-ui-ready');
+        return;
+      }
+
+      const elapsed = performance.now() - startedAt;
+      if (sidebarEl && elapsed > 1500) {
+        body.classList.add('course-ui-ready');
+        return;
+      }
+
+      requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, viewMode, selectedLesson, selectedReviewModule]);
 
   // Fetch review modules on mount
   useEffect(() => {
@@ -1442,6 +1501,7 @@ export default function CourseTabContent({
           )}
           
           <aside
+            data-course-sidebar="true"
             className={`absolute left-0 top-0 h-full backdrop-blur-xl bg-[var(--surface-1)]/95 border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
               isMobile
                 ? sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -2304,6 +2364,7 @@ export default function CourseTabContent({
 
         {viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' && selectedLesson.title !== 'Module Quiz' && (
           <div 
+            data-course-bottom-bar="true"
             className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
             style={{ 
               left: !isMobile ? `${sidebarOffset}px` : 0,
@@ -2541,6 +2602,7 @@ export default function CourseTabContent({
         {/* Bottom nav for Module Quiz lessons */}
         {viewMode === "topic" && selectedLesson && selectedLesson.title === 'Module Quiz' && (
           <div 
+            data-course-bottom-bar="true"
             className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
             style={{ 
               left: !isMobile ? `${sidebarOffset}px` : 0,
@@ -2609,6 +2671,7 @@ export default function CourseTabContent({
         {/* Bottom nav for Review Modules */}
         {viewMode === "topic" && selectedReviewModule && (
           <div 
+            data-course-bottom-bar="true"
             className="fixed bottom-0 z-30 backdrop-blur-xl bg-[var(--surface-1)]/90 border-t border-[var(--border)] shadow-lg"
             style={{ 
               left: !isMobile ? `${sidebarOffset}px` : 0,
