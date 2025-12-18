@@ -1030,6 +1030,7 @@ export default function CoursePage() {
         focusTimerRef={focusTimerRef}
         focusTimerState={focusTimerState}
         isDeepStudyCourse={isDeepStudyCourse}
+        onOpenModifyCourse={() => setIsEditCourseModalOpen(true)}
       />
 
       {/* PersonalTimer - always mounted to preserve focus timer state */}

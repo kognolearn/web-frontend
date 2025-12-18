@@ -16,7 +16,8 @@ export default function CourseSettingsModal({
   onPauseToggle,
   focusTimerRef,
   focusTimerState,
-  isDeepStudyCourse = false
+  isDeepStudyCourse = false,
+  onOpenModifyCourse
 }) {
   if (!isOpen) return null;
 
@@ -145,6 +146,43 @@ export default function CourseSettingsModal({
                   </div>
 
                   <PersonalTimerControls timerRef={focusTimerRef} timerState={focusTimerState} />
+                </div>
+              )}
+
+              {/* Course Modification Section */}
+              {onOpenModifyCourse && (
+                <div className="space-y-4 border-t border-[var(--border)] pt-6">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                      Course Modification
+                      <InfoTooltip content="Modify your course content by adding, removing, or restructuring lessons." position="right" />
+                    </h3>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/60 p-5">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm text-[var(--muted-foreground)]">
+                          Need to adjust your course? You can add new topics, remove existing lessons, or restructure the content to better fit your learning goals.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onOpenModifyCourse();
+                        }}
+                        className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-[var(--primary-hover)] hover:shadow-md active:scale-[0.98]"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Modify Course
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
