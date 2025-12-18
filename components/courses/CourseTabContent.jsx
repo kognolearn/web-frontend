@@ -1233,21 +1233,18 @@ export default function CourseTabContent({
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
-      {canRenderSidebar && (
-        <motion.button
+      {canRenderSidebar && !sidebarOpen && (
+        <button
           type="button"
-          onClick={toggleSidebar}
-          className="absolute left-0 top-4 z-50 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
-          animate={{ x: sidebarOffset + 16 }}
-          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-          initial={false}
-          title={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
+          onClick={() => setSidebarOpen(true)}
+          className="absolute left-4 top-4 z-30 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
+          title="Show Sidebar"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
-          {sidebarOpen ? "Hide" : "Show"} Sidebar
-        </motion.button>
+          Show Sidebar
+        </button>
       )}
 
       {/* Top Right Controls: Pause, Timer, Settings */}
@@ -1452,28 +1449,31 @@ export default function CourseTabContent({
             }`}
             style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
           >
-            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
+            <div className="p-3 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
+              {/* Close sidebar button on the left - styled like Show Sidebar */}
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
+                title="Hide Sidebar"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Hide Sidebar
+              </button>
+              {/* Dashboard button on the right */}
               <button
                 type="button"
                 onClick={() => router.push('/dashboard')}
-                className="btn btn-ghost btn-sm text-xs text-[var(--muted-foreground)] gap-1 px-2 hover:text-[var(--primary)] transition-colors"
+                className="flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
+                title="Go to Dashboard"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
                 Dashboard
               </button>
-              {isMobile && (
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(false)}
-                  className="rounded p-1 hover:bg-[var(--surface-2)] transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
             </div>
 
             <div className="p-4 border-b border-[var(--border)]">
