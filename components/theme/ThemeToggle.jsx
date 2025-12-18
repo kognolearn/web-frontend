@@ -14,6 +14,8 @@ export default function ThemeToggle() {
   const [courseSidebarClosed, setCourseSidebarClosed] = useState(false);
   const [hasCourseSidebar, setHasCourseSidebar] = useState(false);
   const [courseUiReady, setCourseUiReady] = useState(false);
+  const [chatOverlayActive, setChatOverlayActive] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -46,9 +48,11 @@ export default function ThemeToggle() {
       if (!body) return;
       const hasSidebar = body.classList.contains("has-course-sidebar");
       const isReady = body.classList.contains("course-ui-ready");
+      const chatOpen = body.classList.contains("course-chat-open");
       setCourseSidebarClosed(body.classList.contains("course-sidebar-closed"));
       setHasCourseSidebar(hasSidebar);
       setCourseUiReady(isReady);
+      setChatOverlayActive(chatOpen);
     };
 
     updateStateFromBody();
@@ -59,6 +63,16 @@ export default function ThemeToggle() {
     return () => {
       observer.disconnect();
     };
+  }, []);
+
+  // Track viewport size for mobile-specific behavior
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const handle = () => setIsMobileViewport(mq.matches);
+    handle();
+    mq.addEventListener("change", handle);
+    return () => mq.removeEventListener("change", handle);
   }, []);
 
   const isPublicPage = useMemo(() => {
@@ -73,13 +87,19 @@ export default function ThemeToggle() {
 
   const isDark = theme === "dark";
   const shouldShift = hasCourseSidebar && !courseSidebarClosed;
+  const hideForChat = chatOverlayActive && isMobileViewport;
+  const effectiveZIndex = hideForChat ? 5 : 50;
 
   return (
     <div 
-      className="fixed z-50 transition-all duration-200 ease-in-out"
+      className="fixed transition-all duration-200 ease-in-out"
       style={{ 
         left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 1rem)' : '1rem',
-        bottom: hasCourseSidebar ? '5rem' : '1rem'
+        bottom: hasCourseSidebar ? '5rem' : '1rem',
+        zIndex: effectiveZIndex,
+        pointerEvents: hideForChat ? 'none' : 'auto',
+        opacity: hideForChat ? 0 : 1,
+        transform: hideForChat ? 'translateY(8px)' : 'translateY(0)'
       }}
     >
       <button

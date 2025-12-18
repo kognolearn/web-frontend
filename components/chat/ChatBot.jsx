@@ -680,6 +680,23 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  // Expose chat-open state to body for mobile layering
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    if (!body) return;
+
+    if (isMobile && isOpen) {
+      body.classList.add('course-chat-open');
+    } else {
+      body.classList.remove('course-chat-open');
+    }
+
+    return () => {
+      body.classList.remove('course-chat-open');
+    };
+  }, [isMobile, isOpen]);
+
   // Notify parent of width changes
   useEffect(() => {
     if (onWidthChange) {
