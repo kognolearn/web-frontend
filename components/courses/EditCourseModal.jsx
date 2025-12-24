@@ -111,7 +111,8 @@ export default function EditCourseModal({
     setErrorMessage("");
     
     try {
-      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
+      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const response = await authFetch(`${baseUrl}/courses/${courseId}/modify-topics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
