@@ -735,7 +735,8 @@ function CreateCoursePageContent() {
         console.log(`Attempt ${attempt} - courseTitle: "${payload.courseTitle}", university: "${payload.university}"`);
         console.log(`Attempt ${attempt} - payload body length: ${payloadStr.length} chars`);
 
-        const res = await authFetch("/api/courses/topics", {
+        const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+        const res = await authFetch(`${baseUrl}/courses/topics`, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
@@ -1300,7 +1301,8 @@ function CreateCoursePageContent() {
       payload.seconds_to_complete = secondsToComplete;
       
       console.log("[CreateCourse] About to fetch /api/courses");
-      const response = await authFetch("/api/courses", {
+      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
