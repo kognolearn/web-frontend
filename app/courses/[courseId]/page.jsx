@@ -13,9 +13,11 @@ import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
-import { authFetch, getAuthHeaders } from "@/lib/api";
+import { authFetch } from "@/lib/api";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
+const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
+const getCourseTabsStorageKey = (userId, courseId) => `${COURSE_TABS_STORAGE_PREFIX}_${userId}_${courseId}`;
 
 const normalizeCourseMode = (value) => {
   if (!value) return null;
@@ -78,6 +80,23 @@ const mergeChatStates = (base, incoming) => {
   return merged;
 };
 
+const unlockStudyPlan = (plan) => {
+  if (!plan) return plan;
+  const modules = (plan.modules || [])
+    .map((module) => ({
+      ...module,
+      lessons: (module.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
+    }))
+    .filter((module) => {
+      const lessons = module.lessons || [];
+      if (module.is_practice_exam_module) return true;
+      if (lessons.length === 0) return false;
+      if (lessons.length === 1 && lessons[0].title === "Module Quiz") return false;
+      return true;
+    });
+  return { ...plan, modules };
+};
+
 export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
@@ -105,6 +124,8 @@ export default function CoursePage() {
       drafts: { [initialChat.id]: { input: "", attachedFiles: [] } },
     };
   });
+  const sharedChatStateRef = useRef(sharedChatState);
+  const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
   
   // Focus timer state - lifted from CourseTabContent
@@ -122,14 +143,19 @@ export default function CoursePage() {
     }
   }, [isDeepStudyCourse]);
 
+  useEffect(() => {
+    sharedChatStateRef.current = sharedChatState;
+  }, [sharedChatState]);
+
   // Tab State
   const [tabs, setTabs] = useState(() => {
     const initialChatId = sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null;
     return [
-      { id: 'tab-1', type: 'course', title: 'Course Content', activeChatId: initialChatId }
+      { id: 'tab-1', type: 'course', title: 'Course Content', activeChatId: initialChatId, selectedLessonId: null, selectedContentType: null }
     ];
   });
   const [activeTabId, setActiveTabId] = useState('tab-1');
+  const [hasHydratedTabs, setHasHydratedTabs] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -155,6 +181,30 @@ export default function CoursePage() {
       mounted = false;
     };
   }, []);
+
+  // Persist tabs for this course/user
+  useEffect(() => {
+    if (!userId || !courseId || !hasHydratedTabs) return;
+    if (typeof window === 'undefined') return;
+
+    try {
+      const key = getCourseTabsStorageKey(userId, courseId);
+      const payload = {
+        tabs: tabs.map((tab) => ({
+          id: tab.id,
+          type: tab.type,
+          title: tab.title,
+          activeChatId: tab.activeChatId ?? null,
+          selectedLessonId: tab.selectedLessonId ?? null,
+          selectedContentType: tab.selectedContentType ?? null,
+        })),
+        activeTabId,
+      };
+      window.localStorage.setItem(key, JSON.stringify(payload));
+    } catch (e) {
+      console.error('Failed to persist course tabs:', e);
+    }
+  }, [tabs, activeTabId, userId, courseId, hasHydratedTabs]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -238,39 +288,11 @@ export default function CoursePage() {
   useEffect(() => {
     if (!userId || !courseId) return;
     let aborted = false;
-    let detectedMode = null;
     setLoading(true);
     setError("");
+    setHasHydratedTabs(false);
     (async () => {
       try {
-        const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}`;
-        const courseMetaRes = await authFetch(courseMetaUrl);
-        if (courseMetaRes.ok) {
-          const body = await courseMetaRes.json();
-          const courses = Array.isArray(body?.courses) ? body.courses : [];
-          const courseMeta = courses.find(c => c.id === courseId);
-          
-          if (!aborted && courseMeta) {
-            const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
-            if (title) setCourseName(title);
-
-            const metaMode = normalizeCourseMode(
-              courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
-            );
-            if (metaMode) {
-              detectedMode = metaMode;
-              setCourseMode(metaMode);
-            }
-            if (metaMode === "deep") {
-              setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
-              setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
-            } else if (typeof courseMeta.seconds_to_complete === 'number') {
-              setSecondsRemaining(courseMeta.seconds_to_complete);
-              setInitialSeconds(courseMeta.seconds_to_complete);
-            }
-          }
-        }
-        
         const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
         const res = await authFetch(url);
         if (!res.ok) {
@@ -284,51 +306,156 @@ export default function CoursePage() {
           json?.mode || json?.course_mode || json?.study_mode || json?.studyMode
         );
         if (planMode) {
-          detectedMode = planMode;
           setCourseMode(planMode);
-        } else if (detectedMode) {
-          setCourseMode(detectedMode);
         }
 
-        const isDeepCourse = (planMode || detectedMode) === "deep";
+        const isDeepCourse = planMode === "deep";
         setHasHiddenContent(isDeepCourse ? false : json.has_hidden_content === true);
         if (isDeepCourse) {
           setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
           setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
         }
-        
-        const unlockStudyPlan = (p) => {
-          if (!p) return p;
-          // Filter out modules that only contain a Module Quiz (no real lessons)
-          const modules = (p.modules || [])
-            .map((m) => ({
-              ...m,
-              lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
-            }))
-            .filter((m) => {
-              const lessons = m.lessons || [];
-              // Keep module if it has more than just a Module Quiz, or is a special module
-              if (m.is_practice_exam_module) return true;
-              if (lessons.length === 0) return false;
-              if (lessons.length === 1 && lessons[0].title === 'Module Quiz') return false;
-              return true;
-            });
-          return { ...p, modules };
-        };
 
         const unlocked = unlockStudyPlan(json);
+        const modules = Array.isArray(unlocked?.modules) ? unlocked.modules : [];
+        const lessonList = modules
+          .filter((module) => !module.is_practice_exam_module)
+          .flatMap((module) => module.lessons || []);
+        const fallbackLessons = lessonList.length > 0
+          ? lessonList
+          : modules.flatMap((module) => module.lessons || []);
+        const firstLesson = fallbackLessons[0] || null;
+        const defaultLessonId = firstLesson?.id || null;
+        const defaultContentType = firstLesson ? "reading" : null;
         setStudyPlan(unlocked);
+
+        let hydratedTabs = [];
+        let resolvedActiveId = "tab-1";
+
+        if (typeof window === "undefined") {
+          hydratedTabs = [{
+            id: "tab-1",
+            type: "course",
+            title: "Course Content",
+            activeChatId: initialChatIdRef.current,
+            selectedLessonId: defaultLessonId,
+            selectedContentType: defaultContentType,
+          }];
+          resolvedActiveId = hydratedTabs[0].id;
+        } else {
+          try {
+            const key = getCourseTabsStorageKey(userId, courseId);
+            const raw = window.localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const storedTabs = Array.isArray(parsed?.tabs) ? parsed.tabs : [];
+            const seenIds = new Set();
+
+            hydratedTabs = storedTabs.reduce((acc, tab, idx) => {
+              if (!tab || typeof tab !== "object") return acc;
+              const type = tab.type === "chat" ? "chat" : "course";
+              let id = typeof tab.id === "string" && tab.id.trim() ? tab.id : `tab-restored-${idx}`;
+              if (seenIds.has(id)) {
+                id = `${id}-${idx}`;
+              }
+              seenIds.add(id);
+              const title = typeof tab.title === "string" && tab.title.trim()
+                ? tab.title
+                : (type === "course" ? "Course Content" : "Chat");
+              const activeChatId = typeof tab.activeChatId === "string"
+                ? tab.activeChatId
+                : (type === "course" ? initialChatIdRef.current : null);
+              const selectedLessonId = typeof tab.selectedLessonId === "string" ? tab.selectedLessonId : null;
+              const selectedContentType = typeof tab.selectedContentType === "string" ? tab.selectedContentType : null;
+              acc.push({ id, type, title, activeChatId, selectedLessonId, selectedContentType });
+              return acc;
+            }, []);
+
+            const hasCachedTabs = hydratedTabs.length > 0;
+
+            if (!hydratedTabs.some((tab) => tab.type === "course")) {
+              let defaultId = "tab-1";
+              if (seenIds.has(defaultId)) {
+                defaultId = `tab-${Date.now()}`;
+              }
+              hydratedTabs.unshift({
+                id: defaultId,
+                type: "course",
+                title: "Course Content",
+                activeChatId: initialChatIdRef.current,
+                selectedLessonId: hasCachedTabs ? null : defaultLessonId,
+                selectedContentType: hasCachedTabs ? null : defaultContentType,
+              });
+            }
+
+            const desiredActiveId = typeof parsed?.activeTabId === "string" ? parsed.activeTabId : null;
+            resolvedActiveId = hydratedTabs.find((tab) => tab.id === desiredActiveId)?.id
+              || hydratedTabs[0]?.id
+              || "tab-1";
+          } catch (e) {
+            console.error("Failed to restore course tabs:", e);
+            hydratedTabs = [{
+              id: "tab-1",
+              type: "course",
+              title: "Course Content",
+              activeChatId: initialChatIdRef.current,
+              selectedLessonId: defaultLessonId,
+              selectedContentType: defaultContentType,
+            }];
+            resolvedActiveId = hydratedTabs[0].id;
+          }
+        }
+
+        setTabs(hydratedTabs);
+        setActiveTabId(resolvedActiveId);
+        setHasHydratedTabs(true);
+
+        void (async () => {
+          try {
+            const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}`;
+            const courseMetaRes = await authFetch(courseMetaUrl);
+            if (!courseMetaRes.ok || aborted) return;
+            const body = await courseMetaRes.json();
+            const courses = Array.isArray(body?.courses) ? body.courses : [];
+            const courseMeta = courses.find((course) => course.id === courseId);
+
+            if (courseMeta) {
+              const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
+              if (title) setCourseName(title);
+
+              const metaMode = normalizeCourseMode(
+                courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
+              );
+              if (metaMode && !planMode) {
+                setCourseMode(metaMode);
+              }
+              if (metaMode === "deep") {
+                setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+                setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+                if (!planMode) {
+                  setHasHiddenContent(false);
+                }
+              } else if (typeof courseMeta.seconds_to_complete === "number") {
+                setSecondsRemaining(courseMeta.seconds_to_complete);
+                setInitialSeconds(courseMeta.seconds_to_complete);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to load course metadata:", e);
+          }
+        })();
       } catch (e) {
         if (aborted) return;
         setError(e?.message || "Failed to load study plan.");
       } finally {
-        if (!aborted) setLoading(false);
+        if (!aborted) {
+          setLoading(false);
+        }
       }
     })();
     return () => {
       aborted = true;
     };
-  }, [userId, courseId, courseMode]);
+  }, [userId, courseId]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
@@ -353,24 +480,6 @@ export default function CoursePage() {
         setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
       }
       
-      const unlockStudyPlan = (p) => {
-        if (!p) return p;
-        // Filter out modules that only contain a Module Quiz (no real lessons)
-        const modules = (p.modules || [])
-          .map((m) => ({
-            ...m,
-            lessons: (m.lessons || []).map((lesson) => ({ ...lesson, is_locked: false })),
-          }))
-          .filter((m) => {
-            const lessons = m.lessons || [];
-            // Keep module if it has more than just a Module Quiz, or is a special module
-            if (m.is_practice_exam_module) return true;
-            if (lessons.length === 0) return false;
-            if (lessons.length === 1 && lessons[0].title === 'Module Quiz') return false;
-            return true;
-          });
-        return { ...p, modules };
-      };
       const newPlan = unlockStudyPlan(json);
       
       // Smart merge: preserve current lesson visibility when time decreases
@@ -495,9 +604,32 @@ export default function CoursePage() {
     return tabTitleChangeHandlers.current[tabId];
   }, [handleTabTitleChange]);
 
+  // Track per-tab lesson/content selection for restore
+  const tabViewStateChangeHandlers = useRef({});
+  const getTabViewStateChangeHandler = useCallback((tabId) => {
+    if (!tabViewStateChangeHandlers.current[tabId]) {
+      tabViewStateChangeHandlers.current[tabId] = (viewState) => {
+        const lessonId = viewState?.lessonId || null;
+        const contentType = viewState?.contentType || null;
+        if (!lessonId) return;
+        setTabs((prev) => {
+          let mutated = false;
+          const next = prev.map((tab) => {
+            if (tab.id !== tabId) return tab;
+            if (tab.selectedLessonId === lessonId && tab.selectedContentType === contentType) return tab;
+            mutated = true;
+            return { ...tab, selectedLessonId: lessonId, selectedContentType: contentType };
+          });
+          return mutated ? next : prev;
+        });
+      };
+    }
+    return tabViewStateChangeHandlers.current[tabId];
+  }, []);
+
   const updateTabActiveChatId = useCallback((tabId, chatId) => {
     if (!tabId) return;
-    const chatNameLookup = new Map((sharedChatState?.chats || []).map((chat) => [chat.id, chat.name || "Chat"]));
+    const chatNameLookup = new Map((sharedChatStateRef.current?.chats || []).map((chat) => [chat.id, chat.name || "Chat"]));
     setTabs((prev) => {
       let mutated = false;
       const next = prev.map((tab) => {
@@ -521,7 +653,15 @@ export default function CoursePage() {
       });
       return mutated ? next : prev;
     });
-  }, [sharedChatState]);
+  }, []);
+
+  const tabActiveChatChangeHandlers = useRef({});
+  const getTabActiveChatChangeHandler = useCallback((tabId) => {
+    if (!tabActiveChatChangeHandlers.current[tabId]) {
+      tabActiveChatChangeHandlers.current[tabId] = (chatId) => updateTabActiveChatId(tabId, chatId);
+    }
+    return tabActiveChatChangeHandlers.current[tabId];
+  }, [updateTabActiveChatId]);
 
   const handleSharedChatStateChange = useCallback((state) => {
     if (!state) return;
@@ -544,7 +684,7 @@ export default function CoursePage() {
   const addTab = (type, options = {}) => {
     const newId = options.id || `tab-${Date.now()}`;
     const defaultTitle = options.title || (type === 'course' ? 'Course Content' : 'Chat');
-    const baseTab = { id: newId, type, title: defaultTitle };
+    const baseTab = { id: newId, type, title: defaultTitle, selectedLessonId: null, selectedContentType: null };
 
     if (type === 'chat') {
       let targetChatId = options.chatId || null;
@@ -966,6 +1106,9 @@ export default function CoursePage() {
                 handleTimerUpdate={handleTimerUpdate}
                 isTimerPaused={isTimerPaused}
                 onPauseToggle={toggleTimerPause}
+                initialLessonId={tab.selectedLessonId}
+                initialContentType={tab.selectedContentType}
+                onViewStateChange={getTabViewStateChangeHandler(tab.id)}
                 onTabTitleChange={getTabTitleChangeHandler(tab.id)}
                 onCurrentLessonChange={handleCurrentLessonChange}
                 isSettingsModalOpen={isSettingsModalOpen}
@@ -983,7 +1126,7 @@ export default function CoursePage() {
                 sharedChatState={sharedChatState}
                 onSharedChatStateChange={handleSharedChatStateChange}
                 activeChatId={tab.activeChatId}
-                onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
+                onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
                 focusTimerRef={focusTimerRef}
                 focusTimerState={focusTimerState}
                 isDeepStudyCourse={isDeepStudyCourse}
@@ -998,7 +1141,7 @@ export default function CoursePage() {
                 sharedChatState={sharedChatState}
                 onSharedChatStateChange={handleSharedChatStateChange}
                 initialChatId={tab.activeChatId}
-                onActiveChatIdChange={(chatId) => updateTabActiveChatId(tab.id, chatId)}
+                onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
               />
             )}
           </div>

@@ -96,6 +96,16 @@ export async function GET(request) {
         estimated_minutes: lesson.estimated_minutes,
         bloom_level: lesson.bloom_level,
         
+        // Completion status from backend (user_node_state)
+        readingCompleted: lesson.readingCompleted || false,
+        videoCompleted: lesson.videoCompleted || false,
+        quizCompleted: lesson.quizCompleted || false,
+        mastery_status: lesson.mastery_status || 'pending',
+        familiarity_score: lesson.familiarity_score,
+        
+        // Inline question selections from backend
+        inlineQuestionSelections: contentPayload.inlineQuestionSelections || {},
+        
         // Content based on what's available
         body: contentPayload.reading || '',
         
