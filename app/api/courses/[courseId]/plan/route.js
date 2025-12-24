@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+
 export async function GET(request, { params }) {
   try {
     const { courseId } = await params;
@@ -19,7 +21,7 @@ export async function GET(request, { params }) {
     // 'hours' param removed: backend no longer expects this parameter
 
     // Build the backend API URL
-    const backendUrl = new URL(`https://api.kognolearn.com/courses/${courseId}/plan`);
+    const backendUrl = new URL(`${BACKEND_API_URL}/courses/${courseId}/plan`);
     backendUrl.searchParams.set('userId', userId);
 
     // Forward the request to the backend API
