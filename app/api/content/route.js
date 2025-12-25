@@ -256,9 +256,9 @@ export async function GET(request) {
           practice_problems: contentPayload.practice_problems
         }),
         
-        // Interactive practice (parsons, skeleton, matching, blackbox problems)
-        ...(contentPayload.interactive_practice && {
-          interactive_practice: contentPayload.interactive_practice
+        // Interactive Task (replaces deprecated interactive_practice)
+        ...((contentPayload.interactive_practice || contentPayload.interactivePractice || lesson.interactive_practice || lesson.interactivePractice || contentPayload.interactive_task || contentPayload.interactiveTask || lesson.interactive_task || lesson.interactiveTask) && {
+          interactive_task: contentPayload.interactive_practice || contentPayload.interactivePractice || lesson.interactive_practice || lesson.interactivePractice || contentPayload.interactive_task || contentPayload.interactiveTask || lesson.interactive_task || lesson.interactiveTask
         }),
       }
     };
