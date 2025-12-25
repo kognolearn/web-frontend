@@ -7,7 +7,7 @@ import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import PracticeProblems from "@/components/content/PracticeProblems";
-import InteractivePractice from "@/components/content/InteractivePractice";
+import TaskRenderer from "@/components/content/TaskRenderer";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
@@ -224,10 +224,11 @@ function ItemContent({
       const practiceProblems = data?.practice_problems || [];
       return <PracticeProblems problems={practiceProblems} />;
     }
-    case "interactive_practice": {
-      // Interactive practice: Parsons, Skeleton, Matching, Blackbox problems
-      const interactivePractice = data?.interactive_practice || data || {};
-      return <InteractivePractice interactivePractice={interactivePractice} />;
+    case "interactive_practice":
+    case "interactive_task": {
+      // Interactive Task (formerly interactive practice)
+      const taskData = data?.interactive_task || data?.interactive_practice || data || {};
+      return <TaskRenderer taskData={taskData} />;
     }
     default:
       return (
@@ -1006,6 +1007,16 @@ export default function CourseTabContent({
         return data.quizCompleted === true;
       case 'flashcards':
         return data.flashcardsCompleted === true;
+      case 'interactive_practice':
+      case 'interactive_task':
+        return (
+          data.interactivePracticeCompleted === true ||
+          data.interactive_practice_completed === true ||
+          data.interactive_practice?.completed === true ||
+          data.interactiveTaskCompleted === true ||
+          data.interactive_task_completed === true ||
+          data.interactive_task?.completed === true
+        );
       default:
         return false;
     }
@@ -1046,10 +1057,10 @@ export default function CourseTabContent({
         if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
         // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
         // Interactive practice: parsons, skeleton, matching, blackbox
-        // const ip = data.interactive_practice;
-        // if (ip && (ip.parsons?.length || ip.skeleton?.length || ip.matching?.length || ip.blackbox?.length)) {
-        //   types.push({ label: "Interactive", value: "interactive_practice" });
-        // }
+        const ip = data.interactive_practice || data.interactive_task;
+        if (ip) {
+          types.push({ label: "Interactive Task", value: "interactive_task" });
+        }
       }
     }
     if (types.length === 0) {
@@ -1165,7 +1176,9 @@ export default function CourseTabContent({
     
     // If content is loaded, rely on backend completion flags
     if (isLessonContentLoaded(lessonId)) {
-      const availableTypes = getAvailableContentTypes(lessonId);
+      const availableTypes = getAvailableContentTypes(lessonId).filter(
+        (type) => type.value !== 'interactive_practice',
+      );
       if (availableTypes.length > 0) {
         return availableTypes.every(type => isContentCompleted(lessonId, type.value));
       }
