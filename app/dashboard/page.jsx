@@ -21,7 +21,13 @@ export default function DashboardPage() {
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
   const { mounted } = useTheme();
   const pollingRef = useRef(null);
+  const refreshRetryRef = useRef(null);
+  const coursesRef = useRef([]);
   const [courseProgress, setCourseProgress] = useState({});
+
+  useEffect(() => {
+    coursesRef.current = courses;
+  }, [courses]);
 
   const loadCourseProgress = useCallback(async (userId, courseIds) => {
     if (!courseIds || courseIds.length === 0) return;
@@ -95,11 +101,21 @@ export default function DashboardPage() {
   }, []);
 
   const loadCourses = useCallback(async (userId, silent = false) => {
+    if (!userId) return coursesRef.current;
+
+    const scheduleRetry = () => {
+      if (silent || refreshRetryRef.current) return;
+      refreshRetryRef.current = setTimeout(() => {
+        refreshRetryRef.current = null;
+        loadCourses(userId, true);
+      }, 2500);
+    };
+
     try {
       const res = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
       if (!res.ok) {
         console.error("Failed to fetch courses from API", res.status);
-        if (!silent) setCourses([]);
+        scheduleRetry();
       } else {
         const body = await res.json();
         const items = Array.isArray(body?.courses) ? body.courses : [];
@@ -109,6 +125,7 @@ export default function DashboardPage() {
           const newStr = JSON.stringify(items);
           return prevStr === newStr ? prev : items;
         });
+        coursesRef.current = items;
         
         // Load progress for all ready courses (not pending or needs_attention)
         const readyCourseIds = items
@@ -117,14 +134,19 @@ export default function DashboardPage() {
         if (readyCourseIds.length > 0) {
           loadCourseProgress(userId, readyCourseIds);
         }
+
+        if (refreshRetryRef.current) {
+          clearTimeout(refreshRetryRef.current);
+          refreshRetryRef.current = null;
+        }
         
         return items;
       }
     } catch (err) {
       console.error("Error fetching courses from API:", err);
-      if (!silent) setCourses([]);
+      scheduleRetry();
     }
-    return [];
+    return coursesRef.current;
   }, [loadCourseProgress]);
 
   // Poll for pending courses to check their status
@@ -142,7 +164,7 @@ export default function DashboardPage() {
 
     // Poll every 5 seconds for pending courses
     pollingRef.current = setInterval(async () => {
-      const updatedCourses = await loadCourses(userId);
+      const updatedCourses = await loadCourses(userId, true);
       const stillPending = updatedCourses.some(c => c.status === 'pending');
       
       if (!stillPending && pollingRef.current) {
@@ -157,6 +179,9 @@ export default function DashboardPage() {
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+      }
+      if (refreshRetryRef.current) {
+        clearTimeout(refreshRetryRef.current);
       }
     };
   }, []);
@@ -391,8 +416,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               {pendingCount > 0 ? (
-                <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-400"></span>
+                <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  <span className="flex h-2 w-2 rounded-full bg-amber-500"></span>
                   Building: {pendingCount}
                 </div>
               ) : null}
@@ -422,39 +447,22 @@ export default function DashboardPage() {
                 pointerPosition="center"
                 delay={800}
                 priority={1}
-                className="w-full"
+                className="w-full h-full"
               >
-                <Tooltip content="Create a new course" position="bottom" delay={300} className="w-full">
-                  <Link
-                    href="/courses/create"
-                    className="group relative flex h-full min-h-[11.5rem] flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-5 py-4 transition-all duration-200 hover:border-[var(--primary)]/50 hover:shadow-lg hover:shadow-[var(--primary)]/5"
-                  >
-                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                      <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/8 via-transparent to-[var(--primary)]/6" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-[var(--foreground)]">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[var(--primary)]">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </div>
-                        <p className="text-lg font-bold">Create New Course</p>
-                      </div>
-                      <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-                        Upload a syllabus and get a tailored study path.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--primary)]">
-                      Start building
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </Link>
-                </Tooltip>
+                <Link
+                  href="/courses/create"
+                  className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
+                >
+                  {/* Hover gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
+                  
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <span className="relative text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">Create Course</span>
+                </Link>
               </OnboardingTooltip>
 
               {courses.map((course) => {
