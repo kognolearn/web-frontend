@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -156,6 +156,16 @@ export default function CoursePage() {
   });
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [hasHydratedTabs, setHasHydratedTabs] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobileView(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -663,6 +673,20 @@ export default function CoursePage() {
     return tabActiveChatChangeHandlers.current[tabId];
   }, [updateTabActiveChatId]);
 
+  const courseTabs = useMemo(() => tabs.filter((tab) => tab.type === 'course'), [tabs]);
+  const effectiveActiveTabId = useMemo(() => {
+    if (!isMobileView) return activeTabId;
+    const activeCourseTab = courseTabs.find((tab) => tab.id === activeTabId);
+    return activeCourseTab?.id || courseTabs[0]?.id || activeTabId;
+  }, [isMobileView, activeTabId, courseTabs]);
+  const renderedTabs = useMemo(() => {
+    if (!isMobileView) return tabs;
+    if (courseTabs.length === 0) {
+      return tabs.length > 0 ? [tabs[0]] : [];
+    }
+    return courseTabs.filter((tab) => tab.id === effectiveActiveTabId);
+  }, [isMobileView, tabs, courseTabs, effectiveActiveTabId]);
+
   const handleSharedChatStateChange = useCallback((state) => {
     if (!state) return;
     setSharedChatState((prev) => mergeChatStates(prev, state));
@@ -682,6 +706,23 @@ export default function CoursePage() {
   }, []);
 
   const addTab = (type, options = {}) => {
+    if (isMobileView) {
+      if (type === 'chat') {
+        const targetCourseTab = courseTabs[0];
+        if (targetCourseTab) {
+          const latestSharedState = options.chatState || sharedChatStateRef.current;
+          const fallbackChatId = latestSharedState?.currentChatId || latestSharedState?.chats?.[0]?.id || null;
+          setChatOpenRequest({
+            tabId: targetCourseTab.id,
+            timestamp: Date.now(),
+            state: latestSharedState,
+            chatId: options.chatId || fallbackChatId,
+          });
+        }
+      }
+      return null;
+    }
+
     const newId = options.id || `tab-${Date.now()}`;
     const defaultTitle = options.title || (type === 'course' ? 'Course Content' : 'Chat');
     const baseTab = { id: newId, type, title: defaultTitle, selectedLessonId: null, selectedContentType: null };
@@ -723,12 +764,16 @@ export default function CoursePage() {
   };
 
   const handleOpenChatTab = (payload) => {
+    let mergedState = sharedChatStateRef.current;
     if (payload?.chatState) {
-      setSharedChatState((prev) => mergeChatStates(prev, payload.chatState));
+      mergedState = mergeChatStates(sharedChatStateRef.current, payload.chatState);
+      sharedChatStateRef.current = mergedState;
+      setSharedChatState(mergedState);
     }
     addTab('chat', {
       title: payload?.title || 'Chat',
       chatId: payload?.chatId,
+      chatState: mergedState,
     });
   };
 
@@ -772,12 +817,16 @@ export default function CoursePage() {
           payload = null;
         }
       }
+      let mergedState = sharedChatStateRef.current;
       if (payload?.chatState) {
-        setSharedChatState((prev) => mergeChatStates(prev, payload.chatState));
+        mergedState = mergeChatStates(sharedChatStateRef.current, payload.chatState);
+        sharedChatStateRef.current = mergedState;
+        setSharedChatState(mergedState);
       }
       addTab('chat', {
         title: payload?.title,
         chatId: payload?.chatId,
+        chatState: mergedState,
       });
       return;
     }
@@ -822,25 +871,26 @@ export default function CoursePage() {
   return (
     <div className="flex flex-col h-screen bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
       {/* Tab Bar */}
-      <div 
-        className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
-          isExternalChatHovering 
-            ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[inset_0_-2px_8px_rgba(123,163,122,0.2)]' 
-            : 'border-[var(--border)]'
-        }`}
-        onDragOver={handleTabBarDragOver}
-        onDragLeave={handleTabBarDragLeave}
-        onDrop={handleTabBarDrop}
-      >
-        <Reorder.Group 
-          axis="x" 
-          values={tabs} 
-          onReorder={setTabs}
-          layoutScroll
-          className="flex-1 flex items-center gap-2 overflow-x-auto scrollbar-none"
+      {!isMobileView && (
+        <div 
+          className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
+            isExternalChatHovering 
+              ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[inset_0_-2px_8px_rgba(123,163,122,0.2)]' 
+              : 'border-[var(--border)]'
+          }`}
+          onDragOver={handleTabBarDragOver}
+          onDragLeave={handleTabBarDragLeave}
+          onDrop={handleTabBarDrop}
         >
-          <AnimatePresence initial={false} mode="popLayout">
-            {tabs.map(tab => (
+          <Reorder.Group 
+            axis="x" 
+            values={tabs} 
+            onReorder={setTabs}
+            layoutScroll
+            className="flex-1 flex items-center gap-2 overflow-x-auto scrollbar-none"
+          >
+            <AnimatePresence initial={false} mode="popLayout">
+              {tabs.map(tab => (
               <Reorder.Item
                 key={tab.id}
                 value={tab}
@@ -983,56 +1033,58 @@ export default function CoursePage() {
                   </button>
                 )}
               </Reorder.Item>
-            ))}
-          </AnimatePresence>
-        </Reorder.Group>
-          
-          {/* Add Tab Buttons */}
-          <div className="flex items-center gap-1 px-2 flex-shrink-0">
-            <OnboardingTooltip
-              id="tab-add-course"
-              content="Open a new course view to browse different lessons side by side."
-              position="bottom"
-              pointerPosition="right"
-              delay={1000}
-              priority={15}
-            >
-              <button
-                onClick={() => addTab('course')}
-                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                title="New Course Tab"
+              ))}
+            </AnimatePresence>
+          </Reorder.Group>
+            
+            {/* Add Tab Buttons */}
+            <div className="flex items-center gap-1 px-2 flex-shrink-0">
+              <OnboardingTooltip
+                id="tab-add-course"
+                content="Open a new course view to browse different lessons side by side."
+                position="bottom"
+                pointerPosition="right"
+                delay={1000}
+                priority={15}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </button>
-            </OnboardingTooltip>
-            <OnboardingTooltip
-              id="tab-add-chat"
-              content="Open a new AI chat tab to ask questions while studying."
-              position="bottom"
-              pointerPosition="right"
-              delay={1200}
-              priority={16}
-            >
-              <button
-                onClick={() => addTab('chat')}
-                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                title="New Chat Tab"
+                <button
+                  onClick={() => addTab('course')}
+                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                  title="New Course Tab"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </button>
+              </OnboardingTooltip>
+              <OnboardingTooltip
+                id="tab-add-chat"
+                content="Open a new AI chat tab to ask questions while studying."
+                position="bottom"
+                pointerPosition="right"
+                delay={1200}
+                priority={16}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </button>
-            </OnboardingTooltip>
-          </div>
-      </div>
+                <button
+                  onClick={() => addTab('chat')}
+                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                  title="New Chat Tab"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </button>
+              </OnboardingTooltip>
+            </div>
+        </div>
+      )}
 
       {/* Tab Content */}
       <div className="flex-1 relative overflow-hidden">
         {/* Dock Zone Indicator - appears when dragging chat tab down */}
-        <AnimatePresence>
-          {isDraggingToDock && draggingTabId && tabs.find(t => t.id === draggingTabId)?.type === 'chat' && (
+        {!isMobileView && (
+          <AnimatePresence>
+            {isDraggingToDock && draggingTabId && tabs.find(t => t.id === draggingTabId)?.type === 'chat' && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1081,20 +1133,23 @@ export default function CoursePage() {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+          </AnimatePresence>
+        )}
 
-        {tabs.map(tab => (
+        {renderedTabs.map(tab => {
+          const isTabActive = tab.id === effectiveActiveTabId;
+          return (
           <div 
             key={tab.id} 
             className="absolute inset-0 w-full h-full"
             style={{ 
-              display: tab.id === activeTabId ? 'block' : 'none',
-              zIndex: tab.id === activeTabId ? 10 : 0
+              display: isTabActive ? 'block' : 'none',
+              zIndex: isTabActive ? 10 : 0
             }}
           >
             {tab.type === 'course' ? (
               <CourseTabContent
-                isActive={tab.id === activeTabId}
+                isActive={isTabActive}
                 courseId={courseId}
                 userId={userId}
                 courseName={courseName}
@@ -1133,7 +1188,7 @@ export default function CoursePage() {
               />
             ) : (
               <ChatTabContent
-                isActive={tab.id === activeTabId}
+                isActive={isTabActive}
                 courseId={courseId}
                 courseName={courseName}
                 studyPlan={studyPlan}
@@ -1145,7 +1200,8 @@ export default function CoursePage() {
               />
             )}
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Global Modals */}
