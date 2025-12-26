@@ -101,7 +101,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
               </span>
-              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Building</span>
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Building</span>
             </div>
           </div>
 
@@ -159,8 +159,8 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           <div className="absolute top-3 right-3 z-10">
             <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium ${
               isCompleted 
-                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' 
-                : 'bg-[var(--surface-2)] text-[var(--muted-foreground)]'
+                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30' 
+                : 'bg-[var(--surface-muted)] text-[var(--foreground)] border border-[var(--border)]'
             }`}>
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -214,16 +214,16 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         {/* Progress section - stays at constant position above footer */}
         <div className="space-y-2 mb-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[var(--muted-foreground)]">Progress</span>
+            <span className="text-[var(--foreground)]/70">Progress</span>
             {topicProgressPercent !== null ? (
-              <span className={`font-semibold ${isCompleted ? 'text-emerald-500' : 'text-[var(--foreground)]'}`}>
+              <span className={`font-semibold ${isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 'text-[var(--foreground)]'}`}>
                 {topicProgressPercent}%
               </span>
             ) : (
-              <span className="text-[var(--muted-foreground)]">Calibrating</span>
+              <span className="text-[var(--foreground)]/50">Calibrating</span>
             )}
           </div>
-          <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+          <div className="h-1.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)]/30 overflow-hidden">
             {topicProgressValue !== null ? (
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -241,10 +241,10 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         </div>
 
         {/* Footer with actions */}
-        <div className="flex items-center gap-2 pt-3 border-t border-[var(--border)]/50">
+        <div className="flex items-center gap-2 pt-3 border-t border-[var(--border)]/70">
           <button
             onClick={handleCheatsheetClick}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-medium text-[var(--muted-foreground)] bg-[var(--surface-2)]/60 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] transition-all duration-200"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-medium text-[var(--foreground)] bg-[var(--surface-muted)]/70 border border-[var(--border)]/50 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)] hover:border-[var(--primary)]/30 transition-all duration-200"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -253,7 +253,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
           </button>
           <button
             onClick={handleReviewClick}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-medium text-[var(--muted-foreground)] bg-[var(--surface-2)]/60 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] transition-all duration-200"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-medium text-[var(--foreground)] bg-[var(--surface-muted)]/70 border border-[var(--border)]/50 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)] hover:border-[var(--primary)]/30 transition-all duration-200"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
