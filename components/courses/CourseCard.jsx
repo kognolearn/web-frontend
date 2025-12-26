@@ -156,7 +156,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
       <div className="relative flex flex-col p-5 h-full">
         {/* Time badge - top right */}
         {timeLabel && (
-          <div className="absolute top-3 right-3 z-10">
+          <div className="absolute top-3 right-3 z-10 transition-all duration-300 ease-out group-hover:-translate-x-8 group-hover:opacity-0">
             <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium ${
               isCompleted 
                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30' 
@@ -172,12 +172,16 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
 
         {/* Header with title and actions */}
         <div className="flex items-start justify-between gap-3">
-          <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 flex-1 ${timeLabel ? 'pr-16' : ''}`}>
+          <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 flex-1 ${timeLabel ? 'pr-28' : ''}`}>
             {courseCode}
           </h3>
 
           {/* Action buttons - shown on hover, replaces time badge position */}
-          <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 shrink-0 -mt-1 ${timeLabel ? 'absolute top-3 right-3 z-20 bg-[var(--surface-1)] rounded-xl' : '-mr-1'}`}>
+          <div className={`flex items-center gap-0.5 transition-all duration-300 ease-out shrink-0 -mt-1 ${
+            timeLabel 
+              ? 'absolute top-3 right-3 z-20 translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100' 
+              : 'opacity-0 group-hover:opacity-100 -mr-1'
+          }`}>
             <Tooltip content={shareCopied ? "Copied!" : "Share"} position="bottom">
               <button
                 onClick={handleShareClick}
