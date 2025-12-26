@@ -86,9 +86,12 @@ export default function ThemeToggle() {
   if (hasCourseSidebar && !courseUiReady) return null;
 
   const isDark = theme === "dark";
-  const shouldShift = hasCourseSidebar && !courseSidebarClosed;
+  const shouldShift = hasCourseSidebar && !courseSidebarClosed && !isMobileViewport;
   const hideForChat = chatOverlayActive && isMobileViewport;
-  const effectiveZIndex = hideForChat ? 5 : 50;
+  const isSidebarOpenOnMobile = isMobileViewport && hasCourseSidebar && !courseSidebarClosed;
+  // On mobile course pages, always use lower z-index so sidebar can slide over smoothly
+  const isOnMobileCoursePage = isMobileViewport && hasCourseSidebar;
+  const effectiveZIndex = hideForChat ? 5 : (isOnMobileCoursePage ? 10 : 50);
 
   return (
     <div 
