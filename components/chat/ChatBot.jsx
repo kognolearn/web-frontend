@@ -2198,7 +2198,7 @@ Instructions:
           </div>
         </div>
         <div className="no-drag flex flex-shrink-0 items-center gap-2">
-          {onOpenInTab && (
+          {onOpenInTab && !isMobile && (
             <button
               onClick={() => {
                 onOpenInTab(buildTransferPayload());
@@ -2213,21 +2213,23 @@ Instructions:
               </svg>
             </button>
           )}
-          <button
-            onClick={() => setIsPopped(!isPopped)}
-            type="button"
-            aria-label={isPopped ? "Dock to side" : "Pop out"}
-            className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
-            title={isPopped ? "Dock to side" : "Pop out"}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              {isPopped ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              )}
-            </svg>
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setIsPopped(!isPopped)}
+              type="button"
+              aria-label={isPopped ? "Dock to side" : "Pop out"}
+              className="rounded-lg p-1.5 hover:bg-[var(--surface-2)] transition-colors"
+              title={isPopped ? "Dock to side" : "Pop out"}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {isPopped ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                )}
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => {
               if (onClose) {
