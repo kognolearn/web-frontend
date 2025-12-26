@@ -438,6 +438,29 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [isCompactDrag, setIsCompactDrag] = useState(false);
+  const [courseSidebarClosed, setCourseSidebarClosed] = useState(false);
+  const [hasCourseSidebar, setHasCourseSidebar] = useState(false);
+
+  // Track when the course sidebar is closed via body class
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const updateStateFromBody = () => {
+      const body = document.body;
+      if (!body) return;
+      setCourseSidebarClosed(body.classList.contains("course-sidebar-closed"));
+      setHasCourseSidebar(body.classList.contains("has-course-sidebar"));
+    };
+
+    updateStateFromBody();
+
+    const observer = new MutationObserver(updateStateFromBody);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
   
   // Chat state
   const [chats, setChats] = useState(initialChatDataRef.current);
@@ -1664,18 +1687,26 @@ Instructions:
     });
   };
 
+  const isSidebarOpenOnMobile = isMobile && hasCourseSidebar && !courseSidebarClosed;
+  // On mobile course pages, always use lower z-index so sidebar can slide over smoothly
+  const isOnMobileCoursePage = isMobile && hasCourseSidebar;
+  const floatingButtonZIndex = isOnMobileCoursePage ? 10 : 50;
+
   const floatingButton = (
-    <OnboardingTooltip
-      id="chatbot-intro"
-      content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
-      position="left"
-      pointerPosition="bottom"
-      delay={1500}
-      priority={20}
-      className="fixed bottom-20 right-4 sm:bottom-20 sm:right-6 z-50"
+    <div 
+      className="fixed bottom-20 right-4 sm:bottom-20 sm:right-6"
+      style={{ zIndex: floatingButtonZIndex }}
     >
-      <button
-        onClick={() => setIsOpen(true)}
+      <OnboardingTooltip
+        id="chatbot-intro"
+        content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
+        position="left"
+        pointerPosition="bottom"
+        delay={1500}
+        priority={20}
+      >
+        <button
+          onClick={() => setIsOpen(true)}
         type="button"
         aria-label="Open ChatBot"
         className="btn btn-primary btn-fab"
@@ -1686,6 +1717,7 @@ Instructions:
         </svg>
       </button>
     </OnboardingTooltip>
+    </div>
   );
 
   if (!isOpen) {
