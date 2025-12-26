@@ -41,25 +41,25 @@ export default function TimerControls({
     <div className="space-y-4">
       {/* Current Timer Display with Pause Button */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <div className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--muted-foreground)]">Current time remaining:</span>
-            <span className="text-lg font-bold text-[var(--foreground)]">{formatTime(currentSeconds)}</span>
+            <span className="text-xs sm:text-sm text-[var(--muted-foreground)]">Current time remaining:</span>
+            <span className="text-base sm:text-lg font-bold text-[var(--foreground)]">{formatTime(currentSeconds)}</span>
           </div>
         </div>
         {onPauseToggle && (
           <button
             type="button"
             onClick={onPauseToggle}
-            className="flex items-center justify-center h-[58px] w-[58px] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            className="flex items-center justify-center h-[50px] w-[50px] sm:h-[58px] sm:w-[58px] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
             title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
           >
             {isTimerPaused ? (
-              <svg className="w-6 h-6 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             ) : (
-              <svg className="w-6 h-6 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
               </svg>
             )}
