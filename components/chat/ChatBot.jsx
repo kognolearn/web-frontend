@@ -98,6 +98,8 @@ SUMMARY
 const MAX_HISTORY_MESSAGES = parseInt(process.env.NEXT_PUBLIC_CHAT_MAX_HISTORY || '12', 10);
 const MAX_SELECTED_TEXT_CHARS = parseInt(process.env.NEXT_PUBLIC_CHAT_MAX_SELECTED || '500', 10);
 const MAX_MESSAGE_CHARS = parseInt(process.env.NEXT_PUBLIC_CHAT_MAX_MESSAGE || '4000', 10);
+const MIN_COMPOSER_HEIGHT = 40;
+const MAX_COMPOSER_HEIGHT = 120;
 
 // Helpers to minimize payload size without losing key context
 const sanitizeText = (text, max = MAX_MESSAGE_CHARS) => {
@@ -500,7 +502,11 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     if (!inputRef.current || useContentEditableInput) return;
     const el = inputRef.current;
     el.style.height = 'auto';
-    const nextHeight = Math.min(el.scrollHeight, 120);
+    const measuredHeight = el.scrollHeight || MIN_COMPOSER_HEIGHT;
+    const nextHeight = Math.max(
+      MIN_COMPOSER_HEIGHT,
+      Math.min(measuredHeight, MAX_COMPOSER_HEIGHT)
+    );
     el.style.height = `${nextHeight}px`;
   }, [useContentEditableInput]);
 
@@ -1016,14 +1022,22 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   }, [currentChatId, updateDraft]);
 
   const createNewChat = () => {
-    // First, clean up any existing empty chats
-    const nonEmptyChats = chats.filter(c => c.messages.length > 0);
-    
     const newChat = createBlankChat();
-    
-    // Add new chat at the beginning (newest first)
-    setChats([newChat, ...nonEmptyChats]);
+
+    setChats((prevChats) => {
+      const nonEmptyChats = prevChats.filter((chat) => chat.messages.length > 0);
+      return [newChat, ...nonEmptyChats];
+    });
+
     setCurrentChatId(newChat.id);
+    setInput("");
+    setAttachedFiles([]);
+    setSelectedText("");
+    updateDraft(newChat.id, { input: "", attachedFiles: [] });
+    if (editingMessageId) {
+      setEditingMessageId(null);
+      setEditingContent("");
+    }
   };
 
   const deleteChat = (chatId) => {
@@ -2059,7 +2073,7 @@ Instructions:
                   spellCheck={false}
                   inputMode="text"
                   className="w-full rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
-                  style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'hidden', whiteSpace: 'pre-wrap' }}
+                  style={{ minHeight: `${MIN_COMPOSER_HEIGHT}px`, maxHeight: `${MAX_COMPOSER_HEIGHT}px`, overflowY: 'hidden', whiteSpace: 'pre-wrap' }}
                 />
               ) : (
                 <textarea
@@ -2096,8 +2110,8 @@ Instructions:
                   className="w-full resize-none rounded-lg bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-shadow"
                   rows={1}
                   style={{
-                    maxHeight: '120px',
-                    minHeight: '40px',
+                    maxHeight: `${MAX_COMPOSER_HEIGHT}px`,
+                    minHeight: `${MIN_COMPOSER_HEIGHT}px`,
                     height: 'auto',
                     overflow: 'hidden',
                   }}
