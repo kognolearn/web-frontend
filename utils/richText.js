@@ -80,8 +80,7 @@ export function normalizeLatex(text) {
   });
   
   // Step 1: Convert literal \\n to actual newlines
-  // Avoid replacing \\n if it's the start of a LaTeX command (e.g., \\neg, \\neq, \\nu)
-  result = result.replace(/\\n(?![a-zA-Z])/g, '\n');
+  result = result.replace(/\\n/g, '\n');
   
   // Step 2: Handle multiple levels of escaping that can occur from JSON parsing
   // Only convert double backslash to single (\\omega -> \omega)
