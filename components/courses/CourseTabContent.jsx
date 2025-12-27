@@ -209,7 +209,6 @@ function ItemContent({
       
       return (
         <Quiz 
-          key={id}
           questions={data?.questions || data} 
           onQuestionChange={onQuizQuestionChange}
           onQuizCompleted={handleQuizCompleted}
@@ -321,7 +320,6 @@ export default function CourseTabContent({
   }, [chatOpenRequest, onActiveChatIdChange, onChatOpenRequestHandled]);
 
   const [contentCache, setContentCache] = useState({});
-  const contentCacheRef = useRef(contentCache);
   const [chatBotWidth, setChatBotWidth] = useState(0);
   const [chatQuizContext, setChatQuizContext] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -342,11 +340,11 @@ export default function CourseTabContent({
       contentType: selectedContentType?.type || null,
     });
   }, [selectedLesson?.id, selectedContentType?.type, onViewStateChange]);
-
-  useEffect(() => {
-    contentCacheRef.current = contentCache;
-  }, [contentCache]);
   
+  // Content type completion tracking
+  const [contentCompletionStatus, setContentCompletionStatus] = useState({});
+  // Force re-render counter for completion status updates
+  const [completionUpdateKey, setCompletionUpdateKey] = useState(0);
   // Lesson/module completion celebration state
   const [completionCelebration, setCompletionCelebration] = useState(null); // { type: 'lesson'|'module', title, status }
   const celebrationTimeoutRef = useRef(null);
@@ -869,25 +867,20 @@ export default function CourseTabContent({
     setExpandedLessons(newExpanded);
   };
 
-  const fetchLessonContent = useCallback((lessonId, formats = ['reading'], options = {}) => {
+  const fetchLessonContent = useCallback((lessonId, formats = ['reading']) => {
     if (!userId || !courseId) return; // Guard: don't fetch without userId/courseId
-    const { force = false } = options;
     formats.forEach(format => {
       const normFmt = normalizeFormat(format);
       const key = `${normFmt}:${lessonId}:${userId}:${courseId}`;
-
-      const existing = contentCacheRef.current[key];
-      if (!force && (existing?.status === "loading" || existing?.status === "loaded")) {
-        return;
-      }
-      if (force && existing?.status === "loading") {
-        return;
-      }
-
-      if (!existing || existing.status === "error") {
-        setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
-      }
-
+      
+      setContentCache((prev) => {
+        // Skip if already loading or loaded
+        if (prev[key]?.status === "loading" || prev[key]?.status === "loaded") {
+          return prev;
+        }
+        return { ...prev, [key]: { status: "loading" } };
+      });
+      
       (async () => {
         try {
           const params = new URLSearchParams({ 
@@ -952,32 +945,53 @@ export default function CourseTabContent({
     await refetchStudyPlan();
   }, [refetchStudyPlan]);
 
-  // Content completion handlers (always refetch backend status)
+  // Content completion handlers
+  const refreshCompletionStatus = useCallback(() => {
+    setCompletionUpdateKey(prev => prev + 1);
+  }, []);
+
   const handleReadingCompleted = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['reading'], { force: true });
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:reading`]: true
+      }));
+      refreshCompletionStatus();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent]);
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
 
   const handleFlashcardsCompleted = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['flashcards'], { force: true });
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:flashcards`]: true
+      }));
+      refreshCompletionStatus();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent]);
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
 
   const handleVideoViewed = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['video'], { force: true });
+      // No localStorage usage - VideoBlock handles the backend API call
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:video`]: true
+      }));
+      refreshCompletionStatus();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent]);
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus]);
 
   const handleQuizContentCompleted = useCallback(async (result) => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['mini_quiz'], { force: true });
+      setContentCompletionStatus(prev => ({
+        ...prev,
+        [`${selectedLesson.id}:mini_quiz`]: true
+      }));
+      refreshCompletionStatus();
       // Also update the study plan
       await refetchStudyPlan();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan]);
+  }, [selectedLesson?.id, courseId, refreshCompletionStatus, refetchStudyPlan]);
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {
@@ -992,24 +1006,32 @@ export default function CourseTabContent({
     return null;
   }, [contentCache]);
 
-  // Check if a content type is completed for a lesson (using backend data only)
+  // Check if a content type is completed for a lesson (using backend data)
   const isContentCompleted = useCallback((lessonId, contentType) => {
+    // Check from local state first (for immediate updates)
+    const stateKey = `${lessonId}:${contentType}`;
+    if (contentCompletionStatus[stateKey]) return true;
+    
+    // Check from backend data in content cache
     const data = getLessonContentData(lessonId);
-    if (!data) return false;
-
-    switch (contentType) {
-      case 'reading':
-        return data.readingCompleted === true;
-      case 'video':
-        return data.videoCompleted === true;
-      case 'mini_quiz':
-        return data.quizCompleted === true;
-      case 'flashcards':
-        return data.flashcardsCompleted === true;
-      default:
-        return false;
+    if (data) {
+      switch (contentType) {
+        case 'reading':
+          return data.readingCompleted === true;
+        case 'video':
+          return data.videoCompleted === true;
+        case 'mini_quiz':
+          return data.quizCompleted === true;
+        case 'flashcards':
+          // Flashcards don't have backend completion tracking yet
+          return contentCompletionStatus[stateKey] || false;
+        default:
+          return false;
+      }
     }
-  }, [getLessonContentData]);
+    return false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, contentCompletionStatus, completionUpdateKey, getLessonContentData]);
 
   // Helper functions for checking lesson content status
   const isLessonContentLoading = useCallback((lessonId) => {
@@ -1163,7 +1185,7 @@ export default function CourseTabContent({
       return true;
     }
     
-    // If content is loaded, rely on backend completion flags
+    // If content is loaded, check localStorage for completion
     if (isLessonContentLoaded(lessonId)) {
       const availableTypes = getAvailableContentTypes(lessonId);
       if (availableTypes.length > 0) {
@@ -1227,8 +1249,10 @@ export default function CourseTabContent({
     if (!selectedLesson?.id || !courseId || !userId) return;
     
     const lessonId = selectedLesson.id;
-    // Skip if we've already marked this lesson complete
-    if (lessonCompletionUpdatedRef.current.has(lessonId)) return;
+    const updateKey = `${lessonId}:${completionUpdateKey}`;
+    
+    // Skip if we've already checked this lesson at this update key
+    if (lessonCompletionUpdatedRef.current.has(updateKey)) return;
     
     // Check if lesson content is loaded first
     if (!isLessonContentLoaded(lessonId)) return;
@@ -1247,7 +1271,7 @@ export default function CourseTabContent({
     
     if (allCompleted) {
       // Mark as checked to prevent duplicate API calls
-      lessonCompletionUpdatedRef.current.add(lessonId);
+      lessonCompletionUpdatedRef.current.add(updateKey);
       
       // Get quiz score from backend data for determining mastery
       const quizScore = calculateQuizScoreFromData(data);
@@ -1287,7 +1311,7 @@ export default function CourseTabContent({
         }
       })();
     }
-  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan]);
+  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, completionUpdateKey, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan]);
 
   const handleDragOver = (e) => {
     if (e.dataTransfer.types.includes('application/x-chat-tab-id')) {

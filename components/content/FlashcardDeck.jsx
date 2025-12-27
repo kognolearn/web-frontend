@@ -7,6 +7,7 @@ import { MathJax } from "better-react-mathjax";
 import Tooltip from "@/components/ui/Tooltip";
 import { normalizeLatex } from "@/utils/richText";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { updateFlashcardProgress, getFlashcardProgress } from "@/utils/lessonProgress";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -30,7 +31,7 @@ function normalizeText(text) {
 }
 
 /** data: { "1": [question, answer, explanation, _ignored], ... } */
-export default function FlashcardDeck({ data = {}, onCardChange, lessonId, onFlashcardsCompleted }) {
+export default function FlashcardDeck({ data = {}, onCardChange, courseId, lessonId, onFlashcardsCompleted }) {
   const cards = useMemo(
     () =>
       Object.entries(data)
@@ -45,17 +46,34 @@ export default function FlashcardDeck({ data = {}, onCardChange, lessonId, onFla
   const cardApiRef = useRef(null);
   const hasNotifiedCompletion = useRef(false);
 
+  // Restore progress from localStorage on mount
   useEffect(() => {
-    hasNotifiedCompletion.current = false;
-  }, [lessonId, total]);
-
-  useEffect(() => {
-    if (!onFlashcardsCompleted || total === 0) return;
-    if (i >= total - 1 && !hasNotifiedCompletion.current) {
-      hasNotifiedCompletion.current = true;
-      onFlashcardsCompleted();
+    if (courseId && lessonId && total > 0) {
+      const progress = getFlashcardProgress(courseId, lessonId);
+      // If we've already completed flashcards and visited the last card, mark as complete
+      if (progress.completed && !hasNotifiedCompletion.current) {
+        hasNotifiedCompletion.current = true;
+        if (onFlashcardsCompleted) {
+          onFlashcardsCompleted();
+        }
+      }
     }
-  }, [i, total, onFlashcardsCompleted]);
+  }, [courseId, lessonId, total, onFlashcardsCompleted]);
+
+  // Track flashcard viewing progress
+  useEffect(() => {
+    if (courseId && lessonId && total > 0) {
+      const completed = updateFlashcardProgress(courseId, lessonId, i, total);
+      
+      // Notify parent when reaching the last card for the first time
+      if (completed && !hasNotifiedCompletion.current) {
+        hasNotifiedCompletion.current = true;
+        if (onFlashcardsCompleted) {
+          onFlashcardsCompleted();
+        }
+      }
+    }
+  }, [i, total, courseId, lessonId, onFlashcardsCompleted]);
 
   const next = useCallback(() => {
     setDirection(1);

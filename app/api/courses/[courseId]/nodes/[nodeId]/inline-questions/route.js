@@ -55,24 +55,17 @@ export async function GET(request, { params }) {
 /**
  * PATCH /api/courses/:courseId/nodes/:nodeId/inline-questions
  * Saves inline answers and updates readingCompleted
- * Body: { userId, updates: [{ questionIndex, selectedAnswer }] }
+ * Body: { userId, answers: [{ questionIndex, selectedOption, isCorrect }] }
  */
 export async function PATCH(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
     const body = await request.json();
-    const { userId, updates } = body;
+    const { userId, answers } = body;
 
     if (!userId) {
       return NextResponse.json(
         { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(updates)) {
-      return NextResponse.json(
-        { error: 'updates is required' },
         { status: 400 }
       );
     }
@@ -89,7 +82,7 @@ export async function PATCH(request, { params }) {
       },
       body: JSON.stringify({
         userId,
-        updates,
+        answers,
       }),
     });
 

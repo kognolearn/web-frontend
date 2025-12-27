@@ -78,29 +78,6 @@ export async function GET(request) {
 
     const lesson = backendData.lesson;
     const contentPayload = lesson.content_payload || {};
-    const resolvedReadingCompleted = lesson.readingCompleted ?? contentPayload.readingCompleted ?? false;
-    const resolvedVideoCompleted = lesson.videoCompleted ?? contentPayload.videoCompleted ?? false;
-    const resolvedQuizCompleted = lesson.quizCompleted ?? contentPayload.quizCompleted ?? false;
-    const inlineQuestionSelections = (() => {
-      if (
-        contentPayload.inlineQuestionSelections &&
-        typeof contentPayload.inlineQuestionSelections === 'object' &&
-        !Array.isArray(contentPayload.inlineQuestionSelections)
-      ) {
-        return contentPayload.inlineQuestionSelections;
-      }
-      if (Array.isArray(contentPayload.inlineQuestions)) {
-        return contentPayload.inlineQuestions.reduce((acc, item) => {
-          if (!item) return acc;
-          const idx = item.questionIndex;
-          if (idx === undefined || idx === null) return acc;
-          if (item.selectedAnswer === undefined || item.selectedAnswer === null) return acc;
-          acc[idx] = item.selectedAnswer;
-          return acc;
-        }, {});
-      }
-      return {};
-    })();
 
     // Log quiz data specifically if present
     if (contentPayload.quiz) {
@@ -120,14 +97,14 @@ export async function GET(request) {
         bloom_level: lesson.bloom_level,
         
         // Completion status from backend (user_node_state)
-        readingCompleted: resolvedReadingCompleted,
-        videoCompleted: resolvedVideoCompleted,
-        quizCompleted: resolvedQuizCompleted,
+        readingCompleted: lesson.readingCompleted || false,
+        videoCompleted: lesson.videoCompleted || false,
+        quizCompleted: lesson.quizCompleted || false,
         mastery_status: lesson.mastery_status || 'pending',
         familiarity_score: lesson.familiarity_score,
         
         // Inline question selections from backend
-        inlineQuestionSelections,
+        inlineQuestionSelections: contentPayload.inlineQuestionSelections || {},
         
         // Content based on what's available
         body: contentPayload.reading || '',
