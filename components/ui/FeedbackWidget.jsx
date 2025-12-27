@@ -392,7 +392,7 @@ export default function FeedbackWidget() {
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="btn btn-glass btn-icon"
+        className="btn btn-glass btn-icon backdrop-blur-md bg-surface-1/30 border border-border/20 shadow-sm"
         aria-label="Send feedback"
         aria-expanded={isOpen}
       >
