@@ -12,6 +12,7 @@ import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 
 // Module-level tracking to survive React Strict Mode remounts
@@ -242,6 +243,68 @@ function ItemContent({
         </article>
       );
   }
+}
+
+// Collapsed rail theme toggle button
+function CollapsedRailThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+  
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="relative flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label="Toggle color mode"
+      aria-pressed={isDark}
+    >
+      {/* Moon icon - visible in dark mode */}
+      <span
+        className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+          isDark ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 -rotate-90"
+        }`}
+        aria-hidden="true"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+        </svg>
+      </span>
+      {/* Sun icon - visible in light mode */}
+      <span
+        className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+          isDark ? "opacity-0 scale-75 rotate-90" : "opacity-100 scale-100 rotate-0"
+        }`}
+        aria-hidden="true"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05 4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
+        </svg>
+      </span>
+    </button>
+  );
+}
+
+// Collapsed rail feedback button - triggers the global feedback widget
+function CollapsedRailFeedbackButton() {
+  const handleClick = () => {
+    // Dispatch custom event to open the global feedback widget
+    window.dispatchEvent(new CustomEvent('open-feedback-widget'));
+  };
+  
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20 mb-3"
+      title="Send feedback"
+      aria-label="Send feedback"
+    >
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    </button>
+  );
 }
 
 export default function CourseTabContent({
@@ -730,12 +793,16 @@ export default function CourseTabContent({
     if (!body) return;
 
     const currentWidth = isMobile ? 280 : sidebarWidth;
-    body.style.setProperty('--course-sidebar-width', `${currentWidth}px`);
-
-    if (!sidebarOpen) {
-      body.classList.add('course-sidebar-closed');
-    } else {
+    const collapsedWidth = 48; // w-12 = 3rem = 48px
+    
+    // Set the sidebar width based on open/closed state
+    if (sidebarOpen) {
+      body.style.setProperty('--course-sidebar-width', `${currentWidth}px`);
       body.classList.remove('course-sidebar-closed');
+    } else {
+      // When closed on desktop, use collapsed rail width
+      body.style.setProperty('--course-sidebar-width', isMobile ? '0px' : `${collapsedWidth}px`);
+      body.classList.add('course-sidebar-closed');
     }
   }, [sidebarOpen, isActive, sidebarWidth, isMobile]);
 
@@ -956,7 +1023,10 @@ export default function CourseTabContent({
 
   const canRenderSidebar = !loading && !error && Boolean(studyPlan);
   const renderedSidebarWidth = isMobile ? 280 : sidebarWidth;
-  const sidebarOffset = canRenderSidebar && sidebarOpen ? renderedSidebarWidth : 0;
+  const collapsedRailWidth = 48; // w-12 = 3rem = 48px
+  const sidebarOffset = canRenderSidebar 
+    ? (sidebarOpen ? renderedSidebarWidth : (isMobile ? 0 : collapsedRailWidth))
+    : 0;
 
   const handleCardChange = useCallback((cardInfo) => {
     setCurrentViewingItem({
@@ -1374,18 +1444,68 @@ export default function CourseTabContent({
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
-      {canRenderSidebar && !sidebarOpen && (
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          className="absolute left-3 top-3 z-30 flex items-center justify-center w-10 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
-          title="Show Sidebar"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
+      {/* Collapsed sidebar rail */}
+      {canRenderSidebar && !sidebarOpen && !isMobile && (
+        <div className="absolute left-0 top-0 h-full w-12 z-30 backdrop-blur-md bg-[var(--surface-1)]/60 border-r border-[var(--border)]/50 flex flex-col items-center pt-3 gap-2">
+          {/* Dashboard button */}
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard')}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Go to Dashboard"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          </button>
+          
+          {/* Open sidebar button */}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Show Sidebar"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
+          
+          {/* Spacer to push bottom items down */}
+          <div className="flex-1" />
+          
+          {/* Review button */}
+          <a
+            href={`/courses/${courseId}/review`}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Review Mode"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </a>
+          
+          {/* Cheatsheet button */}
+          <a
+            href={`/courses/${courseId}/cheatsheet`}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Cheatsheet"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </a>
+          
+          {/* Divider */}
+          <div className="w-6 h-px bg-[var(--border)]/50 my-1" />
+          
+          {/* Theme toggle button */}
+          <CollapsedRailThemeToggle />
+          
+          {/* Feedback button */}
+          <CollapsedRailFeedbackButton />
+        </div>
       )}
 
       {/* Top Right Controls: Pause, Timer, Settings */}
@@ -1647,28 +1767,28 @@ export default function CourseTabContent({
             style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
           >
             <div className="p-3 border-b border-[var(--border)] flex items-center gap-2 backdrop-blur-sm">
+              {/* Dashboard button */}
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+                title="Go to Dashboard"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              </button>
+
               {/* Close sidebar button */}
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="flex items-center justify-center w-10 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
                 title="Hide Sidebar"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   <line x1="9" y1="3" x2="9" y2="21" />
-                </svg>
-              </button>
-              
-              {/* Dashboard button */}
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard')}
-                className="flex items-center justify-center w-10 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
-                title="Go to Dashboard"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
               </button>
             </div>
