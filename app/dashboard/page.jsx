@@ -135,7 +135,6 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
   const hasCourses = courses.length > 0;
-  const pendingCount = courses.filter((c) => c.status === "pending").length;
 
   if (loading || !mounted) {
     return (
@@ -238,43 +237,33 @@ export default function DashboardPage() {
       </div>
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-        <div className="rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-6 shadow-lg shadow-black/10 backdrop-blur-xl">
-          {/* Top bar */}
-          <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="text-2xl font-extrabold tracking-tight text-[var(--primary)]">
-              Kogno
-            </Link>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-2 rounded-full border border-[var(--border)]/70 bg-[var(--surface-2)]/70 px-4 py-2 text-sm font-semibold text-[var(--foreground)]/80 transition-colors hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)]"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Sign out
-            </button>
-          </div>
-
-          {/* Welcome header */}
-          <header className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold sm:text-4xl">
-                Welcome back, {displayName}
-              </h1>
-              <p className="text-[var(--muted-foreground)]">
-                {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {pendingCount > 0 ? (
-                <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-400"></span>
-                  Building: {pendingCount}
-                </div>
-              ) : null}
-            </div>
-          </header>
+        {/* Top bar */}
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-2xl font-bold text-[var(--primary)]">
+            Kogno
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="btn btn-ghost btn-sm"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign out
+          </button>
         </div>
+
+        {/* Welcome header - simplified */}
+        <header>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold sm:text-4xl">
+              Welcome back, {displayName}
+            </h1>
+            <p className="text-[var(--muted-foreground)]">
+              {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
+            </p>
+          </div>
+        </header>
         {/* Courses section */}
         <main className="space-y-6">
           {!hasCourses ? (
@@ -287,9 +276,7 @@ export default function DashboardPage() {
               </Link>
             </div>
           ) : (
-            <div
-              className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-stretch"
-            >
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {/* Create Course Card - always first */}
               <OnboardingTooltip
                 id="dashboard-create-course"
@@ -300,35 +287,18 @@ export default function DashboardPage() {
                 priority={1}
                 className="w-full"
               >
-                <Tooltip content="Create a new course" position="bottom" delay={300} className="w-full">
+                <Tooltip content="Create a new personalized course with study materials tailored to your syllabus and exam" position="bottom" delay={500} className="w-full">
                   <Link
                     href="/courses/create"
-                    className="group relative flex h-full min-h-[11.5rem] flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-5 py-4 transition-all duration-200 hover:border-[var(--primary)]/50 hover:shadow-lg hover:shadow-[var(--primary)]/5"
+                    className="block w-full group relative rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)]/50 bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center transition-all hover:bg-[var(--primary)]/5"
                   >
-                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                      <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/8 via-transparent to-[var(--primary)]/6" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-[var(--foreground)]">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[var(--primary)]">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </div>
-                        <p className="text-lg font-bold">Create New Course</p>
-                      </div>
-                      <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-                        Upload a syllabus and get a tailored study path.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--primary)]">
-                      Start building
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--primary)]/10 group-hover:bg-[var(--primary)]/20 group-hover:scale-110 transition-all mb-3">
+                      <svg className="w-7 h-7 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                     </div>
+                    <span className="font-semibold text-[var(--foreground)]">Create New Course</span>
+                    <span className="text-sm text-[var(--muted-foreground)] mt-1">Build your study plan</span>
                   </Link>
                 </Tooltip>
               </OnboardingTooltip>
