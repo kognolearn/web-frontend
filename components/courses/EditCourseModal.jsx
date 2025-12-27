@@ -175,11 +175,11 @@ export default function EditCourseModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", duration: 0.3 }}
-            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] sm:w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--border)] bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl flex flex-col max-h-[85vh] overflow-hidden"
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--border)] bg-[var(--surface-1)]/95 shadow-2xl backdrop-blur-xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-4 sm:px-6 sm:py-5 flex-shrink-0">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
                   <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@ export default function EditCourseModal({
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto overflow-x-visible p-4 sm:p-6 pt-4 space-y-5">
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto overflow-x-visible p-6 pt-4 space-y-5">
               {/* Intro Text */}
               <OnboardingTooltip
                 id="edit-modal-intro"
