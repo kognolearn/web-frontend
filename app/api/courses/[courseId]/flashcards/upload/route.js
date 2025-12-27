@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const API_BASE = process.env.API_BASE_URL || "https://api.kognolearn.com";
 
 export async function POST(request, { params }) {
   const { courseId } = await params;
