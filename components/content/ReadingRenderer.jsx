@@ -4,7 +4,11 @@ import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { MathJax } from "better-react-mathjax";
 import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
-import { authFetch } from "@/lib/api";
+import { 
+  markReadingQuestionAnswered, 
+  setReadingTotalQuestions, 
+  getReadingProgress 
+} from "@/utils/lessonProgress";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -745,7 +749,7 @@ function InlineContent({ text }) {
 /**
  * Interactive question component with answer reveal
  */
-function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered }) {
+function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, onAnswered }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
@@ -773,20 +777,17 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
     return { shuffledOptions: shuffledWithLabels, shuffledToOriginal, originalCorrectInShuffled };
   }, [options, correctIndex, questionIndex, courseId, lessonId]);
   
-  // Load saved answer state from backend initial data (passed via props)
+  // Load saved answer state from localStorage
   useEffect(() => {
-    if (initialAnswer !== undefined && initialAnswer !== null) {
-      // initialAnswer is the original option index from the backend
-      // We need to find which shuffled index this maps to
-      const shuffledIdx = Object.entries(shuffledToOriginal).find(
-        ([, origIdx]) => origIdx === initialAnswer
-      )?.[0];
-      if (shuffledIdx !== undefined) {
-        setSelectedIdx(parseInt(shuffledIdx, 10));
+    if (courseId && lessonId && questionIndex !== undefined) {
+      const progress = getReadingProgress(courseId, lessonId);
+      const savedAnswer = progress?.questionsAnswered?.[questionIndex];
+      if (savedAnswer?.answered) {
+        // Restore the submitted state
+        setSubmitted(true);
       }
-      setSubmitted(true);
     }
-  }, [initialAnswer, shuffledToOriginal]);
+  }, [courseId, lessonId, questionIndex]);
   
   const handleSelect = useCallback((idx) => {
     if (!submitted) {
@@ -794,32 +795,15 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
     }
   }, [submitted]);
   
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => {
     if (selectedIdx !== null && !submitted) {
       setSubmitted(true);
       // Check if selected shuffled index maps to the original correct index
       const isCorrect = selectedIdx === originalCorrectInShuffled;
-      // Get the original option index for the backend
-      const originalOptionIndex = shuffledToOriginal[selectedIdx];
       
-      // Submit to backend API
-      if (courseId && lessonId && userId && questionIndex !== undefined) {
-        try {
-          await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/inline-questions`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              answers: [{
-                questionIndex,
-                selectedOption: originalOptionIndex,
-                isCorrect
-              }]
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save inline question answer:', error);
-        }
+      // Save to localStorage
+      if (courseId && lessonId && questionIndex !== undefined) {
+        markReadingQuestionAnswered(courseId, lessonId, questionIndex, isCorrect);
       }
       
       // Notify parent of answer
@@ -827,7 +811,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
         onAnswered({ questionIndex, isCorrect });
       }
     }
-  }, [selectedIdx, submitted, originalCorrectInShuffled, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
+  }, [selectedIdx, submitted, originalCorrectInShuffled, courseId, lessonId, questionIndex, onAnswered]);
 
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
@@ -1029,24 +1013,8 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
 
 /**
  * Main ReadingRenderer component
- * 
- * @param {string} content - The markdown/text content to render
- * @param {string} courseId - Course ID for tracking
- * @param {string} lessonId - Lesson/node ID for tracking
- * @param {string} userId - User ID for tracking
- * @param {Object} inlineQuestionSelections - Pre-saved inline question answers from backend { questionIndex: selectedOptionIndex }
- * @param {boolean} readingCompleted - Whether reading is already completed (from backend)
- * @param {Function} onReadingCompleted - Callback when all inline questions are answered
  */
-export default function ReadingRenderer({ 
-  content, 
-  courseId, 
-  lessonId, 
-  userId,
-  inlineQuestionSelections = {}, 
-  readingCompleted: initialReadingCompleted = false,
-  onReadingCompleted 
-}) {
+export default function ReadingRenderer({ content, courseId, lessonId, onReadingCompleted }) {
   const blocks = useMemo(() => parseContent(content), [content]);
   
   // Count question blocks
@@ -1054,23 +1022,19 @@ export default function ReadingRenderer({
     return blocks.filter(block => block.type === "question").length;
   }, [blocks]);
   
-  // Track answered questions count
+  // Track answered questions
   const [answeredCount, setAnsweredCount] = useState(0);
   
-  // Initialize answered count from backend data
+  // Initialize total questions on mount and restore answered count from localStorage
   useEffect(() => {
     if (!courseId || !lessonId) return;
-    
-    // If reading is already completed, set answered count to total
-    if (initialReadingCompleted) {
-      setAnsweredCount(questionCount);
-      return;
-    }
-    
-    // Count pre-saved answers from backend
-    const savedAnsweredCount = Object.keys(inlineQuestionSelections || {}).length;
+
+    // Set total questions and restore answered count from localStorage
+    setReadingTotalQuestions(courseId, lessonId, questionCount);
+    const progress = getReadingProgress(courseId, lessonId);
+    const savedAnsweredCount = Object.keys(progress?.questionsAnswered || {}).length;
     setAnsweredCount(savedAnsweredCount);
-  }, [courseId, lessonId, questionCount, initialReadingCompleted, inlineQuestionSelections]);
+  }, [courseId, lessonId, questionCount]);
 
   // Fire completion callback after render to avoid setState during render warnings
   useEffect(() => {
@@ -1082,6 +1046,7 @@ export default function ReadingRenderer({
     }
 
     if (answeredCount >= questionCount) {
+      setReadingTotalQuestions(courseId, lessonId, questionCount);
       onReadingCompleted();
     }
   }, [answeredCount, questionCount, courseId, lessonId, onReadingCompleted]);
@@ -1240,8 +1205,6 @@ export default function ReadingRenderer({
                     questionIndex={currentQuestionIndex}
                     courseId={courseId}
                     lessonId={lessonId}
-                    userId={userId}
-                    initialAnswer={inlineQuestionSelections?.[currentQuestionIndex]}
                     onAnswered={handleQuestionAnswered}
                   />
                 );

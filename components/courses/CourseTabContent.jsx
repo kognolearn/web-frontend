@@ -9,9 +9,15 @@ import Quiz from "@/components/content/Quiz";
 import PracticeProblems from "@/components/content/PracticeProblems";
 import InteractivePractice from "@/components/content/InteractivePractice";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
-import VideoBlock from "@/components/content/VideoBlock";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
+import { 
+  isContentTypeCompleted, 
+  getLessonCompletionStatus, 
+  markVideoViewed,
+  getQuizScore,
+  determineMasteryStatus
+} from "@/utils/lessonProgress";
 import { authFetch } from "@/lib/api";
 
 // Module-level tracking to survive React Strict Mode remounts
@@ -52,7 +58,6 @@ function ItemContent({
   const key = `${normFmt}:${id}:${userId}:${courseId}`;
   const cached = contentCache[key];
   const fetchInitiatedRef = useRef(new Set());
-  const wasMiniQuizRef = useRef(null);
 
   useEffect(() => {
     if (!normFmt || !id || !userId || !courseId) return undefined;
@@ -108,16 +113,8 @@ function ItemContent({
   // Ensure effect hooks are defined before any early return so hook order remains stable
   useEffect(() => {
     if (!onQuizQuestionChange) return;
-    const isMiniQuiz = normalizeFormat(cachedEnvelope.format || fmt) === "mini_quiz";
-    if (!isMiniQuiz) {
-      if (wasMiniQuizRef.current !== false) {
-        onQuizQuestionChange(null);
-        wasMiniQuizRef.current = false;
-      }
-      return;
-    }
-    if (wasMiniQuizRef.current !== true) {
-      wasMiniQuizRef.current = true;
+    if (normalizeFormat(cachedEnvelope.format || fmt) !== "mini_quiz") {
+      onQuizQuestionChange(null);
     }
   }, [cachedEnvelope.format, onQuizQuestionChange, fmt]);
 
@@ -134,9 +131,12 @@ function ItemContent({
         summary: videos[0].summary,
         total: videos.length
       });
-      // Note: Video completion is now handled by VideoBlock via the backend API
+      // Mark video as viewed when video content is loaded
+      if (onVideoViewed) {
+        onVideoViewed();
+      }
     }
-  }, [cachedEnvelope.format, cachedPayload?.videos, fmt, normFmt, setCurrentViewingItem]);
+  }, [cachedEnvelope.format, cachedPayload?.videos, fmt, normFmt, setCurrentViewingItem, onVideoViewed]);
 
   if (!normFmt || !id) {
     return <div className="text-xs text-red-600">Missing format or id.</div>;
@@ -156,18 +156,48 @@ function ItemContent({
         <div className="space-y-4">
           {data?.videos?.map((vid, idx) => {
             if (!vid) return null;
+            const rawUrl = typeof vid.url === "string" ? vid.url.trim() : "";
+            let embedUrl = rawUrl || null;
+            try {
+              if (!rawUrl) throw new Error("missing url");
+              const u = new URL(rawUrl);
+              if (u.hostname === "youtu.be") {
+                embedUrl = `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+              } else if (u.hostname.includes("youtube.com")) {
+                if (u.pathname === "/watch") {
+                  const v = u.searchParams.get("v");
+                  if (v) embedUrl = `https://www.youtube.com/embed/${v}`;
+                } else if (u.pathname.startsWith("/shorts/") || u.pathname.startsWith("/embed/")) {
+                  const id = u.pathname.split("/").filter(Boolean).pop();
+                  if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
+                }
+              }
+            } catch {}
+            if (!embedUrl) {
+              return (
+                <div key={idx} className="rounded-lg border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted-foreground)]">
+                  Video link missing or invalid.
+                </div>
+              );
+            }
             return (
-              <VideoBlock
-                key={idx}
-                url={vid.url}
-                title={vid.title}
-                description={vid.summary}
-                courseId={courseId}
-                lessonId={id}
-                userId={userId}
-                videoCompleted={data?.videoCompleted || false}
-                onVideoViewed={onVideoViewed}
-              />
+              <div key={idx} className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-lg">
+                <div className="aspect-video">
+                  <iframe
+                    src={embedUrl}
+                    title={vid.title}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+                <div className="p-4 border-t border-[var(--border)]">
+                  <h3 className="font-medium text-[var(--foreground)]">{vid.title}</h3>
+                  {vid.summary && (
+                    <p className="text-sm text-[var(--muted-foreground)] mt-1">{vid.summary}</p>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -180,9 +210,6 @@ function ItemContent({
           content={latexContent} 
           courseId={courseId}
           lessonId={id}
-          userId={userId}
-          inlineQuestionSelections={data?.inlineQuestionSelections || {}}
-          readingCompleted={data?.readingCompleted || false}
           onReadingCompleted={onReadingCompleted}
         />
       );
@@ -254,9 +281,6 @@ export default function CourseTabContent({
   handleTimerUpdate,
   isTimerPaused,
   onPauseToggle,
-  initialLessonId,
-  initialContentType,
-  onViewStateChange,
   isSettingsModalOpen,
   setIsSettingsModalOpen,
   isTimerControlsOpen,
@@ -331,15 +355,6 @@ export default function CourseTabContent({
   const [collapsedModules, setCollapsedModules] = useState(new Set());
   const [selectedContentType, setSelectedContentType] = useState(null);
   const [currentViewingItem, setCurrentViewingItem] = useState(null);
-  
-  // Notify parent of current lesson/content selection for tab restore
-  useEffect(() => {
-    if (!onViewStateChange) return;
-    onViewStateChange({
-      lessonId: selectedLesson?.id || null,
-      contentType: selectedContentType?.type || null,
-    });
-  }, [selectedLesson?.id, selectedContentType?.type, onViewStateChange]);
   
   // Content type completion tracking
   const [contentCompletionStatus, setContentCompletionStatus] = useState({});
@@ -972,7 +987,7 @@ export default function CourseTabContent({
 
   const handleVideoViewed = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      // No localStorage usage - VideoBlock handles the backend API call
+      markVideoViewed(courseId, selectedLesson.id);
       setContentCompletionStatus(prev => ({
         ...prev,
         [`${selectedLesson.id}:video`]: true
@@ -993,45 +1008,19 @@ export default function CourseTabContent({
     }
   }, [selectedLesson?.id, courseId, refreshCompletionStatus, refetchStudyPlan]);
 
-  // Helper to get cached content data for a lesson
-  const getLessonContentData = useCallback((lessonId) => {
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
-    if (lessonCacheKey) {
-      const cached = contentCache[lessonCacheKey];
-      if (cached?.status === "loaded" && cached?.data?.data) {
-        return cached.data.data;
-      }
-    }
-    return null;
-  }, [contentCache]);
-
-  // Check if a content type is completed for a lesson (using backend data)
+  // Check if a content type is completed for a lesson
   const isContentCompleted = useCallback((lessonId, contentType) => {
     // Check from local state first (for immediate updates)
     const stateKey = `${lessonId}:${contentType}`;
     if (contentCompletionStatus[stateKey]) return true;
     
-    // Check from backend data in content cache
-    const data = getLessonContentData(lessonId);
-    if (data) {
-      switch (contentType) {
-        case 'reading':
-          return data.readingCompleted === true;
-        case 'video':
-          return data.videoCompleted === true;
-        case 'mini_quiz':
-          return data.quizCompleted === true;
-        case 'flashcards':
-          // Flashcards don't have backend completion tracking yet
-          return contentCompletionStatus[stateKey] || false;
-        default:
-          return false;
-      }
+    // Then check from localStorage
+    if (courseId && lessonId) {
+      return isContentTypeCompleted(courseId, lessonId, contentType);
     }
     return false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, contentCompletionStatus, completionUpdateKey, getLessonContentData]);
+  }, [courseId, contentCompletionStatus, completionUpdateKey]);
 
   // Helper functions for checking lesson content status
   const isLessonContentLoading = useCallback((lessonId) => {
@@ -1114,33 +1103,19 @@ export default function CourseTabContent({
   }, [selectedLesson?.id, allLessonsFlat]);
 
   // Navigate to a lesson
-  const navigateToLesson = useCallback((lesson, preferredContentType = 'reading') => {
+  const navigateToLesson = useCallback((lesson) => {
     if (!lesson) return;
-    const normalizedType = typeof preferredContentType === 'string' && preferredContentType.trim()
-      ? preferredContentType
-      : 'reading';
     setSelectedLesson(lesson);
-    setSelectedContentType({ lessonId: lesson.id, type: normalizedType });
+    setSelectedContentType({ lessonId: lesson.id, type: 'reading' });
     setSelectedReviewModule(null);
     setViewMode("topic");
     setCurrentViewingItem(null);
-    fetchLessonContent(lesson.id, [normalizedType]);
+    fetchLessonContent(lesson.id, ['reading']);
   }, [fetchLessonContent]);
 
   // Auto-select first lesson if available and not already selected
   useEffect(() => {
     if (!studyPlan || selectedLesson) return;
-
-    if (initialLessonId) {
-      const persistedLesson = getLessonFromStudyPlan(initialLessonId);
-      if (persistedLesson) {
-        const preferredType = typeof initialContentType === 'string' && initialContentType.trim()
-          ? initialContentType
-          : 'reading';
-        navigateToLesson(persistedLesson, preferredType);
-        return;
-      }
-    }
 
     const modules = studyPlan.modules || [];
     const firstModule =
@@ -1150,30 +1125,7 @@ export default function CourseTabContent({
     if (firstModule && firstModule.lessons[0]) {
       navigateToLesson(firstModule.lessons[0]);
     }
-  }, [studyPlan, selectedLesson, navigateToLesson, initialLessonId, initialContentType, getLessonFromStudyPlan]);
-
-  // If initialLessonId changes from parent (e.g., tab restore), sync to it.
-  // Use a ref to track the last synced initialLessonId to avoid infinite loops.
-  const lastSyncedInitialLessonIdRef = useRef(null);
-  
-  useEffect(() => {
-    if (!studyPlan || !initialLessonId) return;
-    // Only sync if initialLessonId actually changed from what we last synced
-    if (lastSyncedInitialLessonIdRef.current === initialLessonId) return;
-    // Don't override if we're already on the right lesson
-    if (selectedLesson?.id === initialLessonId) {
-      lastSyncedInitialLessonIdRef.current = initialLessonId;
-      return;
-    }
-    const persistedLesson = getLessonFromStudyPlan(initialLessonId);
-    if (persistedLesson) {
-      lastSyncedInitialLessonIdRef.current = initialLessonId;
-      const preferredType = typeof initialContentType === 'string' && initialContentType.trim()
-        ? initialContentType
-        : 'reading';
-      navigateToLesson(persistedLesson, preferredType);
-    }
-  }, [studyPlan, initialLessonId, initialContentType, selectedLesson?.id, getLessonFromStudyPlan, navigateToLesson]);
+  }, [studyPlan, selectedLesson, navigateToLesson]);
 
   // Check if all content types for a lesson are completed
   const isLessonFullyCompleted = useCallback((lessonId) => {
@@ -1219,29 +1171,6 @@ export default function CourseTabContent({
     });
   }, [isLessonFullyCompleted]);
 
-  // Helper to calculate quiz score from backend data
-  const calculateQuizScoreFromData = useCallback((data) => {
-    if (!data?.questions || !Array.isArray(data.questions)) return null;
-    
-    const questions = data.questions;
-    if (questions.length === 0) return null;
-    
-    // Count correct answers based on status field
-    const correctCount = questions.filter(q => 
-      q.status === 'correct' || q.status === 'correct/flag'
-    ).length;
-    
-    return correctCount / questions.length;
-  }, []);
-
-  // Determine mastery status based on quiz score
-  const determineMasteryStatus = useCallback((quizScore) => {
-    if (quizScore === null || quizScore === undefined) {
-      return 'mastered'; // Default to mastered if no quiz
-    }
-    return quizScore >= 0.7 ? 'mastered' : 'needs_review';
-  }, []);
-
   // Effect to update lesson status when all content is completed
   const lessonCompletionUpdatedRef = useRef(new Set());
   
@@ -1257,24 +1186,18 @@ export default function CourseTabContent({
     // Check if lesson content is loaded first
     if (!isLessonContentLoaded(lessonId)) return;
     
-    // Get the cached content data
-    const data = getLessonContentData(lessonId);
-    if (!data) return;
+    // Check if all content types are completed
+    const availableTypes = getAvailableContentTypes(lessonId);
+    if (availableTypes.length === 0) return;
     
-    // Check if all required content types are completed from backend data
-    const readingCompleted = data.readingCompleted === true || !data.body;
-    const videoCompleted = data.videoCompleted === true || !data.videos?.length;
-    const quizCompleted = data.quizCompleted === true || !data.questions?.length;
-    
-    // Only mark lesson complete when reading, video, and quiz are all marked as complete from backend
-    const allCompleted = readingCompleted && videoCompleted && quizCompleted;
+    const allCompleted = availableTypes.every(type => isContentCompleted(lessonId, type.value));
     
     if (allCompleted) {
       // Mark as checked to prevent duplicate API calls
       lessonCompletionUpdatedRef.current.add(updateKey);
       
-      // Get quiz score from backend data for determining mastery
-      const quizScore = calculateQuizScoreFromData(data);
+      // Get quiz score for determining mastery
+      const quizScore = getQuizScore(courseId, lessonId);
       const masteryStatus = determineMasteryStatus(quizScore);
       const familiarityScore = quizScore !== null ? quizScore : 1; // Default to 1 if no quiz
       
@@ -1311,7 +1234,7 @@ export default function CourseTabContent({
         }
       })();
     }
-  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, completionUpdateKey, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan]);
+  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, completionUpdateKey, isLessonContentLoaded, getAvailableContentTypes, isContentCompleted, refetchStudyPlan]);
 
   const handleDragOver = (e) => {
     if (e.dataTransfer.types.includes('application/x-chat-tab-id')) {

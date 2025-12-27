@@ -17,82 +17,8 @@ export default function DashboardPage() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [courseToDelete, setCourseToDelete] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
   const { mounted } = useTheme();
   const pollingRef = useRef(null);
-  const [courseProgress, setCourseProgress] = useState({});
-
-  const loadCourseProgress = useCallback(async (userId, courseIds) => {
-    if (!courseIds || courseIds.length === 0) return;
-    
-    // Fetch progress for all courses in parallel
-    const progressPromises = courseIds.map(async (courseId) => {
-      try {
-        const res = await authFetch(`/api/courses/${encodeURIComponent(courseId)}/progress?userId=${encodeURIComponent(userId)}`);
-        if (res.ok) {
-          const data = await res.json();
-          // Handle various possible response formats from backend
-          // Could be: { progress: 0.5 }, { percent: 50 }, { completion_percent: 50 }, 
-          // { topics_progress: 0.5 }, { percentComplete: 50 }, or nested in { data: { progress: 0.5 } }
-          let progress = null;
-          
-          // Check for direct decimal values (0-1 range)
-          if (typeof data.progress === 'number') {
-            progress = data.progress;
-          } else if (typeof data.topics_progress === 'number') {
-            progress = data.topics_progress;
-          } else if (typeof data.completion === 'number') {
-            progress = data.completion;
-          }
-          // Check for percentage values (0-100 range) and convert to decimal
-          else if (typeof data.percentComplete === 'number') {
-            progress = data.percentComplete / 100;
-          } else if (typeof data.percent === 'number') {
-            progress = data.percent / 100;
-          } else if (typeof data.completion_percent === 'number') {
-            progress = data.completion_percent / 100;
-          } else if (typeof data.progress_percent === 'number') {
-            progress = data.progress_percent / 100;
-          }
-          // Check nested data object
-          else if (data.data) {
-            if (typeof data.data.progress === 'number') {
-              progress = data.data.progress;
-            } else if (typeof data.data.percentComplete === 'number') {
-              progress = data.data.percentComplete / 100;
-            } else if (typeof data.data.percent === 'number') {
-              progress = data.data.percent / 100;
-            } else if (typeof data.data.completion_percent === 'number') {
-              progress = data.data.completion_percent / 100;
-            }
-          }
-          
-          return { courseId, progress };
-        }
-        // If endpoint returns 404, it's not implemented yet - silently return null
-        // Don't log error for expected 404s
-        if (res.status !== 404) {
-          console.error(`Error fetching progress for course ${courseId}: ${res.status}`);
-        }
-      } catch (err) {
-        console.error(`Error fetching progress for course ${courseId}:`, err);
-      }
-      return { courseId, progress: null };
-    });
-
-    const results = await Promise.all(progressPromises);
-    const progressMap = {};
-    results.forEach(({ courseId, progress }) => {
-      progressMap[courseId] = progress;
-    });
-
-    setCourseProgress(prev => {
-      const prevStr = JSON.stringify(prev);
-      const newStr = JSON.stringify({ ...prev, ...progressMap });
-      return prevStr === newStr ? prev : { ...prev, ...progressMap };
-    });
-  }, []);
 
   const loadCourses = useCallback(async (userId, silent = false) => {
     try {
@@ -109,15 +35,6 @@ export default function DashboardPage() {
           const newStr = JSON.stringify(items);
           return prevStr === newStr ? prev : items;
         });
-        
-        // Load progress for all ready courses (not pending or needs_attention)
-        const readyCourseIds = items
-          .filter(c => c.status !== 'pending' && c.status !== 'needs_attention')
-          .map(c => c.id);
-        if (readyCourseIds.length > 0) {
-          loadCourseProgress(userId, readyCourseIds);
-        }
-        
         return items;
       }
     } catch (err) {
@@ -125,7 +42,7 @@ export default function DashboardPage() {
       if (!silent) setCourses([]);
     }
     return [];
-  }, [loadCourseProgress]);
+  }, []);
 
   // Poll for pending courses to check their status
   const startPollingForPendingCourses = useCallback((userId, courseList) => {
@@ -195,34 +112,6 @@ export default function DashboardPage() {
     window.addEventListener("courses:updated", handler);
     return () => window.removeEventListener("courses:updated", handler);
   }, [user, loadCourses, startPollingForPendingCourses]);
-
-  // Check if the signed-in user is an admin
-  useEffect(() => {
-    let cancelled = false;
-    if (!user) return undefined;
-
-    (async () => {
-      try {
-        const res = await authFetch('/api/admin/status');
-        if (!res.ok) {
-          throw new Error(`Failed to verify admin (${res.status})`);
-        }
-        const body = await res.json().catch(() => ({}));
-        if (!cancelled) {
-          setIsAdmin(body?.isAdmin === true);
-        }
-      } catch (err) {
-        console.error('Failed to check admin status:', err);
-        if (!cancelled) setIsAdmin(false);
-      } finally {
-        if (!cancelled) setHasCheckedAdmin(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -355,28 +244,15 @@ export default function DashboardPage() {
             <Link href="/" className="text-2xl font-extrabold tracking-tight text-[var(--primary)]">
               Kogno
             </Link>
-            <div className="flex items-center gap-2">
-              {hasCheckedAdmin && isAdmin && (
-                <Link
-                  href="/admin"
-                  className="flex items-center gap-2 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 px-4 py-2 text-sm font-semibold text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                  </svg>
-                  Admin
-                </Link>
-              )}
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 rounded-full border border-[var(--border)]/70 bg-[var(--surface-2)]/70 px-4 py-2 text-sm font-semibold text-[var(--foreground)]/80 transition-colors hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)]"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Sign out
-              </button>
-            </div>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-2 rounded-full border border-[var(--border)]/70 bg-[var(--surface-2)]/70 px-4 py-2 text-sm font-semibold text-[var(--foreground)]/80 transition-colors hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)]"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign out
+            </button>
           </div>
 
           {/* Welcome header */}
@@ -472,7 +348,6 @@ export default function DashboardPage() {
                     courseId={course.id}
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
                     status={course.status}
-                    topicsProgress={courseProgress[course.id]}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
                 );

@@ -1,7 +1,4 @@
-"use client";
-
-import React, { useEffect, useRef } from "react";
-import { authFetch } from "@/lib/api";
+import React from "react";
 
 const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const VIMEO_REGEX = /vimeo\.com\/(?:video\/)?(\d+)/i;
@@ -36,70 +33,8 @@ function normalizeUrl(url) {
   };
 }
 
-/**
- * VideoBlock component
- * 
- * @param {string} url - Video URL (YouTube, Vimeo, or direct)
- * @param {string} title - Video title
- * @param {string} description - Video description
- * @param {string} className - Additional CSS classes
- * @param {string} courseId - Course ID for tracking
- * @param {string} lessonId - Lesson/node ID for tracking
- * @param {string} userId - User ID for tracking
- * @param {boolean} videoCompleted - Whether video is already completed (from backend)
- * @param {Function} onVideoViewed - Callback when video is viewed/completed
- */
-export default function VideoBlock({ 
-  url, 
-  title, 
-  description, 
-  className = "",
-  courseId,
-  lessonId,
-  userId,
-  videoCompleted: initialVideoCompleted = false,
-  onVideoViewed
-}) {
+export default function VideoBlock({ url, title, description, className = "" }) {
   const normalized = normalizeUrl(url);
-  const hasMarkedCompleted = useRef(false);
-
-  // Mark video as completed when component mounts (video page is viewed)
-  useEffect(() => {
-    // Skip if already marked completed or if already completed from backend
-    if (hasMarkedCompleted.current || initialVideoCompleted) {
-      if (initialVideoCompleted && onVideoViewed) {
-        // Still notify parent that video is completed
-        onVideoViewed();
-      }
-      return;
-    }
-    
-    // Only mark as completed if we have the necessary tracking info
-    if (!courseId || !lessonId || !userId) return;
-    if (normalized.type === "none") return;
-    
-    hasMarkedCompleted.current = true;
-    
-    // Mark video as completed via backend API
-    (async () => {
-      try {
-        const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/video`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            completed: true
-          }),
-        });
-        
-        if (response.ok && onVideoViewed) {
-          onVideoViewed();
-        }
-      } catch (error) {
-        console.error('Failed to mark video as completed:', error);
-      }
-    })();
-  }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed]);
 
   if (normalized.type === "none") {
     return (
