@@ -110,7 +110,7 @@ export default function ThemeToggle() {
         onClick={toggleTheme}
         aria-label="Toggle color mode"
         aria-pressed={isDark}
-        className="btn btn-glass btn-icon"
+        className="btn btn-glass btn-icon backdrop-blur-md bg-surface-1/30 border border-border/20 shadow-sm"
       >
         {/* Icons layered and cross-faded/rotated for smooth transition */}
         <span
