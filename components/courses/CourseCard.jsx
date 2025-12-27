@@ -47,8 +47,8 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const openCourse = (e) => {
-    // Don't navigate if course is still building
-    if (status === 'pending') return;
+    // Don't navigate if course is still building or needs attention
+    if (status === 'pending' || status === 'needs_attention') return;
     // Prevent clicks from nested interactive elements if any
     if (e) {
       e.stopPropagation();
@@ -74,6 +74,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   const topicProgressPercent = topicProgressValue !== null ? Math.round(topicProgressValue * 100) : null;
   const timeLabel = isCompleted ? "Done" : shouldShowTimeRemaining ? formatTimeRemaining(secondsToComplete) : null;
   const isPending = status === 'pending';
+  const needsAttention = status === 'needs_attention';
 
   // Pending/Building state - show a special loading card
   if (isPending) {
@@ -129,7 +130,52 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     );
   }
 
+  // Needs attention/Failed state - show error card with instructions
+  if (needsAttention) {
+    return (
+      <div
+        role="article"
+        aria-label={`Course ${courseCode} failed to generate`}
+        className="relative rounded-2xl flex flex-col overflow-hidden bg-[var(--surface-1)] border border-rose-500/20"
+      >
+        {/* Error gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-rose-500/8" />
 
+        {/* Content */}
+        <div className="relative z-10 flex flex-col p-4">
+          {/* Header with title and status */}
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h3 className="text-lg font-bold text-[var(--foreground)] line-clamp-1 leading-tight flex-1">
+              {courseCode}
+            </h3>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20">
+                <svg className="w-3 h-3 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Failed</span>
+              </div>
+              <Tooltip content="Delete" position="bottom">
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-1.5 rounded-lg hover:bg-rose-500/10 text-[var(--muted-foreground)] hover:text-rose-500 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+          
+          {/* Error message */}
+          <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Generation failed. Report via feedback button, then delete and retry.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
