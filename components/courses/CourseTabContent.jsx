@@ -1042,14 +1042,14 @@ export default function CourseTabContent({
         const data = cached.data.data;
         if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
         if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
-        // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
+        if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
         if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
-        // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
+        if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
         // Interactive practice: parsons, skeleton, matching, blackbox
-        // const ip = data.interactive_practice;
-        // if (ip && (ip.parsons?.length || ip.skeleton?.length || ip.matching?.length || ip.blackbox?.length)) {
-        //   types.push({ label: "Interactive", value: "interactive_practice" });
-        // }
+        const ip = data.interactive_practice;
+        if (ip && (ip.parsons?.length || ip.skeleton?.length || ip.matching?.length || ip.blackbox?.length)) {
+          types.push({ label: "Interactive", value: "interactive_practice" });
+        }
       }
     }
     if (types.length === 0) {
@@ -2490,7 +2490,7 @@ export default function CourseTabContent({
 
                     <OnboardingTooltip
                       id="course-content-types"
-                      content="Each lesson has different content types: Reading for text content, Video for visual learning, and Quiz for practice. Switch between them using these tabs!"
+                      content="Each lesson has different content types: Reading for text content, Video for visual learning, Flashcards for memorization, and Quiz for practice. Switch between them using these tabs!"
                       position="top"
                       pointerPosition="center"
                       delay={800}
@@ -2683,11 +2683,11 @@ export default function CourseTabContent({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                   )},
-                  // { value: 'practice', label: '', icon: (
-                  //   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  //     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  //   </svg>
-                  // )}
+                  { value: 'practice', label: '', icon: (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  )}
                 ];
                 
                 return (
