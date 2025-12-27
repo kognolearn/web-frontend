@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
@@ -376,8 +377,18 @@ export default function DashboardPage() {
         <div className="rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-6 shadow-lg shadow-black/10 backdrop-blur-xl">
           {/* Top bar */}
           <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="text-2xl font-extrabold tracking-tight text-[var(--primary)]">
-              Kogno
+            <Link href="/" className="flex items-center">
+              <Image 
+                src="/images/kogno_logo.png" 
+                alt="Kogno Logo" 
+                width={240} 
+                height={80} 
+                className="h-16 w-auto object-contain"
+                priority
+              />
+              <span className="text-2xl font-extrabold tracking-tight text-[var(--primary)]">
+                Kogno
+              </span>
             </Link>
             <div className="flex items-center gap-2">
               {hasCheckedAdmin && isAdmin && (
