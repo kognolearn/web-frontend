@@ -38,39 +38,38 @@ export default function DashboardPage() {
         const res = await authFetch(`/api/courses/${encodeURIComponent(courseId)}/progress?userId=${encodeURIComponent(userId)}`);
         if (res.ok) {
           const data = await res.json();
-          // Handle various possible response formats from backend
-          // Could be: { progress: 0.5 }, { percent: 50 }, { completion_percent: 50 }, 
-          // { topics_progress: 0.5 }, { percentComplete: 50 }, or nested in { data: { progress: 0.5 } }
+          console.log(`Progress data for ${courseId}:`, data);
+          
+          // Helper to safely parse progress values
+          const parseVal = (val) => {
+            if (typeof val === 'number') return val;
+            if (typeof val === 'string' && !isNaN(parseFloat(val))) return parseFloat(val);
+            return null;
+          };
+
           let progress = null;
           
-          // Check for direct decimal values (0-1 range)
-          if (typeof data.progress === 'number') {
-            progress = data.progress;
-          } else if (typeof data.topics_progress === 'number') {
-            progress = data.topics_progress;
-          } else if (typeof data.completion === 'number') {
-            progress = data.completion;
+          // Try to find progress in various fields
+          // 1. Direct decimal values (0-1)
+          const directProgress = parseVal(data.progress) ?? parseVal(data.topics_progress) ?? parseVal(data.completion);
+          
+          // 2. Percentage values (0-100)
+          const percentProgress = parseVal(data.percentComplete) ?? parseVal(data.percent) ?? parseVal(data.completion_percent) ?? parseVal(data.progress_percent);
+          
+          if (directProgress !== null) {
+            progress = directProgress;
+          } else if (percentProgress !== null) {
+            progress = percentProgress / 100;
           }
-          // Check for percentage values (0-100 range) and convert to decimal
-          else if (typeof data.percentComplete === 'number') {
-            progress = data.percentComplete / 100;
-          } else if (typeof data.percent === 'number') {
-            progress = data.percent / 100;
-          } else if (typeof data.completion_percent === 'number') {
-            progress = data.completion_percent / 100;
-          } else if (typeof data.progress_percent === 'number') {
-            progress = data.progress_percent / 100;
-          }
-          // Check nested data object
+          // 3. Nested data object
           else if (data.data) {
-            if (typeof data.data.progress === 'number') {
-              progress = data.data.progress;
-            } else if (typeof data.data.percentComplete === 'number') {
-              progress = data.data.percentComplete / 100;
-            } else if (typeof data.data.percent === 'number') {
-              progress = data.data.percent / 100;
-            } else if (typeof data.data.completion_percent === 'number') {
-              progress = data.data.completion_percent / 100;
+            const nestedDirect = parseVal(data.data.progress) ?? parseVal(data.data.topics_progress) ?? parseVal(data.data.completion);
+            const nestedPercent = parseVal(data.data.percentComplete) ?? parseVal(data.data.percent) ?? parseVal(data.data.completion_percent) ?? parseVal(data.data.progress_percent);
+            
+            if (nestedDirect !== null) {
+              progress = nestedDirect;
+            } else if (nestedPercent !== null) {
+              progress = nestedPercent / 100;
             }
           }
           
@@ -127,9 +126,9 @@ export default function DashboardPage() {
         });
         coursesRef.current = items;
         
-        // Load progress for all ready courses (not pending or needs_attention)
+        // Load progress for all ready courses (not pending)
         const readyCourseIds = items
-          .filter(c => c.status !== 'pending' && c.status !== 'needs_attention')
+          .filter(c => c.status !== 'pending')
           .map(c => c.id);
         if (readyCourseIds.length > 0) {
           loadCourseProgress(userId, readyCourseIds);
