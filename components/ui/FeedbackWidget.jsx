@@ -232,7 +232,7 @@ export default function FeedbackWidget() {
     <div
       className="fixed transition-all duration-200 ease-in-out"
       style={{
-        left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 4.75rem)' : '4.75rem',
+        left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 4.5rem)' : '4.5rem',
         bottom: hasCourseSidebar ? '5rem' : '1rem',
         zIndex: effectiveZIndex,
         pointerEvents: hideForChat ? 'none' : 'auto',

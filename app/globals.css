@@ -274,13 +274,14 @@ body {
   --btn-padding-x: 0;
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 999px;
+  border-radius: 1rem;
   padding: 0;
 }
 
 .btn-icon-sm {
   width: 2.2rem;
   height: 2.2rem;
+  border-radius: 0.75rem;
 }
 
 .btn-fab {
@@ -300,6 +301,7 @@ body {
 .btn-icon-xs {
   width: 1.75rem;
   height: 1.75rem;
+  border-radius: 0.5rem;
 }
 
 .btn-fab {
