@@ -1801,6 +1801,12 @@ Instructions:
                       : 'bg-[var(--surface-1)] border border-[var(--border)] text-[var(--foreground)] rounded-2xl rounded-bl-md shadow-sm'
                   } px-4 py-3`}
                 >
+                  {displayVersion.selectedText && (
+                    <div className="mb-2 text-xs border-l-2 border-current pl-2 opacity-80 italic">
+                      &ldquo;{displayVersion.selectedText}&rdquo;
+                    </div>
+                  )}
+
                   {displayVersion.files && displayVersion.files.length > 0 && (
                     <div className="mb-1.5 space-y-0.5">
                       {displayVersion.files.map(file => (
