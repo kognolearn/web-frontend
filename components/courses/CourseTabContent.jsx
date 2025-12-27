@@ -1374,7 +1374,7 @@ export default function CourseTabContent({
 
       {/* Top Right Controls: Pause, Timer, Settings */}
       <div 
-        className="absolute top-4 z-20 flex items-center gap-2"
+        className="absolute top-4 z-50 flex items-center gap-2"
         style={{ right: isMobile ? '16px' : `${chatBotWidth + 16}px` }}
       >
         {/* Pause/Play Button for Study Timer */}

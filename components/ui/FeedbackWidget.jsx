@@ -224,12 +224,9 @@ export default function FeedbackWidget() {
   // Don't show on course pages until UI is ready
   if (hasCourseSidebar && !courseUiReady) return null;
 
-  const shouldShift = hasCourseSidebar && !sidebarClosedOnCourse && !isMobileViewport;
+  const shouldShift = hasCourseSidebar && !sidebarClosedOnCourse;
   const hideForChat = chatOverlayActive && isMobileViewport;
-  const isSidebarOpenOnMobile = isMobileViewport && hasCourseSidebar && !sidebarClosedOnCourse;
-  // On mobile course pages, always use lower z-index so sidebar can slide over smoothly
-  const isOnMobileCoursePage = isMobileViewport && hasCourseSidebar;
-  const effectiveZIndex = hideForChat ? 5 : (isOnMobileCoursePage ? 10 : 50);
+  const effectiveZIndex = hideForChat ? 5 : 50;
 
   return (
     <div
