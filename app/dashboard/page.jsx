@@ -411,8 +411,14 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
   const hasCourses = courses.length > 0;
-  const pendingCourseCount = courses.filter((c) => c.status === "pending").length;
   const courseIdSet = new Set(courses.map((course) => course?.id).filter(Boolean));
+  // Count courses that are pending OR have a running job associated with them
+  const pendingCourseCount = courses.filter((c) => {
+    if (c.status === "pending") return true;
+    const associatedJob = pendingJobs.find((job) => job.courseId === c.id);
+    const jobStatus = associatedJob?.status?.toLowerCase();
+    return associatedJob && !terminalJobStatuses.has(jobStatus || "");
+  }).length;
   const pendingJobCount = pendingJobs.filter((job) => !job.courseId || !courseIdSet.has(job.courseId)).length;
   const pendingCount = pendingCourseCount + pendingJobCount;
 
@@ -625,6 +631,12 @@ export default function DashboardPage() {
                   course?.name ||
                   course?.courseName ||
                   "Untitled Course";
+                // Check if there's a running job associated with this course
+                const associatedJob = pendingJobs.find((job) => job.courseId === course.id);
+                const jobStatus = associatedJob?.status?.toLowerCase();
+                const isJobRunning = associatedJob && !terminalJobStatuses.has(jobStatus || "");
+                // Show as pending/building if course status is pending OR if there's a running job
+                const effectiveStatus = (course.status === "pending" || isJobRunning) ? "pending" : course.status;
                 return (
                   <CourseCard
                     key={course.id}
@@ -632,7 +644,7 @@ export default function DashboardPage() {
                     courseName=""
                     courseId={course.id}
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
-                    status={course.status}
+                    status={effectiveStatus}
                     topicsProgress={courseProgress[course.id]}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
