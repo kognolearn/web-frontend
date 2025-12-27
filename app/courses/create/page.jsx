@@ -8,6 +8,9 @@ import ThemeToggle from "@/components/theme/ThemeToggle";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import DurationInput from "@/components/ui/DurationInput";
 import { authFetch } from "@/lib/api";
+import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
+import { upsertCourseCreateJob } from "@/utils/courseJobs";
+import { getAsyncDisabledMessage } from "@/utils/asyncJobs";
 
 import {
   defaultTopicRating,
@@ -65,6 +68,44 @@ function resolveCourseId(payload) {
     payload?.course?.id,
     payload?.course?.courseId,
     payload?.data?.courseId,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function resolveJobId(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const candidates = [
+    payload.jobId,
+    payload.job_id,
+    payload.job?.id,
+    payload.job?.job_id,
+    payload.data?.jobId,
+    payload.data?.job_id,
+    payload.result?.jobId,
+    payload.result?.job_id,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function resolveJobStatusUrl(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const candidates = [
+    payload.statusUrl,
+    payload.status_url,
+    payload.job?.statusUrl,
+    payload.job?.status_url,
+    payload.data?.statusUrl,
+    payload.data?.status_url,
   ];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim()) {
@@ -185,6 +226,41 @@ function collectPayloadCandidates(payload) {
   return results;
 }
 
+function buildOverviewFromModules(modules) {
+  if (!Array.isArray(modules)) return [];
+  return modules.map((module, index) => {
+    const overviewId = String(
+      module?.id ?? module?.module_id ?? `overview_${index + 1}`
+    );
+    const lessons = Array.isArray(module?.lessons)
+      ? module.lessons
+      : Array.isArray(module?.topics)
+      ? module.topics
+      : [];
+    return {
+      id: overviewId,
+      title: String(module?.title ?? module?.name ?? `Module ${index + 1}`),
+      description: module?.description ? String(module.description) : "",
+      likelyOnExam: Boolean(module?.likelyOnExam ?? module?.likely_on_exam ?? true),
+      subtopics: lessons.map((lesson, subIndex) => ({
+        id: lesson?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
+        overviewId,
+        title: lesson?.title ?? lesson?.name ?? `Topic ${subIndex + 1}`,
+        description: lesson?.description || "",
+        difficulty: lesson?.difficulty || "intermediate",
+        likelyOnExam: lesson?.likelyOnExam ?? lesson?.likely_on_exam ?? true,
+        familiarity: Number.isFinite(lesson?.familiarity)
+          ? lesson.familiarity
+          : defaultTopicRating,
+        source: lesson?.source || "generated",
+        bloomLevel: lesson?.bloom_level || lesson?.bloomLevel || undefined,
+        examRelevanceReasoning:
+          lesson?.exam_relevance_reasoning || lesson?.examRelevanceReasoning || "",
+      })),
+    };
+  });
+}
+
 function buildOverviewFromTopics(topics, groupId = "overview_1", groupTitle = "All topics") {
   return [
     {
@@ -256,6 +332,137 @@ function normalizeGrokDraftPayload(rawDraft) {
     .filter(Boolean);
   if (!normalized.length) return null;
   return { topics: normalized };
+}
+
+function resolveRagSessionId(payloadCandidates) {
+  for (const candidate of payloadCandidates) {
+    const ragId = candidate?.rag_session_id || candidate?.ragSessionId;
+    if (typeof ragId === "string" && ragId.trim()) {
+      return ragId.trim();
+    }
+  }
+  return null;
+}
+
+function parseTopicPayload(payload) {
+  const payloadCandidates = collectPayloadCandidates(payload);
+  let extractedGrokDraft = null;
+  for (const candidate of payloadCandidates) {
+    const normalizedDraft = normalizeGrokDraftPayload(
+      candidate?.grok_draft || candidate?.grokDraft || candidate?.grokDraftPayload
+    );
+    if (normalizedDraft) {
+      extractedGrokDraft = normalizedDraft;
+      break;
+    }
+  }
+
+  let rawOverview = [];
+  for (const candidate of payloadCandidates) {
+    const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
+    if (Array.isArray(overviewArray) && overviewArray.length) {
+      rawOverview = overviewArray;
+      break;
+    }
+  }
+
+  if (!rawOverview.length) {
+    for (const candidate of payloadCandidates) {
+      const modules =
+        candidate?.modules ||
+        candidate?.moduleList ||
+        candidate?.module_list;
+      if (Array.isArray(modules) && modules.length) {
+        rawOverview = buildOverviewFromModules(modules);
+        break;
+      }
+    }
+  }
+
+  if (!rawOverview.length) {
+    for (const candidate of payloadCandidates) {
+      if (Array.isArray(candidate?.topicTree) && candidate.topicTree.length) {
+        rawOverview = candidate.topicTree;
+        break;
+      }
+      if (Array.isArray(candidate?.topicGroups) && candidate.topicGroups.length) {
+        rawOverview = candidate.topicGroups;
+        break;
+      }
+    }
+  }
+
+  if (!rawOverview.length) {
+    for (const candidate of payloadCandidates) {
+      const topicList = Array.isArray(candidate?.topics)
+        ? candidate.topics
+        : Array.isArray(candidate?.topicList)
+        ? candidate.topicList
+        : null;
+      if (topicList?.length) {
+        rawOverview = buildOverviewFromTopics(topicList);
+        break;
+      }
+    }
+  }
+
+  if (!rawOverview.length) {
+    throw new Error("The model did not return any topics. Please try again.");
+  }
+
+  const hydrated = rawOverview.map((overview, index) => {
+    const overviewId = String(overview?.id ?? `overview_${index + 1}`);
+    const subtopics = Array.isArray(overview?.subtopics)
+      ? overview.subtopics
+      : Array.isArray(overview?.subTopics)
+      ? overview.subTopics
+      : [];
+    return {
+      id: overviewId,
+      title: String(overview?.title ?? `Topic group ${index + 1}`),
+      description: overview?.description ? String(overview.description) : "",
+      likelyOnExam: Boolean(overview?.likelyOnExam ?? overview?.likely_on_exam ?? true),
+      subtopics: subtopics.map((subtopic, subIndex) =>
+        createSubtopic({
+          id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
+          overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
+          title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
+          description: subtopic?.description || "",
+          difficulty: subtopic?.difficulty || "intermediate",
+          likelyOnExam: subtopic?.likelyOnExam ?? subtopic?.likely_on_exam ?? true,
+          familiarity: Number.isFinite(subtopic?.familiarity)
+            ? subtopic.familiarity
+            : defaultTopicRating,
+          bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
+          examRelevanceReasoning:
+            subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
+        })
+      ),
+    };
+  });
+
+  const totalSubtopics = hydrated.reduce((sum, ot) => sum + ot.subtopics.length, 0);
+  if (totalSubtopics === 0) {
+    throw new Error("The model did not return any topics. Please try again.");
+  }
+
+  return {
+    hydrated,
+    extractedGrokDraft,
+    ragSessionId: resolveRagSessionId(payloadCandidates),
+  };
+}
+
+function buildCurrentModulesPayload(overviewTopics) {
+  if (!Array.isArray(overviewTopics)) return [];
+  return overviewTopics.map((overview, index) => ({
+    id: overview?.id ?? `module_${index + 1}`,
+    title: overview?.title ?? `Module ${index + 1}`,
+    lessons: (overview?.subtopics || []).map((subtopic, subIndex) => ({
+      id: subtopic?.id ?? `lesson_${index + 1}_${subIndex + 1}`,
+      title: subtopic?.title ?? `Topic ${subIndex + 1}`,
+    })),
+  }));
 }
 
 function CreateCoursePageContent() {
@@ -346,6 +553,10 @@ function CreateCoursePageContent() {
   // RAG session ID returned from /courses/topics for context continuity
   const [ragSessionId, setRagSessionId] = useState(null);
 
+  const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
+  const [isModifyingTopics, setIsModifyingTopics] = useState(false);
+  const [topicModifyError, setTopicModifyError] = useState("");
+
   const [courseGenerating, setCourseGenerating] = useState(false);
   const [courseGenerationError, setCourseGenerationError] = useState("");
   const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
@@ -360,6 +571,13 @@ function CreateCoursePageContent() {
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
+  const canModifyTopics = Boolean(
+    courseId &&
+      userId &&
+      topicModifyPrompt.trim() &&
+      !isModifyingTopics &&
+      !isTopicsLoading
+  );
 
   useEffect(() => {
     if (!overviewTopics.length) {
@@ -614,6 +832,9 @@ function CreateCoursePageContent() {
     setModuleConfidenceState({});
     setOpenAccordions({});
     setTopicsError(null);
+    setTopicModifyPrompt("");
+    setTopicModifyError("");
+    setIsModifyingTopics(false);
   }, []);
 
   const handleCramTopicStrategyChange = useCallback(
@@ -680,6 +901,64 @@ function CreateCoursePageContent() {
     setRagSessionId(null);
   }, [manualTopicsInput]);
 
+  const handleModifyTopics = useCallback(async () => {
+    const prompt = topicModifyPrompt.trim();
+    if (!prompt) {
+      setTopicModifyError("Enter a prompt to refine your topics.");
+      return;
+    }
+    if (!userId) {
+      setTopicModifyError("You need to be signed in to update topics.");
+      return;
+    }
+    if (!courseId) {
+      setTopicModifyError("Create the course first to enable prompt-based topic updates.");
+      return;
+    }
+    if (!overviewTopics.length) {
+      setTopicModifyError("Generate topics before requesting updates.");
+      return;
+    }
+
+    setTopicModifyError("");
+    setIsModifyingTopics(true);
+    setCourseGenerationError("");
+
+    try {
+      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          prompt,
+          currentModules: buildCurrentModulesPayload(overviewTopics),
+        }),
+      });
+
+      const { result } = await resolveAsyncJobResponse(response, {
+        errorLabel: "modify topics",
+      });
+
+      if (!result) {
+        throw new Error("Topic update completed but no result was returned.");
+      }
+
+      const parsed = parseTopicPayload(result);
+      setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
+      setOverviewTopics(parsed.hydrated);
+      setDeletedSubtopics([]);
+      if (parsed.ragSessionId) {
+        setRagSessionId(parsed.ragSessionId);
+      }
+      setTopicModifyPrompt("");
+    } catch (error) {
+      console.error("Modify topics failed:", error);
+      setTopicModifyError(error.message || "Unable to update topics.");
+    } finally {
+      setIsModifyingTopics(false);
+    }
+  }, [courseId, overviewTopics, topicModifyPrompt, userId]);
+
   const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
     if (!userId) {
@@ -735,8 +1014,7 @@ function CreateCoursePageContent() {
         console.log(`Attempt ${attempt} - courseTitle: "${payload.courseTitle}", university: "${payload.university}"`);
         console.log(`Attempt ${attempt} - payload body length: ${payloadStr.length} chars`);
 
-        const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
-        const res = await authFetch(`${baseUrl}/courses/topics`, {
+        const res = await authFetch(`/api/courses/topics`, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
@@ -745,115 +1023,28 @@ function CreateCoursePageContent() {
           body: payloadStr,
         });
 
-        const data = await res.json().catch(() => ({}));
+        const { result } = await resolveAsyncJobResponse(res, { errorLabel: "build topics" });
         console.log(`Attempt ${attempt} - response status: ${res.status}`);
-        if (!res.ok || data?.success === false) {
-          throw new Error(data?.error || "Failed to build topics.");
+        console.log("Backend response:", JSON.stringify(result, null, 2));
+
+        if (!result) {
+          throw new Error("Topic generation completed but no result was returned.");
         }
 
-        console.log("Backend response:", JSON.stringify(data, null, 2));
-
-        const payloadCandidates = collectPayloadCandidates(data);
-        let extractedGrokDraft = null;
-        for (const candidate of payloadCandidates) {
-          const normalizedDraft = normalizeGrokDraftPayload(
-            candidate?.grok_draft || candidate?.grokDraft || candidate?.grokDraftPayload
-          );
-          if (normalizedDraft) {
-            extractedGrokDraft = normalizedDraft;
-            break;
-          }
-        }
-        let rawOverview = [];
-        for (const candidate of payloadCandidates) {
-          const overviewArray = candidate?.overviewTopics || candidate?.overview_topics;
-          if (Array.isArray(overviewArray) && overviewArray.length) {
-            rawOverview = overviewArray;
-            console.log("Found overviewTopics with", overviewArray.length, "items");
-            break;
-          }
+        const parsed = parseTopicPayload(result);
+        const maybeCourseId = resolveCourseId(result);
+        if (maybeCourseId && !courseId) {
+          setCourseId(maybeCourseId);
         }
 
-        if (!rawOverview.length) {
-          for (const candidate of payloadCandidates) {
-            if (Array.isArray(candidate?.topicTree) && candidate.topicTree.length) {
-              rawOverview = candidate.topicTree;
-              break;
-            }
-            if (Array.isArray(candidate?.topicGroups) && candidate.topicGroups.length) {
-              rawOverview = candidate.topicGroups;
-              break;
-            }
-          }
+        if (parsed.ragSessionId) {
+          console.log("Stored rag_session_id:", parsed.ragSessionId);
+          setRagSessionId(parsed.ragSessionId);
         }
 
-        if (!rawOverview.length) {
-          for (const candidate of payloadCandidates) {
-            const topicList = Array.isArray(candidate?.topics)
-              ? candidate.topics
-              : Array.isArray(candidate?.topicList)
-              ? candidate.topicList
-              : null;
-            if (topicList?.length) {
-              rawOverview = buildOverviewFromTopics(topicList);
-              break;
-            }
-          }
-        }
-
-        if (!rawOverview.length) {
-          console.log("rawOverview is still empty, throwing error");
-          throw new Error("The model did not return any topics. Please try again.");
-        }
-
-        console.log("rawOverview has", rawOverview.length, "overview topics");
-
-        const hydrated = rawOverview.map((overview, index) => {
-          const overviewId = String(overview?.id ?? `overview_${index + 1}`);
-          const subtopics = Array.isArray(overview?.subtopics)
-            ? overview.subtopics
-            : Array.isArray(overview?.subTopics)
-            ? overview.subTopics
-            : [];
-          return {
-            id: overviewId,
-            title: String(overview?.title ?? `Topic group ${index + 1}`),
-            description: overview?.description ? String(overview.description) : "",
-            likelyOnExam: Boolean(overview?.likelyOnExam ?? true),
-            subtopics: subtopics.map((subtopic, subIndex) =>
-                createSubtopic({
-                id: subtopic?.id ?? `subtopic_${index + 1}_${subIndex + 1}`,
-                overviewId: subtopic?.overviewId ? String(subtopic.overviewId) : overviewId,
-                title: subtopic?.title ?? `Subtopic ${subIndex + 1}`,
-                description: subtopic?.description || "",
-                difficulty: subtopic?.difficulty || "intermediate",
-                likelyOnExam: subtopic?.likelyOnExam ?? true,
-                familiarity: Number.isFinite(subtopic?.familiarity)
-                  ? subtopic.familiarity
-                  : defaultTopicRating,
-                  bloomLevel: subtopic?.bloom_level || subtopic?.bloomLevel || undefined,
-                  examRelevanceReasoning: subtopic?.exam_relevance_reasoning || subtopic?.examRelevanceReasoning || "",
-              })
-            ),
-          };
-        });
-
-        const totalSubtopics = hydrated.reduce((sum, ot) => sum + ot.subtopics.length, 0);
-        console.log("Total subtopics after hydration:", totalSubtopics);
-        if (totalSubtopics === 0) {
-          throw new Error("The model did not return any topics. Please try again.");
-        }
-
-        // Store rag_session_id if returned by backend for use in course generation
-        const returnedRagSessionId = data?.rag_session_id || null;
-        if (returnedRagSessionId) {
-          console.log("Stored rag_session_id:", returnedRagSessionId);
-        }
-        
         // Success - update state and exit the retry loop
-        setGeneratedGrokDraft(extractedGrokDraft || buildGrokDraftPayload(hydrated));
-        setOverviewTopics(hydrated);
-        setRagSessionId(returnedRagSessionId);
+        setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
+        setOverviewTopics(parsed.hydrated);
         setTopicsError(null);
         setIsTopicsLoading(false);
         return; // Exit the function on success
@@ -877,6 +1068,7 @@ function CreateCoursePageContent() {
     setIsTopicsLoading(false);
   }, [
     collegeName,
+    courseId,
     courseTitle,
     examFiles,
     examNotes,
@@ -1312,7 +1504,20 @@ function CreateCoursePageContent() {
       const body = await response.json().catch(() => ({}));
       console.log("[CreateCourse] Response body:", body);
       if (!response.ok) {
-        throw new Error(body?.error || "Failed to create course. Please try again.");
+        const asyncDisabled = getAsyncDisabledMessage(response.status, body);
+        throw new Error(asyncDisabled || body?.error || "Failed to create course. Please try again.");
+      }
+
+      const jobId = resolveJobId(body);
+      if (jobId) {
+        upsertCourseCreateJob(userId, {
+          jobId,
+          statusUrl: resolveJobStatusUrl(body),
+          courseTitle: className,
+        });
+        try {
+          window.dispatchEvent(new Event("courses:updated"));
+        } catch {}
       }
 
       // Course created successfully - dispatch additional refresh events
@@ -2200,17 +2405,55 @@ Series & convergence"
                         type="button"
                         onClick={handleGenerateTopics}
                         className="btn btn-outline btn-sm"
-                        disabled={isTopicsLoading}
+                        disabled={isTopicsLoading || isModifyingTopics}
                       >
                         Regenerate
                       </button>
                     )}
+                </div>
+
+                <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-[var(--foreground)]">Refine topics with a prompt</h4>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Describe the adjustments you want, and we'll rewrite the topic list for you.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleModifyTopics}
+                        className="btn btn-primary btn-sm"
+                        disabled={!canModifyTopics}
+                      >
+                        {isModifyingTopics ? "Updating..." : "Apply Prompt"}
+                      </button>
+                    </div>
+                    <textarea
+                      value={topicModifyPrompt}
+                      onChange={(event) => {
+                        setTopicModifyPrompt(event.target.value);
+                        if (topicModifyError) setTopicModifyError("");
+                      }}
+                      placeholder="Example: Emphasize graph algorithms and remove basic sorting topics."
+                      className="w-full min-h-[96px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/40 p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50"
+                    />
+                    {topicModifyError && (
+                      <p className="text-xs text-[var(--danger)]">{topicModifyError}</p>
+                    )}
+                    {!courseId && (
+                      <p className="text-[10px] text-[var(--muted-foreground)]">
+                        Prompt-based updates require a course ID. Create the course to enable this.
+                      </p>
+                    )}
                   </div>
+                </div>
                   
-                  <div className="max-h-[90vh] overflow-y-auto pr-2 -mr-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--surface-1)]">
-                    <TopicExplorer
-                      overviewTopics={overviewTopics}
-                      moduleConfidenceState={moduleConfidenceState}
+                <div className="max-h-[90vh] overflow-y-auto pr-2 -mr-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--surface-1)]">
+                  <TopicExplorer
+                    overviewTopics={overviewTopics}
+                    moduleConfidenceState={moduleConfidenceState}
                       openAccordions={openAccordions}
                       handleModuleModeChange={handleModuleModeChange}
                       handleAccordionToggle={handleAccordionToggle}

@@ -11,6 +11,46 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
+import {
+  getCourseCreateJobs,
+  removeCourseCreateJob,
+  upsertCourseCreateJob,
+} from "@/utils/courseJobs";
+
+const terminalJobStatuses = new Set([
+  "completed",
+  "succeeded",
+  "success",
+  "failed",
+  "error",
+  "canceled",
+  "cancelled",
+]);
+
+function extractJobPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.job && typeof payload.job === "object") return payload.job;
+  if (payload.data?.job && typeof payload.data.job === "object") return payload.data.job;
+  if (payload.result?.job && typeof payload.result.job === "object") return payload.result.job;
+  return payload;
+}
+
+function resolveJobCourseId(job) {
+  if (!job || typeof job !== "object") return null;
+  const candidates = [
+    job.course_id,
+    job.courseId,
+    job.result?.course_id,
+    job.result?.courseId,
+    job.result?.course?.id,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -22,9 +62,11 @@ export default function DashboardPage() {
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
   const { mounted } = useTheme();
   const pollingRef = useRef(null);
+  const jobPollingRef = useRef(null);
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
   const [courseProgress, setCourseProgress] = useState({});
+  const [pendingJobs, setPendingJobs] = useState([]);
 
   useEffect(() => {
     coursesRef.current = courses;
@@ -174,11 +216,107 @@ export default function DashboardPage() {
     }, 5000);
   }, [loadCourses]);
 
+  const loadPendingJobs = useCallback((userId) => {
+    if (!userId) return [];
+    const jobs = getCourseCreateJobs(userId);
+    setPendingJobs(jobs);
+    return jobs;
+  }, []);
+
+  const pollCourseJobs = useCallback(async (userId) => {
+    const jobs = getCourseCreateJobs(userId);
+    if (!jobs.length) {
+      setPendingJobs([]);
+      if (jobPollingRef.current) {
+        clearInterval(jobPollingRef.current);
+        jobPollingRef.current = null;
+      }
+      return;
+    }
+
+    let shouldRefreshCourses = false;
+
+    await Promise.all(
+      jobs.map(async (job) => {
+        try {
+          const res = await authFetch(`/api/jobs/${encodeURIComponent(job.jobId)}`);
+          if (!res.ok) {
+            if (res.status === 400 || res.status === 404) {
+              removeCourseCreateJob(userId, job.jobId);
+              shouldRefreshCourses = true;
+            }
+            return;
+          }
+
+          const payload = await res.json().catch(() => ({}));
+          const jobData = extractJobPayload(payload);
+          if (!jobData) return;
+
+          const status = typeof jobData.status === "string" ? jobData.status : null;
+          const normalizedStatus = status ? status.toLowerCase() : "";
+          const courseId = resolveJobCourseId(jobData);
+          const hasNewCourseId = courseId && courseId !== job.courseId;
+
+          if (courseId || status) {
+            upsertCourseCreateJob(userId, { jobId: job.jobId, courseId, status });
+          }
+
+          const isFinished =
+            Boolean(jobData.finished_at) ||
+            Boolean(jobData.error) ||
+            (normalizedStatus && terminalJobStatuses.has(normalizedStatus));
+
+          if (isFinished) {
+            removeCourseCreateJob(userId, job.jobId);
+            shouldRefreshCourses = true;
+          }
+
+          if (hasNewCourseId) {
+            shouldRefreshCourses = true;
+          }
+        } catch (err) {
+          console.error(`Error checking job ${job.jobId}:`, err);
+        }
+      })
+    );
+
+    const updatedJobs = getCourseCreateJobs(userId);
+    setPendingJobs(updatedJobs);
+
+    if (!updatedJobs.length && jobPollingRef.current) {
+      clearInterval(jobPollingRef.current);
+      jobPollingRef.current = null;
+    }
+
+    if (shouldRefreshCourses) {
+      const updatedCourses = await loadCourses(userId, true);
+      startPollingForPendingCourses(userId, updatedCourses);
+    }
+  }, [loadCourses, startPollingForPendingCourses]);
+
+  const startPollingForCourseJobs = useCallback((userId) => {
+    if (jobPollingRef.current) {
+      clearInterval(jobPollingRef.current);
+      jobPollingRef.current = null;
+    }
+
+    const jobs = loadPendingJobs(userId);
+    if (!jobs.length) return;
+
+    pollCourseJobs(userId);
+    jobPollingRef.current = setInterval(() => {
+      pollCourseJobs(userId);
+    }, 5000);
+  }, [loadPendingJobs, pollCourseJobs]);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+      }
+      if (jobPollingRef.current) {
+        clearInterval(jobPollingRef.current);
       }
       if (refreshRetryRef.current) {
         clearTimeout(refreshRetryRef.current);
@@ -202,12 +340,13 @@ export default function DashboardPage() {
 
       // Start polling if there are pending courses
       startPollingForPendingCourses(user.id, courseList);
+      startPollingForCourseJobs(user.id);
 
       setLoading(false);
     };
 
     loadUserAndCourses();
-  }, [router, loadCourses, startPollingForPendingCourses]);
+  }, [router, loadCourses, startPollingForPendingCourses, startPollingForCourseJobs]);
 
   // Listen for course updates triggered elsewhere (e.g., CreateCourseCard/Modal)
   useEffect(() => {
@@ -216,10 +355,11 @@ export default function DashboardPage() {
       // Silent refresh - don't show loading state, just update if data changed
       const courseList = await loadCourses(user.id);
       startPollingForPendingCourses(user.id, courseList);
+      startPollingForCourseJobs(user.id);
     };
     window.addEventListener("courses:updated", handler);
     return () => window.removeEventListener("courses:updated", handler);
-  }, [user, loadCourses, startPollingForPendingCourses]);
+  }, [user, loadCourses, startPollingForPendingCourses, startPollingForCourseJobs]);
 
   // Check if the signed-in user is an admin
   useEffect(() => {
@@ -271,7 +411,10 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
   const hasCourses = courses.length > 0;
-  const pendingCount = courses.filter((c) => c.status === "pending").length;
+  const pendingCourseCount = courses.filter((c) => c.status === "pending").length;
+  const courseIdSet = new Set(courses.map((course) => course?.id).filter(Boolean));
+  const pendingJobCount = pendingJobs.filter((job) => !job.courseId || !courseIdSet.has(job.courseId)).length;
+  const pendingCount = pendingCourseCount + pendingJobCount;
 
   if (loading || !mounted) {
     return (
