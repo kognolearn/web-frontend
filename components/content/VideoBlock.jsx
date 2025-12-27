@@ -62,14 +62,12 @@ export default function VideoBlock({
 }) {
   const normalized = normalizeUrl(url);
   const hasMarkedCompleted = useRef(false);
-  const refreshTimeoutRef = useRef(null);
 
   // Mark video as completed when component mounts (video page is viewed)
   useEffect(() => {
     // Skip if already marked completed or if already completed from backend
     if (hasMarkedCompleted.current || initialVideoCompleted) {
-      if (initialVideoCompleted && onVideoViewed && !hasMarkedCompleted.current) {
-        hasMarkedCompleted.current = true;
+      if (initialVideoCompleted && onVideoViewed) {
         // Still notify parent that video is completed
         onVideoViewed();
       }
@@ -101,19 +99,6 @@ export default function VideoBlock({
         console.error('Failed to mark video as completed:', error);
       }
     })();
-    
-    if (onVideoViewed) {
-      refreshTimeoutRef.current = setTimeout(() => {
-        onVideoViewed();
-      }, 3000);
-    }
-    
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
-    };
   }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed]);
 
   if (normalized.type === "none") {

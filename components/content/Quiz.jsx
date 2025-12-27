@@ -7,54 +7,6 @@ import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
 
-const quizProgressCache = new Map();
-
-function getQuizCacheKey(userId, courseId, lessonId) {
-  if (!userId || !courseId || !lessonId) return null;
-  return `quizProgress:${userId}:${courseId}:${lessonId}`;
-}
-
-function readQuizProgress(key, signature) {
-  if (!key || !signature) return null;
-  const cached = quizProgressCache.get(key);
-  if (cached?.signature === signature) return cached;
-
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed?.signature !== signature) return null;
-    quizProgressCache.set(key, parsed);
-    return parsed;
-  } catch (error) {
-    console.error("Failed to read quiz progress cache:", error);
-    return null;
-  }
-}
-
-function writeQuizProgress(key, payload) {
-  if (!key || !payload) return;
-  quizProgressCache.set(key, payload);
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(payload));
-  } catch (error) {
-    console.error("Failed to write quiz progress cache:", error);
-  }
-}
-
-function clearQuizProgress(key) {
-  if (!key) return;
-  quizProgressCache.delete(key);
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch (error) {
-    console.error("Failed to clear quiz progress cache:", error);
-  }
-}
-
 /**
  * Seeded random number generator for consistent shuffling per question
  * Uses a simple mulberry32 algorithm
@@ -600,7 +552,6 @@ export default function Quiz({
   const [expandedExplanations, setExpandedExplanations] = useState({});
   const [flaggedQuestions, setFlaggedQuestions] = useState({});
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
-  const [isReady, setIsReady] = useState(false);
 
   // Track the last notification sent to parent to prevent duplicate calls
   const lastNotificationRef = useRef(null);
@@ -640,10 +591,6 @@ export default function Quiz({
       return `${normalizedQuestions.length}-${Date.now()}`;
     }
   }, [normalizedQuestions]);
-  const quizCacheKey = useMemo(
-    () => getQuizCacheKey(userId, courseId, lessonId),
-    [userId, courseId, lessonId]
-  );
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -651,19 +598,17 @@ export default function Quiz({
     setExpandedExplanations({});
     setStrikethroughOptions({});
     lastNotificationRef.current = null;
-    setIsReady(false);
-
+    
     // Derive initial state from backend status on each question
     // If any question has a status of 'correct', 'incorrect', or 'correct/flag', the quiz was previously submitted
     const hasAnsweredQuestions = normalizedQuestions.some(
       q => q.status === 'correct' || q.status === 'incorrect' || q.status === 'correct/flag'
     );
-
+    
     if (hasAnsweredQuestions) {
-      clearQuizProgress(quizCacheKey);
       // Mark quiz as submitted since we have answered questions from backend
       setIsSubmitted(true);
-
+      
       // Restore user's selected answers from backend
       const restoredResponses = {};
       normalizedQuestions.forEach(q => {
@@ -673,7 +618,7 @@ export default function Quiz({
         }
       });
       setResponses(restoredResponses);
-
+      
       // Mark all questions with status as revealed
       const revealed = {};
       normalizedQuestions.forEach(q => {
@@ -682,7 +627,7 @@ export default function Quiz({
         }
       });
       setRevealedByQuestion(revealed);
-
+      
       // Initialize flagged questions from 'correct/flag' status only
       const flagged = {};
       normalizedQuestions.forEach(q => {
@@ -691,41 +636,14 @@ export default function Quiz({
         }
       });
       setFlaggedQuestions(flagged);
-      setIsReady(true);
-      return;
+    } else {
+      setIsSubmitted(false);
+      setResponses({});
+      setRevealedByQuestion({});
+      setFlaggedQuestions({});
     }
-
-    setIsSubmitted(false);
-    setRevealedByQuestion({});
-    setFlaggedQuestions({});
-
-    const cached = readQuizProgress(quizCacheKey, questionsSignature);
-    if (cached?.responses && Object.keys(cached.responses).length > 0) {
-      setResponses(cached.responses);
-      if (Number.isFinite(cached.currentIndex)) {
-        setCurrentIndex(cached.currentIndex);
-      }
-      setIsReady(true);
-      return;
-    }
-
-    setResponses({});
-    setIsReady(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionsSignature, quizCacheKey]);
-
-  useEffect(() => {
-    if (!quizCacheKey || !isReady) return;
-    if (isSubmitted) {
-      clearQuizProgress(quizCacheKey);
-      return;
-    }
-    writeQuizProgress(quizCacheKey, {
-      signature: questionsSignature,
-      responses,
-      currentIndex,
-    });
-  }, [quizCacheKey, isSubmitted, responses, currentIndex, questionsSignature, isReady]);
+  }, [questionsSignature]);
 
   useEffect(() => {
     setCurrentIndex((prev) => {
@@ -750,17 +668,7 @@ export default function Quiz({
       const questionEntry = normalizedQuestions[currentIndex];
       if (!questionEntry) return;
 
-      setResponses((prev) => {
-        const next = { ...prev, [questionEntry.id]: optionId };
-        if (quizCacheKey && !isSubmitted) {
-          writeQuizProgress(quizCacheKey, {
-            signature: questionsSignature,
-            responses: next,
-            currentIndex,
-          });
-        }
-        return next;
-      });
+  setResponses((prev) => ({ ...prev, [questionEntry.id]: optionId }));
 
       const option = questionEntry.options.find((item) => item.id === optionId) || null;
       if (option && typeof onAnswer === "function") {
@@ -773,7 +681,7 @@ export default function Quiz({
         });
       }
     },
-    [currentIndex, isSubmitted, normalizedQuestions, onAnswer, quizCacheKey, questionsSignature]
+    [currentIndex, isSubmitted, normalizedQuestions, onAnswer]
   );
 
   const handleSubmit = useCallback(async () => {
@@ -900,20 +808,12 @@ export default function Quiz({
     (direction) => {
       setCurrentIndex((prev) => {
         const next = prev + direction;
-        let resolved = next;
-        if (resolved < 0) resolved = 0;
-        if (resolved >= questionCount) resolved = questionCount - 1;
-        if (quizCacheKey && !isSubmitted) {
-          writeQuizProgress(quizCacheKey, {
-            signature: questionsSignature,
-            responses,
-            currentIndex: resolved,
-          });
-        }
-        return resolved;
+        if (next < 0) return 0;
+        if (next >= questionCount) return questionCount - 1;
+        return next;
       });
     },
-    [questionCount, quizCacheKey, isSubmitted, responses, questionsSignature]
+    [questionCount]
   );
 
   const handleFlagQuestion = useCallback(
@@ -1125,16 +1025,7 @@ export default function Quiz({
                   <button
                     key={q.id}
                     type="button"
-                    onClick={() => {
-                      setCurrentIndex(idx);
-                      if (quizCacheKey && !isSubmitted) {
-                        writeQuizProgress(quizCacheKey, {
-                          signature: questionsSignature,
-                          responses,
-                          currentIndex: idx,
-                        });
-                      }
-                    }}
+                    onClick={() => setCurrentIndex(idx)}
                     className={`
                       w-8 h-8 rounded-lg border text-sm font-medium
                       transition-all duration-200 cursor-pointer

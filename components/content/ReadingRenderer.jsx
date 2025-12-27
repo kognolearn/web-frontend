@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { MathJax } from "better-react-mathjax";
 import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
@@ -48,45 +48,6 @@ function stringToSeed(str) {
     hash = hash & hash;
   }
   return Math.abs(hash);
-}
-
-function normalizeSelectedAnswer(value) {
-  if (value === undefined || value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const trimmed = String(value).trim();
-  if (!trimmed) return null;
-  if (/^\d+$/.test(trimmed)) return Number(trimmed);
-  const letter = trimmed.toUpperCase();
-  if (/^[A-Z]$/.test(letter)) {
-    return letter.charCodeAt(0) - "A".charCodeAt(0);
-  }
-  return null;
-}
-
-function normalizeInlineSelections(input) {
-  if (!input) return {};
-  if (Array.isArray(input)) {
-    return input.reduce((acc, item) => {
-      if (!item) return acc;
-      const idx = item.questionIndex;
-      if (idx === undefined || idx === null) return acc;
-      const normalized = normalizeSelectedAnswer(
-        item.selectedAnswer ?? item.selectedOption ?? item.answer
-      );
-      if (normalized === null) return acc;
-      acc[idx] = normalized;
-      return acc;
-    }, {});
-  }
-  if (typeof input === "object") {
-    return Object.entries(input).reduce((acc, [key, value]) => {
-      const normalized = normalizeSelectedAnswer(value);
-      if (normalized === null) return acc;
-      acc[key] = normalized;
-      return acc;
-    }, {});
-  }
-  return {};
 }
 
 /**
@@ -836,44 +797,37 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
   const handleSubmit = useCallback(async () => {
     if (selectedIdx !== null && !submitted) {
       setSubmitted(true);
+      // Check if selected shuffled index maps to the original correct index
+      const isCorrect = selectedIdx === originalCorrectInShuffled;
       // Get the original option index for the backend
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
       
       // Submit to backend API
       if (courseId && lessonId && userId && questionIndex !== undefined) {
         try {
-          const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/inline-questions`, {
+          await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/inline-questions`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               userId,
-              updates: [{
+              answers: [{
                 questionIndex,
-                selectedAnswer: originalOptionIndex,
+                selectedOption: originalOptionIndex,
+                isCorrect
               }]
             }),
           });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Failed to save inline question answer: ${response.status} ${errorText}`);
-          }
-          
-          const data = await response.json();
-          if (onAnswered) {
-            onAnswered({
-              questionIndex,
-              selectedAnswer: originalOptionIndex,
-              readingCompleted: data?.readingCompleted,
-              results: data?.results,
-            });
-          }
         } catch (error) {
           console.error('Failed to save inline question answer:', error);
         }
       }
+      
+      // Notify parent of answer
+      if (onAnswered) {
+        onAnswered({ questionIndex, isCorrect });
+      }
     }
-  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
+  }, [selectedIdx, submitted, originalCorrectInShuffled, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
 
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
@@ -1094,91 +1048,47 @@ export default function ReadingRenderer({
   onReadingCompleted 
 }) {
   const blocks = useMemo(() => parseContent(content), [content]);
-  const [inlineSelections, setInlineSelections] = useState(() =>
-    normalizeInlineSelections(inlineQuestionSelections)
-  );
-  const [readingCompleted, setReadingCompleted] = useState(Boolean(initialReadingCompleted));
-  const [inlineStatusLoaded, setInlineStatusLoaded] = useState(false);
-  const completionNotifiedRef = useRef(false);
-  const lessonKey = `${courseId || ""}:${lessonId || ""}`;
-  const lastLessonKeyRef = useRef(lessonKey);
-
+  
+  // Count question blocks
+  const questionCount = useMemo(() => {
+    return blocks.filter(block => block.type === "question").length;
+  }, [blocks]);
+  
+  // Track answered questions count
+  const [answeredCount, setAnsweredCount] = useState(0);
+  
+  // Initialize answered count from backend data
   useEffect(() => {
-    if (lastLessonKeyRef.current === lessonKey) return;
-    lastLessonKeyRef.current = lessonKey;
-    setInlineSelections(normalizeInlineSelections(inlineQuestionSelections));
-    setReadingCompleted(Boolean(initialReadingCompleted));
-    completionNotifiedRef.current = false;
-  }, [lessonKey, inlineQuestionSelections, initialReadingCompleted]);
+    if (!courseId || !lessonId) return;
+    
+    // If reading is already completed, set answered count to total
+    if (initialReadingCompleted) {
+      setAnsweredCount(questionCount);
+      return;
+    }
+    
+    // Count pre-saved answers from backend
+    const savedAnsweredCount = Object.keys(inlineQuestionSelections || {}).length;
+    setAnsweredCount(savedAnsweredCount);
+  }, [courseId, lessonId, questionCount, initialReadingCompleted, inlineQuestionSelections]);
 
+  // Fire completion callback after render to avoid setState during render warnings
   useEffect(() => {
-    if (!courseId || !lessonId || !userId) {
-      setInlineStatusLoaded(true);
+    if (!courseId || !lessonId || !onReadingCompleted) return;
+
+    if (questionCount === 0) {
+      onReadingCompleted();
       return;
     }
 
-    const ac = new AbortController();
-    setInlineStatusLoaded(false);
-
-    (async () => {
-      try {
-        const response = await authFetch(
-          `/api/courses/${courseId}/nodes/${lessonId}/inline-questions?userId=${encodeURIComponent(userId)}`,
-          { signal: ac.signal }
-        );
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to load inline question status: ${response.status} ${errorText}`);
-        }
-        const data = await response.json();
-        const normalizedSelections = normalizeInlineSelections(
-          data.inlineQuestions || data.inlineQuestionSelections || data.results
-        );
-        setInlineSelections(normalizedSelections);
-        if (typeof data.readingCompleted === "boolean") {
-          setReadingCompleted(data.readingCompleted);
-        }
-      } catch (error) {
-        if (error.name === "AbortError") return;
-        console.error("Failed to load inline question status:", error);
-      } finally {
-        if (!ac.signal.aborted) {
-          setInlineStatusLoaded(true);
-        }
-      }
-    })();
-
-    return () => {
-      ac.abort();
-    };
-  }, [courseId, lessonId, userId]);
-
-  useEffect(() => {
-    if (!onReadingCompleted || !inlineStatusLoaded) return;
-    if (readingCompleted && !completionNotifiedRef.current) {
-      completionNotifiedRef.current = true;
+    if (answeredCount >= questionCount) {
       onReadingCompleted();
     }
-  }, [readingCompleted, inlineStatusLoaded, onReadingCompleted]);
+  }, [answeredCount, questionCount, courseId, lessonId, onReadingCompleted]);
   
-  const handleInlineQuestionUpdate = useCallback((payload) => {
-    if (!payload) return;
-    if (Array.isArray(payload.results)) {
-      const normalizedSelections = normalizeInlineSelections(payload.results);
-      if (Object.keys(normalizedSelections).length) {
-        setInlineSelections(prev => ({ ...prev, ...normalizedSelections }));
-      }
-    } else if (payload.questionIndex !== undefined && payload.questionIndex !== null) {
-      const normalized = normalizeSelectedAnswer(payload.selectedAnswer);
-      if (normalized !== null) {
-        setInlineSelections(prev => ({ ...prev, [payload.questionIndex]: normalized }));
-      }
-    }
-    if (typeof payload.readingCompleted === "boolean") {
-      setReadingCompleted(payload.readingCompleted);
-      setInlineStatusLoaded(true);
-    }
-  }, []);
+  const handleQuestionAnswered = useCallback(() => {
+    setAnsweredCount(prev => Math.min(prev + 1, questionCount || prev + 1));
+  }, [questionCount]);
   
   // Track question index for each question block
   let questionIndex = 0;
@@ -1331,8 +1241,8 @@ export default function ReadingRenderer({
                     courseId={courseId}
                     lessonId={lessonId}
                     userId={userId}
-                    initialAnswer={inlineSelections?.[currentQuestionIndex]}
-                    onAnswered={handleInlineQuestionUpdate}
+                    initialAnswer={inlineQuestionSelections?.[currentQuestionIndex]}
+                    onAnswered={handleQuestionAnswered}
                   />
                 );
                 
