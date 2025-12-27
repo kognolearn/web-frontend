@@ -1,5 +1,4 @@
 import AdminGuard from "@/components/admin/AdminGuard";
-import ThemeToggle from "@/components/theme/ThemeToggle";
 import Link from "next/link";
 
 export default function AdminLayout({ children }) {
@@ -51,7 +50,6 @@ export default function AdminLayout({ children }) {
                     </div>
                 </nav>
                 <main className="relative mx-auto max-w-7xl p-6">{children}</main>
-                <ThemeToggle />
             </div>
         </AdminGuard>
     );

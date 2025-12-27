@@ -253,19 +253,19 @@ export default function FeedbackWidget() {
   const isOnMobileCoursePage = isMobileViewport && hasCourseSidebar;
   const effectiveZIndex = hideForChat ? 5 : (isOnMobileCoursePage ? 10 : 50);
 
+  // Only render when open (no floating button)
+  if (!isOpen) return null;
+
   return (
     <div
-      className="fixed transition-all duration-200 ease-in-out"
-      style={{
-        left: shouldShift ? 'calc(var(--course-sidebar-width, 300px) + 4.5rem)' : '4.5rem',
-        bottom: hasCourseSidebar ? '5rem' : '1rem',
-        zIndex: effectiveZIndex,
-        pointerEvents: hideForChat ? 'none' : 'auto',
-        opacity: hideForChat ? 0 : 1,
-        transform: hideForChat ? 'translateY(8px)' : 'translateY(0)'
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setIsOpen(false);
       }}
-      ref={panelRef}
     >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -273,7 +273,8 @@ export default function FeedbackWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="absolute bottom-14 left-0 w-80 sm:w-96 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xl overflow-hidden"
+            className="relative w-80 sm:w-96 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xl overflow-hidden"
+            ref={panelRef}
           >
             {/* Header */}
             <div className="px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--border)]">
@@ -410,35 +411,6 @@ export default function FeedbackWidget() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Trigger Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="btn btn-glass btn-icon backdrop-blur-md bg-surface-1/30 border border-border/20 shadow-sm"
-        aria-label="Send feedback"
-        aria-expanded={isOpen}
-      >
-        <span
-          className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-            isOpen ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 rotate-90"
-          }`}
-          aria-hidden={!isOpen}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </span>
-        <span
-          className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-            isOpen ? "opacity-0 scale-75 -rotate-90" : "opacity-100 scale-100 rotate-0"
-          }`}
-          aria-hidden={isOpen}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-        </span>
-      </button>
     </div>
   );
 }

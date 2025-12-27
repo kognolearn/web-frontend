@@ -2,11 +2,10 @@ import { Nunito } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import ThemeToggle from "@/components/theme/ThemeToggle";
-import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
+import FeedbackWidget from "@/components/ui/FeedbackWidget";
 
 
 const nunito = Nunito({
@@ -58,11 +57,8 @@ export default function RootLayout({ children }) {
           <ThemeProvider>
             <OnboardingProvider>
               <SupabaseSessionProvider />
-              {/* Persistent theme toggle (shown only when logged in) */}
-              <ThemeToggle />
-              {/* Feedback widget (shown only when logged in) */}
-              <FeedbackWidget />
               {children}
+              <FeedbackWidget />
             </OnboardingProvider>
           </ThemeProvider>
         </MathJaxContext>

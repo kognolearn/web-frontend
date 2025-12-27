@@ -12,9 +12,12 @@ import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
+import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
+import PersonalizationModal from "@/components/ui/PersonalizationModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
+import { supabase } from "@/lib/supabase/client";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -358,6 +361,69 @@ export default function CourseTabContent({
   const router = useRouter();
   const chatBotRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
+  const [userInitials, setUserInitials] = useState("");
+  const [userName, setUserName] = useState("");
+
+  // Fetch user info on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!mounted || !user) return;
+        const fullName = user.user_metadata?.full_name || "";
+        const email = user.email || "";
+        let initials = "";
+        if (fullName) {
+          const parts = fullName.trim().split(/\s+/);
+          initials = parts.length >= 2
+            ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+            : parts[0].substring(0, 2).toUpperCase();
+          setUserName(fullName);
+        } else if (email) {
+          initials = email.substring(0, 2).toUpperCase();
+          setUserName(email.split("@")[0]);
+        }
+        setUserInitials(initials);
+      } catch (e) {
+        // Silently fail
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  
+  // Profile menu state
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
+  const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+    if (isProfileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isProfileMenuOpen]);
+
+  // Handle logout
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
+  };
+
+  // Handle send feedback
+  const handleSendFeedback = () => {
+    setIsProfileMenuOpen(false);
+    window.dispatchEvent(new CustomEvent('open-feedback-widget'));
+  };
   
   // Track the last title we sent to avoid redundant calls
   const lastTitleRef = useRef(null);
@@ -415,8 +481,32 @@ export default function CourseTabContent({
     };
   }, [isMobileMenuOpen]);
   const [viewMode, setViewMode] = useState("topic");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(300);
+  
+  // Sidebar state with localStorage persistence
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kogno-sidebar-open');
+      return saved !== null ? saved === 'true' : true;
+    }
+    return true;
+  });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kogno-sidebar-width');
+      return saved !== null ? parseInt(saved, 10) : 300;
+    }
+    return 300;
+  });
+  
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('kogno-sidebar-open', String(sidebarOpen));
+  }, [sidebarOpen]);
+  
+  useEffect(() => {
+    localStorage.setItem('kogno-sidebar-width', String(sidebarWidth));
+  }, [sidebarWidth]);
+  
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [expandedLessons, setExpandedLessons] = useState(new Set());
   const [collapsedModules, setCollapsedModules] = useState(new Set());
@@ -1437,25 +1527,196 @@ export default function CourseTabContent({
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
+
+      {/* Top Right Controls - Desktop Only (fixed position) */}
+      {!isMobile && (
+        <div 
+          className="absolute top-4 z-20 flex items-center gap-2"
+          style={{ right: `${chatBotWidth + 16}px` }}
+        >
+          {/* Pause/Play Button for Study Timer */}
+          {!isDeepStudyCourse && secondsRemaining !== null && (
+            <button
+              type="button"
+              onClick={onPauseToggle}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+              title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
+            >
+              {isTimerPaused ? (
+                <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              )}
+            </button>
+          )}
+
+          {/* Combined Timer Display Card (Clickable) */}
+          {shouldShowTimerCard && (
+            (() => {
+              const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
+              const containerProps = !isDeepStudyCourse && secondsRemaining !== null
+                ? {
+                    type: 'button',
+                    onClick: () => setIsTimerControlsOpen(true),
+                    className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+                  }
+                : {
+                    className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl"
+                  };
+              return (
+                <Container {...containerProps}>
+                  {!isDeepStudyCourse && secondsRemaining !== null && (
+                    <>
+                      <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex items-baseline gap-0.5">
+                        {(() => {
+                          const h = Math.floor(secondsRemaining / 3600);
+                          const m = Math.floor((secondsRemaining % 3600) / 60);
+                          return (
+                            <>
+                              <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
+                              <span className="text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
+                              <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                              <span className="text-[10px] text-[var(--muted-foreground)]">m</span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </>
+                  )}
+
+                  {(!isDeepStudyCourse && secondsRemaining !== null && isFocusTimerVisible) && (
+                    <span className="text-[var(--border)] mx-1">|</span>
+                  )}
+
+                  {isFocusTimerVisible && (
+                    focusTimerState.isCompleted ? (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                        </svg>
+                        <span className="text-sm font-semibold text-green-500">Done</span>
+                      </div>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <div className="flex items-baseline gap-0.5">
+                          {(() => {
+                            const m = Math.floor(focusTimerState.seconds / 60);
+                            const s = focusTimerState.seconds % 60;
+                            return (
+                              <>
+                                <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                                <span className="text-[10px] text-[var(--muted-foreground)]">:</span>
+                                <span className="text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
+                                {focusTimerState.phase && focusTimerState.phase !== "work" && (
+                                  <span className="ml-1 text-[9px] text-amber-500 font-medium uppercase">
+                                    {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )
+                  )}
+                </Container>
+              );
+            })()
+          )}
+
+          {focusTimerState?.isCompleted && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.dismissComplete?.(); }}
+              className="flex items-center justify-center w-9 h-9 rounded-xl border border-green-500/30 bg-green-500/10 shadow-md backdrop-blur-xl transition-all hover:bg-green-500/20"
+              title="Dismiss"
+            >
+              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+
+          {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
+            <Tooltip content="Some content is hidden. Add more time to see all content." position="bottom">
+              <button
+                type="button"
+                onClick={() => onHiddenContentClick?.()}
+                className="flex items-center justify-center w-11 h-11 rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-lg backdrop-blur-xl transition-all hover:bg-amber-500/20"
+                title="Content hidden - click to add time"
+              >
+                <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+              </button>
+            </Tooltip>
+          )}
+
+          <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShareCourse();
+              }}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
+              title="Share course"
+              aria-label="Share course"
+            >
+              {shareCopied ? (
+                <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
+                </svg>
+              )}
+            </button>
+          </Tooltip>
+
+          <OnboardingTooltip
+            id="course-settings-button"
+            content={settingsTooltipContent}
+            position="bottom"
+            pointerPosition="right"
+            delay={800}
+            priority={5}
+          >
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+              title="Course Settings"
+            >
+              <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </OnboardingTooltip>
+        </div>
+      )}
+
       {/* Collapsed sidebar rail */}
       {canRenderSidebar && !sidebarOpen && !isMobile && (
-        <div className="absolute left-0 top-0 h-full w-12 z-30 backdrop-blur-md bg-[var(--surface-1)]/60 border-r border-[var(--border)]/50 flex flex-col items-center pt-3 gap-2">
-          {/* Dashboard button */}
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Go to Dashboard"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </button>
-          
+        <div className="absolute left-0 top-0 h-full w-12 z-40 backdrop-blur-md bg-[var(--surface-1)]/60 border-r border-[var(--border)]/50 flex flex-col items-center pt-3 gap-2">
           {/* Open sidebar button */}
           <button
             type="button"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(true); }}
             className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
             title="Show Sidebar"
           >
@@ -1465,8 +1726,20 @@ export default function CourseTabContent({
             </svg>
           </button>
           
-          {/* Spacer to push bottom items down */}
-          <div className="flex-1" />
+          {/* Divider */}
+          <div className="w-6 h-px bg-[var(--border)]/50 my-1" />
+          
+          {/* Edit Course button */}
+          <button
+            type="button"
+            onClick={() => { setIsProfileMenuOpen(false); setIsEditCourseModalOpen(true); }}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Edit Course"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
           
           {/* Review button */}
           <a
@@ -1490,255 +1763,107 @@ export default function CourseTabContent({
             </svg>
           </a>
           
+          {/* Spacer to push bottom items down */}
+          <div className="flex-1" />
+          
+          {/* New Course button */}
+          <button
+            type="button"
+            onClick={() => { setIsProfileMenuOpen(false); router.push('/courses/create'); }}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Create New Course"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          
+          {/* Home button */}
+          <button
+            type="button"
+            onClick={() => { setIsProfileMenuOpen(false); router.push('/dashboard'); }}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            title="Go to Dashboard"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          </button>
+          
           {/* Divider */}
           <div className="w-6 h-px bg-[var(--border)]/50 my-1" />
           
-          {/* Theme toggle button */}
-          <CollapsedRailThemeToggle />
-          
-          {/* Feedback button */}
-          <CollapsedRailFeedbackButton />
+          {/* Profile icon with dropdown */}
+          <div className="relative mb-3" ref={profileMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--primary)] text-white text-xs font-semibold transition-all hover:opacity-90 hover:scale-105"
+              title="Profile Menu"
+            >
+              {userInitials || "?"}
+            </button>
+            
+            {/* Profile dropdown menu */}
+            {isProfileMenuOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl z-50">
+                <div className="p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      setIsProfileSettingsModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Profile Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      setIsPersonalizationModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                    </svg>
+                    Personalization
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendFeedback}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Send Feedback
+                  </button>
+                </div>
+                <div className="border-t border-[var(--border)]">
+                  <div className="p-2">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
-
-      {/* Top Right Controls: Pause, Timer, Settings */}
-      <div 
-        className="absolute top-4 z-20 flex items-center gap-2"
-        style={{ right: isMobile ? '12px' : `${chatBotWidth + 16}px` }}
-      >
-        {/* Pause/Play Button for Study Timer */}
-        {!isDeepStudyCourse && secondsRemaining !== null && (
-          <button
-            type="button"
-            onClick={onPauseToggle}
-            className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-            title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
-          >
-            {isTimerPaused ? (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-              </svg>
-            )}
-          </button>
-        )}
-
-        {/* Combined Timer Display Card (Clickable) */}
-        {shouldShowTimerCard && (
-          (() => {
-            const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
-            const containerProps = !isDeepStudyCourse && secondsRemaining !== null
-              ? {
-                  type: 'button',
-                  onClick: () => setIsTimerControlsOpen(true),
-                  className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-                }
-              : {
-                  className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl"
-                };
-            return (
-              <Container {...containerProps}>
-                {!isDeepStudyCourse && secondsRemaining !== null && (
-                  <>
-                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="flex items-baseline gap-0.5">
-                      {(() => {
-                        const h = Math.floor(secondsRemaining / 3600);
-                        const m = Math.floor((secondsRemaining % 3600) / 60);
-                        return (
-                          <>
-                            <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
-                            <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
-                            <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
-                            <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)]">m</span>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </>
-                )}
-
-                {(!isDeepStudyCourse && secondsRemaining !== null && isFocusTimerVisible) && (
-                  <span className="text-[var(--border)] mx-1">|</span>
-                )}
-
-                {isFocusTimerVisible && (
-                  focusTimerState.isCompleted ? (
-                    <div className="flex items-center gap-1 sm:gap-1.5">
-                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                      </svg>
-                      <span className="text-xs sm:text-sm font-semibold text-green-500">Done</span>
-                    </div>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      <div className="flex items-baseline gap-0.5">
-                        {(() => {
-                          const m = Math.floor(focusTimerState.seconds / 60);
-                          const s = focusTimerState.seconds % 60;
-                          return (
-                            <>
-                              <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
-                              <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)]">:</span>
-                              <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
-                              {focusTimerState.phase && focusTimerState.phase !== "work" && (
-                                <span className="ml-1 text-[8px] sm:text-[9px] text-amber-500 font-medium uppercase">
-                                  {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </>
-                  )
-                )}
-              </Container>
-            );
-          })()
-        )}
-
-        {/* Focus Timer Complete Dismiss Button */}
-        {isMobile ? (
-          <div className="relative" ref={mobileMenuRef}>
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
-            >
-              <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-              </svg>
-            </button>
-            <AnimatePresence>
-              {isMobileMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] shadow-xl p-2 flex flex-col gap-2 z-50"
-                >
-                   {/* Focus Timer Dismiss */}
-                   {focusTimerState?.isCompleted && (
-                      <button onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.dismissComplete?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
-                        <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        <span className="text-sm font-medium">Dismiss Timer</span>
-                      </button>
-                   )}
-                   
-                   {/* Hidden Content */}
-                   {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
-                      <button onClick={() => { onHiddenContentClick?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
-                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                        <span className="text-sm font-medium">Hidden Content</span>
-                      </button>
-                   )}
-
-                   {/* Share */}
-                   <button onClick={(e) => { e.stopPropagation(); handleShareCourse(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
-                      {shareCopied ? (
-                        <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      ) : (
-                        <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" /></svg>
-                      )}
-                      <span className="text-sm font-medium">{shareCopied ? "Link Copied" : "Share Course"}</span>
-                   </button>
-
-                   {/* Settings */}
-                   <button onClick={() => { setIsSettingsModalOpen(true); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
-                      <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      <span className="text-sm font-medium">Settings</span>
-                   </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ) : (
-          <>
-            {focusTimerState?.isCompleted && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.dismissComplete?.(); }}
-                className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl border border-green-500/30 bg-green-500/10 shadow-md backdrop-blur-xl transition-all hover:bg-green-500/20"
-                title="Dismiss"
-              >
-                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-
-            {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
-              <Tooltip content="Some content is hidden. Add more time to see all content." position="bottom">
-                <button
-                  type="button"
-                  onClick={() => onHiddenContentClick?.()}
-                  className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-lg backdrop-blur-xl transition-all hover:bg-amber-500/20"
-                  title="Content hidden - click to add time"
-                >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                </button>
-              </Tooltip>
-            )}
-
-            <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleShareCourse();
-                }}
-                className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
-                title="Share course"
-                aria-label="Share course"
-              >
-                {shareCopied ? (
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" />
-                  </svg>
-                )}
-              </button>
-            </Tooltip>
-
-            <OnboardingTooltip
-              id="course-settings-button"
-              content={settingsTooltipContent}
-              position="bottom"
-              pointerPosition="right"
-              delay={800}
-              priority={5}
-            >
-              <button
-                type="button"
-                onClick={() => setIsSettingsModalOpen(true)}
-                className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-                title="Course Settings"
-              >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-            </OnboardingTooltip>
-          </>
-        )}
-      </div>
 
       {/* Sidebar */}
       {canRenderSidebar && (
@@ -1759,7 +1884,7 @@ export default function CourseTabContent({
             }`}
             style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
           >
-            <div className="p-3 border-b border-[var(--border)] flex items-center gap-2 backdrop-blur-sm">
+            <div className="p-3 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
               {/* Dashboard button */}
               <button
                 type="button"
@@ -1775,7 +1900,7 @@ export default function CourseTabContent({
               {/* Close sidebar button */}
               <button
                 type="button"
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(false); }}
                 className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
                 title="Hide Sidebar"
               >
@@ -2117,6 +2242,86 @@ export default function CourseTabContent({
               </div>
             </nav>
 
+            {/* Profile section at bottom */}
+            <div className="p-3 border-t border-[var(--border)] bg-[var(--surface-1)]/50 relative" ref={!isMobile ? undefined : profileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                title="Profile Menu"
+              >
+                <div className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--primary)] text-white text-xs font-semibold flex-shrink-0">
+                  {userInitials || "?"}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                    {userName || "User"}
+                  </p>
+                </div>
+                <svg className="w-4 h-4 text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              
+              {/* Profile dropdown menu */}
+              {isProfileMenuOpen && (
+                <div className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl z-50">
+                  <div className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setIsProfileSettingsModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      Profile Settings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setIsPersonalizationModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                      </svg>
+                      Personalization
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendFeedback}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Send Feedback
+                    </button>
+                  </div>
+                  <div className="border-t border-[var(--border)]">
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {!isMobile && (
               <div
                 className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
@@ -2181,7 +2386,187 @@ export default function CourseTabContent({
           </div>
         )}
 
-        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-20 pt-20 sm:px-6 lg:px-8 z-10">
+        {/* Top Controls Bar - Mobile only, scrolls with content */}
+        {isMobile && (
+          <div className="flex items-center justify-between px-4 pt-3 pb-1 max-w-5xl mx-auto w-full">
+          {/* Left side - Mobile sidebar toggle */}
+          <div className="flex items-center">
+            {canRenderSidebar && !sidebarOpen && isMobile && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex items-center justify-center w-10 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
+                title="Open Sidebar"
+              >
+                <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Right side - Timer and controls */}
+          <div className="flex items-center gap-2">
+            {/* Pause/Play Button for Study Timer */}
+            {!isDeepStudyCourse && secondsRemaining !== null && (
+              <button
+                type="button"
+                onClick={onPauseToggle}
+                className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+                title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
+              >
+                {isTimerPaused ? (
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                )}
+              </button>
+            )}
+
+            {/* Combined Timer Display Card (Clickable) */}
+            {shouldShowTimerCard && (
+              (() => {
+                const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
+                const containerProps = !isDeepStudyCourse && secondsRemaining !== null
+                  ? {
+                      type: 'button',
+                      onClick: () => setIsTimerControlsOpen(true),
+                      className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+                    }
+                  : {
+                      className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl"
+                    };
+                return (
+                  <Container {...containerProps}>
+                    {!isDeepStudyCourse && secondsRemaining !== null && (
+                      <>
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex items-baseline gap-0.5">
+                          {(() => {
+                            const h = Math.floor(secondsRemaining / 3600);
+                            const m = Math.floor((secondsRemaining % 3600) / 60);
+                            return (
+                              <>
+                                <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(h).padStart(2, '0')}</span>
+                                <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)] mr-0.5">h</span>
+                                <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                                <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)]">m</span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )}
+
+                    {(!isDeepStudyCourse && secondsRemaining !== null && isFocusTimerVisible) && (
+                      <span className="text-[var(--border)] mx-1">|</span>
+                    )}
+
+                    {isFocusTimerVisible && (
+                      focusTimerState.isCompleted ? (
+                        <div className="flex items-center gap-1 sm:gap-1.5">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                          </svg>
+                          <span className="text-xs sm:text-sm font-semibold text-green-500">Done</span>
+                        </div>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <div className="flex items-baseline gap-0.5">
+                            {(() => {
+                              const m = Math.floor(focusTimerState.seconds / 60);
+                              const s = focusTimerState.seconds % 60;
+                              return (
+                                <>
+                                  <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(m).padStart(2, '0')}</span>
+                                  <span className="text-[9px] sm:text-[10px] text-[var(--muted-foreground)]">:</span>
+                                  <span className="text-base sm:text-lg font-bold tabular-nums text-[var(--foreground)]">{String(s).padStart(2, '0')}</span>
+                                  {focusTimerState.phase && focusTimerState.phase !== "work" && (
+                                    <span className="ml-1 text-[8px] sm:text-[9px] text-amber-500 font-medium uppercase">
+                                      {focusTimerState.phase === "longBreak" ? "Long" : "Break"}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      )
+                    )}
+                  </Container>
+                );
+              })()
+            )}
+
+            {/* Mobile Menu */}
+            <div className="relative" ref={mobileMenuRef}>
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)]"
+              >
+                <svg className="w-5 h-5 text-[var(--foreground)]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                </svg>
+              </button>
+              <AnimatePresence>
+                {isMobileMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] shadow-xl p-2 flex flex-col gap-2 z-50"
+                  >
+                     {/* Focus Timer Dismiss */}
+                     {focusTimerState?.isCompleted && (
+                        <button onClick={(e) => { e.stopPropagation(); focusTimerRef?.current?.dismissComplete?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
+                          <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          <span className="text-sm font-medium">Dismiss Timer</span>
+                        </button>
+                     )}
+                     
+                     {/* Hidden Content */}
+                     {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
+                        <button onClick={() => { onHiddenContentClick?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
+                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                          <span className="text-sm font-medium">Hidden Content</span>
+                        </button>
+                     )}
+
+                     {/* Share */}
+                     <button onClick={(e) => { e.stopPropagation(); handleShareCourse(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
+                        {shareCopied ? (
+                          <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 6l-4-4-4 4" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v14" /></svg>
+                        )}
+                        <span className="text-sm font-medium">{shareCopied ? "Link Copied" : "Share Course"}</span>
+                     </button>
+
+                     {/* Settings */}
+                     <button onClick={() => { setIsSettingsModalOpen(true); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
+                        <svg className="w-4 h-4 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        <span className="text-sm font-medium">Settings</span>
+                     </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+        )}
+
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-8 px-4 pb-20 pt-1 sm:pt-20 sm:px-6 lg:px-8 z-10">
           {loading && (
             <div className="backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] rounded-3xl px-8 py-16 text-center shadow-lg">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
@@ -3001,6 +3386,7 @@ export default function CourseTabContent({
       <ChatBot 
         ref={chatBotRef}
         isActive={isActive}
+        buttonClassName={viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' ? "bottom-[77px]" : "bottom-4"}
         pageContext={{
           courseId,
           courseName,
@@ -3127,6 +3513,18 @@ export default function CourseTabContent({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Profile Settings Modal */}
+      <ProfileSettingsModal
+        isOpen={isProfileSettingsModalOpen}
+        onClose={() => setIsProfileSettingsModalOpen(false)}
+      />
+
+      {/* Personalization Modal */}
+      <PersonalizationModal
+        isOpen={isPersonalizationModalOpen}
+        onClose={() => setIsPersonalizationModalOpen(false)}
+      />
 
     </div>
   );
