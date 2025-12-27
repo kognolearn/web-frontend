@@ -14,6 +14,7 @@ import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/On
 import Tooltip from "@/components/ui/Tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
+import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -30,6 +31,14 @@ const normalizeFormat = (fmt) => {
 const prettyFormat = (fmt) => {
   const base = String(fmt || "").toLowerCase().replace(/[_-]+/g, " ");
   return base.replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+const resolveAsyncResult = async (response, options = {}) => {
+  const { result } = await resolveAsyncJobResponse(response, options);
+  if (!result) {
+    throw new Error("Job completed but no result was returned.");
+  }
+  return result;
 };
 
 // ItemContent component
@@ -556,12 +565,7 @@ export default function CourseTabContent({
         }
       );
       
-      if (!generateRes.ok) {
-        const errData = await generateRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Failed to generate exam (${generateRes.status})`);
-      }
-      
-      const genData = await generateRes.json();
+      const genData = await resolveAsyncResult(generateRes, { errorLabel: "generate exam" });
       
       // Add the new exam to the list and select it
       setExamState(prev => {
@@ -634,13 +638,11 @@ export default function CourseTabContent({
       
       // Clear timeout on success
       if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
-      
-      if (!gradeRes.ok) {
-        const errData = await gradeRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Failed to grade exam (${gradeRes.status})`);
-      }
-      
-      const gradeData = await gradeRes.json();
+
+      const gradeData = await resolveAsyncResult(gradeRes, {
+        signal: abortController.signal,
+        errorLabel: "grade exam"
+      });
       
       // Update the exam in the list with grade data
       setExamState(prev => {
@@ -702,12 +704,7 @@ export default function CourseTabContent({
         }
       );
       
-      if (!modifyRes.ok) {
-        const errData = await modifyRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Failed to modify exam (${modifyRes.status})`);
-      }
-      
-      const modData = await modifyRes.json();
+      const modData = await resolveAsyncResult(modifyRes, { errorLabel: "modify exam" });
       
       // Update the exam in the list with new URL
       setExamState(prev => {
@@ -892,11 +889,7 @@ export default function CourseTabContent({
         })
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to generate review module');
-      }
-
-      const data = await res.json();
+      await resolveAsyncJobResponse(res, { errorLabel: "generate review module" });
       
       // Refresh review modules list
       const listRes = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
@@ -905,7 +898,7 @@ export default function CourseTabContent({
         setReviewModules(listData.modules || []);
       }
 
-      return data;
+      return true;
     } catch (e) {
       console.error('Failed to generate review module:', e);
       throw e;

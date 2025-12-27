@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
+import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 
 // Convert file to base64 for API
 async function fileToBase64(file) {
@@ -182,21 +183,19 @@ export default function CheatsheetPage() {
         body: JSON.stringify(body),
       });
       
-      if (res.ok) {
-        const data = await res.json();
-        setCheatsheets(prev => [...prev, { name: data.name, url: data.url, number: data.number }]);
-        setSelectedCheatsheet({ name: data.name, url: data.url, number: data.number });
-        setShowGenerateForm(false);
-        setGeneratePrompt("");
-        setSelectedLessons([]);
-        setAttachedFiles([]);
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to generate cheatsheet");
+      const { result } = await resolveAsyncJobResponse(res, { errorLabel: "generate cheatsheet" });
+      if (!result) {
+        throw new Error("Cheatsheet generation completed but no result was returned.");
       }
+      setCheatsheets(prev => [...prev, { name: result.name, url: result.url, number: result.number }]);
+      setSelectedCheatsheet({ name: result.name, url: result.url, number: result.number });
+      setShowGenerateForm(false);
+      setGeneratePrompt("");
+      setSelectedLessons([]);
+      setAttachedFiles([]);
     } catch (err) {
       console.error("Error generating cheatsheet:", err);
-      alert("Failed to generate cheatsheet");
+      alert(err?.message || "Failed to generate cheatsheet");
     } finally {
       setIsGenerating(false);
     }
@@ -214,23 +213,21 @@ export default function CheatsheetPage() {
         body: JSON.stringify({ prompt: modifyPrompt }),
       });
       
-      if (res.ok) {
-        const data = await res.json();
-        setCheatsheets(prev => prev.map(cs => 
-          cs.number === data.number 
-            ? { ...cs, url: data.url }
-            : cs
-        ));
-        setSelectedCheatsheet(prev => ({ ...prev, url: data.url }));
-        setShowModifyForm(false);
-        setModifyPrompt("");
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to modify cheatsheet");
+      const { result } = await resolveAsyncJobResponse(res, { errorLabel: "modify cheatsheet" });
+      if (!result) {
+        throw new Error("Cheatsheet update completed but no result was returned.");
       }
+      setCheatsheets(prev => prev.map(cs => 
+        cs.number === result.number 
+          ? { ...cs, url: result.url }
+          : cs
+      ));
+      setSelectedCheatsheet(prev => ({ ...prev, url: result.url }));
+      setShowModifyForm(false);
+      setModifyPrompt("");
     } catch (err) {
       console.error("Error modifying cheatsheet:", err);
-      alert("Failed to modify cheatsheet");
+      alert(err?.message || "Failed to modify cheatsheet");
     } finally {
       setIsModifying(false);
     }

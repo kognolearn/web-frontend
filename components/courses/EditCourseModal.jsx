@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
+import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 
 export default function EditCourseModal({ 
   isOpen, 
@@ -111,8 +112,7 @@ export default function EditCourseModal({
     setErrorMessage("");
     
     try {
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
-      const response = await authFetch(`${baseUrl}/courses/${courseId}/modify-topics`, {
+      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,13 +124,12 @@ export default function EditCourseModal({
           currentModules: studyPlan?.modules || []
         })
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || 'Failed to submit modification request');
+
+      const { result } = await resolveAsyncJobResponse(response, { errorLabel: "modify course" });
+      if (!result) {
+        throw new Error("Course update completed but no result was returned.");
       }
-      
-      const result = await response.json();
+
       setResultStats(result.log?.stats || null);
       setSubmitStatus('success');
       setModificationText("");
