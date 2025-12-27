@@ -14,5 +14,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           vercel-org-id: ${{ secrets.ORG_ID }}
           vercel-project-id: ${{ secrets.PROJECT_ID }}
-          # Production deploy to www with the hosted API.
-          vercel-args: '--prod --regions sfo1 --env BACKEND_API_URL=https://api.kognolearn.com --env API_BASE_URL=https://api.kognolearn.com'
+          vercel-args: '--prod --regions sfo1'
