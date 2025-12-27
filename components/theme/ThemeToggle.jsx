@@ -84,6 +84,9 @@ export default function ThemeToggle() {
   
   // Don't show on course pages until UI is ready
   if (hasCourseSidebar && !courseUiReady) return null;
+  
+  // Hide on desktop course pages when sidebar is closed (collapsed rail has its own toggle)
+  if (hasCourseSidebar && courseSidebarClosed && !isMobileViewport) return null;
 
   const isDark = theme === "dark";
   const shouldShift = hasCourseSidebar && !courseSidebarClosed && !isMobileViewport;

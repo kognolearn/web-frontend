@@ -63,6 +63,7 @@ export default function FeedbackWidget() {
   const [error, setError] = useState(null);
   const [sidebarClosedOnCourse, setSidebarClosedOnCourse] = useState(false);
   const [hasCourseSidebar, setHasCourseSidebar] = useState(false);
+  const [forceShow, setForceShow] = useState(false);
   const [courseUiReady, setCourseUiReady] = useState(false);
   const [chatOverlayActive, setChatOverlayActive] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -219,10 +220,31 @@ export default function FeedbackWidget() {
     }
   };
 
+  // Listen for force-open event from collapsed sidebar rail
+  useEffect(() => {
+    const handleForceOpen = () => {
+      setForceShow(true);
+      setIsOpen(true);
+    };
+    window.addEventListener('open-feedback-widget', handleForceOpen);
+    return () => window.removeEventListener('open-feedback-widget', handleForceOpen);
+  }, []);
+  
+  // Reset forceShow when closing
+  useEffect(() => {
+    if (!isOpen && forceShow) {
+      setForceShow(false);
+    }
+  }, [isOpen, forceShow]);
+
   if (!mounted || (!user && !isPublicPage)) return null;
   
   // Don't show on course pages until UI is ready
   if (hasCourseSidebar && !courseUiReady) return null;
+  
+  // Hide on desktop course pages when sidebar is closed (collapsed rail has its own feedback button)
+  // But show if forceShow is true (triggered from collapsed rail)
+  if (hasCourseSidebar && sidebarClosedOnCourse && !isMobileViewport && !forceShow) return null;
 
   const shouldShift = hasCourseSidebar && !sidebarClosedOnCourse && !isMobileViewport;
   const hideForChat = chatOverlayActive && isMobileViewport;
