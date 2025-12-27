@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
-
 export async function POST(request, { params }) {
   try {
     const { courseId } = await params;
@@ -25,7 +23,7 @@ export async function POST(request, { params }) {
     }
 
     // Build the backend API URL
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/restructure`;
+    const backendUrl = `https://api.kognolearn.com/courses/${courseId}/restructure`;
 
     // Build request body
     const requestBody = {
