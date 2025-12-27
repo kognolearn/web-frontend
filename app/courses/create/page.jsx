@@ -556,6 +556,7 @@ function CreateCoursePageContent() {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [showRefinePrompt, setShowRefinePrompt] = useState(false);
 
   const [courseGenerating, setCourseGenerating] = useState(false);
   const [courseGenerationError, setCourseGenerationError] = useState("");
@@ -572,8 +573,7 @@ function CreateCoursePageContent() {
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
   const canModifyTopics = Boolean(
-    courseId &&
-      userId &&
+    userId &&
       topicModifyPrompt.trim() &&
       !isModifyingTopics &&
       !isTopicsLoading
@@ -911,10 +911,7 @@ function CreateCoursePageContent() {
       setTopicModifyError("You need to be signed in to update topics.");
       return;
     }
-    if (!courseId) {
-      setTopicModifyError("Create the course first to enable prompt-based topic updates.");
-      return;
-    }
+    
     if (!overviewTopics.length) {
       setTopicModifyError("Generate topics before requesting updates.");
       return;
@@ -925,15 +922,26 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
 
     try {
-      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          prompt,
-          currentModules: buildCurrentModulesPayload(overviewTopics),
-        }),
-      });
+      let response;
+      const payload = {
+        userId,
+        prompt,
+        currentModules: buildCurrentModulesPayload(overviewTopics),
+      };
+
+      if (courseId) {
+        response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        response = await authFetch(`/api/courses/topics/refine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       const { result } = await resolveAsyncJobResponse(response, {
         errorLabel: "modify topics",
@@ -2401,54 +2409,62 @@ Series & convergence"
                       </p>
                     </div>
                     {!isCramManual && (
-                      <button
-                        type="button"
-                        onClick={handleGenerateTopics}
-                        className="btn btn-outline btn-sm"
-                        disabled={isTopicsLoading || isModifyingTopics}
-                      >
-                        Regenerate
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowRefinePrompt(!showRefinePrompt)}
+                          className={`btn btn-sm ${showRefinePrompt ? "btn-primary" : "btn-outline"}`}
+                        >
+                          Refine with Prompt
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGenerateTopics}
+                          className="btn btn-outline btn-sm"
+                          disabled={isTopicsLoading || isModifyingTopics}
+                        >
+                          Regenerate
+                        </button>
+                      </div>
                     )}
                 </div>
 
-                <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h4 className="text-sm font-semibold text-[var(--foreground)]">Refine topics with a prompt</h4>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          Describe the adjustments you want, and we'll rewrite the topic list for you.
-                        </p>
+                {showRefinePrompt && (
+                  <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[var(--foreground)]">Refine topics with a prompt</h4>
+                          <p className="text-xs text-[var(--muted-foreground)]">
+                            Describe the adjustments you want, and we'll rewrite the topic list for you.
+                          </p>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleModifyTopics}
-                        className="btn btn-primary btn-sm"
-                        disabled={!canModifyTopics}
-                      >
-                        {isModifyingTopics ? "Updating..." : "Apply Prompt"}
-                      </button>
+                      <textarea
+                        value={topicModifyPrompt}
+                        onChange={(event) => {
+                          setTopicModifyPrompt(event.target.value);
+                          if (topicModifyError) setTopicModifyError("");
+                        }}
+                        placeholder="Example: Emphasize graph algorithms and remove basic sorting topics."
+                        className="w-full min-h-[96px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/40 p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={handleModifyTopics}
+                          className="btn btn-primary btn-sm"
+                          disabled={!canModifyTopics}
+                        >
+                          {isModifyingTopics ? "Updating..." : "Apply Prompt"}
+                        </button>
+                      </div>
+                      {topicModifyError && (
+                        <p className="text-xs text-[var(--danger)]">{topicModifyError}</p>
+                      )}
                     </div>
-                    <textarea
-                      value={topicModifyPrompt}
-                      onChange={(event) => {
-                        setTopicModifyPrompt(event.target.value);
-                        if (topicModifyError) setTopicModifyError("");
-                      }}
-                      placeholder="Example: Emphasize graph algorithms and remove basic sorting topics."
-                      className="w-full min-h-[96px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/40 p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50"
-                    />
-                    {topicModifyError && (
-                      <p className="text-xs text-[var(--danger)]">{topicModifyError}</p>
-                    )}
-                    {!courseId && (
-                      <p className="text-[10px] text-[var(--muted-foreground)]">
-                        Prompt-based updates require a course ID. Create the course to enable this.
-                      </p>
-                    )}
                   </div>
-                </div>
+                )}
                   
                 <div className="max-h-[90vh] overflow-y-auto pr-2 -mr-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--surface-1)]">
                   <TopicExplorer
