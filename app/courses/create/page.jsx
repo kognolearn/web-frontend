@@ -572,9 +572,9 @@ function CreateCoursePageContent() {
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
   const canModifyTopics = Boolean(
-    courseId &&
-      userId &&
+    userId &&
       topicModifyPrompt.trim() &&
+      overviewTopics.length > 0 &&
       !isModifyingTopics &&
       !isTopicsLoading
   );
@@ -911,10 +911,6 @@ function CreateCoursePageContent() {
       setTopicModifyError("You need to be signed in to update topics.");
       return;
     }
-    if (!courseId) {
-      setTopicModifyError("Create the course first to enable prompt-based topic updates.");
-      return;
-    }
     if (!overviewTopics.length) {
       setTopicModifyError("Generate topics before requesting updates.");
       return;
@@ -925,11 +921,12 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
 
     try {
-      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
+      // Use the new endpoint that doesn't require courseId (for pre-course topic modification)
+      // userId is derived from JWT token in the backend
+      const response = await authFetch(`/api/courses/modify-topics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
           prompt,
           currentModules: buildCurrentModulesPayload(overviewTopics),
         }),
@@ -957,7 +954,7 @@ function CreateCoursePageContent() {
     } finally {
       setIsModifyingTopics(false);
     }
-  }, [courseId, overviewTopics, topicModifyPrompt, userId]);
+  }, [overviewTopics, topicModifyPrompt, userId]);
 
   const handleGenerateTopics = useCallback(async (event) => {
     event.preventDefault();
@@ -2441,11 +2438,6 @@ Series & convergence"
                     />
                     {topicModifyError && (
                       <p className="text-xs text-[var(--danger)]">{topicModifyError}</p>
-                    )}
-                    {!courseId && (
-                      <p className="text-[10px] text-[var(--muted-foreground)]">
-                        Prompt-based updates require a course ID. Create the course to enable this.
-                      </p>
                     )}
                   </div>
                 </div>

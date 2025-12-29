@@ -25,6 +25,11 @@ export default function EditCourseModal({
   const [expandedModules, setExpandedModules] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Compute whether submit button should be enabled
+  const canSubmit = useMemo(() => {
+    return modificationText.trim().length > 0 && !isSubmitting;
+  }, [modificationText, isSubmitting]);
+
   // Extract all lessons from study plan
   const allLessons = useMemo(() => {
     if (!studyPlan?.modules) return [];
@@ -523,7 +528,7 @@ export default function EditCourseModal({
               <button
                 type="button"
                 onClick={handleModificationSubmit}
-                disabled={!modificationText.trim() || isSubmitting}
+                disabled={!canSubmit}
                 className="w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-active)] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-[var(--primary)]/25 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
