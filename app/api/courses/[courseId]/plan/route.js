@@ -5,24 +5,9 @@ const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.c
 export async function GET(request, { params }) {
   try {
     const { courseId } = await params;
-    const { searchParams } = new URL(request.url);
-    
-    // Get query parameters
-    const userId = searchParams.get('userId');
 
-    // Validate required parameters
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
-
-    // 'hours' param removed: backend no longer expects this parameter
-
-    // Build the backend API URL
+    // Build the backend API URL - userId is derived from JWT by the backend
     const backendUrl = new URL(`${BACKEND_API_URL}/courses/${courseId}/plan`);
-    backendUrl.searchParams.set('userId', userId);
 
     // Forward the request to the backend API
     const response = await fetch(backendUrl.toString(), {
