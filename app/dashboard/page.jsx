@@ -556,8 +556,8 @@ export default function DashboardPage() {
                 const associatedJob = pendingJobs.find((job) => job.courseId === course.id);
                 const jobStatus = associatedJob?.status?.toLowerCase();
                 const isJobRunning = associatedJob && !terminalJobStatuses.has(jobStatus || "");
-                // Show as pending/building if course status is pending OR if there's a running job
-                const effectiveStatus = (course.status === "pending" || isJobRunning) ? "pending" : course.status;
+                // Show as pending/building if course status is pending/generating OR if there's a running job
+                const effectiveStatus = (course.status === "pending" || course.status === "generating" || isJobRunning) ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
                 const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
                 return (

@@ -73,7 +73,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   const topicProgressValue = typeof topicsProgress === "number" ? Math.min(1, Math.max(0, topicsProgress)) : null;
   const topicProgressPercent = topicProgressValue !== null ? Math.round(topicProgressValue * 100) : null;
   const timeLabel = isCompleted ? "Done" : shouldShowTimeRemaining ? formatTimeRemaining(secondsToComplete) : null;
-  const isPending = status === 'pending';
+  const isPending = status === 'pending' || status === 'generating';
 
   // Pending/Building state - show a special loading card
   if (isPending) {
