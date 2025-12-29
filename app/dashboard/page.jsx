@@ -65,82 +65,11 @@ export default function DashboardPage() {
   const jobPollingRef = useRef(null);
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
-  const [courseProgress, setCourseProgress] = useState({});
   const [pendingJobs, setPendingJobs] = useState([]);
 
   useEffect(() => {
     coursesRef.current = courses;
   }, [courses]);
-
-  const loadCourseProgress = useCallback(async (userId, courseIds) => {
-    if (!courseIds || courseIds.length === 0) return;
-    
-    // Fetch progress for all courses in parallel
-    const progressPromises = courseIds.map(async (courseId) => {
-      try {
-        const res = await authFetch(`/api/courses/${encodeURIComponent(courseId)}/progress`);
-        if (res.ok) {
-          const data = await res.json();
-          console.log(`Progress data for ${courseId}:`, data);
-          
-          // Helper to safely parse progress values
-          const parseVal = (val) => {
-            if (typeof val === 'number') return val;
-            if (typeof val === 'string' && !isNaN(parseFloat(val))) return parseFloat(val);
-            return null;
-          };
-
-          let progress = null;
-          
-          // Try to find progress in various fields
-          // 1. Direct decimal values (0-1)
-          const directProgress = parseVal(data.progress) ?? parseVal(data.topics_progress) ?? parseVal(data.completion);
-          
-          // 2. Percentage values (0-100)
-          const percentProgress = parseVal(data.percentComplete) ?? parseVal(data.percent) ?? parseVal(data.completion_percent) ?? parseVal(data.progress_percent);
-          
-          if (directProgress !== null) {
-            progress = directProgress;
-          } else if (percentProgress !== null) {
-            progress = percentProgress / 100;
-          }
-          // 3. Nested data object
-          else if (data.data) {
-            const nestedDirect = parseVal(data.data.progress) ?? parseVal(data.data.topics_progress) ?? parseVal(data.data.completion);
-            const nestedPercent = parseVal(data.data.percentComplete) ?? parseVal(data.data.percent) ?? parseVal(data.data.completion_percent) ?? parseVal(data.data.progress_percent);
-            
-            if (nestedDirect !== null) {
-              progress = nestedDirect;
-            } else if (nestedPercent !== null) {
-              progress = nestedPercent / 100;
-            }
-          }
-          
-          return { courseId, progress };
-        }
-        // If endpoint returns 404, it's not implemented yet - silently return null
-        // Don't log error for expected 404s
-        if (res.status !== 404) {
-          console.error(`Error fetching progress for course ${courseId}: ${res.status}`);
-        }
-      } catch (err) {
-        console.error(`Error fetching progress for course ${courseId}:`, err);
-      }
-      return { courseId, progress: null };
-    });
-
-    const results = await Promise.all(progressPromises);
-    const progressMap = {};
-    results.forEach(({ courseId, progress }) => {
-      progressMap[courseId] = progress;
-    });
-
-    setCourseProgress(prev => {
-      const prevStr = JSON.stringify(prev);
-      const newStr = JSON.stringify({ ...prev, ...progressMap });
-      return prevStr === newStr ? prev : { ...prev, ...progressMap };
-    });
-  }, []);
 
   const loadCourses = useCallback(async (userId, silent = false) => {
     if (!userId) return coursesRef.current;
@@ -168,20 +97,12 @@ export default function DashboardPage() {
           return prevStr === newStr ? prev : items;
         });
         coursesRef.current = items;
-        
-        // Load progress for all ready courses (not pending)
-        const readyCourseIds = items
-          .filter(c => c.status !== 'pending')
-          .map(c => c.id);
-        if (readyCourseIds.length > 0) {
-          loadCourseProgress(userId, readyCourseIds);
-        }
 
         if (refreshRetryRef.current) {
           clearTimeout(refreshRetryRef.current);
           refreshRetryRef.current = null;
         }
-        
+
         return items;
       }
     } catch (err) {
@@ -189,7 +110,7 @@ export default function DashboardPage() {
       scheduleRetry();
     }
     return coursesRef.current;
-  }, [loadCourseProgress]);
+  }, []);
 
   // Poll for pending courses to check their status
   const startPollingForPendingCourses = useCallback((userId, courseList) => {
@@ -637,6 +558,8 @@ export default function DashboardPage() {
                 const isJobRunning = associatedJob && !terminalJobStatuses.has(jobStatus || "");
                 // Show as pending/building if course status is pending OR if there's a running job
                 const effectiveStatus = (course.status === "pending" || isJobRunning) ? "pending" : course.status;
+                // Use percent_complete from the course object (0-100 range)
+                const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
                 return (
                   <CourseCard
                     key={course.id}
@@ -645,7 +568,7 @@ export default function DashboardPage() {
                     courseId={course.id}
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
                     status={effectiveStatus}
-                    topicsProgress={courseProgress[course.id]}
+                    topicsProgress={progress}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
                 );
