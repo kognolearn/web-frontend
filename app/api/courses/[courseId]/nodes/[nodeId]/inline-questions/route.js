@@ -9,17 +9,8 @@ const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.c
 export async function GET(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
-
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions?userId=${userId}`;
+    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions`;
 
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -55,20 +46,13 @@ export async function GET(request, { params }) {
 /**
  * PATCH /api/courses/:courseId/nodes/:nodeId/inline-questions
  * Saves inline answers and updates readingCompleted
- * Body: { userId, updates: [{ questionIndex, selectedAnswer }] }
+ * Body: { updates: [{ questionIndex, selectedAnswer }] }
  */
 export async function PATCH(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
     const body = await request.json();
-    const { userId, updates } = body;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
+    const { updates } = body;
 
     if (!Array.isArray(updates)) {
       return NextResponse.json(
@@ -88,7 +72,6 @@ export async function PATCH(request, { params }) {
         }),
       },
       body: JSON.stringify({
-        userId,
         updates,
       }),
     });

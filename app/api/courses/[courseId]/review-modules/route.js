@@ -7,12 +7,9 @@ export async function POST(request, { params }) {
   try {
     const { courseId } = await params;
     const body = await request.json();
-    
-    const { userId, examType, topics } = body;
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
+    const { examType, topics } = body;
+
     if (!examType || !["midterm", "final"].includes(examType)) {
       return NextResponse.json({ error: "examType must be 'midterm' or 'final'" }, { status: 400 });
     }
@@ -30,12 +27,12 @@ export async function POST(request, { params }) {
 
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 minutes
-    
+
     try {
       const res = await fetch(url.toString(), {
         method: "POST",
         headers,
-        body: JSON.stringify({ userId, examType, topics }),
+        body: JSON.stringify({ examType, topics }),
         signal: controller.signal,
       });
 
@@ -65,16 +62,10 @@ export async function GET(request, { params }) {
   try {
     const { courseId } = await params;
     const { searchParams } = new URL(request.url);
-    
-    const userId = searchParams.get("userId");
+
     const type = searchParams.get("type"); // optional: midterm or final
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
     const url = new URL(`/courses/${courseId}/review-modules`, BASE_URL);
-    url.searchParams.set("userId", userId);
     if (type) {
       url.searchParams.set("type", type);
     }

@@ -1123,7 +1123,7 @@ export default function ReadingRenderer({
     (async () => {
       try {
         const response = await authFetch(
-          `/api/courses/${courseId}/nodes/${lessonId}/inline-questions?userId=${encodeURIComponent(userId)}`,
+          `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`,
           { signal: ac.signal }
         );
         if (!response.ok) {

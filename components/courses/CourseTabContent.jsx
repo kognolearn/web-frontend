@@ -558,7 +558,6 @@ export default function CourseTabContent({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId,
             lessons: lessonTitles,
             type: examType
           })
@@ -700,7 +699,7 @@ export default function CourseTabContent({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, prompt: prompt.trim() })
+          body: JSON.stringify({ prompt: prompt.trim() })
         }
       );
       
@@ -851,7 +850,7 @@ export default function CourseTabContent({
     
     const fetchReviewModules = async () => {
       try {
-        const res = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+        const res = await authFetch(`/api/courses/${courseId}/review-modules`);
         if (res.ok) {
           const data = await res.json();
           setReviewModules(data.modules || []);
@@ -883,16 +882,15 @@ export default function CourseTabContent({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
           examType: key,
           topics
         })
       });
 
       await resolveAsyncJobResponse(res, { errorLabel: "generate review module" });
-      
+
       // Refresh review modules list
-      const listRes = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+      const listRes = await authFetch(`/api/courses/${courseId}/review-modules`);
       if (listRes.ok) {
         const listData = await listRes.json();
         setReviewModules(listData.modules || []);
@@ -1353,7 +1351,6 @@ export default function CourseTabContent({
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              userId,
               mastery_status: masteryStatus,
               familiarity_score: familiarityScore,
             }),

@@ -97,7 +97,7 @@ export default function ReviewPage() {
       setStudyPlanLoading(true);
       try {
         // Fetch course name
-        const courseRes = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
+        const courseRes = await authFetch(`/api/courses`);
         if (courseRes.ok) {
           const courseData = await courseRes.json();
           const course = courseData.courses?.find(c => c.id === courseId);
@@ -112,7 +112,7 @@ export default function ReviewPage() {
         }
         
         // Fetch study plan for lesson selection
-        const planRes = await authFetch(`/api/courses/${courseId}/plan?userId=${encodeURIComponent(userId)}`);
+        const planRes = await authFetch(`/api/courses/${courseId}/plan`);
         if (planRes.ok) {
           const planData = await planRes.json();
           setStudyPlan(planData);
@@ -135,7 +135,7 @@ export default function ReviewPage() {
       setQuestionsLoading(true);
       try {
         const res = await authFetch(
-          `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
+          `/api/courses/${courseId}/questions?correctness=needs_review`
         );
         if (res.ok) {
           const data = await res.json();
@@ -326,7 +326,6 @@ export default function ReviewPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
           updates: [{
             id: currentFlashcard.id,
             next_show_timestamp: nextShowTime,
@@ -529,7 +528,7 @@ export default function ReviewPage() {
                   const fetchQuestions = async () => {
                     try {
                       const res = await authFetch(
-                        `/api/courses/${courseId}/questions?userId=${encodeURIComponent(userId)}&correctness=needs_review`
+                        `/api/courses/${courseId}/questions?correctness=needs_review`
                       );
                       if (res.ok) {
                         const data = await res.json();

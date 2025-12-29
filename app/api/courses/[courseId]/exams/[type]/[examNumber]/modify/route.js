@@ -8,11 +8,8 @@ export async function POST(request, { params }) {
     const { courseId, type, examNumber } = await params;
     const json = await request.json().catch(() => ({}));
 
-    const { userId, prompt } = json;
+    const { prompt } = json;
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 });
     }
@@ -26,9 +23,9 @@ export async function POST(request, { params }) {
 
     const url = new URL(`/courses/${courseId}/exams/${type}/${examNum}/modify`, BASE_URL);
 
-    const headers = { 
-      "Content-Type": "application/json", 
-      Accept: "application/json" 
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json"
     };
     const authHeader = request.headers.get("Authorization");
     if (authHeader) {
@@ -42,7 +39,7 @@ export async function POST(request, { params }) {
       const res = await fetch(url.toString(), {
         method: "POST",
         headers,
-        body: JSON.stringify({ userId, prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim() }),
         signal: controller.signal,
       });
       const bodyText = await res.text();

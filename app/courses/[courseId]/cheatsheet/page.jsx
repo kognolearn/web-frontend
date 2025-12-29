@@ -90,7 +90,7 @@ export default function CheatsheetPage() {
     
     const fetchCourseData = async () => {
       try {
-        const courseRes = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
+        const courseRes = await authFetch(`/api/courses`);
         if (courseRes.ok) {
           const courseData = await courseRes.json();
           const course = courseData.courses?.find(c => c.id === courseId);
@@ -99,7 +99,7 @@ export default function CheatsheetPage() {
           }
         }
         
-        const planRes = await authFetch(`/api/courses/${courseId}/plan?userId=${encodeURIComponent(userId)}`);
+        const planRes = await authFetch(`/api/courses/${courseId}/plan`);
         if (planRes.ok) {
           const planData = await planRes.json();
           setStudyPlan(planData);

@@ -6,17 +6,10 @@ export async function POST(request, { params }) {
   try {
     const { courseId } = await params;
     const body = await request.json();
-    
-    const { userId, prompt, lessonIds, currentModules } = body;
+
+    const { prompt, lessonIds, currentModules } = body;
 
     // Validate required parameters
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
-
     if (!prompt) {
       return NextResponse.json(
         { error: 'prompt is required' },
@@ -29,7 +22,6 @@ export async function POST(request, { params }) {
 
     // Build request body
     const requestBody = {
-      userId,
       prompt,
       currentModules: currentModules || [],
     };

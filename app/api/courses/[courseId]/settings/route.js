@@ -29,16 +29,12 @@ async function getTokenFromCookies() {
 async function updateSettings(request, { params }) {
   try {
     const { courseId } = await params;
-    
+
     if (!courseId) {
       return NextResponse.json({ error: "courseId is required" }, { status: 400 });
     }
 
     const json = await request.json().catch(() => ({}));
-    
-    if (!json.userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
 
     if (typeof json.seconds_to_complete !== 'number' || json.seconds_to_complete < 0) {
       return NextResponse.json({ error: "seconds_to_complete must be a non-negative number" }, { status: 400 });

@@ -5,18 +5,10 @@ const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.c
 export async function PATCH(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
-    
+
     // Parse request body
     const body = await request.json();
-    const { userId, mastery_status, familiarity_score } = body;
-
-    // Validate required parameters
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
+    const { mastery_status, familiarity_score } = body;
 
     // Build the backend API URL
     const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/progress`;
@@ -32,7 +24,6 @@ export async function PATCH(request, { params }) {
         }),
       },
       body: JSON.stringify({
-        userId,
         ...(mastery_status && { mastery_status }),
         ...(familiarity_score !== undefined && { familiarity_score }),
       }),

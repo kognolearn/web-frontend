@@ -5,11 +5,9 @@ const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "";
     const courseId = searchParams.get("courseId") || "";
 
     const url = new URL("/courses", BASE_URL);
-    if (userId) url.searchParams.set("userId", userId);
     if (courseId) url.searchParams.set("courseId", courseId);
 
     const headers = { Accept: "application/json" };
@@ -76,15 +74,13 @@ export async function POST(request) {
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
     const courseId = searchParams.get("courseId");
 
-    if (!userId || !courseId) {
-      return NextResponse.json({ error: "userId and courseId are required" }, { status: 400 });
+    if (!courseId) {
+      return NextResponse.json({ error: "courseId is required" }, { status: 400 });
     }
 
     const url = new URL("/courses", BASE_URL);
-    url.searchParams.set("userId", userId);
     url.searchParams.set("courseId", courseId);
 
     const headers = { Accept: "application/json" };

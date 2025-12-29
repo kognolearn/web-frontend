@@ -303,7 +303,7 @@ export default function CoursePage() {
     setHasHydratedTabs(false);
     (async () => {
       try {
-        const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
+        const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
         const res = await authFetch(url);
         if (!res.ok) {
           const text = await res.text();
@@ -421,7 +421,7 @@ export default function CoursePage() {
 
         void (async () => {
           try {
-            const courseMetaUrl = `/api/courses?userId=${encodeURIComponent(userId)}`;
+            const courseMetaUrl = `/api/courses`;
             const courseMetaRes = await authFetch(courseMetaUrl);
             if (!courseMetaRes.ok || aborted) return;
             const body = await courseMetaRes.json();
@@ -470,7 +470,7 @@ export default function CoursePage() {
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
     try {
-      const url = `/api/courses/${encodeURIComponent(courseId)}/plan?userId=${encodeURIComponent(userId)}`;
+      const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
       const res = await authFetch(url);
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);

@@ -78,7 +78,7 @@ export default function DashboardPage() {
     // Fetch progress for all courses in parallel
     const progressPromises = courseIds.map(async (courseId) => {
       try {
-        const res = await authFetch(`/api/courses/${encodeURIComponent(courseId)}/progress?userId=${encodeURIComponent(userId)}`);
+        const res = await authFetch(`/api/courses/${encodeURIComponent(courseId)}/progress`);
         if (res.ok) {
           const data = await res.json();
           console.log(`Progress data for ${courseId}:`, data);
@@ -154,7 +154,7 @@ export default function DashboardPage() {
     };
 
     try {
-      const res = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
+      const res = await authFetch(`/api/courses`);
       if (!res.ok) {
         console.error("Failed to fetch courses from API", res.status);
         scheduleRetry();

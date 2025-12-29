@@ -5,17 +5,12 @@ const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function GET(request, { params }) {
   const { courseId } = await params;
   const { searchParams } = new URL(request.url);
-  
-  const userId = searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 });
-  }
 
-  const queryParams = new URLSearchParams({ userId });
-  
+  const queryParams = new URLSearchParams();
+
   const currentTimestamp = searchParams.get("current_timestamp");
   if (currentTimestamp) queryParams.set("current_timestamp", currentTimestamp);
-  
+
   const lessons = searchParams.get("lessons");
   if (lessons) queryParams.set("lessons", lessons);
 
@@ -25,6 +20,11 @@ export async function GET(request, { params }) {
   const uploadedOnly = searchParams.get("uploaded_only");
   if (uploadedOnly) queryParams.set("uploaded_only", uploadedOnly);
 
+  const queryString = queryParams.toString();
+  const url = queryString
+    ? `${API_BASE}/courses/${courseId}/flashcards?${queryString}`
+    : `${API_BASE}/courses/${courseId}/flashcards`;
+
   try {
     const headers = { "Content-Type": "application/json" };
     const authHeader = request.headers.get("Authorization");
@@ -32,7 +32,7 @@ export async function GET(request, { params }) {
       headers["Authorization"] = authHeader;
     }
 
-    const res = await fetch(`${API_BASE}/courses/${courseId}/flashcards?${queryParams}`, {
+    const res = await fetch(url, {
       method: "GET",
       headers,
     });
@@ -47,12 +47,12 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   const { courseId } = await params;
-  
+
   try {
     const body = await request.json();
-    
-    if (!body.userId || !body.updates) {
-      return NextResponse.json({ success: false, error: "Missing userId or updates" }, { status: 400 });
+
+    if (!body.updates) {
+      return NextResponse.json({ success: false, error: "Missing updates" }, { status: 400 });
     }
 
     const headers = { "Content-Type": "application/json" };
