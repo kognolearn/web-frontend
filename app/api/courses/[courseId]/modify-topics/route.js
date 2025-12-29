@@ -39,37 +39,38 @@ export async function POST(request, { params }) {
       requestBody.lessonIds = lessonIds;
     }
 
-    // Forward the request to the backend API with extended timeout (30 minutes)
+    // Forward the request to the backend API
+    // The backend should return a job ID (202 status) for async processing
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30 * 60 * 1000);
-    
-    const response = await fetch(backendUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(request.headers.get('authorization') && {
-          'Authorization': request.headers.get('authorization')
-        }),
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
+    const timeoutId = setTimeout(() => controller.abort(), 30 * 1000); // 30 seconds for job creation
 
-    // Check if the backend request was successful
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Backend API error: ${response.status} - ${errorText}`);
-      return NextResponse.json(
-        { error: `Backend API error: ${response.statusText}`, details: errorText },
-        { status: response.status }
-      );
+    try {
+      const response = await fetch(backendUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(request.headers.get('authorization') && {
+            'Authorization': request.headers.get('authorization')
+          }),
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      const bodyText = await response.text();
+      let data;
+      try {
+        data = bodyText ? JSON.parse(bodyText) : {};
+      } catch {
+        data = { error: 'Invalid JSON from backend', raw: bodyText };
+      }
+
+      // Return the backend response as-is (preserving status code)
+      // If backend returns 202 with jobId, frontend will poll via resolveAsyncJobResponse
+      return NextResponse.json(data, { status: response.status });
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    // Parse and return backend response
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
 
   } catch (error) {
     console.error('Error in /api/courses/[courseId]/modify-topics:', error);
