@@ -1766,18 +1766,6 @@ export default function CourseTabContent({
           {/* Spacer to push bottom items down */}
           <div className="flex-1" />
           
-          {/* New Course button */}
-          <button
-            type="button"
-            onClick={() => { setIsProfileMenuOpen(false); router.push('/courses/create'); }}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Create New Course"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          
           {/* Home button */}
           <button
             type="button"
