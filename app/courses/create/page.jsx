@@ -1488,7 +1488,10 @@ function CreateCoursePageContent() {
       // Calculate seconds_to_complete from studyHours and studyMinutes
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
       payload.seconds_to_complete = secondsToComplete;
-      
+
+      // Enable V2 section-based content pipeline
+      payload.content_version = 2;
+
       console.log("[CreateCourse] About to fetch /api/courses");
       const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {

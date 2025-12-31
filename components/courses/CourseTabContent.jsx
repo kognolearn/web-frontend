@@ -10,6 +10,7 @@ import PracticeProblems from "@/components/content/PracticeProblems";
 import TaskRenderer from "@/components/content/TaskRenderer";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
+import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -159,6 +160,18 @@ function ItemContent({
   }
   const data = cachedPayload || {};
   const resolvedFormat = normalizeFormat(cachedEnvelope.format) || normFmt;
+
+  // V2 Section-based content detection
+  // If content has version: 2 and sections array, use V2ContentRenderer
+  if (isV2Content(data)) {
+    return (
+      <V2ContentRenderer
+        content={data}
+        courseId={courseId}
+        nodeId={id}
+      />
+    );
+  }
 
   switch (resolvedFormat) {
     case "video": {
