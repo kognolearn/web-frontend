@@ -413,7 +413,7 @@ const snapshotChatState = (chats, currentChatId, drafts) => {
   };
 };
 
-const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, onStateChange, onActiveChatChange, initialChats, initialChatId, syncedState, mode = "docked", isActive = true }, ref) => {
+const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidthChange, onOpenInTab, onClose, onStateChange, onActiveChatChange, initialChats, initialChatId, syncedState, mode = "docked", isActive = true, buttonClassName }, ref) => {
   const initialChatDataRef = useRef(null);
   const initialChatIdRef = useRef(null);
 
@@ -1694,7 +1694,7 @@ Instructions:
 
   const floatingButton = (
     <div 
-      className="fixed bottom-20 right-4 sm:bottom-20 sm:right-6"
+      className={`fixed right-4 sm:right-6 ${buttonClassName ?? 'bottom-20 sm:bottom-20'}`}
       style={{ zIndex: floatingButtonZIndex }}
     >
       <OnboardingTooltip

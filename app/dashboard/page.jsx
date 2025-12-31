@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
+import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
+import PersonalizationModal from "@/components/ui/PersonalizationModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
@@ -60,12 +62,39 @@ export default function DashboardPage() {
   const [courseToDelete, setCourseToDelete] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
-  const { mounted } = useTheme();
+  const { theme, themeMode, setThemeMode, mounted } = useTheme();
   const pollingRef = useRef(null);
   const jobPollingRef = useRef(null);
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
   const [pendingJobs, setPendingJobs] = useState([]);
+  
+  // Profile menu state
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
+  const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+    if (isProfileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isProfileMenuOpen]);
+
+  // Handle send feedback
+  const handleSendFeedback = () => {
+    setIsProfileMenuOpen(false);
+    window.dispatchEvent(new CustomEvent('open-feedback-widget'));
+  };
 
   useEffect(() => {
     coursesRef.current = courses;
@@ -331,6 +360,23 @@ export default function DashboardPage() {
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
+  
+  // Compute user initials (first and last initial if full name, otherwise first 2 chars)
+  const userInitials = (() => {
+    const fullName = user?.user_metadata?.full_name;
+    if (fullName) {
+      const parts = fullName.trim().split(/\s+/);
+      return parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : parts[0].substring(0, 2).toUpperCase();
+    }
+    const email = user?.email;
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return "?";
+  })();
+  
   const hasCourses = courses.length > 0;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
@@ -437,28 +483,28 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-        <div className="rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-6 shadow-lg shadow-black/10 backdrop-blur-xl">
+      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-6 sm:gap-8 px-3 sm:px-4 pb-16 pt-6 sm:pt-8 sm:px-6 lg:px-8">
+        <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl relative z-10">
           {/* Top bar */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link href="/" className="flex items-center">
               <Image 
                 src="/images/kogno_logo.png" 
                 alt="Kogno Logo" 
                 width={240} 
                 height={80} 
-                className="h-16 w-auto object-contain"
+                className="h-10 sm:h-16 w-auto object-contain"
                 priority
               />
-              <span className="text-2xl font-extrabold tracking-tight text-[var(--primary)]">
+              <span className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--primary)]">
                 Kogno
               </span>
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               {hasCheckedAdmin && isAdmin && (
                 <Link
                   href="/admin"
-                  className="flex items-center gap-2 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 px-4 py-2 text-sm font-semibold text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
+                  className="hidden sm:flex items-center gap-2 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 px-4 py-2 text-sm font-semibold text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
@@ -466,25 +512,96 @@ export default function DashboardPage() {
                   Admin
                 </Link>
               )}
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 rounded-full border border-[var(--border)]/70 bg-[var(--surface-2)]/70 px-4 py-2 text-sm font-semibold text-[var(--foreground)]/80 transition-colors hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/15 hover:text-[var(--primary)]"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Sign out
-              </button>
+              {hasCheckedAdmin && isAdmin && (
+                <Link
+                  href="/admin"
+                  className="flex sm:hidden items-center justify-center w-9 h-9 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
+                  title="Admin"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                  </svg>
+                </Link>
+              )}
+              {/* Profile icon with dropdown */}
+              <div className="relative z-[100]" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold transition-all hover:opacity-90 hover:scale-105"
+                  title="Profile Menu"
+                >
+                  {userInitials}
+                </button>
+                
+                {/* Profile dropdown menu */}
+                {isProfileMenuOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl">
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          setIsProfileSettingsModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Profile Settings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          setIsPersonalizationModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                        </svg>
+                        Personalization
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendFeedback}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        Send Feedback
+                      </button>
+                    </div>
+                    <div className="border-t border-[var(--border)]">
+                      <div className="p-2">
+                        <button
+                          type="button"
+                          onClick={() => { setIsProfileMenuOpen(false); handleSignOut(); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Welcome header */}
           <header className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2">
-              <h1 className="text-3xl font-bold sm:text-4xl">
+              <h1 className="text-2xl sm:text-3xl font-bold sm:text-4xl">
                 Welcome back, {displayName}
               </h1>
-              <p className="text-[var(--muted-foreground)]">
+              <p className="text-sm sm:text-base text-[var(--muted-foreground)]">
                 {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
               </p>
             </div>
@@ -511,7 +628,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div
-              className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-stretch"
+              className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-stretch"
             >
               {/* Create Course Card - always first */}
               <OnboardingTooltip
@@ -573,6 +690,16 @@ export default function DashboardPage() {
         course={courseToDelete}
         onClose={() => setCourseToDelete(null)}
         onConfirm={handleDeleteCourse}
+      />
+
+      <ProfileSettingsModal
+        isOpen={isProfileSettingsModalOpen}
+        onClose={() => setIsProfileSettingsModalOpen(false)}
+      />
+
+      <PersonalizationModal
+        isOpen={isPersonalizationModalOpen}
+        onClose={() => setIsPersonalizationModalOpen(false)}
       />
     </div>
   );

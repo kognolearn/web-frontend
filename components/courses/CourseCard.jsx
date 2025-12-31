@@ -264,18 +264,6 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
             </svg>
             Review
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              openCourse();
-            }}
-            className="p-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-[var(--primary)]/20"
-            aria-label="Open course"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </button>
         </div>
       </div>
     </div>

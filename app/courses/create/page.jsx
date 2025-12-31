@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useId, useMemo, useState, useRef } fr
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import ThemeToggle from "@/components/theme/ThemeToggle";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import DurationInput from "@/components/ui/DurationInput";
 import { authFetch } from "@/lib/api";
@@ -669,6 +668,12 @@ function CreateCoursePageContent() {
         }
         setUserId(user.id);
         setAuthStatus("ready");
+        
+        // Pre-fill college name from user's saved school if not already set
+        const savedSchool = user.user_metadata?.school;
+        if (savedSchool && !collegeName) {
+          setCollegeName(savedSchool);
+        }
       } catch (error) {
         if (!active) return;
         setTopicsError("Unable to confirm your session. Please try again.");
@@ -2554,8 +2559,6 @@ Series & convergence"
             )}
         </button>
       </div>
-
-      <ThemeToggle />
     </div>
   );
 }
