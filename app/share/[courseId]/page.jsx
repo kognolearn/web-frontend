@@ -49,7 +49,7 @@ export default function ShareCoursePage() {
     setError("");
     (async () => {
       try {
-        const res = await authFetch(`/api/courses/${courseId}/plan?userId=${encodeURIComponent(user.id)}`);
+        const res = await authFetch(`/api/courses/${courseId}/plan`);
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Failed to load course (${res.status})`);
@@ -94,7 +94,6 @@ export default function ShareCoursePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId,
-          userId: user.id,
           seconds_to_complete: totalSeconds,
         }),
       });

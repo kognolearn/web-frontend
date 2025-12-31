@@ -117,16 +117,14 @@ export default function EditCourseModal({
     setErrorMessage("");
     
     try {
-      const response = await authFetch(`/api/courses/${courseId}/modify-topics`, {
+      const response = await authFetch(`/api/courses/${courseId}/restructure`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId,
           prompt: modificationText,
           lessonIds: selectedLessons.size > 0 ? Array.from(selectedLessons) : undefined,
-          currentModules: studyPlan?.modules || []
         })
       });
 

@@ -15,7 +15,6 @@ export async function POST(request) {
     const {
       system,
       user,
-      userId,
       context,
       useWebSearch = false,
       responseFormat = 'text',
@@ -30,7 +29,6 @@ export async function POST(request) {
     const payload = {
       system,
       user,
-      userId,
       ...(context !== undefined ? { context } : {}),
       useWebSearch,
       responseFormat,
@@ -96,11 +94,10 @@ function validateBody(body) {
   if (!body || typeof body !== 'object') {
     return { valid: false, error: 'Request body must be a JSON object' };
   }
-  const { system, user, userId, context, useWebSearch, responseFormat, temperature, maxTokens, attachments } = body;
+  const { system, user, context, useWebSearch, responseFormat, temperature, maxTokens, attachments } = body;
 
   if (!isNonEmptyString(system)) return { valid: false, error: 'Missing required field: system (string)' };
   if (!isNonEmptyString(user)) return { valid: false, error: 'Missing required field: user (string)' };
-  if (!isUuid(userId)) return { valid: false, error: 'Missing or invalid field: userId (UUID)' };
 
   // Optional types
   if (typeof useWebSearch !== 'undefined' && typeof useWebSearch !== 'boolean') {
@@ -131,15 +128,4 @@ function validateBody(body) {
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
-}
-
-function isUuid(v) {
-  if (typeof v !== 'string') return false;
-  // UUID v1-v5 pattern
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(v);
-}
-
-async function safeReadText(resp) {
-  try { return await resp.text(); } catch { return ''; }
 }

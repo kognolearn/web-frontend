@@ -6,19 +6,12 @@ const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function GET(request, { params }) {
   try {
     const { courseId, type } = await params;
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
 
     if (!["midterm", "final"].includes(type)) {
       return NextResponse.json({ error: "type must be 'midterm' or 'final'" }, { status: 400 });
     }
 
     const url = new URL(`/courses/${courseId}/exams/${type}`, BASE_URL);
-    url.searchParams.set("userId", userId);
 
     const headers = { Accept: "application/json" };
     const authHeader = request.headers.get("Authorization");

@@ -5,10 +5,10 @@ const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function POST(request) {
   try {
     const body = await request.json();
-    
-    if (!body.userId || !body.type || !body.message) {
+
+    if (!body.type || !body.message) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: userId, type, message" },
+        { success: false, error: "Missing required fields: type, message" },
         { status: 400 }
       );
     }

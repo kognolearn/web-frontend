@@ -5,22 +5,22 @@ const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
 export async function GET(request, { params }) {
   const { courseId } = await params;
   const { searchParams } = new URL(request.url);
-  
-  const userId = searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 });
-  }
 
-  const queryParams = new URLSearchParams({ userId });
-  
+  const queryParams = new URLSearchParams();
+
   const correctness = searchParams.get("correctness");
   if (correctness) queryParams.set("correctness", correctness);
-  
+
   const attempted = searchParams.get("attempted");
   if (attempted) queryParams.set("attempted", attempted);
-  
+
   const lessons = searchParams.get("lessons");
   if (lessons) queryParams.set("lessons", lessons);
+
+  const queryString = queryParams.toString();
+  const url = queryString
+    ? `${API_BASE}/courses/${courseId}/questions?${queryString}`
+    : `${API_BASE}/courses/${courseId}/questions`;
 
   try {
     const headers = { "Content-Type": "application/json" };
@@ -29,7 +29,7 @@ export async function GET(request, { params }) {
       headers["Authorization"] = authHeader;
     }
 
-    const res = await fetch(`${API_BASE}/courses/${courseId}/questions?${queryParams}`, {
+    const res = await fetch(url, {
       method: "GET",
       headers,
     });
@@ -44,12 +44,12 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   const { courseId } = await params;
-  
+
   try {
     const body = await request.json();
-    
-    if (!body.userId || !body.updates) {
-      return NextResponse.json({ success: false, error: "Missing userId or updates" }, { status: 400 });
+
+    if (!body.updates) {
+      return NextResponse.json({ success: false, error: "Missing updates" }, { status: 400 });
     }
 
     const headers = { "Content-Type": "application/json" };

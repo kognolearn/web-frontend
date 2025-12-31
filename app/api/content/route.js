@@ -78,6 +78,28 @@ export async function GET(request) {
 
     const lesson = backendData.lesson;
     const contentPayload = lesson.content_payload || {};
+
+    // V2 Content Detection: If content has version 2 and sections array, pass through directly
+    if (contentPayload.version === 2 && Array.isArray(contentPayload.sections)) {
+      console.log('[Content API] V2 content detected, passing through directly');
+      return NextResponse.json({
+        format: 'v2',
+        data: {
+          // Pass through entire V2 content payload
+          ...contentPayload,
+          // Include lesson metadata
+          id: lesson.id,
+          title: contentPayload.title || lesson.title,
+          module_ref: lesson.module_ref,
+          estimated_minutes: lesson.estimated_minutes,
+          bloom_level: lesson.bloom_level,
+          mastery_status: lesson.mastery_status || 'pending',
+          familiarity_score: lesson.familiarity_score,
+        }
+      });
+    }
+
+    // V1 Content: Continue with legacy transformation
     const resolvedReadingCompleted = lesson.readingCompleted ?? contentPayload.readingCompleted ?? false;
     const resolvedVideoCompleted = lesson.videoCompleted ?? contentPayload.videoCompleted ?? false;
     const resolvedQuizCompleted = lesson.quizCompleted ?? contentPayload.quizCompleted ?? false;

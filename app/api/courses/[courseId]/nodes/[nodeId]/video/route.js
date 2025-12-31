@@ -5,20 +5,13 @@ const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.c
 /**
  * PATCH /api/courses/:courseId/nodes/:nodeId/video
  * Sets videoCompleted status for a user
- * Body: { userId, completed?: boolean }
+ * Body: { completed?: boolean }
  */
 export async function PATCH(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
     const body = await request.json();
-    const { userId, completed = true } = body;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
+    const { completed = true } = body;
 
     const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/video`;
 
@@ -31,7 +24,6 @@ export async function PATCH(request, { params }) {
         }),
       },
       body: JSON.stringify({
-        userId,
         completed,
       }),
     });

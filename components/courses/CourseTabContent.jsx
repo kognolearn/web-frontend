@@ -18,6 +18,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
+import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -162,6 +163,28 @@ function ItemContent({
   }
   const data = cachedPayload || {};
   const resolvedFormat = normalizeFormat(cachedEnvelope.format) || normFmt;
+
+  // V2 Section-based content detection
+  // If content has version: 2 and sections array, use V2ContentRenderer
+  if (isV2Content(data)) {
+    // Extract section index from format (e.g., "v2_section_0" -> 0)
+    let sectionIndex = 0;
+    if (normFmt && normFmt.startsWith('v2_section_')) {
+      const parsed = parseInt(normFmt.replace('v2_section_', ''), 10);
+      if (!isNaN(parsed)) {
+        sectionIndex = parsed;
+      }
+    }
+
+    return (
+      <V2ContentRenderer
+        content={data}
+        courseId={courseId}
+        nodeId={id}
+        activeSectionIndex={sectionIndex}
+      />
+    );
+  }
 
   switch (resolvedFormat) {
     case "video": {
@@ -648,7 +671,6 @@ export default function CourseTabContent({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId,
             lessons: lessonTitles,
             type: examType
           })
@@ -790,7 +812,7 @@ export default function CourseTabContent({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, prompt: prompt.trim() })
+          body: JSON.stringify({ prompt: prompt.trim() })
         }
       );
       
@@ -941,7 +963,7 @@ export default function CourseTabContent({
     
     const fetchReviewModules = async () => {
       try {
-        const res = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+        const res = await authFetch(`/api/courses/${courseId}/review-modules`);
         if (res.ok) {
           const data = await res.json();
           setReviewModules(data.modules || []);
@@ -973,16 +995,15 @@ export default function CourseTabContent({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
           examType: key,
           topics
         })
       });
 
       await resolveAsyncJobResponse(res, { errorLabel: "generate review module" });
-      
+
       // Refresh review modules list
-      const listRes = await authFetch(`/api/courses/${courseId}/review-modules?userId=${userId}`);
+      const listRes = await authFetch(`/api/courses/${courseId}/review-modules`);
       if (listRes.ok) {
         const listData = await listRes.json();
         setReviewModules(listData.modules || []);
@@ -1220,6 +1241,18 @@ export default function CourseTabContent({
       const cached = contentCache[lessonCacheKey];
       if (cached?.status === "loaded" && cached?.data?.data) {
         const data = cached.data.data;
+
+        // V2 content: return sections as content types
+        if (data.version === 2 && Array.isArray(data.sections)) {
+          return data.sections.map((section, index) => ({
+            label: section.title || `Section ${index + 1}`,
+            value: `v2_section_${index}`,
+            isV2Section: true,
+            sectionIndex: index,
+          }));
+        }
+
+        // V1 content: return traditional content types
         if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
         if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
         // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
@@ -1443,7 +1476,6 @@ export default function CourseTabContent({
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              userId,
               mastery_status: masteryStatus,
               familiarity_score: familiarityScore,
             }),
@@ -3092,6 +3124,14 @@ export default function CourseTabContent({
                             
                             // Icon for each content type
                             const getIcon = () => {
+                              // V2 sections: show section number
+                              if (contentType.value?.startsWith('v2_section_')) {
+                                const sectionNum = (contentType.sectionIndex ?? 0) + 1;
+                                return (
+                                  <span className="text-sm font-semibold">{sectionNum}</span>
+                                );
+                              }
+
                               switch(contentType.value) {
                                 case 'reading':
                                   return (

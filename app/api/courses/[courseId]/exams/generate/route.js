@@ -8,11 +8,8 @@ export async function POST(request, { params }) {
     const { courseId } = await params;
     const json = await request.json().catch(() => ({}));
 
-    const { userId, lessons, type } = json;
+    const { lessons, type } = json;
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
     if (!lessons || !Array.isArray(lessons) || lessons.length === 0) {
       return NextResponse.json({ error: "lessons array is required" }, { status: 400 });
     }
@@ -22,9 +19,9 @@ export async function POST(request, { params }) {
 
     const url = new URL(`/courses/${courseId}/exams/generate`, BASE_URL);
 
-    const headers = { 
-      "Content-Type": "application/json", 
-      Accept: "application/json" 
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json"
     };
     const authHeader = request.headers.get("Authorization");
     if (authHeader) {
@@ -38,7 +35,7 @@ export async function POST(request, { params }) {
       const res = await fetch(url.toString(), {
         method: "POST",
         headers,
-        body: JSON.stringify({ userId, lessons, type }),
+        body: JSON.stringify({ lessons, type }),
         signal: controller.signal,
       });
       const bodyText = await res.text();
