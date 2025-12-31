@@ -1714,83 +1714,89 @@ export default function CourseTabContent({
       {canRenderSidebar && !sidebarOpen && !isMobile && (
         <div className="absolute left-0 top-0 h-full w-12 z-40 backdrop-blur-md bg-[var(--surface-1)]/60 border-r border-[var(--border)]/50 flex flex-col items-center pt-3 gap-2">
           {/* Open sidebar button */}
-          <button
-            type="button"
-            onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(true); }}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Show Sidebar"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </svg>
-          </button>
+          <Tooltip content="Show Sidebar" position="right">
+            <button
+              type="button"
+              onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(true); }}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
+          </Tooltip>
           
           {/* Divider */}
           <div className="w-6 h-px bg-[var(--border)]/50 my-1" />
           
           {/* Edit Course button */}
-          <button
-            type="button"
-            onClick={() => { setIsProfileMenuOpen(false); setIsEditCourseModalOpen(true); }}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Edit Course"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+          <Tooltip content="Edit Course" position="right">
+            <button
+              type="button"
+              onClick={() => { setIsProfileMenuOpen(false); setIsEditCourseModalOpen(true); }}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </Tooltip>
           
           {/* Review button */}
-          <a
-            href={`/courses/${courseId}/review`}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Review Mode"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </a>
+          <Tooltip content="Review Mode" position="right">
+            <a
+              href={`/courses/${courseId}/review`}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </a>
+          </Tooltip>
           
           {/* Cheatsheet button */}
-          <a
-            href={`/courses/${courseId}/cheatsheet`}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Cheatsheet"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </a>
+          <Tooltip content="Cheatsheet" position="right">
+            <a
+              href={`/courses/${courseId}/cheatsheet`}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </a>
+          </Tooltip>
           
           {/* Spacer to push bottom items down */}
           <div className="flex-1" />
           
           {/* Home button */}
-          <button
-            type="button"
-            onClick={() => { setIsProfileMenuOpen(false); router.push('/dashboard'); }}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-            title="Go to Dashboard"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </button>
+          <Tooltip content="Go to Dashboard" position="right">
+            <button
+              type="button"
+              onClick={() => { setIsProfileMenuOpen(false); router.push('/dashboard'); }}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </button>
+          </Tooltip>
           
           {/* Divider */}
           <div className="w-6 h-px bg-[var(--border)]/50 my-1" />
           
           {/* Profile icon with dropdown */}
           <div className="relative mb-3" ref={profileMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-              className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--primary)] text-white text-xs font-semibold transition-all hover:opacity-90 hover:scale-105"
-              title="Profile Menu"
-            >
-              {userInitials || "?"}
-            </button>
+            <Tooltip content="Profile Menu" position="right">
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--primary)] text-white text-xs font-semibold transition-all hover:opacity-90 hover:scale-105"
+              >
+                {userInitials || "?"}
+              </button>
+            </Tooltip>
             
             {/* Profile dropdown menu */}
             {isProfileMenuOpen && (
@@ -1874,29 +1880,31 @@ export default function CourseTabContent({
           >
             <div className="p-3 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
               {/* Dashboard button */}
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard')}
-                className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-                title="Go to Dashboard"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-              </button>
+              <Tooltip content="Go to Dashboard" position="right">
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard')}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                </button>
+              </Tooltip>
 
               {/* Close sidebar button */}
-              <button
-                type="button"
-                onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(false); }}
-                className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
-                title="Hide Sidebar"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                </svg>
-              </button>
+              <Tooltip content="Hide Sidebar" position="bottom">
+                <button
+                  type="button"
+                  onClick={() => { setIsProfileMenuOpen(false); setSidebarOpen(false); }}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                  </svg>
+                </button>
+              </Tooltip>
             </div>
 
             <div className="p-4 border-b border-[var(--border)]">
@@ -1938,16 +1946,17 @@ export default function CourseTabContent({
                   delay={800}
                   priority={7}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setIsEditCourseModalOpen(true)}
-                    className="flex-shrink-0 p-2 rounded-lg hover:bg-[var(--surface-muted)] transition-colors group"
-                    title="Edit Course"
-                  >
-                    <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+                  <Tooltip content="Edit Course" position="bottom">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditCourseModalOpen(true)}
+                      className="flex-shrink-0 p-2 rounded-lg hover:bg-[var(--surface-muted)] transition-colors group"
+                    >
+                      <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  </Tooltip>
                 </OnboardingTooltip>
               </div>
             </div>
@@ -2207,26 +2216,28 @@ export default function CourseTabContent({
 
               {/* Review & Cheatsheet Section - Bottom of Sidebar */}
               <div className="mt-4 pt-4 border-t border-[var(--border)] flex gap-2">
-                <a
-                  href={`/courses/${courseId}/review`}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
-                  title="Review Mode"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span className="text-sm font-medium">Review</span>
-                </a>
-                <a
-                  href={`/courses/${courseId}/cheatsheet`}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
-                  title="Cheatsheet"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span className="text-sm font-medium">Cheatsheet</span>
-                </a>
+                <Tooltip content="Practice and reinforce what you've learned" position="top">
+                  <a
+                    href={`/courses/${courseId}/review`}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span className="text-sm font-medium">Review</span>
+                  </a>
+                </Tooltip>
+                <Tooltip content="Quick reference summary of key concepts" position="top">
+                  <a
+                    href={`/courses/${courseId}/cheatsheet`}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="text-sm font-medium">Cheatsheet</span>
+                  </a>
+                </Tooltip>
               </div>
             </nav>
 
@@ -3374,7 +3385,7 @@ export default function CourseTabContent({
       <ChatBot 
         ref={chatBotRef}
         isActive={isActive}
-        buttonClassName={viewMode === "topic" && selectedLesson && selectedLesson.type !== 'practice_exam' ? "bottom-[77px]" : "bottom-4"}
+        buttonClassName="bottom-20"
         pageContext={{
           courseId,
           courseName,
