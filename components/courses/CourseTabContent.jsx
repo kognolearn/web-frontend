@@ -10,12 +10,12 @@ import PracticeProblems from "@/components/content/PracticeProblems";
 import TaskRenderer from "@/components/content/TaskRenderer";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
-import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
+import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -164,11 +164,21 @@ function ItemContent({
   // V2 Section-based content detection
   // If content has version: 2 and sections array, use V2ContentRenderer
   if (isV2Content(data)) {
+    // Extract section index from format (e.g., "v2_section_0" -> 0)
+    let sectionIndex = 0;
+    if (normFmt && normFmt.startsWith('v2_section_')) {
+      const parsed = parseInt(normFmt.replace('v2_section_', ''), 10);
+      if (!isNaN(parsed)) {
+        sectionIndex = parsed;
+      }
+    }
+
     return (
       <V2ContentRenderer
         content={data}
         courseId={courseId}
         nodeId={id}
+        activeSectionIndex={sectionIndex}
       />
     );
   }
@@ -1141,6 +1151,18 @@ export default function CourseTabContent({
       const cached = contentCache[lessonCacheKey];
       if (cached?.status === "loaded" && cached?.data?.data) {
         const data = cached.data.data;
+
+        // V2 content: return sections as content types
+        if (data.version === 2 && Array.isArray(data.sections)) {
+          return data.sections.map((section, index) => ({
+            label: section.title || `Section ${index + 1}`,
+            value: `v2_section_${index}`,
+            isV2Section: true,
+            sectionIndex: index,
+          }));
+        }
+
+        // V1 content: return traditional content types
         if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
         if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
         // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
@@ -2718,6 +2740,14 @@ export default function CourseTabContent({
                             
                             // Icon for each content type
                             const getIcon = () => {
+                              // V2 sections: show section number
+                              if (contentType.value?.startsWith('v2_section_')) {
+                                const sectionNum = (contentType.sectionIndex ?? 0) + 1;
+                                return (
+                                  <span className="text-sm font-semibold">{sectionNum}</span>
+                                );
+                              }
+
                               switch(contentType.value) {
                                 case 'reading':
                                   return (

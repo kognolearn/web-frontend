@@ -58,12 +58,21 @@ function reducer(state, action) {
     }
 
     case 'SET_SECTION_GRADED': {
-      const { sectionId, grades, totalScore, maxScore } = action.payload;
+      const { sectionId, grades } = action.payload;
+      // Flatten gradeData into the section grade state
       return {
         ...state,
         sectionGrades: {
           ...state.sectionGrades,
-          [sectionId]: { status: 'graded', grades, error: null, totalScore, maxScore },
+          [sectionId]: {
+            status: 'graded',
+            error: null,
+            passed: grades.passed,
+            earnedPoints: grades.earnedPoints,
+            maxPoints: grades.maxPoints,
+            results: grades.results,
+            feedback: grades.feedback,
+          },
         },
         sectionProgress: {
           ...state.sectionProgress,
@@ -83,6 +92,17 @@ function reducer(state, action) {
         sectionProgress: {
           ...state.sectionProgress,
           [sectionId]: 'dirty', // Allow retry
+        },
+      };
+    }
+
+    case 'SET_SECTION_PROGRESS': {
+      const { sectionId, progress } = action.payload;
+      return {
+        ...state,
+        sectionProgress: {
+          ...state.sectionProgress,
+          [sectionId]: progress,
         },
       };
     }
@@ -140,12 +160,23 @@ export function V2ContentProvider({ children, initialAnswers = {} }) {
   /**
    * Set section as graded with results
    * @param {string} sectionId
-   * @param {Object.<string, V2ComponentGradeResult>} grades
-   * @param {number} totalScore
-   * @param {number} maxScore
+   * @param {Object} gradeData - Grade data object
+   * @param {boolean} gradeData.passed - Whether section passed
+   * @param {number} gradeData.earnedPoints - Points earned
+   * @param {number} gradeData.maxPoints - Maximum points
+   * @param {Object.<string, V2ComponentGradeResult>} gradeData.results - Per-component grades
+   * @param {string} [gradeData.feedback] - Overall feedback
    */
-  const setSectionGraded = useCallback((sectionId, grades, totalScore, maxScore) => {
-    dispatch({ type: 'SET_SECTION_GRADED', payload: { sectionId, grades, totalScore, maxScore } });
+  const setSectionGraded = useCallback((sectionId, gradeData) => {
+    dispatch({
+      type: 'SET_SECTION_GRADED',
+      payload: {
+        sectionId,
+        grades: gradeData,
+        totalScore: gradeData.earnedPoints,
+        maxScore: gradeData.maxPoints,
+      }
+    });
   }, []);
 
   /**
@@ -236,13 +267,21 @@ export function V2ContentProvider({ children, initialAnswers = {} }) {
   }, [state.sectionProgress]);
 
   const value = useMemo(() => ({
-    state,
+    // Expose state properties directly for convenience
+    answers: state.answers,
+    sectionGrades: state.sectionGrades,
+    sectionProgress: state.sectionProgress,
+    // Actions
     setAnswer,
     setSectionGrading,
     setSectionGraded,
     setSectionError,
+    setSectionProgress: (sectionId, progress) => {
+      dispatch({ type: 'SET_SECTION_PROGRESS', payload: { sectionId, progress } });
+    },
     resetSection,
     resetAll,
+    // Getters (for compatibility)
     getAnswer,
     getSectionAnswers,
     getSectionGrade,
@@ -250,7 +289,9 @@ export function V2ContentProvider({ children, initialAnswers = {} }) {
     getSectionProgress,
     isSectionUnlocked,
   }), [
-    state,
+    state.answers,
+    state.sectionGrades,
+    state.sectionProgress,
     setAnswer,
     setSectionGrading,
     setSectionGraded,

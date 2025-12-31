@@ -332,16 +332,10 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
   const hasCourses = courses.length > 0;
-  const courseIdSet = new Set(courses.map((course) => course?.id).filter(Boolean));
-  // Count courses that are pending OR have a running job associated with them
-  const pendingCourseCount = courses.filter((c) => {
-    if (c.status === "pending") return true;
-    const associatedJob = pendingJobs.find((job) => job.courseId === c.id);
-    const jobStatus = associatedJob?.status?.toLowerCase();
-    return associatedJob && !terminalJobStatuses.has(jobStatus || "");
-  }).length;
-  const pendingJobCount = pendingJobs.filter((job) => !job.courseId || !courseIdSet.has(job.courseId)).length;
-  const pendingCount = pendingCourseCount + pendingJobCount;
+  // Count courses that are pending or generating based on course status only
+  const pendingCount = courses.filter((c) =>
+    c.status === "pending" || c.status === "generating"
+  ).length;
 
   if (loading || !mounted) {
     return (
@@ -552,12 +546,8 @@ export default function DashboardPage() {
                   course?.name ||
                   course?.courseName ||
                   "Untitled Course";
-                // Check if there's a running job associated with this course
-                const associatedJob = pendingJobs.find((job) => job.courseId === course.id);
-                const jobStatus = associatedJob?.status?.toLowerCase();
-                const isJobRunning = associatedJob && !terminalJobStatuses.has(jobStatus || "");
-                // Show as pending/building if course status is pending/generating OR if there's a running job
-                const effectiveStatus = (course.status === "pending" || course.status === "generating" || isJobRunning) ? "pending" : course.status;
+                // Show as pending/building if course status is pending or generating
+                const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
                 const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
                 return (

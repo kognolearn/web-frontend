@@ -59,10 +59,21 @@ import {
 } from "./components/assessment";
 
 /**
+ * Convert PascalCase to snake_case
+ * @param {string} str
+ * @returns {string}
+ */
+function toSnakeCase(str) {
+  return str.replace(/([A-Z])/g, (match, letter, index) =>
+    index === 0 ? letter.toLowerCase() : '_' + letter.toLowerCase()
+  );
+}
+
+/**
  * Registry mapping component type strings to React components
  *
- * The keys match the `type` field from the backend component spec.
- * Component types use snake_case to match backend naming convention.
+ * The keys use snake_case internally, but getComponent handles both
+ * snake_case and PascalCase lookups (e.g., "markdown_block" or "MarkdownBlock")
  */
 const componentRegistry = {
   // Display Components (11)
@@ -113,12 +124,29 @@ const componentRegistry = {
 };
 
 /**
+ * Normalize a component type to snake_case for registry lookup
+ * Handles both PascalCase (MarkdownBlock) and snake_case (markdown_block)
+ * @param {string} type
+ * @returns {string}
+ */
+function normalizeType(type) {
+  if (!type) return '';
+  // If already snake_case or lowercase, return as-is
+  if (type.includes('_') || type === type.toLowerCase()) {
+    return type;
+  }
+  // Convert PascalCase to snake_case
+  return toSnakeCase(type);
+}
+
+/**
  * Get a component by its type name
- * @param {string} type - The component type (e.g., "markdown_block", "select_group")
+ * @param {string} type - The component type (e.g., "markdown_block", "MarkdownBlock")
  * @returns {React.ComponentType|null} - The React component or null if not found
  */
 export function getComponent(type) {
-  return componentRegistry[type] || null;
+  const normalized = normalizeType(type);
+  return componentRegistry[normalized] || null;
 }
 
 /**
@@ -127,7 +155,8 @@ export function getComponent(type) {
  * @returns {boolean}
  */
 export function hasComponent(type) {
-  return type in componentRegistry;
+  const normalized = normalizeType(type);
+  return normalized in componentRegistry;
 }
 
 /**
@@ -196,7 +225,8 @@ export const COMPONENT_CATEGORIES = {
  * @returns {boolean}
  */
 export function isGradableType(type) {
-  return COMPONENT_CATEGORIES.assessment.includes(type);
+  const normalized = normalizeType(type);
+  return COMPONENT_CATEGORIES.assessment.includes(normalized);
 }
 
 /**
@@ -205,7 +235,8 @@ export function isGradableType(type) {
  * @returns {boolean}
  */
 export function isInputType(type) {
-  return COMPONENT_CATEGORIES.input.includes(type);
+  const normalized = normalizeType(type);
+  return COMPONENT_CATEGORIES.input.includes(normalized);
 }
 
 /**
@@ -214,7 +245,8 @@ export function isInputType(type) {
  * @returns {boolean}
  */
 export function isDisplayType(type) {
-  return COMPONENT_CATEGORIES.display.includes(type);
+  const normalized = normalizeType(type);
+  return COMPONENT_CATEGORIES.display.includes(normalized);
 }
 
 export default componentRegistry;
