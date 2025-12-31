@@ -3385,7 +3385,7 @@ export default function CourseTabContent({
       <ChatBot 
         ref={chatBotRef}
         isActive={isActive}
-        buttonClassName="bottom-20"
+        buttonClassName="bottom-24"
         pageContext={{
           courseId,
           courseName,
