@@ -112,7 +112,7 @@ export default function DashboardPage() {
     };
 
     try {
-      const res = await authFetch(`/api/courses`);
+      const res = await authFetch(`/api/courses?userId=${encodeURIComponent(userId)}`);
       if (!res.ok) {
         console.error("Failed to fetch courses from API", res.status);
         scheduleRetry();
