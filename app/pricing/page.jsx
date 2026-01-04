@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { authFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/api";
 
 const PLAN_FEATURES = {
   monthly: [
@@ -89,34 +89,15 @@ export default function PricingPage() {
     }
   }
 
-  async function handleSubscribe(planId) {
+  function handleSubscribe(planId) {
     if (!user) {
       router.push("/auth/sign-in?redirect=/pricing");
       return;
     }
 
     setSubscribing(planId);
-    setError(null);
-
-    try {
-      const res = await authFetch("/api/stripe?endpoint=create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productType: planId }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create checkout session");
-      }
-
-      router.push(`/checkout?clientSecret=${data.clientSecret}&productType=${planId}`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubscribing(null);
-    }
+    // Redirect to checkout page - it will create the Elements session
+    router.push(`/checkout?productType=${planId}`);
   }
 
   if (loading || !prices) {
