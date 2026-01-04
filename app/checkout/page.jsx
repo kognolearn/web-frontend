@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import Link from "next/link";
+import { useTheme } from "@/components/theme/ThemeProvider";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
@@ -12,6 +13,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState(null);
+  const { theme } = useTheme();
 
   const clientSecret = searchParams.get("clientSecret");
   const productType = searchParams.get("productType");
@@ -22,8 +24,22 @@ function CheckoutContent() {
     }
   }, [clientSecret, router]);
 
+  // Stripe Embedded Checkout appearance based on theme
+  const appearance = {
+    theme: theme === 'dark' ? 'night' : 'stripe',
+    variables: {
+      colorPrimary: '#8BC34A',
+      colorBackground: theme === 'dark' ? '#1a1a1a' : '#ffffff',
+      colorText: theme === 'dark' ? '#ffffff' : '#1a1a1a',
+      colorDanger: '#ef4444',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      borderRadius: '8px',
+    },
+  };
+
   const options = {
     clientSecret,
+    appearance,
   };
 
   if (!clientSecret) {
@@ -49,11 +65,7 @@ function CheckoutContent() {
           </Link>
         </div>
 
-        <div className="bg-[var(--bg-secondary)] rounded-2xl p-6 border border-[var(--border)]">
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-6 text-center">
-            Complete Your Purchase
-          </h1>
-
+        <div className="rounded-2xl overflow-hidden">
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
               <p className="text-red-500 text-center">{error}</p>
