@@ -75,6 +75,7 @@ export default function DashboardPage() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
   const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
   const profileMenuRef = useRef(null);
 
   // Close profile menu when clicking outside
@@ -385,6 +386,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateCourseClick = (e) => {
+    // Check if user is on free tier and has hit the course limit
+    const isFree = subscriptionStatus?.planLevel === 'free' || !subscriptionStatus?.hasSubscription;
+    const courseLimit = 1; // Free tier limit
+
+    if (isFree && courses.length >= courseLimit) {
+      e.preventDefault();
+      setShowCourseLimitModal(true);
+      return false;
+    }
+    // Allow navigation to proceed
+    return true;
+  };
+
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
   
   // Compute user initials (first and last initial if full name, otherwise first 2 chars)
@@ -652,7 +667,7 @@ export default function DashboardPage() {
         <main className="space-y-6">
           {!hasCourses ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Link href="/courses/create" className="btn btn-primary btn-lg">
+              <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
@@ -675,11 +690,12 @@ export default function DashboardPage() {
               >
                 <Link
                   href="/courses/create"
+                  onClick={handleCreateCourseClick}
                   className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
                 >
                   {/* Hover gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
-                  
+
                   <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -734,6 +750,81 @@ export default function DashboardPage() {
         isOpen={isPersonalizationModalOpen}
         onClose={() => setIsPersonalizationModalOpen(false)}
       />
+
+      {/* Course Limit Modal */}
+      {showCourseLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowCourseLimitModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Close button */}
+            <button
+              onClick={() => setShowCourseLimitModal(false)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">
+                Free Plan Limit Reached
+              </h3>
+              <p className="text-[var(--muted-foreground)]">
+                You've reached the maximum of 1 course on the free plan. Upgrade to Pro for unlimited courses, exams, and cheatsheets.
+              </p>
+            </div>
+
+            {/* Features list */}
+            <div className="bg-[var(--surface-2)] rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-[var(--foreground)] mb-3">Pro includes:</p>
+              <ul className="space-y-2">
+                {['Unlimited courses', 'Unlimited practice exams', 'Unlimited cheatsheets', 'Priority support'].map((feature) => (
+                  <li key={feature} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/pricing"
+                onClick={() => setShowCourseLimitModal(false)}
+                className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors text-center"
+              >
+                Upgrade to Pro
+              </Link>
+              <button
+                onClick={() => setShowCourseLimitModal(false)}
+                className="w-full py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors"
+              >
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

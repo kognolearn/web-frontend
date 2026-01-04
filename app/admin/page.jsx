@@ -674,6 +674,7 @@ export default function AdminPage() {
     const [dateRangeLoading, setDateRangeLoading] = useState(false);
     const [twoWeekDealEnabled, setTwoWeekDealEnabled] = useState(false);
     const [twoWeekDealLoading, setTwoWeekDealLoading] = useState(false);
+    const [stripePrices, setStripePrices] = useState(null);
 
     // Fetch all data (used for initial load and refresh)
     const fetchAllData = async (isRefresh = false) => {
@@ -793,6 +794,22 @@ export default function AdminPage() {
             }
         };
         fetchTwoWeekDealStatus();
+    }, []);
+
+    // Fetch Stripe prices on mount
+    useEffect(() => {
+        const fetchStripePrices = async () => {
+            try {
+                const res = await fetch('/api/stripe?endpoint=prices');
+                if (res.ok) {
+                    const data = await res.json();
+                    setStripePrices(data);
+                }
+            } catch (err) {
+                console.error("Error fetching Stripe prices:", err);
+            }
+        };
+        fetchStripePrices();
     }, []);
 
     // Toggle two-week deal
@@ -1524,7 +1541,7 @@ export default function AdminPage() {
                                 <div>
                                     <h4 className="font-medium text-[var(--foreground)]">2-Week Deal</h4>
                                     <p className="text-sm text-[var(--muted-foreground)] mt-1">
-                                        Enable or disable the $4.99 two-week trial offer for new users.
+                                        Enable or disable the {stripePrices?.['2week_deal']?.unitAmount ? `$${(stripePrices['2week_deal'].unitAmount / 100).toFixed(2)}` : ''} two-week trial offer for new users.
                                     </p>
                                 </div>
                                 <button
@@ -1560,23 +1577,54 @@ export default function AdminPage() {
 
                     <div className="card p-6">
                         <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">Subscription Tiers</h3>
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <div className="p-4 bg-[var(--surface-2)] rounded-lg">
-                                <h4 className="font-medium text-[var(--foreground)]">Monthly</h4>
-                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$9.99/mo</p>
-                                <p className="text-sm text-[var(--muted-foreground)] mt-1">Recurring subscription</p>
+                        {stripePrices ? (
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <div className="p-4 bg-[var(--surface-2)] rounded-lg">
+                                    <h4 className="font-medium text-[var(--foreground)]">
+                                        {stripePrices.monthly?.productName || 'Monthly'}
+                                    </h4>
+                                    <p className="text-2xl font-bold text-[var(--primary)] mt-2">
+                                        {stripePrices.monthly?.unitAmount
+                                            ? `$${(stripePrices.monthly.unitAmount / 100).toFixed(2)}/mo`
+                                            : 'N/A'}
+                                    </p>
+                                    <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                                        {stripePrices.monthly?.productDescription || 'Recurring subscription'}
+                                    </p>
+                                </div>
+                                <div className="p-4 bg-[var(--surface-2)] rounded-lg border-2 border-[var(--primary)]">
+                                    <h4 className="font-medium text-[var(--foreground)]">
+                                        {stripePrices['3month']?.productName || '3 Month'}
+                                    </h4>
+                                    <p className="text-2xl font-bold text-[var(--primary)] mt-2">
+                                        {stripePrices['3month']?.unitAmount
+                                            ? `$${(stripePrices['3month'].unitAmount / 100).toFixed(2)}`
+                                            : 'N/A'}
+                                    </p>
+                                    <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                                        {stripePrices['3month']?.productDescription || 'Save with 3-month plan'}
+                                    </p>
+                                </div>
+                                <div className="p-4 bg-[var(--surface-2)] rounded-lg">
+                                    <h4 className="font-medium text-[var(--foreground)]">
+                                        {stripePrices['2week_deal']?.productName || '2 Week Deal'}
+                                    </h4>
+                                    <p className="text-2xl font-bold text-[var(--primary)] mt-2">
+                                        {stripePrices['2week_deal']?.unitAmount
+                                            ? `$${(stripePrices['2week_deal'].unitAmount / 100).toFixed(2)}`
+                                            : 'N/A'}
+                                    </p>
+                                    <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                                        {stripePrices['2week_deal']?.productDescription || 'One-time, new users only'}
+                                    </p>
+                                </div>
                             </div>
-                            <div className="p-4 bg-[var(--surface-2)] rounded-lg border-2 border-[var(--primary)]">
-                                <h4 className="font-medium text-[var(--foreground)]">3 Month</h4>
-                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$24.99</p>
-                                <p className="text-sm text-[var(--muted-foreground)] mt-1">Save 17%</p>
+                        ) : (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--primary)]"></div>
+                                <span className="ml-2 text-sm text-[var(--muted-foreground)]">Loading prices...</span>
                             </div>
-                            <div className="p-4 bg-[var(--surface-2)] rounded-lg">
-                                <h4 className="font-medium text-[var(--foreground)]">2 Week Deal</h4>
-                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$4.99</p>
-                                <p className="text-sm text-[var(--muted-foreground)] mt-1">One-time, new users only</p>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             )}
