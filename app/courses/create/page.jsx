@@ -654,6 +654,28 @@ function CreateCoursePageContent() {
     setPrefillApplied(true);
   }, [prefillApplied, searchParams]);
 
+  // Onboarding flow prefill
+  useEffect(() => {
+    if (searchParams.get('from_onboarding') === 'true') {
+        try {
+            const session = localStorage.getItem('kogno_onboarding_session');
+            if (session) {
+                const data = JSON.parse(session);
+                if (data.collegeName) setCollegeName(data.collegeName);
+                if (data.courseName) setCourseTitle(data.courseName);
+                setStudyMode('deep');
+                setStudyHours(999);
+                setCurrentStep(2);
+                // Clean up to prevent re-triggering on reload if desired, 
+                // but keeping it might be safer for refreshes.
+                // localStorage.removeItem('kogno_onboarding_session');
+            }
+        } catch (e) {
+            console.error("Failed to load onboarding session", e);
+        }
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     let active = true;
     const loadUser = async () => {
@@ -1496,6 +1518,20 @@ function CreateCoursePageContent() {
 
       // Enable V2 section-based content pipeline
       payload.content_version = 2;
+
+      // Include onboarding context if available
+      try {
+        const session = localStorage.getItem('kogno_onboarding_session');
+        if (session) {
+          const onboardingData = JSON.parse(session);
+          if (onboardingData) {
+            payload.onboarding_context = onboardingData;
+            // Clear session after using it? Maybe not yet, wait for success.
+          }
+        }
+      } catch (e) {
+        console.error("Failed to read onboarding session", e);
+      }
 
       console.log("[CreateCourse] About to fetch /api/courses");
       const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
