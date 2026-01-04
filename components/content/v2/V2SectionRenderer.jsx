@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, Trophy, Target } from "lucide-react";
 import { useV2Content } from "./V2ContentContext";
@@ -27,6 +27,7 @@ export default function V2SectionRenderer({
   sectionIndex,
   onGrade,
   isGrading = false,
+  isAdmin = false,
 }) {
   const {
     answers,
@@ -34,6 +35,7 @@ export default function V2SectionRenderer({
     sectionProgress,
     setAnswer,
   } = useV2Content();
+  const [rawComponents, setRawComponents] = useState({});
 
   const sectionId = section.id;
   const sectionAnswers = answers[sectionId] || {};
@@ -107,8 +109,16 @@ export default function V2SectionRenderer({
   };
 
   // Render components
+  const toggleRawComponent = (componentKey) => {
+    setRawComponents((prev) => ({
+      ...prev,
+      [componentKey]: !prev[componentKey],
+    }));
+  };
+
   const renderComponents = () => {
     const renderedComponents = components.map((component, index) => {
+      const componentKey = component.id || `${component.type || "component"}-${index}`;
       const Component = getComponent(component.type);
 
       if (!Component) {
@@ -132,21 +142,47 @@ export default function V2SectionRenderer({
       const questionNumber = isGradable ? getQuestionNumber(component.id) : null;
 
       // Spread all component props from spec, plus standard props
+      const showRaw = isAdmin && Boolean(rawComponents[componentKey]);
+      const componentPayload = component ? JSON.stringify(component, null, 2) : "";
       const componentElement = (
-        <Component
-          id={component.id}
-          value={sectionAnswers[component.id]}
-          onChange={
-            isGradable || isInput
-              ? (value) => handleAnswerChange(component.id, value)
-              : undefined
-          }
-          disabled={isGrading}
-          grade={componentGrade}
-          isGraded={isGraded}
-          isGradable={isGradable}
-          {...component.props}
-        />
+        <div className="space-y-3">
+          {isAdmin && (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => toggleRawComponent(componentKey)}
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+                aria-pressed={showRaw}
+              >
+                {showRaw ? "Hide raw component" : "Show raw component"}
+              </button>
+            </div>
+          )}
+          {showRaw && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
+              <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Raw component
+              </div>
+              <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                {componentPayload || "No raw content available."}
+              </pre>
+            </div>
+          )}
+          <Component
+            id={component.id}
+            value={sectionAnswers[component.id]}
+            onChange={
+              isGradable || isInput
+                ? (value) => handleAnswerChange(component.id, value)
+                : undefined
+            }
+            disabled={isGrading}
+            grade={componentGrade}
+            isGraded={isGraded}
+            isGradable={isGradable}
+            {...component.props}
+          />
+        </div>
       );
 
       // Wrap gradable components in QuestionCard
@@ -233,11 +269,11 @@ export default function V2SectionRenderer({
             </div>
             {isGraded && scoreDisplay && (
               <div className="flex items-center gap-2">
-                <Trophy className={`w-4 h-4 ${scoreDisplay.passed ? "text-emerald-500" : "text-rose-500"}`} />
+                <Trophy className={`w-4 h-4 ${scoreDisplay.passed ? "text-success" : "text-danger"}`} />
                 <span className={`text-sm font-medium ${
                   scoreDisplay.passed
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
+                    ? "text-success"
+                    : "text-danger"
                 }`}>
                   {scoreDisplay.percentage}%
                 </span>
@@ -258,8 +294,8 @@ export default function V2SectionRenderer({
               className={`h-full rounded-full ${
                 isGraded
                   ? scoreDisplay?.passed
-                    ? "bg-emerald-500"
-                    : "bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500"
+                    ? "bg-success"
+                    : "bg-gradient-to-r from-[var(--success)] via-[var(--warning)] to-[var(--danger)]"
                   : "bg-[var(--primary)]"
               }`}
               style={{
@@ -287,35 +323,35 @@ export default function V2SectionRenderer({
                 exit={{ opacity: 0, scale: 0.95 }}
                 className={`relative overflow-hidden rounded-2xl border ${
                   scoreDisplay.passed
-                    ? "border-emerald-500/50 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5"
-                    : "border-rose-500/50 bg-gradient-to-br from-rose-500/10 to-rose-500/5"
+                    ? "border-success/50 bg-gradient-to-br from-[var(--success)]/10 to-[var(--success)]/5"
+                    : "border-danger/50 bg-gradient-to-br from-[var(--danger)]/10 to-[var(--danger)]/5"
                 }`}
               >
                 {/* Decorative background */}
                 <div className={`absolute inset-0 opacity-30 ${
                   scoreDisplay.passed
-                    ? "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-emerald-400/20 to-transparent"
-                    : "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-rose-400/20 to-transparent"
+                    ? "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-[var(--success)]/20 to-transparent"
+                    : "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-[var(--danger)]/20 to-transparent"
                 }`} />
 
                 <div className="relative flex items-center gap-4 p-5">
                   <div className={`flex items-center justify-center w-14 h-14 rounded-xl ${
                     scoreDisplay.passed
-                      ? "bg-emerald-500/20"
-                      : "bg-rose-500/20"
+                      ? "bg-success/20"
+                      : "bg-danger/20"
                   }`}>
                     {scoreDisplay.passed ? (
-                      <Trophy className="w-7 h-7 text-emerald-500" />
+                      <Trophy className="w-7 h-7 text-success" />
                     ) : (
-                      <AlertCircle className="w-7 h-7 text-rose-500" />
+                      <AlertCircle className="w-7 h-7 text-danger" />
                     )}
                   </div>
                   <div className="flex-1">
                     <p
                       className={`text-2xl font-bold ${
                         scoreDisplay.passed
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-rose-600 dark:text-rose-400"
+                          ? "text-success"
+                          : "text-danger"
                       }`}
                     >
                       {scoreDisplay.earned} / {scoreDisplay.max}
@@ -326,8 +362,8 @@ export default function V2SectionRenderer({
                     <p
                       className={`text-sm mt-0.5 ${
                         scoreDisplay.passed
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : "text-rose-700 dark:text-rose-300"
+                          ? "text-success opacity-80"
+                          : "text-danger opacity-80"
                       }`}
                     >
                       {scoreDisplay.passed
@@ -340,16 +376,16 @@ export default function V2SectionRenderer({
 
                   {/* Quick stats */}
                   <div className="hidden sm:flex items-center gap-3 text-sm">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/20">
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                      <span className="text-success font-medium">
                         {progressStats.correct}
                       </span>
                     </div>
                     {progressStats.total - progressStats.correct > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20">
-                        <AlertCircle className="w-4 h-4 text-rose-500" />
-                        <span className="text-rose-600 dark:text-rose-400 font-medium">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger/20">
+                        <AlertCircle className="w-4 h-4 text-danger" />
+                        <span className="text-danger font-medium">
                           {progressStats.total - progressStats.correct}
                         </span>
                       </div>
@@ -414,8 +450,8 @@ export default function V2SectionRenderer({
               animate={{ opacity: 1, y: 0 }}
               className={`mt-4 text-sm p-4 rounded-xl ${
                 sectionGrade.passed
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                  ? "bg-success/10 text-success"
+                  : "bg-danger/10 text-danger"
               }`}
             >
               {sectionGrade.feedback}

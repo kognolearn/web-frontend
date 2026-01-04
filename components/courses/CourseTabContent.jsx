@@ -37,6 +37,11 @@ const prettyFormat = (fmt) => {
   return base.replace(/\b\w/g, (m) => m.toUpperCase());
 };
 
+const getLessonCacheKey = (lessonId, userId, courseId) => {
+  if (!lessonId || !userId || !courseId) return null;
+  return `lesson:${lessonId}:${userId}:${courseId}`;
+};
+
 const resolveAsyncResult = async (response, options = {}) => {
   const { result } = await resolveAsyncJobResponse(response, options);
   if (!result) {
@@ -60,16 +65,17 @@ function ItemContent({
   onReadingCompleted,
   onFlashcardsCompleted,
   onVideoViewed,
-  moduleQuizTab
+  moduleQuizTab,
+  isAdmin
 }) {
   const normFmt = normalizeFormat(fmt);
-  const key = `${normFmt}:${id}:${userId}:${courseId}`;
-  const cached = contentCache[key];
+  const key = getLessonCacheKey(id, userId, courseId);
+  const cached = key ? contentCache[key] : null;
   const fetchInitiatedRef = useRef(new Set());
   const wasMiniQuizRef = useRef(null);
 
   useEffect(() => {
-    if (!normFmt || !id || !userId || !courseId) return undefined;
+    if (!key) return undefined;
     if (fetchInitiatedRef.current.has(key)) return undefined;
     const existing = contentCache[key];
     if (existing && (existing.status === "loaded" || existing.status === "loading")) return undefined;
@@ -80,7 +86,7 @@ function ItemContent({
 
     (async () => {
       try {
-        const params = new URLSearchParams({ format: normFmt, id: String(id) });
+        const params = new URLSearchParams({ id: String(id) });
         if (userId) params.set("userId", String(userId));
         if (courseId) params.set("courseId", String(courseId));
         const url = `/api/content?${params.toString()}`;
@@ -106,11 +112,12 @@ function ItemContent({
       fetchInitiatedRef.current.delete(key);
       ac.abort();
     };
-  }, [normFmt, id, key, userId, courseId]);
+  }, [key, id, userId, courseId]);
 
   const cachedEnvelope = cached?.data || {};
   const cachedPayload = cachedEnvelope.data;
   const cardsArray = cachedPayload?.cards;
+  const [showRawContent, setShowRawContent] = useState(false);
   const flashcardData = useMemo(() => {
     if (!Array.isArray(cardsArray)) return {};
     return cardsArray.reduce((acc, card, idx) => {
@@ -118,6 +125,17 @@ function ItemContent({
       return acc;
     }, {});
   }, [cardsArray]);
+  const rawContent = typeof cachedPayload?.body === "string"
+    ? cachedPayload.body
+    : typeof cachedPayload?.reading === "string"
+    ? cachedPayload.reading
+    : cachedPayload
+    ? JSON.stringify(cachedPayload, null, 2)
+    : "";
+
+  useEffect(() => {
+    setShowRawContent(false);
+  }, [id, fmt]);
 
   // Ensure effect hooks are defined before any early return so hook order remains stable
   useEffect(() => {
@@ -156,7 +174,7 @@ function ItemContent({
     return <div className="text-xs text-red-600">Missing format or id.</div>;
   }
   if (!cached || cached.status === "loading") {
-    return <div className="text-xs text-[var(--muted-foreground)]">Loading {normFmt}…</div>;
+    return <div className="text-xs text-[var(--muted-foreground)]">Loading content…</div>;
   }
   if (cached.status === "error") {
     return <div className="text-xs text-red-600">{cached.error}</div>;
@@ -182,6 +200,7 @@ function ItemContent({
         courseId={courseId}
         nodeId={id}
         activeSectionIndex={sectionIndex}
+        isAdmin={isAdmin}
       />
     );
   }
@@ -212,15 +231,39 @@ function ItemContent({
     case "reading": {
       const latexContent = data?.body || data?.reading || "";
       return (
-        <ReadingRenderer 
-          content={latexContent} 
-          courseId={courseId}
-          lessonId={id}
-          userId={userId}
-          inlineQuestionSelections={data?.inlineQuestionSelections || {}}
-          readingCompleted={data?.readingCompleted || false}
-          onReadingCompleted={onReadingCompleted}
-        />
+        <div className="space-y-4">
+          {isAdmin && (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRawContent((prev) => !prev)}
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+                aria-pressed={showRawContent}
+              >
+                {showRawContent ? "Hide raw content" : "Show raw content"}
+              </button>
+            </div>
+          )}
+          {isAdmin && showRawContent && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
+              <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Raw text
+              </div>
+              <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                {rawContent || "No raw content available."}
+              </pre>
+            </div>
+          )}
+          <ReadingRenderer 
+            content={latexContent} 
+            courseId={courseId}
+            lessonId={id}
+            userId={userId}
+            inlineQuestionSelections={data?.inlineQuestionSelections || {}}
+            readingCompleted={data?.readingCompleted || false}
+            onReadingCompleted={onReadingCompleted}
+          />
+        </div>
       );
     }
     case "flashcards": {
@@ -264,7 +307,13 @@ function ItemContent({
     case "interactive_task": {
       // Interactive Task (formerly interactive practice)
       const taskData = data?.interactive_task || data?.interactive_practice || data || {};
-      return <TaskRenderer taskData={taskData} />;
+      return (
+        <TaskRenderer
+          taskData={taskData}
+          courseId={courseId}
+          nodeId={id}
+        />
+      );
     }
     default:
       return (
@@ -574,11 +623,40 @@ export default function CourseTabContent({
   // Exam modification modal state
   const [examModifyModal, setExamModifyModal] = useState({ open: false, examType: null, examNumber: null });
   const [examModifyPrompt, setExamModifyPrompt] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
 
   // Update ref whenever state changes
   useEffect(() => {
     examStateRef.current = examState;
   }, [examState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch('/api/admin/status');
+        if (!res.ok) {
+          throw new Error(`Failed to verify admin (${res.status})`);
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setIsAdmin(body?.isAdmin === true);
+        }
+      } catch (err) {
+        console.error('Failed to check admin status:', err);
+        if (!cancelled) setIsAdmin(false);
+      } finally {
+        if (!cancelled) setHasCheckedAdmin(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // Cleanup on unmount
   // Cleanup on unmount
@@ -654,6 +732,17 @@ export default function CourseTabContent({
       globalExamFetching.delete(key);
     }
   }, [userId, courseId]);
+
+  // Fetch existing practice exams whenever the practice exam view is opened
+  useEffect(() => {
+    if (!userId || !courseId) return;
+    if (!selectedLesson || selectedLesson.type !== 'practice_exam') return;
+
+    const examType = selectedLesson.title?.toLowerCase().includes('final') ? 'final' : 'midterm';
+    if (!examType) return;
+
+    fetchExamList(examType);
+  }, [userId, courseId, selectedLesson?.id, selectedLesson?.type, selectedLesson?.title, fetchExamList]);
 
   // Generate exam (only called when user clicks create)
   const generateExam = useCallback(async (examType, lessonTitles) => {
@@ -1057,51 +1146,48 @@ export default function CourseTabContent({
     setExpandedLessons(newExpanded);
   };
 
-  const fetchLessonContent = useCallback((lessonId, formats = ['reading'], options = {}) => {
+  const fetchLessonContent = useCallback((lessonId, options = {}) => {
     if (!userId || !courseId) return; // Guard: don't fetch without userId/courseId
     const { force = false } = options;
-    formats.forEach(format => {
-      const normFmt = normalizeFormat(format);
-      const key = `${normFmt}:${lessonId}:${userId}:${courseId}`;
+    const key = getLessonCacheKey(lessonId, userId, courseId);
+    if (!key) return;
 
-      const existing = contentCacheRef.current[key];
-      if (!force && (existing?.status === "loading" || existing?.status === "loaded")) {
-        return;
-      }
-      if (force && existing?.status === "loading") {
-        return;
-      }
+    const existing = contentCacheRef.current[key];
+    if (!force && (existing?.status === "loading" || existing?.status === "loaded")) {
+      return;
+    }
+    if (force && existing?.status === "loading") {
+      return;
+    }
 
-      if (!existing || existing.status === "error") {
-        setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
-      }
+    if (!existing || existing.status === "error") {
+      setContentCache((prev) => ({ ...prev, [key]: { status: "loading" } }));
+    }
 
-      (async () => {
+    (async () => {
+      try {
+        const params = new URLSearchParams({ 
+          id: String(lessonId) 
+        });
+        params.set("userId", String(userId));
+        params.set("courseId", String(courseId));
+        const url = `/api/content?${params.toString()}`;
+        const res = await authFetch(url);
+        let data;
         try {
-          const params = new URLSearchParams({ 
-            format: normFmt, 
-            id: String(lessonId) 
-          });
-          params.set("userId", String(userId));
-          params.set("courseId", String(courseId));
-          const url = `/api/content?${params.toString()}`;
-          const res = await authFetch(url);
-          let data;
-          try {
-            data = await res.json();
-          } catch (_) {
-            const raw = await res.text().catch(() => "");
-            data = raw ? { raw } : {};
-          }
-          if (!res.ok) {
-            throw new Error((data && data.error) || `Failed (${res.status})`);
-          }
-          setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
-        } catch (e) {
-          setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
+          data = await res.json();
+        } catch (_) {
+          const raw = await res.text().catch(() => "");
+          data = raw ? { raw } : {};
         }
-      })();
-    });
+        if (!res.ok) {
+          throw new Error((data && data.error) || `Failed (${res.status})`);
+        }
+        setContentCache((prev) => ({ ...prev, [key]: { status: "loaded", data } }));
+      } catch (e) {
+        setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
+      }
+    })();
   }, [userId, courseId]);
 
   const handleContentTypeClick = (lesson, contentType) => {
@@ -1110,7 +1196,7 @@ export default function CourseTabContent({
     setSelectedReviewModule(null);
     setViewMode("topic");
     setCurrentViewingItem(null);
-    fetchLessonContent(lesson.id, [contentType]);
+    fetchLessonContent(lesson.id);
   };
 
   const handleBackToSyllabus = () => {
@@ -1146,25 +1232,25 @@ export default function CourseTabContent({
   // Content completion handlers (always refetch backend status)
   const handleReadingCompleted = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['reading'], { force: true });
+      fetchLessonContent(selectedLesson.id, { force: true });
     }
   }, [selectedLesson?.id, courseId, fetchLessonContent]);
 
   const handleFlashcardsCompleted = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['flashcards'], { force: true });
+      fetchLessonContent(selectedLesson.id, { force: true });
     }
   }, [selectedLesson?.id, courseId, fetchLessonContent]);
 
   const handleVideoViewed = useCallback(() => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['video'], { force: true });
+      fetchLessonContent(selectedLesson.id, { force: true });
     }
   }, [selectedLesson?.id, courseId, fetchLessonContent]);
 
   const handleQuizContentCompleted = useCallback(async (result) => {
     if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, ['mini_quiz'], { force: true });
+      fetchLessonContent(selectedLesson.id, { force: true });
       // Also update the study plan
       await refetchStudyPlan();
     }
@@ -1172,16 +1258,13 @@ export default function CourseTabContent({
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
-    if (lessonCacheKey) {
-      const cached = contentCache[lessonCacheKey];
-      if (cached?.status === "loaded" && cached?.data?.data) {
-        return cached.data.data;
-      }
+    const key = getLessonCacheKey(lessonId, userId, courseId);
+    const cached = key ? contentCache[key] : null;
+    if (cached?.status === "loaded" && cached?.data?.data) {
+      return cached.data.data;
     }
     return null;
-  }, [contentCache]);
+  }, [contentCache, userId, courseId]);
 
   // Check if a content type is completed for a lesson (using backend data only)
   const isContentCompleted = useCallback((lessonId, contentType) => {
@@ -1214,62 +1297,61 @@ export default function CourseTabContent({
 
   // Helper functions for checking lesson content status
   const isLessonContentLoading = useCallback((lessonId) => {
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
-    if (lessonCacheKey) {
-      const cached = contentCache[lessonCacheKey];
-      return cached?.status === "loading";
-    }
-    return false;
-  }, [contentCache]);
+    const key = getLessonCacheKey(lessonId, userId, courseId);
+    return key ? contentCache[key]?.status === "loading" : false;
+  }, [contentCache, userId, courseId]);
 
   const isLessonContentLoaded = useCallback((lessonId) => {
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
-    if (lessonCacheKey) {
-      const cached = contentCache[lessonCacheKey];
-      return cached?.status === "loaded";
-    }
-    return false;
-  }, [contentCache]);
+    const key = getLessonCacheKey(lessonId, userId, courseId);
+    return key ? contentCache[key]?.status === "loaded" : false;
+  }, [contentCache, userId, courseId]);
 
   const getAvailableContentTypes = useCallback((lessonId) => {
     const types = [];
-    const cacheKeys = Object.keys(contentCache);
-    const lessonCacheKey = cacheKeys.find(key => key.includes(`:${lessonId}:`));
-    if (lessonCacheKey) {
-      const cached = contentCache[lessonCacheKey];
-      if (cached?.status === "loaded" && cached?.data?.data) {
-        const data = cached.data.data;
+    const data = getLessonContentData(lessonId);
+    if (data) {
+      // V2 content: return sections as content types
+      if (data.version === 2 && Array.isArray(data.sections)) {
+        return data.sections.map((section, index) => ({
+          label: section.title || `Section ${index + 1}`,
+          value: `v2_section_${index}`,
+          isV2Section: true,
+          sectionIndex: index,
+        }));
+      }
 
-        // V2 content: return sections as content types
-        if (data.version === 2 && Array.isArray(data.sections)) {
-          return data.sections.map((section, index) => ({
-            label: section.title || `Section ${index + 1}`,
-            value: `v2_section_${index}`,
-            isV2Section: true,
-            sectionIndex: index,
-          }));
-        }
-
-        // V1 content: return traditional content types
-        if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
-        if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
-        // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
-        if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
-        // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
-        // Interactive practice: parsons, skeleton, matching, blackbox
-        const ip = data.interactive_practice || data.interactive_task;
-        if (ip) {
-          types.push({ label: "Interactive Task", value: "interactive_task" });
-        }
+      // V1 content: return traditional content types
+      if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
+      if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
+      // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
+      if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
+      // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
+      // Interactive practice: parsons, skeleton, matching, blackbox
+      const ip = data.interactive_practice || data.interactive_task;
+      if (ip) {
+        types.push({ label: "Interactive Task", value: "interactive_task" });
       }
     }
     if (types.length === 0) {
       types.push({ label: "Reading", value: "reading" });
     }
     return types;
-  }, [contentCache]);
+  }, [getLessonContentData]);
+
+  // Auto-select first section when V2 content loads
+  useEffect(() => {
+    if (!selectedLesson?.id) return;
+    const availableTypes = getAvailableContentTypes(selectedLesson.id);
+    if (availableTypes.length === 0) return;
+
+    const firstType = availableTypes[0];
+    const currentType = selectedContentType?.type;
+
+    // If current type is generic 'reading' but V2 sections are available, switch to first section
+    if (firstType.isV2Section && (!currentType || currentType === 'reading')) {
+      setSelectedContentType({ lessonId: selectedLesson.id, type: firstType.value });
+    }
+  }, [selectedLesson?.id, contentCache, getAvailableContentTypes, selectedContentType?.type]);
 
   // Helper to get lesson data from studyPlan by ID
   const getLessonFromStudyPlan = useCallback((lessonId) => {
@@ -1315,7 +1397,7 @@ export default function CourseTabContent({
     setSelectedReviewModule(null);
     setViewMode("topic");
     setCurrentViewingItem(null);
-    fetchLessonContent(lesson.id, [normalizedType]);
+    fetchLessonContent(lesson.id);
   }, [fetchLessonContent]);
 
   // Auto-select first lesson if available and not already selected
@@ -1482,17 +1564,6 @@ export default function CourseTabContent({
           });
           
           if (response.ok) {
-            // Show celebration banner
-            if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
-            setCompletionCelebration({
-              type: 'lesson',
-              title: selectedLesson.title,
-              status: masteryStatus,
-            });
-            celebrationTimeoutRef.current = setTimeout(() => {
-              setCompletionCelebration(null);
-            }, 5000); // Auto-dismiss after 5 seconds
-            
             // Refresh the study plan to get updated lesson status
             await refetchStudyPlan();
           }
@@ -2133,11 +2204,7 @@ export default function CourseTabContent({
                         >
                           <div className="flex items-center gap-2.5">
                             {/* Module number badge - shows checkmark if all lessons completed */}
-                            <div className={`flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums ${
-                              moduleCompleted 
-                                ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
-                                : 'bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25'
-                            }`}>
+                            <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25">
                               {moduleCompleted ? (
                                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -2146,16 +2213,9 @@ export default function CourseTabContent({
                                 moduleIdx + 1
                               )}
                             </div>
-                            <h3 className={`text-xs uppercase tracking-[0.15em] font-semibold text-left ${
-                              moduleCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--primary)]'
-                            }`}>
+                            <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-left text-[var(--primary)]">
                               {module.title}
                             </h3>
-                            {moduleCompleted && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium">
-                                Complete
-                              </span>
-                            )}
                           </div>
                           <svg 
                             className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
@@ -2190,12 +2250,12 @@ export default function CourseTabContent({
                                 if (lesson.title === 'Module Quiz') {
                                   setSelectedContentType({ lessonId: lesson.id, type: 'mini_quiz' });
                                   setModuleQuizTab('quiz'); // Reset to quiz tab when opening Module Quiz
-                                  fetchLessonContent(lesson.id, ['mini_quiz']);
+                                  fetchLessonContent(lesson.id);
                                 } else if (availableTypes.length > 0) {
                                   setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
-                                  fetchLessonContent(lesson.id, ['reading']);
+                                  fetchLessonContent(lesson.id);
                                 } else {
-                                  fetchLessonContent(lesson.id, ['reading']);
+                                  fetchLessonContent(lesson.id);
                                 }
                                 setViewMode("topic");
                                 setCurrentViewingItem(null);
@@ -2203,15 +2263,13 @@ export default function CourseTabContent({
                               className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
                                 selectedLesson?.id === lesson.id
                                   ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                  : showCompleted
-                                    ? "bg-emerald-500/5 hover:bg-emerald-500/10 text-[var(--foreground)]"
-                                    : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
+                                  : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
                               }`}
                             >
                               {/* Lesson number badge - shows checkmark if completed */}
                               <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
                                 showCompleted
-                                  ? "bg-emerald-500 text-white"
+                                  ? "bg-[var(--primary)] text-white"
                                   : selectedLesson?.id === lesson.id
                                     ? "bg-[var(--primary)]/20 text-[var(--primary)]"
                                     : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
@@ -2224,19 +2282,9 @@ export default function CourseTabContent({
                                   lessonIdx + 1
                                 )}
                               </span>
-                              <span className={`flex-1 truncate ${
-                                showCompleted
-                                  ? 'text-emerald-700 dark:text-emerald-400'
-                                  : ''
-                              }`}>
+                              <span className="flex-1 truncate">
                                 {lesson.title}
                               </span>
-                              {/* Completion indicator badge */}
-                              {showCompleted && (
-                                <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium">
-                                  Complete
-                                </span>
-                              )}
                             </button>
                           );
                         })}
@@ -2247,11 +2295,11 @@ export default function CourseTabContent({
               })}
 
               {/* Review & Cheatsheet Section - Bottom of Sidebar */}
-              <div className="mt-4 pt-4 border-t border-[var(--border)] flex gap-2">
+              <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-between">
                 <Tooltip content="Practice and reinforce what you've learned" position="top">
                   <a
                     href={`/courses/${courseId}/review`}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -2262,7 +2310,7 @@ export default function CourseTabContent({
                 <Tooltip content="Quick reference summary of key concepts" position="top">
                   <a
                     href={`/courses/${courseId}/cheatsheet`}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-muted)]/50 transition-colors group"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2686,6 +2734,7 @@ export default function CourseTabContent({
                     const exams = currentExamState.exams || [];
                     const selectedExamNumber = currentExamState.selectedExamNumber;
                     const selectedExam = exams.find(e => e.number === selectedExamNumber) || exams[exams.length - 1];
+                    const effectiveExamStatus = currentExamState.status || (userId && courseId ? 'loading' : null);
                     
                     const allLessons = studyPlan.modules?.filter(m => !m.is_practice_exam_module).flatMap(m => m.lessons || []) || [];
                     const precedingLessonIds = selectedLesson.preceding_lessons || [];
@@ -2703,7 +2752,7 @@ export default function CourseTabContent({
                     );
                     
                     // Loading states (checking, generating, grading, modifying)
-                    if (['loading', 'generating', 'grading', 'modifying'].includes(currentExamState.status)) {
+                    if (['loading', 'generating', 'grading', 'modifying'].includes(effectiveExamStatus)) {
                       return (
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                           {fileInput}
@@ -2712,15 +2761,15 @@ export default function CourseTabContent({
                             <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-[var(--primary)] animate-spin" />
                           </div>
                           <p className="mt-6 text-lg font-medium text-[var(--foreground)]">
-                            {currentExamState.status === 'loading' && 'Loading exams...'}
-                            {currentExamState.status === 'generating' && 'Generating your exam...'}
-                            {currentExamState.status === 'grading' && 'Grading your submission...'}
-                            {currentExamState.status === 'modifying' && 'Modifying your exam...'}
+                            {effectiveExamStatus === 'loading' && 'Loading exams...'}
+                            {effectiveExamStatus === 'generating' && 'Generating your exam...'}
+                            {effectiveExamStatus === 'grading' && 'Grading your submission...'}
+                            {effectiveExamStatus === 'modifying' && 'Modifying your exam...'}
                           </p>
                           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                            {currentExamState.status === 'generating' && 'This usually takes 1-2 minutes'}
-                            {currentExamState.status === 'grading' && 'Analyzing your answers...'}
-                            {currentExamState.status === 'modifying' && 'Applying your changes...'}
+                            {effectiveExamStatus === 'generating' && 'This usually takes 1-2 minutes'}
+                            {effectiveExamStatus === 'grading' && 'Analyzing your answers...'}
+                            {effectiveExamStatus === 'modifying' && 'Applying your changes...'}
                           </p>
                         </div>
                       );
@@ -3021,6 +3070,7 @@ export default function CourseTabContent({
                     onFlashcardsCompleted={handleFlashcardsCompleted}
                     onVideoViewed={handleVideoViewed}
                     moduleQuizTab={moduleQuizTab}
+                    isAdmin={hasCheckedAdmin && isAdmin}
                   />
                 )}
               </section>
@@ -3077,7 +3127,7 @@ export default function CourseTabContent({
                       onClick={() => {
                         if (prevType) {
                           setSelectedContentType({ lessonId: selectedLesson.id, type: prevType.value });
-                          fetchLessonContent(selectedLesson.id, [prevType.value]);
+                          fetchLessonContent(selectedLesson.id);
                         }
                       }}
                       disabled={!prevType}
@@ -3184,7 +3234,7 @@ export default function CourseTabContent({
                                 type="button"
                                 onClick={() => {
                                   setSelectedContentType({ lessonId: selectedLesson.id, type: contentType.value });
-                                  fetchLessonContent(selectedLesson.id, [contentType.value]);
+                                  fetchLessonContent(selectedLesson.id);
                                 }}
                                 className={`
                                   relative flex items-center justify-center w-11 h-11 rounded-2xl text-sm font-medium flex-shrink-0
@@ -3219,7 +3269,7 @@ export default function CourseTabContent({
                       onClick={() => {
                         if (nextType) {
                           setSelectedContentType({ lessonId: selectedLesson.id, type: nextType.value });
-                          fetchLessonContent(selectedLesson.id, [nextType.value]);
+                          fetchLessonContent(selectedLesson.id);
                         }
                       }}
                       disabled={!nextType}
@@ -3286,10 +3336,7 @@ export default function CourseTabContent({
             <div className="flex items-center justify-center px-4 py-3">
               {(() => {
                 // Check if module quiz has practice problems
-                const cacheKeys = Object.keys(contentCache);
-                const lessonCacheKey = cacheKeys.find(key => key.includes(`:${selectedLesson.id}:`));
-                const cached = lessonCacheKey ? contentCache[lessonCacheKey] : null;
-                const data = cached?.data?.data;
+                const data = getLessonContentData(selectedLesson.id);
                 const hasPractice = data?.practice_problems && data.practice_problems.length > 0;
                 const hasQuiz = data?.questions || data?.mcq || data?.frq;
                 
@@ -3433,9 +3480,8 @@ export default function CourseTabContent({
           selectedLesson,
           currentViewingItem,
           currentContent: selectedContentType && selectedLesson ? (() => {
-            const normFmt = normalizeFormat(selectedContentType.type);
-            const key = `${normFmt}:${selectedLesson.id}:${userId || ''}:${courseId || ''}`;
-            const cached = contentCache[key];
+            const key = getLessonCacheKey(selectedLesson.id, userId, courseId);
+            const cached = key ? contentCache[key] : null;
             
             if (cached?.status === "loaded" && cached?.data?.data) {
               const data = cached.data.data;

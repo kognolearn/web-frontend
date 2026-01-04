@@ -36,6 +36,7 @@ const TABS = [
     { id: "usage", label: "API & Costs", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { id: "feedback", label: "Feedback", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
     { id: "exportCourse", label: "Export Course", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" },
+    { id: "settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
 ];
 
 function StatCard({ title, value, subtitle, icon, trend, trendDirection, color = "primary", borderColor }) {
@@ -671,6 +672,8 @@ export default function AdminPage() {
 
     // Separate loading state for date-range data
     const [dateRangeLoading, setDateRangeLoading] = useState(false);
+    const [twoWeekDealEnabled, setTwoWeekDealEnabled] = useState(false);
+    const [twoWeekDealLoading, setTwoWeekDealLoading] = useState(false);
 
     // Fetch all data (used for initial load and refresh)
     const fetchAllData = async (isRefresh = false) => {
@@ -771,6 +774,51 @@ export default function AdminPage() {
 
         fetchDateRangeData();
     }, [startDate, endDate]);
+
+    // Fetch two-week deal status on mount
+    useEffect(() => {
+        const fetchTwoWeekDealStatus = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const headers = session?.access_token
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {};
+                const res = await fetch('/api/admin/settings/two-week-deal', { headers });
+                if (res.ok) {
+                    const data = await res.json();
+                    setTwoWeekDealEnabled(data.enabled);
+                }
+            } catch (err) {
+                console.error("Error fetching two-week deal status:", err);
+            }
+        };
+        fetchTwoWeekDealStatus();
+    }, []);
+
+    // Toggle two-week deal
+    const toggleTwoWeekDeal = async () => {
+        setTwoWeekDealLoading(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            };
+            const res = await fetch('/api/admin/settings/two-week-deal', {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ enabled: !twoWeekDealEnabled }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setTwoWeekDealEnabled(data.enabled);
+            }
+        } catch (err) {
+            console.error("Error toggling two-week deal:", err);
+        } finally {
+            setTwoWeekDealLoading(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -1464,6 +1512,73 @@ export default function AdminPage() {
 
             {activeTab === "exportCourse" && (
                 <CourseExportTab usageByCourseData={usageByCourseData} dateRangeLoading={dateRangeLoading} />
+            )}
+
+            {activeTab === "settings" && (
+                <div className="space-y-6">
+                    <div className="card p-6">
+                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">Payment Settings</h3>
+
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg">
+                                <div>
+                                    <h4 className="font-medium text-[var(--foreground)]">2-Week Deal</h4>
+                                    <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                                        Enable or disable the $4.99 two-week trial offer for new users.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={toggleTwoWeekDeal}
+                                    disabled={twoWeekDealLoading}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:ring-offset-2 ${
+                                        twoWeekDealEnabled ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'
+                                    } ${twoWeekDealLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            twoWeekDealEnabled ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            <div className="p-4 bg-[var(--surface-2)] rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-[var(--muted-foreground)] mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm text-[var(--muted-foreground)]">
+                                            When enabled, new users who have never had a subscription will see the 2-week deal option on the pricing page.
+                                            This is a one-time offer - users who have previously subscribed will not see it.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card p-6">
+                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">Subscription Tiers</h3>
+                        <div className="grid gap-4 md:grid-cols-3">
+                            <div className="p-4 bg-[var(--surface-2)] rounded-lg">
+                                <h4 className="font-medium text-[var(--foreground)]">Monthly</h4>
+                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$9.99/mo</p>
+                                <p className="text-sm text-[var(--muted-foreground)] mt-1">Recurring subscription</p>
+                            </div>
+                            <div className="p-4 bg-[var(--surface-2)] rounded-lg border-2 border-[var(--primary)]">
+                                <h4 className="font-medium text-[var(--foreground)]">3 Month</h4>
+                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$24.99</p>
+                                <p className="text-sm text-[var(--muted-foreground)] mt-1">Save 17%</p>
+                            </div>
+                            <div className="p-4 bg-[var(--surface-2)] rounded-lg">
+                                <h4 className="font-medium text-[var(--foreground)]">2 Week Deal</h4>
+                                <p className="text-2xl font-bold text-[var(--primary)] mt-2">$4.99</p>
+                                <p className="text-sm text-[var(--muted-foreground)] mt-1">One-time, new users only</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

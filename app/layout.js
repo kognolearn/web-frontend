@@ -1,6 +1,7 @@
 import { Nunito } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
+import "@/styles/jsxgraph.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
@@ -46,6 +47,11 @@ const mathJaxConfig = {
       E: "\\operatorname{E}",
       Prob: "\\operatorname{P}",
     }
+  },
+  options: {
+    enableMenu: false,
+    enableExplorer: false,
+    enableAssistiveMml: false,
   }
 };
 

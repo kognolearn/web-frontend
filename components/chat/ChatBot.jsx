@@ -503,6 +503,8 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     isPending: true,
   }), []);
   const [selectedText, setSelectedText] = useState("");
+  const [pendingSelection, setPendingSelection] = useState(null);
+  const pendingSelectionRef = useRef(null);
   const [attachedFiles, setAttachedFiles] = useState(() => cloneDraftFiles(initialDraft.attachedFiles));
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -520,6 +522,11 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const lastEmittedStateRef = useRef(null);
   const suppressStateSyncRef = useRef(false);
+
+  const clearPendingSelection = useCallback(() => {
+    pendingSelectionRef.current = null;
+    setPendingSelection(null);
+  }, []);
 
   const adjustInputHeight = useCallback(() => {
     if (!inputRef.current || useContentEditableInput) return;
@@ -749,23 +756,33 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
 
   // Handle text selection from page
   useEffect(() => {
-    const handleSelection = (e) => {
+    const handleSelection = () => {
+      if (!isActive) return;
       const selection = window.getSelection();
       const text = selection?.toString().trim();
-      
-      if (!text) return;
-      
+
+      if (!text) {
+        clearPendingSelection();
+        return;
+      }
+
       // Get the element where the selection started
       const anchorNode = selection.anchorNode;
-      if (!anchorNode) return;
-      
+      if (!anchorNode) {
+        clearPendingSelection();
+        return;
+      }
+
       // Get the parent element (text nodes don't have classList)
-      const element = anchorNode.nodeType === Node.TEXT_NODE 
-        ? anchorNode.parentElement 
+      const element = anchorNode.nodeType === Node.TEXT_NODE
+        ? anchorNode.parentElement
         : anchorNode;
-      
-      if (!element) return;
-      
+
+      if (!element) {
+        clearPendingSelection();
+        return;
+      }
+
       // Check if the selection is within allowed areas
       const isInMainContent = element.closest('main'); // Main content area of the page
       const isInChatMessage = element.closest('[data-chat-message="true"]'); // Chat messages
@@ -775,16 +792,111 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       const isInNav = element.closest('nav'); // Exclude navigation
       const isInChatHeader = element.closest('.border-b.border-\\[var\\(--border\\)\\].bg-\\[var\\(--surface-1\\)\\]'); // Exclude chat header
       const isInChatSidebar = element.closest('.w-56.border-r'); // Exclude chat sidebar
-      
+
       // Only capture text from main content or chat messages, but not from UI controls
       if ((isInMainContent || isInChatMessage) && !isInButton && !isInInput && !isInHeader && !isInNav && !isInChatHeader && !isInChatSidebar) {
-        setSelectedText(text);
+        const range = selection.getRangeAt(0);
+        const rects = Array.from(range.getClientRects())
+          .filter((rect) => rect.width > 0 && rect.height > 0)
+          .map((rect) => ({
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+          }));
+
+        if (!rects.length) {
+          clearPendingSelection();
+          return;
+        }
+
+        const boundingRect = range.getBoundingClientRect();
+        const buttonWidth = 120;
+        const buttonHeight = 32;
+        const margin = 8;
+        const top = Math.min(window.innerHeight - buttonHeight - margin, boundingRect.bottom + 8);
+        const left = Math.min(
+          window.innerWidth - buttonWidth - margin,
+          Math.max(margin, boundingRect.left)
+        );
+
+        const nextSelection = {
+          text,
+          rects,
+          buttonPosition: { top, left },
+        };
+        pendingSelectionRef.current = nextSelection;
+        setPendingSelection(nextSelection);
+        selection.removeAllRanges();
+      } else {
+        clearPendingSelection();
       }
     };
 
     document.addEventListener('mouseup', handleSelection);
     return () => document.removeEventListener('mouseup', handleSelection);
-  }, []);
+  }, [isActive, clearPendingSelection]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    if (!body) return;
+
+    if (pendingSelection) {
+      body.classList.add('kogno-selection-active');
+    } else {
+      body.classList.remove('kogno-selection-active');
+    }
+
+    return () => {
+      body.classList.remove('kogno-selection-active');
+    };
+  }, [pendingSelection]);
+
+  useEffect(() => {
+    if (!isActive) {
+      clearPendingSelection();
+    }
+  }, [isActive, clearPendingSelection]);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        if (!pendingSelectionRef.current) {
+          clearPendingSelection();
+        }
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [clearPendingSelection]);
+
+  useEffect(() => {
+    if (!pendingSelection) return;
+
+    const clearOnScroll = () => {
+      clearPendingSelection();
+    };
+
+    window.addEventListener('scroll', clearOnScroll, true);
+    window.addEventListener('resize', clearOnScroll);
+    return () => {
+      window.removeEventListener('scroll', clearOnScroll, true);
+      window.removeEventListener('resize', clearOnScroll);
+    };
+  }, [pendingSelection, clearPendingSelection]);
+
+  const handleAskFromSelection = useCallback(() => {
+    if (!pendingSelection?.text) return;
+    const nextText = sanitizeText(pendingSelection.text, MAX_SELECTED_TEXT_CHARS);
+    setSelectedText(nextText);
+    setIsOpen(true);
+    clearPendingSelection();
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+  }, [pendingSelection, clearPendingSelection]);
 
   // Handle drag and drop for files
   useEffect(() => {
@@ -2184,6 +2296,46 @@ Instructions:
     </div>
   );
 
+  const selectionOverlay = pendingSelection && typeof document !== 'undefined'
+    ? createPortal(
+        <div className="fixed inset-0 z-[120] pointer-events-none">
+          {pendingSelection.rects?.map((rect, index) => (
+            <div
+              key={`${index}-${rect.top}-${rect.left}`}
+              className="kogno-selection-highlight"
+              style={{
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height,
+              }}
+            />
+          ))}
+          <div
+            className="pointer-events-auto"
+            style={{
+              position: 'fixed',
+              top: pendingSelection.buttonPosition.top,
+              left: pendingSelection.buttonPosition.left,
+            }}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={handleAskFromSelection}
+              className="flex items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-[var(--primary)]/30 hover:shadow-[var(--primary)]/50 transition-all"
+            >
+              Ask Kogno
+            </button>
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
   const chatContent = (
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
@@ -2319,71 +2471,74 @@ Instructions:
   if (mode === "full") {
     const sidebarWidth = 300;
     return (
-      <div className="relative w-full h-full flex overflow-hidden bg-[var(--background)]">
-        {/* Floating Sidebar Toggle */}
-        <motion.button
-          type="button"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute left-0 top-4 z-50 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
-          animate={{ x: isSidebarOpen ? sidebarWidth + 16 : 16 }}
-          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-          initial={false}
-          title={isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          {isSidebarOpen ? "Hide" : "Show"} Sidebar
-        </motion.button>
-
-        {/* Top Right Controls */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-          {/* New Chat Button */}
-          <OnboardingTooltip
-            id="chat-new-button"
-            content="Start a new conversation with Kogno."
-            position="bottom"
-            pointerPosition="right"
-            delay={800}
-            priority={5}
+      <>
+        {selectionOverlay}
+        <div className="relative w-full h-full flex overflow-hidden bg-[var(--background)]">
+          {/* Floating Sidebar Toggle */}
+          <motion.button
+            type="button"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="absolute left-0 top-4 z-50 flex items-center gap-2 h-10 px-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)] text-xs font-medium"
+            animate={{ x: isSidebarOpen ? sidebarWidth + 16 : 16 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            initial={false}
+            title={isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
           >
-            <button
-              type="button"
-              onClick={createNewChat}
-              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
-              title="New Chat"
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            {isSidebarOpen ? "Hide" : "Show"} Sidebar
+          </motion.button>
+
+          {/* Top Right Controls */}
+          <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+            {/* New Chat Button */}
+            <OnboardingTooltip
+              id="chat-new-button"
+              content="Start a new conversation with Kogno."
+              position="bottom"
+              pointerPosition="right"
+              delay={800}
+              priority={5}
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          </OnboardingTooltip>
+              <button
+                type="button"
+                onClick={createNewChat}
+                className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
+                title="New Chat"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </OnboardingTooltip>
 
+          </div>
+
+          {/* Sidebar */}
+          <aside
+            className={`absolute left-0 top-0 h-full backdrop-blur-xl bg-[var(--surface-1)]/95 border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
+              isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+            style={{ width: `${sidebarWidth}px` }}
+          >
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">Chat History</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {sidebarListContent}
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main
+            className="flex-1 h-full transition-all duration-200 pt-20"
+            style={{ marginLeft: isSidebarOpen ? `${sidebarWidth}px` : 0 }}
+          >
+            {mainChatArea}
+          </main>
         </div>
-
-        {/* Sidebar */}
-        <aside
-          className={`absolute left-0 top-0 h-full backdrop-blur-xl bg-[var(--surface-1)]/95 border-r border-[var(--border)] transition-transform duration-200 z-40 flex flex-col ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          style={{ width: `${sidebarWidth}px` }}
-        >
-          <div className="p-4 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">Chat History</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {sidebarListContent}
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main
-          className="flex-1 h-full transition-all duration-200 pt-20"
-          style={{ marginLeft: isSidebarOpen ? `${sidebarWidth}px` : 0 }}
-        >
-          {mainChatArea}
-        </main>
-      </div>
+      </>
     );
   }
 
@@ -2446,20 +2601,31 @@ Instructions:
     );
 
     if (typeof document !== 'undefined') {
-      return createPortal(
-        <div style={{ display: isActive ? 'block' : 'none' }}>
-          {content}
-        </div>,
-        document.body
+      return (
+        <>
+          {selectionOverlay}
+          {createPortal(
+            <div style={{ display: isActive ? 'block' : 'none' }}>
+              {content}
+            </div>,
+            document.body
+          )}
+        </>
       );
     }
-    return content;
+    return (
+      <>
+        {selectionOverlay}
+        {content}
+      </>
+    );
   }
 
   // Docked mode: desktop right sidebar, mobile bottom sheet overlay
   if (isMobile) {
     return (
       <>
+        {selectionOverlay}
         <div
           className="fixed inset-0 z-40 bg-black/40"
           onClick={() => setIsOpen(false)}
@@ -2475,18 +2641,21 @@ Instructions:
   }
 
   return (
-    <div
-      className="absolute right-0 top-0 z-40 h-full shadow-2xl border-l border-[var(--border)] backdrop-blur-xl"
-      style={{ width: `${width}px` }}
-    >
-      {chatContent}
-      
-      {/* Resize handle for docked mode (desktop only) */}
+    <>
+      {selectionOverlay}
       <div
-        className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
-        onMouseDown={() => setIsResizing(true)}
-      />
-    </div>
+        className="absolute right-0 top-0 z-40 h-full shadow-2xl border-l border-[var(--border)] backdrop-blur-xl"
+        style={{ width: `${width}px` }}
+      >
+        {chatContent}
+
+        {/* Resize handle for docked mode (desktop only) */}
+        <div
+          className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors"
+          onMouseDown={() => setIsResizing(true)}
+        />
+      </div>
+    </>
   );
 });
 

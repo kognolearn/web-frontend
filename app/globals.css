@@ -108,6 +108,42 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+::selection {
+  background-color: rgba(var(--primary-rgb), 0.35);
+  color: var(--foreground);
+}
+
+::-moz-selection {
+  background-color: rgba(var(--primary-rgb), 0.35);
+  color: var(--foreground);
+}
+
+body.kogno-selection-active ::selection {
+  background-color: transparent;
+  color: inherit;
+}
+
+body.kogno-selection-active ::-moz-selection {
+  background-color: transparent;
+  color: inherit;
+}
+
+.kogno-selection-highlight {
+  position: fixed;
+  background-color: rgba(var(--primary-rgb), 0.35);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* MathJax - disable focus highlight */
+mjx-container,
+mjx-container:focus,
+mjx-container[tabindex]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
 /* Cards */
 .card,
 .card-shell { /* keep legacy class as alias */
@@ -242,11 +278,11 @@ body {
 }
 
 .btn-danger {
-  --btn-bg: linear-gradient(130deg, #f16d6d, #b83333);
-  --btn-border-color: color-mix(in srgb, #f16d6d 55%, #661212);
+  --btn-bg: linear-gradient(130deg, var(--danger), color-mix(in srgb, var(--danger) 70%, black));
+  --btn-border-color: color-mix(in srgb, var(--danger) 55%, transparent);
   --btn-color: #ffffff;
-  --btn-shadow: 0 18px 38px rgba(241, 109, 109, 0.3);
-  --btn-shadow-hover: 0 24px 48px rgba(241, 109, 109, 0.38);
+  --btn-shadow: 0 18px 38px color-mix(in srgb, var(--danger) 30%, transparent);
+  --btn-shadow-hover: 0 24px 48px color-mix(in srgb, var(--danger) 38%, transparent);
 }
 
 .btn-link {
@@ -501,3 +537,29 @@ select:focus {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Semantic color utilities - use these instead of Tailwind color classes for consistency */
+.text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-info { color: var(--info); }
+
+.bg-danger { background-color: var(--danger); }
+.bg-success { background-color: var(--success); }
+.bg-warning { background-color: var(--warning); }
+.bg-info { background-color: var(--info); }
+
+.bg-danger\/5 { background-color: color-mix(in srgb, var(--danger) 5%, transparent); }
+.bg-danger\/10 { background-color: color-mix(in srgb, var(--danger) 10%, transparent); }
+.bg-danger\/20 { background-color: color-mix(in srgb, var(--danger) 20%, transparent); }
+.bg-success\/5 { background-color: color-mix(in srgb, var(--success) 5%, transparent); }
+.bg-success\/10 { background-color: color-mix(in srgb, var(--success) 10%, transparent); }
+.bg-success\/20 { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
+
+.border-danger { border-color: var(--danger); }
+.border-success { border-color: var(--success); }
+.border-warning { border-color: var(--warning); }
+.border-info { border-color: var(--info); }
+
+.border-danger\/50 { border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.border-success\/50 { border-color: color-mix(in srgb, var(--success) 50%, transparent); }

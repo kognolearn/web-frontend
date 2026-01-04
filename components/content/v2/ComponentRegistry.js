@@ -19,6 +19,11 @@ import {
   DiagramViewer,
   DataTableViewer,
   PdfViewer,
+  SideBySideCompare,
+  TimelineViewer,
+  MapViewer,
+  CitationList,
+  GlossaryPanel,
 } from "./components/display";
 
 // Input Components
@@ -32,6 +37,7 @@ import {
   GraphPlotter,
   ChemicalEquation,
   AudioRecorder,
+  DrawingCanvas,
 } from "./components/input";
 
 // Assessment Components
@@ -48,6 +54,7 @@ import {
   TableInput,
   ImageHotspot,
   DiagramLabeler,
+  AnnotationHighlighter,
   EvidenceHighlighter,
   StepwiseDerivation,
   ProofBuilder,
@@ -57,6 +64,15 @@ import {
   ArgumentBuilder,
   OralResponse,
 } from "./components/assessment";
+
+import {
+  CodePlayground,
+  SQLWorkbench,
+  CircuitBuilder,
+  MusicNotation,
+  MoleculeViewer3D,
+  GeometrySketcher,
+} from "./components/plugin";
 
 /**
  * Convert PascalCase to snake_case
@@ -76,7 +92,7 @@ function toSnakeCase(str) {
  * snake_case and PascalCase lookups (e.g., "markdown_block" or "MarkdownBlock")
  */
 const componentRegistry = {
-  // Display Components (11)
+  // Display Components (16)
   markdown_block: MarkdownBlock,
   callout: Callout,
   reveal_block: RevealBlock,
@@ -88,8 +104,13 @@ const componentRegistry = {
   diagram_viewer: DiagramViewer,
   data_table_viewer: DataTableViewer,
   pdf_viewer: PdfViewer,
+  side_by_side_compare: SideBySideCompare,
+  timeline_viewer: TimelineViewer,
+  map_viewer: MapViewer,
+  citation_list: CitationList,
+  glossary_panel: GlossaryPanel,
 
-  // Input Components (9)
+  // Input Components (11)
   numeric_input: NumericInput,
   number_slider: NumberSlider,
   math_input: MathInput,
@@ -99,6 +120,8 @@ const componentRegistry = {
   graph_plotter: GraphPlotter,
   chemical_equation: ChemicalEquation,
   audio_recorder: AudioRecorder,
+  drawing_canvas: DrawingCanvas,
+  annotation_highlighter: AnnotationHighlighter,
 
   // Assessment Components (20)
   select_group: SelectGroup,
@@ -121,6 +144,16 @@ const componentRegistry = {
   long_form_response: LongFormResponse,
   argument_builder: ArgumentBuilder,
   oral_response: OralResponse,
+
+  // Plugin Components (6)
+  code_playground: CodePlayground,
+  sql_workbench: SQLWorkbench,
+  s_q_l_workbench: SQLWorkbench,
+  circuit_builder: CircuitBuilder,
+  music_notation: MusicNotation,
+  molecule_viewer3_d: MoleculeViewer3D,
+  molecule_viewer_3d: MoleculeViewer3D,
+  geometry_sketcher: GeometrySketcher,
 };
 
 /**
@@ -183,6 +216,11 @@ export const COMPONENT_CATEGORIES = {
     "diagram_viewer",
     "data_table_viewer",
     "pdf_viewer",
+    "side_by_side_compare",
+    "timeline_viewer",
+    "map_viewer",
+    "citation_list",
+    "glossary_panel",
   ],
   input: [
     "numeric_input",
@@ -194,6 +232,8 @@ export const COMPONENT_CATEGORIES = {
     "graph_plotter",
     "chemical_equation",
     "audio_recorder",
+    "drawing_canvas",
+    "annotation_highlighter",
   ],
   assessment: [
     "select_group",
@@ -216,6 +256,16 @@ export const COMPONENT_CATEGORIES = {
     "long_form_response",
     "argument_builder",
     "oral_response",
+  ],
+  plugin: [
+    "code_playground",
+    "sql_workbench",
+    "s_q_l_workbench",
+    "circuit_builder",
+    "music_notation",
+    "molecule_viewer3_d",
+    "molecule_viewer_3d",
+    "geometry_sketcher",
   ],
 };
 
@@ -246,7 +296,10 @@ export function isInputType(type) {
  */
 export function isDisplayType(type) {
   const normalized = normalizeType(type);
-  return COMPONENT_CATEGORIES.display.includes(normalized);
+  return (
+    COMPONENT_CATEGORIES.display.includes(normalized) ||
+    COMPONENT_CATEGORIES.plugin.includes(normalized)
+  );
 }
 
 export default componentRegistry;

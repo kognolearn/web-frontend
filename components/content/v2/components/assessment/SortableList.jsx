@@ -26,9 +26,17 @@ export default function SortableList({
   isGradable = false,
   items = [],
 }) {
+  // Normalize items to always be objects with {id, content}
+  // Supports both string arrays and object arrays
+  const normalizedItems = items.map((item, index) =>
+    typeof item === "string"
+      ? { id: item, content: item }
+      : { id: item.id ?? `item-${index}`, content: item.content ?? item.label ?? String(item) }
+  );
+
   // Initialize with items in original order if no value
   const [order, setOrder] = useState(
-    value || items.map((item) => item.id)
+    value || normalizedItems.map((item) => item.id)
   );
 
   const currentOrder = value !== undefined ? value : order;
@@ -55,7 +63,7 @@ export default function SortableList({
   };
 
   // Get item by ID
-  const getItem = (itemId) => items.find((item) => item.id === itemId);
+  const getItem = (itemId) => normalizedItems.find((item) => item.id === itemId);
 
   return (
     <div id={id} className="v2-sortable-list space-y-2">

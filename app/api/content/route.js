@@ -10,9 +10,9 @@ export async function GET(request) {
     const nodeId = searchParams.get('id'); // The lesson/node ID
     const courseId = searchParams.get('courseId');
     const userId = searchParams.get('userId');
-    const format = searchParams.get('format'); // Legacy parameter, not used in new API
+    const format = searchParams.get('format'); // Legacy parameter (ignored when missing)
 
-    console.log(`[Content API] Request received - courseId: ${courseId}, nodeId: ${nodeId}, format: ${format}`);
+    console.log(`[Content API] Request received - courseId: ${courseId}, nodeId: ${nodeId}`);
 
     // Validate required parameters
     if (!nodeId) {
@@ -132,7 +132,7 @@ export async function GET(request) {
     // Transform the backend response to match the frontend's expected format
     // The frontend expects { format, data } where data contains the content
     const transformedResponse = {
-      format: format || 'lesson', // Use provided format or default
+      ...(format ? { format } : {}),
       data: {
         // Lesson metadata
         id: lesson.id,

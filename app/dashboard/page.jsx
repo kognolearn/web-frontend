@@ -18,6 +18,7 @@ import {
   removeCourseCreateJob,
   upsertCourseCreateJob,
 } from "@/utils/courseJobs";
+import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -68,7 +69,8 @@ export default function DashboardPage() {
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
   const [pendingJobs, setPendingJobs] = useState([]);
-  
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
@@ -339,6 +341,30 @@ export default function DashboardPage() {
     };
   }, [user]);
 
+  // Fetch subscription status
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch('/api/stripe?endpoint=subscription-status');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setSubscriptionStatus(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch subscription status:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/");
@@ -501,6 +527,13 @@ export default function DashboardPage() {
               </span>
             </Link>
             <div className="flex items-center gap-1 sm:gap-2">
+              {subscriptionStatus && (
+                <SubscriptionBadge
+                  planLevel={subscriptionStatus.planLevel}
+                  expiresAt={subscriptionStatus.subscription?.currentPeriodEnd}
+                  className="hidden sm:inline-flex"
+                />
+              )}
               {hasCheckedAdmin && isAdmin && (
                 <Link
                   href="/admin"

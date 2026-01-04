@@ -408,9 +408,20 @@ export default function DiagramViewer({
 
       {/* Global styles for mermaid */}
       <style jsx global>{`
-        .mermaid-container svg {
+        .v2-diagram-viewer .mermaid-container svg {
           max-width: 100%;
           height: auto;
+        }
+
+        .v2-diagram-viewer .mermaid-container .node text {
+          paint-order: stroke;
+          stroke: rgba(15, 23, 42, 0.65);
+          stroke-linejoin: round;
+          stroke-width: 2px;
+        }
+
+        .v2-diagram-viewer .mermaid-container .node .label {
+          text-shadow: 0 1px 2px rgba(15, 23, 42, 0.6);
         }
       `}</style>
     </div>
