@@ -53,6 +53,17 @@ function resolveJobCourseId(job) {
   return null;
 }
 
+function getCourseTitle(course) {
+  if (!course || typeof course !== "object") return "Untitled Course";
+  return (
+    course.title ||
+    course.course_title ||
+    course.name ||
+    course.courseName ||
+    "Untitled Course"
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -362,6 +373,8 @@ export default function DashboardPage() {
     };
   }, [user]);
 
+  const isFreeTier = subscriptionStatus?.planLevel === 'free' || !subscriptionStatus?.hasSubscription;
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/");
@@ -384,10 +397,9 @@ export default function DashboardPage() {
 
   const handleCreateCourseClick = (e) => {
     // Check if user is on free tier and has hit the course limit
-    const isFree = subscriptionStatus?.planLevel === 'free' || !subscriptionStatus?.hasSubscription;
     const courseLimit = 1; // Free tier limit
 
-    if (isFree && courses.length >= courseLimit) {
+    if (isFreeTier && courses.length >= courseLimit) {
       e.preventDefault();
       setShowCourseLimitModal(true);
       return false;
@@ -641,6 +653,15 @@ export default function DashboardPage() {
                   Building: {pendingCount}
                 </div>
               ) : null}
+              <Link
+                href="/exams/ad-hoc"
+                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Grade exam
+              </Link>
             </div>
           </header>
         </div>
@@ -687,12 +708,7 @@ export default function DashboardPage() {
               </OnboardingTooltip>
 
               {courses.map((course) => {
-                const courseTitle =
-                  course?.title ||
-                  course?.course_title ||
-                  course?.name ||
-                  course?.courseName ||
-                  "Untitled Course";
+                const courseTitle = getCourseTitle(course);
                 // Show as pending/building if course status is pending or generating
                 const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
