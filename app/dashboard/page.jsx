@@ -549,14 +549,7 @@ export default function DashboardPage() {
                 Kogno
               </span>
             </Link>
-            <div className="flex items-center gap-1 sm:gap-2">
-              {subscriptionStatus && (
-                <SubscriptionBadge
-                  planLevel={subscriptionStatus.planLevel}
-                  expiresAt={subscriptionStatus.subscription?.currentPeriodEnd}
-                  className="hidden sm:inline-flex"
-                />
-              )}
+            <div className="flex items-center gap-2 sm:gap-3">
               {hasCheckedAdmin && isAdmin && (
                 <Link
                   href="/admin"
@@ -579,15 +572,30 @@ export default function DashboardPage() {
                   </svg>
                 </Link>
               )}
-              {/* Profile icon with dropdown */}
+              {/* Profile with connected subscription badge */}
               <div className="relative z-[100]" ref={profileMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold transition-all hover:opacity-90 hover:scale-105"
+                  className="group flex items-center transition-all"
                   title="Profile Menu"
                 >
-                  {userInitials}
+                  {/* Avatar with optional connected badge */}
+                  <div className="relative flex items-center">
+                    {/* Avatar circle */}
+                    <div className="relative z-10 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold ring-2 ring-[var(--surface-1)] group-hover:ring-[var(--primary)]/20 transition-all">
+                      {userInitials}
+                    </div>
+                    {/* Pro badge - positioned to overlap slightly */}
+                    {subscriptionStatus?.planLevel === "paid" && (
+                      <div className="hidden sm:flex items-center gap-1 h-6 pl-5 pr-2.5 -ml-4 rounded-r-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Pro
+                      </div>
+                    )}
+                  </div>
                 </button>
                 
                 {/* Profile dropdown menu */}
@@ -647,12 +655,6 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {pendingCount > 0 ? (
-                <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-500"></span>
-                  Building: {pendingCount}
-                </div>
-              ) : null}
               <Link
                 href="/exams/ad-hoc"
                 className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
