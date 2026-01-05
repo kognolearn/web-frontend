@@ -131,6 +131,12 @@ export async function GET(request) {
 
     // Transform the backend response to match the frontend's expected format
     // The frontend expects { format, data } where data contains the content
+    const contentSequence = Array.isArray(contentPayload.content_sequence)
+      ? contentPayload.content_sequence
+      : Array.isArray(contentPayload.contentSequence)
+      ? contentPayload.contentSequence
+      : null;
+
     const transformedResponse = {
       ...(format ? { format } : {}),
       data: {
@@ -147,6 +153,9 @@ export async function GET(request) {
         quizCompleted: resolvedQuizCompleted,
         mastery_status: lesson.mastery_status || 'pending',
         familiarity_score: lesson.familiarity_score,
+
+        // Content ordering from backend
+        ...(contentSequence ? { content_sequence: contentSequence } : {}),
         
         // Inline question selections from backend
         inlineQuestionSelections,

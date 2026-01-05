@@ -37,6 +37,39 @@ const prettyFormat = (fmt) => {
   return base.replace(/\b\w/g, (m) => m.toUpperCase());
 };
 
+const normalizeContentSequenceToken = (token) => {
+  if (!token) return null;
+  const normalized = String(token).trim().toLowerCase().replace(/[-\s]+/g, "_");
+  if (normalized === "quiz" || normalized === "mini_quiz" || normalized === "miniquiz") return "mini_quiz";
+  if (normalized === "interactive_practice" || normalized === "interactive_task") return "interactive_task";
+  if (normalized === "flashcard") return "flashcards";
+  if (normalized === "videos") return "video";
+  return normalized;
+};
+
+const orderContentTypes = (types, sequence) => {
+  if (!Array.isArray(types) || types.length === 0) return [];
+  if (!Array.isArray(sequence) || sequence.length === 0) return types;
+  const byValue = new Map(types.map((type) => [type.value, type]));
+  const ordered = [];
+  const seen = new Set();
+  sequence.forEach((entry) => {
+    const normalized = normalizeContentSequenceToken(entry);
+    if (!normalized) return;
+    const type = byValue.get(normalized);
+    if (type && !seen.has(normalized)) {
+      ordered.push(type);
+      seen.add(normalized);
+    }
+  });
+  types.forEach((type) => {
+    if (!seen.has(type.value)) {
+      ordered.push(type);
+    }
+  });
+  return ordered;
+};
+
 const getLessonCacheKey = (lessonId, userId, courseId) => {
   if (!lessonId || !userId || !courseId) return null;
   return `lesson:${lessonId}:${userId}:${courseId}`;
@@ -1335,8 +1368,28 @@ export default function CourseTabContent({
     if (types.length === 0) {
       types.push({ label: "Reading", value: "reading" });
     }
-    return types;
+    const sequence = Array.isArray(data?.content_sequence)
+      ? data.content_sequence
+      : Array.isArray(data?.contentSequence)
+      ? data.contentSequence
+      : null;
+    return orderContentTypes(types, sequence);
   }, [getLessonContentData]);
+
+  const getReviewModuleContentTypes = useCallback((reviewModule) => {
+    if (!reviewModule) return [];
+    const payload = reviewModule.content_payload || {};
+    const types = [];
+    if (payload.reading) types.push({ value: 'reading', label: 'Reading' });
+    if (payload.video?.length > 0) types.push({ value: 'video', label: 'Video' });
+    if (payload.quiz?.length > 0) types.push({ value: 'mini_quiz', label: 'Quiz' });
+    const sequence = Array.isArray(payload?.content_sequence)
+      ? payload.content_sequence
+      : Array.isArray(payload?.contentSequence)
+      ? payload.contentSequence
+      : null;
+    return orderContentTypes(types, sequence);
+  }, []);
 
   // Auto-select first section when V2 content loads
   useEffect(() => {
@@ -1352,6 +1405,15 @@ export default function CourseTabContent({
       setSelectedContentType({ lessonId: selectedLesson.id, type: firstType.value });
     }
   }, [selectedLesson?.id, contentCache, getAvailableContentTypes, selectedContentType?.type]);
+
+  useEffect(() => {
+    if (!selectedReviewModule) return;
+    const availableTypes = getReviewModuleContentTypes(selectedReviewModule);
+    if (availableTypes.length === 0) return;
+    if (!availableTypes.some((type) => type.value === reviewModuleContentType)) {
+      setReviewModuleContentType(availableTypes[0].value);
+    }
+  }, [selectedReviewModule, reviewModuleContentType, getReviewModuleContentTypes]);
 
   // Helper to get lesson data from studyPlan by ID
   const getLessonFromStudyPlan = useCallback((lessonId) => {
@@ -2103,7 +2165,8 @@ export default function CourseTabContent({
                             onClick={() => {
                               setSelectedReviewModule(reviewModule);
                               setSelectedLesson(null);
-                              setReviewModuleContentType('reading');
+                              const availableTypes = getReviewModuleContentTypes(reviewModule);
+                              setReviewModuleContentType(availableTypes[0]?.value || 'reading');
                               setViewMode("topic");
                             }}
                             className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
@@ -2681,12 +2744,10 @@ export default function CourseTabContent({
             <section className="space-y-6 pb-24">
               {(() => {
                 const payload = selectedReviewModule.content_payload || {};
-                const availableTypes = [];
-                if (payload.reading) availableTypes.push({ value: 'reading', label: 'Reading' });
-                if (payload.video?.length > 0) availableTypes.push({ value: 'video', label: 'Video' });
-                if (payload.quiz?.length > 0) availableTypes.push({ value: 'mini_quiz', label: 'Quiz' });
-                
-                const activeType = reviewModuleContentType;
+                const availableTypes = getReviewModuleContentTypes(selectedReviewModule);
+                const activeType = availableTypes.some((type) => type.value === reviewModuleContentType)
+                  ? reviewModuleContentType
+                  : availableTypes[0]?.value;
                 
                 return (
                   <>
@@ -3401,11 +3462,7 @@ export default function CourseTabContent({
           >
             <div className="flex items-center justify-center px-4 py-3">
                 {(() => {
-                  const payload = selectedReviewModule.content_payload || {};
-                  const availableTypes = [];
-                  if (payload.reading) availableTypes.push({ value: 'reading', label: 'Reading' });
-                  if (payload.video?.length > 0) availableTypes.push({ value: 'video', label: 'Video' });
-                  if (payload.quiz?.length > 0) availableTypes.push({ value: 'mini_quiz', label: 'Quiz' });
+                  const availableTypes = getReviewModuleContentTypes(selectedReviewModule);
                   
                   return (
                       <div className="flex items-center gap-2">
