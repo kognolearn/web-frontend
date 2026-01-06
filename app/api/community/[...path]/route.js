@@ -29,9 +29,22 @@ async function proxyRequest(request, method) {
       const contentType = request.headers.get("Content-Type") || "";
 
       if (contentType.includes("multipart/form-data")) {
-        // For file uploads, pass the body as-is
-        const formData = await request.formData();
-        fetchOptions.body = formData;
+        // For file uploads, reconstruct FormData for the outgoing request
+        const incomingFormData = await request.formData();
+        const outgoingFormData = new FormData();
+
+        for (const [key, value] of incomingFormData.entries()) {
+          if (value instanceof File) {
+            // Convert File to Blob with proper filename
+            const buffer = await value.arrayBuffer();
+            const blob = new Blob([buffer], { type: value.type });
+            outgoingFormData.append(key, blob, value.name);
+          } else {
+            outgoingFormData.append(key, value);
+          }
+        }
+
+        fetchOptions.body = outgoingFormData;
         // Don't set Content-Type header - let fetch set it with boundary
         delete headers["Content-Type"];
       } else {
