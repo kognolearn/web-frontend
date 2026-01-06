@@ -198,7 +198,11 @@ export default function DiscussionTab({
       await Promise.all([fetchPinVotes(), fetchPinnedPosts()]);
     } catch (err) {
       console.error("Error voting on pin:", err);
-      alert(err.message || "Failed to vote on pin");
+      const message = err?.message || "Failed to vote on pin";
+      if (message.toLowerCase().includes("expired") || message.toLowerCase().includes("no longer active")) {
+        await Promise.all([fetchPinVotes(), fetchPinnedPosts()]);
+      }
+      alert(message);
     }
   };
 

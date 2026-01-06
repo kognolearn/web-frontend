@@ -10,6 +10,7 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const bellRef = useRef(null);
+  const isFetchingRef = useRef(false);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -23,7 +24,8 @@ export default function NotificationBell() {
   }, []);
 
   const fetchNotifications = useCallback(async () => {
-    if (loading) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
     try {
       const res = await authFetch("/api/notifications?limit=20");
@@ -34,8 +36,9 @@ export default function NotificationBell() {
       console.error("Error fetching notifications:", err);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [loading]);
+  }, []);
 
   // Initial fetch and polling
   useEffect(() => {
