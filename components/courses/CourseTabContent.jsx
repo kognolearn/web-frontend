@@ -341,12 +341,43 @@ function ItemContent({
     case "interactive_task": {
       // Interactive Task (formerly interactive practice)
       const taskData = data?.interactive_task || data?.interactive_practice || data || {};
+      const rawTaskContent = (() => {
+        if (typeof taskData === "string") return taskData;
+        if (!taskData || (typeof taskData === "object" && Object.keys(taskData).length === 0)) {
+          return "";
+        }
+        return JSON.stringify(taskData, null, 2);
+      })();
       return (
-        <TaskRenderer
-          taskData={taskData}
-          courseId={courseId}
-          nodeId={id}
-        />
+        <div className="space-y-4">
+          {isAdmin && (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRawContent((prev) => !prev)}
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+                aria-pressed={showRawContent}
+              >
+                {showRawContent ? "Hide raw content" : "Show raw content"}
+              </button>
+            </div>
+          )}
+          {isAdmin && showRawContent && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
+              <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Raw text
+              </div>
+              <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                {rawTaskContent || "No raw content available."}
+              </pre>
+            </div>
+          )}
+          <TaskRenderer
+            taskData={taskData}
+            courseId={courseId}
+            nodeId={id}
+          />
+        </div>
       );
     }
     default:

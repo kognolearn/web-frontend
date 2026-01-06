@@ -32,9 +32,11 @@ export default function ConversationThread({
 
       const newMessages = data.messages || [];
       if (append) {
-        setMessages(prev => [...newMessages.reverse(), ...prev]);
+        // Older messages go at the beginning (API returns them in chronological order)
+        setMessages(prev => [...newMessages, ...prev]);
       } else {
-        setMessages(newMessages.reverse());
+        // Messages are already in chronological order from the API
+        setMessages(newMessages);
       }
       setHasMore(data.hasMore);
       setPage(pageNum);
