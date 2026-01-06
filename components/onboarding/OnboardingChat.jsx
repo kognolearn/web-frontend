@@ -95,6 +95,13 @@ export default function OnboardingChat() {
     }
   };
 
+  const handleCustomTopicSubmit = async () => {
+    if (!input.trim()) return;
+    const val = input.trim();
+    setInput('');
+    await handleTopicSelection(val);
+  };
+
   const validateCourseData = async (college) => {
     setLoading(true);
     setStep(STEPS.VALIDATE_COURSE);
@@ -103,10 +110,15 @@ export default function OnboardingChat() {
       const res = await api.validateCourse(currentData);
       
       if (res.valid) {
-        const topicRes = await api.getHardTopics(currentData);
+        const normalizedCourse = res.normalizedCourseName || currentData.courseName;
+        const normalizedCollege = res.normalizedCollegeName || currentData.collegeName;
+        const normalizedData = { courseName: normalizedCourse, collegeName: normalizedCollege };
+        setData(prev => ({ ...prev, ...normalizedData }));
+
+        const topicRes = await api.getHardTopics(normalizedData);
         setTopics(topicRes.topics || []);
         setStep(STEPS.SHOW_TOPICS);
-        addBotMessage("Pick a topic below, or tell me another one. I can teach it to you in 5 minutes.");
+        addBotMessage("Here are the hardest topics I could find. Pick one below, or tell me another one - I can teach it to you in 5 minutes.");
       } else {
         setStep(STEPS.ASK_COURSE);
         addBotMessage("Hmm, I couldn't find that course. Mind checking the name and college again? What's the course name?");
@@ -137,14 +149,22 @@ export default function OnboardingChat() {
         const validRes = await api.validateTopic(currentData);
         
         if (validRes.valid) {
+            const normalizedTopic = validRes.normalizedTopic || topic;
+            const normalizedData = { ...data, topic: normalizedTopic };
+            setData(prev => ({ ...prev, topic: normalizedTopic }));
             setStep(STEPS.START_JOB);
-            const jobRes = await api.generateLesson(currentData);
+            const jobRes = await api.generateLesson(normalizedData);
             setJobId(jobRes.jobId);
             setStep(STEPS.WAIT_JOB);
             addBotMessage("On it! Creating your personalized lesson...");
         } else {
             setStep(STEPS.SHOW_TOPICS);
-            addBotMessage("That topic doesn't seem to fit the course. Try picking one from the list or be more specific.");
+            if (Array.isArray(validRes.suggestedTopics) && validRes.suggestedTopics.length) {
+                setTopics(validRes.suggestedTopics);
+                addBotMessage("That topic doesn't seem to fit the course. Try one of these instead, or be more specific.");
+            } else {
+                addBotMessage("That topic doesn't seem to fit the course. Try picking one from the list or be more specific.");
+            }
         }
     } catch (e) {
         addBotMessage("Something went wrong. Please try picking a topic again.");
@@ -185,7 +205,8 @@ export default function OnboardingChat() {
                 setStep(STEPS.COMPLETED);
                 addBotMessage("Ready! Taking you there now.");
                 setTimeout(() => {
-                     if (status.resultUrl) router.push(status.resultUrl);
+                     const nextUrl = status.resultUrl || status.redirectUrl;
+                     if (nextUrl) router.push(nextUrl);
                      else router.push('/dashboard');
                 }, 1000);
             } else if (status.status === 'failed') {
@@ -234,10 +255,10 @@ export default function OnboardingChat() {
                     {topics.map(t => (
                         <button
                             key={t}
-                            onClick={() => handleTopicSelection(t)}
-                            className="px-3 py-1.5 text-sm bg-[var(--surface-1)] hover:bg-[var(--primary)] hover:text-white border border-white/10 rounded-full transition-colors text-left"
-                        >
-                            {t}
+                    onClick={() => handleTopicSelection(t)}
+                    className="px-3 py-1.5 text-sm bg-[var(--surface-1)] hover:bg-[var(--primary)] hover:text-white border border-white/10 rounded-full transition-colors text-left"
+                >
+                    {t}
                         </button>
                     ))}
                 </div>
@@ -247,12 +268,12 @@ export default function OnboardingChat() {
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (setStep(STEPS.ASK_TOPIC_CUSTOM), handleSend())}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCustomTopicSubmit()}
                         placeholder="Or type a topic..."
                         className="w-full bg-[var(--background)] border border-white/10 rounded-xl px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
                     />
                      <button 
-                        onClick={() => { setStep(STEPS.ASK_TOPIC_CUSTOM); handleSend(); }}
+                        onClick={handleCustomTopicSubmit}
                         disabled={!input.trim()}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-[var(--primary)] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90"
                     >

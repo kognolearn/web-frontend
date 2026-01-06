@@ -22,6 +22,7 @@ export default function LessonPreviewRenderer({
   onVideoViewed,
   onQuizCompleted,
   onFlashcardsCompleted,
+  onInteractiveTaskCompleted,
 }) {
   const normFmt = normalizeFormat(format);
 
@@ -34,25 +35,35 @@ export default function LessonPreviewRenderer({
       if (!isNaN(parsed)) sectionIndex = parsed;
     }
     return (
-      <V2ContentRenderer
-        content={data}
-        // Mock IDs for preview
-        courseId="preview-course"
-        nodeId="preview-node"
-        activeSectionIndex={sectionIndex}
-        isPreview={true}
-        onSectionComplete={(idx) => {
-            // Simple completion mapping for preview
-            if (idx === (data.sections?.length - 1)) {
-                onReadingCompleted && onReadingCompleted();
-            }
-        }}
-      />
+      <div className="space-y-6">
+        <V2ContentRenderer
+          content={data}
+          // Mock IDs for preview
+          courseId="preview-course"
+          nodeId="preview-node"
+          activeSectionIndex={sectionIndex}
+        />
+        {onReadingCompleted && (
+          <div className="flex justify-end">
+            <button
+              onClick={onReadingCompleted}
+              className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary)]/90"
+            >
+              Mark lesson complete
+            </button>
+          </div>
+        )}
+      </div>
     );
   }
 
   // Flashcards Data Preparation
   const cardsArray = data?.cards || data?.flashcards;
+  const videoList = Array.isArray(data?.videos)
+    ? data.videos
+    : Array.isArray(data?.video)
+      ? data.video
+      : [];
   const flashcardData = useMemo(() => {
     if (!Array.isArray(cardsArray)) return {};
     return cardsArray.reduce((acc, card, idx) => {
@@ -65,12 +76,15 @@ export default function LessonPreviewRenderer({
     case "video":
       return (
         <div className="space-y-4">
-          {data?.videos?.map((vid, idx) => (
+          {videoList.map((vid, idx) => {
+            const url = vid.url || (vid.videoId ? `https://www.youtube.com/watch?v=${vid.videoId}` : "");
+            const description = vid.summary || vid.description || "";
+            return (
             <VideoBlock
               key={idx}
-              url={vid.url}
+              url={url}
               title={vid.title}
-              description={vid.summary}
+              description={description}
               // Mock IDs
               courseId="preview-course"
               lessonId="preview-node"
@@ -78,22 +92,35 @@ export default function LessonPreviewRenderer({
               onVideoViewed={onVideoViewed}
               isPreview={true}
             />
-          ))}
+            );
+          })}
         </div>
       );
 
     case "reading":
       const latexContent = data?.body || data?.reading || "";
       return (
-        <ReadingRenderer
-          content={latexContent}
-          courseId="preview-course"
-          lessonId="preview-node"
-          inlineQuestionSelections={{}}
-          readingCompleted={false}
-          onReadingCompleted={onReadingCompleted}
-          isPreview={true}
-        />
+        <div className="space-y-6">
+          <ReadingRenderer
+            content={latexContent}
+            courseId="preview-course"
+            lessonId="preview-node"
+            inlineQuestionSelections={{}}
+            readingCompleted={false}
+            onReadingCompleted={onReadingCompleted}
+            isPreview={true}
+          />
+          {onReadingCompleted && (
+            <div className="flex justify-end">
+              <button
+                onClick={onReadingCompleted}
+                className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary)]/90"
+              >
+                Mark reading complete
+              </button>
+            </div>
+          )}
+        </div>
       );
 
     case "flashcards":
@@ -121,7 +148,21 @@ export default function LessonPreviewRenderer({
       );
 
     case "interactive_task":
-      return <TaskRenderer taskData={data?.interactive_task || {}} isPreview={true} />;
+      return (
+        <div className="space-y-6">
+          <TaskRenderer taskData={data?.interactive_task || {}} isPreview={true} />
+          {onInteractiveTaskCompleted && (
+            <div className="flex justify-end">
+              <button
+                onClick={onInteractiveTaskCompleted}
+                className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary)]/90"
+              >
+                Mark task complete
+              </button>
+            </div>
+          )}
+        </div>
+      );
 
     default:
       return (

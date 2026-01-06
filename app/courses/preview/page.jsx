@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import * as api from "@/lib/onboarding";
 import LessonPreviewRenderer from "@/components/courses/LessonPreviewRenderer";
 import CompletionModal from "@/components/onboarding/CompletionModal";
@@ -16,8 +15,8 @@ export default function CoursePreviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const [activeNodeIndex, setActiveNodeIndex] = useState(0);
-  const [completedNodes, setCompletedNodes] = useState(new Set());
+  const [activeContentType, setActiveContentType] = useState(null);
+  const [completedTypes, setCompletedTypes] = useState(() => new Set());
   const [showModal, setShowModal] = useState(false);
 
   // Fetch job status and data
@@ -60,28 +59,92 @@ export default function CoursePreviewPage() {
 
   const currentNode = useMemo(() => {
     if (!data?.nodes) return null;
-    return data.nodes[activeNodeIndex];
-  }, [data, activeNodeIndex]);
+    return data.nodes[0];
+  }, [data]);
 
-  const handleNodeCompletion = () => {
-     if (!currentNode) return;
-     
-     setCompletedNodes(prev => {
-         const next = new Set(prev);
-         next.add(currentNode.id);
-         return next;
-     });
+  const currentPayload = useMemo(() => {
+    return currentNode?.data || currentNode?.content_payload || null;
+  }, [currentNode]);
 
-     // If this is the last node, show modal
-     if (activeNodeIndex === (data.nodes.length - 1)) {
-         setTimeout(() => setShowModal(true), 1000);
-     } else {
-         // Auto-advance or let user click? Let's just mark complete for now.
-         // Maybe show a "Next" button?
-         // For the MVP, let's assume one big lesson node.
-         setTimeout(() => setShowModal(true), 1000);
-     }
-  };
+  const availableTypes = useMemo(() => {
+    if (!currentPayload) return [];
+    if (currentPayload?.version === 2 && Array.isArray(currentPayload?.sections)) {
+      return [{ key: 'v2', label: 'Lesson' }];
+    }
+
+    const typeAvailability = {
+      reading: Boolean(currentPayload.reading),
+      video: (Array.isArray(currentPayload.video) && currentPayload.video.length > 0)
+        || (Array.isArray(currentPayload.videos) && currentPayload.videos.length > 0),
+      mini_quiz: Array.isArray(currentPayload.quiz) && currentPayload.quiz.length > 0,
+      flashcards: Array.isArray(currentPayload.flashcards) && currentPayload.flashcards.length > 0,
+      interactive_task: Boolean(currentPayload.interactive_task),
+    };
+
+    const labelMap = {
+      reading: 'Reading',
+      video: 'Video',
+      mini_quiz: 'Quiz',
+      flashcards: 'Flashcards',
+      interactive_task: 'Practice Task',
+    };
+
+    const ordered = [];
+    const seen = new Set();
+    const sequence = Array.isArray(currentPayload.content_sequence) ? currentPayload.content_sequence : [];
+    sequence.forEach((entry) => {
+      const normalized = entry === 'quiz' ? 'mini_quiz' : entry;
+      if (typeAvailability[normalized] && !seen.has(normalized)) {
+        ordered.push({ key: normalized, label: labelMap[normalized] || normalized });
+        seen.add(normalized);
+      }
+    });
+
+    Object.keys(typeAvailability).forEach((key) => {
+      if (typeAvailability[key] && !seen.has(key)) {
+        ordered.push({ key, label: labelMap[key] || key });
+        seen.add(key);
+      }
+    });
+
+    return ordered;
+  }, [currentPayload]);
+
+  useEffect(() => {
+    if (!availableTypes.length) {
+      setActiveContentType(null);
+      return;
+    }
+    setActiveContentType(availableTypes[0].key);
+    setCompletedTypes(new Set());
+    setShowModal(false);
+  }, [availableTypes]);
+
+  const handleTypeCompleted = useCallback((typeKey) => {
+    setCompletedTypes((prev) => {
+      if (prev.has(typeKey)) return prev;
+      const next = new Set(prev);
+      next.add(typeKey);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!availableTypes.length || !activeContentType) return;
+    const keys = availableTypes.map((entry) => entry.key);
+    const allDone = keys.every((key) => completedTypes.has(key));
+    if (allDone) {
+      setShowModal(true);
+      return;
+    }
+
+    if (completedTypes.has(activeContentType)) {
+      const nextType = keys.find((key) => !completedTypes.has(key));
+      if (nextType) {
+        setActiveContentType(nextType);
+      }
+    }
+  }, [availableTypes, activeContentType, completedTypes]);
 
   const handleGenerateFullCourse = async () => {
     // 1. Save context
@@ -134,14 +197,39 @@ export default function CoursePreviewPage() {
         {currentNode ? (
             <div className="bg-[var(--surface-1)] rounded-3xl border border-white/5 p-6 sm:p-8 shadow-xl">
                 <h2 className="text-2xl font-bold mb-6">{currentNode.title}</h2>
-                <LessonPreviewRenderer 
-                    data={currentNode.data} 
-                    format={currentNode.type || 'reading'}
-                    onReadingCompleted={handleNodeCompletion}
-                    onVideoViewed={handleNodeCompletion}
-                    onQuizCompleted={handleNodeCompletion}
-                    onFlashcardsCompleted={handleNodeCompletion}
-                />
+                {currentPayload && availableTypes.length > 1 && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {availableTypes.map((entry) => (
+                      <button
+                        key={entry.key}
+                        onClick={() => setActiveContentType(entry.key)}
+                        className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                          activeContentType === entry.key
+                            ? "bg-[var(--primary)] text-white border-transparent"
+                            : "bg-[var(--surface-2)] text-[var(--foreground)] border-white/10 hover:border-[var(--primary)]/60"
+                        }`}
+                      >
+                        {entry.label}
+                        {completedTypes.has(entry.key) && (
+                          <span className="ml-2 text-xs opacity-80">Done</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {currentPayload && availableTypes.length > 0 ? (
+                  <LessonPreviewRenderer 
+                      data={currentPayload} 
+                      format={activeContentType || 'reading'}
+                      onReadingCompleted={() => handleTypeCompleted(activeContentType === 'v2' ? 'v2' : 'reading')}
+                      onVideoViewed={() => handleTypeCompleted('video')}
+                      onQuizCompleted={() => handleTypeCompleted('mini_quiz')}
+                      onFlashcardsCompleted={() => handleTypeCompleted('flashcards')}
+                      onInteractiveTaskCompleted={() => handleTypeCompleted('interactive_task')}
+                  />
+                ) : (
+                  <div className="text-center p-10">No content available.</div>
+                )}
             </div>
         ) : (
             <div className="text-center p-10">No content available.</div>
