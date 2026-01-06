@@ -14,6 +14,7 @@ import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/On
 import Tooltip from "@/components/ui/Tooltip";
 import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
 import PersonalizationModal from "@/components/ui/PersonalizationModal";
+import CommunityPanel from "@/components/community/CommunityPanel";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
@@ -446,6 +447,8 @@ export default function CourseTabContent({
   isEditCourseModalOpen,
   setIsEditCourseModalOpen,
   onOpenChatTab,
+  onOpenDiscussionTab,
+  onOpenMessagesTab,
   onClose,
   onChatTabReturn,
   chatOpenRequest,
@@ -501,6 +504,7 @@ export default function CourseTabContent({
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
   const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const [isCommunityPanelOpen, setIsCommunityPanelOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
   // Close profile menu when clicking outside
@@ -1931,7 +1935,20 @@ export default function CourseTabContent({
               </svg>
             </a>
           </Tooltip>
-          
+
+          {/* Community button */}
+          <Tooltip content="Community" position="right">
+            <button
+              type="button"
+              onClick={() => { setIsProfileMenuOpen(false); setIsCommunityPanelOpen(true); }}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </button>
+          </Tooltip>
+
           {/* Spacer to push bottom items down */}
           <div className="flex-1" />
           
@@ -3666,6 +3683,16 @@ export default function CourseTabContent({
       <PersonalizationModal
         isOpen={isPersonalizationModalOpen}
         onClose={() => setIsPersonalizationModalOpen(false)}
+      />
+
+      {/* Community Panel */}
+      <CommunityPanel
+        isOpen={isCommunityPanelOpen}
+        onClose={() => setIsCommunityPanelOpen(false)}
+        courseId={courseId}
+        userId={userId}
+        onOpenDiscussionTab={onOpenDiscussionTab}
+        onOpenMessagesTab={onOpenMessagesTab}
       />
 
     </div>

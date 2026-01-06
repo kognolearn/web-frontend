@@ -21,7 +21,7 @@ export default function ReplyThread({
     const fetchReplies = async () => {
       try {
         setLoading(true);
-        const res = await authFetch(`/api/community/${studyGroupId}/posts/${postId}`);
+        const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${postId}`);
         if (!res.ok) throw new Error("Failed to fetch replies");
         const data = await res.json();
         setReplies(data.post?.replies || []);

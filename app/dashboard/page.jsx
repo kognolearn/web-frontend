@@ -17,6 +17,7 @@ import {
   upsertCourseCreateJob,
 } from "@/utils/courseJobs";
 import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -572,6 +573,8 @@ export default function DashboardPage() {
                   </svg>
                 </Link>
               )}
+              {/* Notifications */}
+              <NotificationBell />
               {/* Profile with connected subscription badge */}
               <div className="relative z-[100]" ref={profileMenuRef}>
                 <button

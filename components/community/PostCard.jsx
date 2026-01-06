@@ -50,7 +50,7 @@ export default function PostCard({
 
     setIsDeleting(true);
     try {
-      const res = await authFetch(`/api/community/${studyGroupId}/posts/${post.id}`, {
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${post.id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete post");

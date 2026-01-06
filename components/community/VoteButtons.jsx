@@ -36,11 +36,16 @@ export default function VoteButtons({
 
     setIsVoting(true);
     try {
-      const res = await authFetch(`/api/community/${studyGroupId}/posts/${postId}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voteType: newVote }),
-      });
+      // Use DELETE to remove vote, POST to add/change vote
+      const res = newVote === 0
+        ? await authFetch(`/api/community/groups/${studyGroupId}/posts/${postId}/vote`, {
+            method: "DELETE",
+          })
+        : await authFetch(`/api/community/groups/${studyGroupId}/posts/${postId}/vote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voteType: newVote }),
+          });
 
       if (!res.ok) {
         // Revert on error

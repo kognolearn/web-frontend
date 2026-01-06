@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
+import { authFetch } from "@/lib/api";
 
 export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress }) {
   const router = useRouter();
-  const shareLink = `https://www.kognolearn.com/share/${courseId}`;
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
   const shareResetRef = useRef(null);
 
   const handleDeleteClick = (e) => {
@@ -15,24 +16,32 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     if (onDelete) onDelete();
   };
 
-  const handleShareClick = (e) => {
+  const handleShareClick = async (e) => {
     e.stopPropagation();
-    const fallbackOpen = () => {
-      if (typeof window !== "undefined") {
-        window.open(shareLink, "_blank", "noopener,noreferrer");
-      }
-    };
+    if (shareLoading) return;
 
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(shareLink)
-        .then(() => {
-          setShareCopied(true);
-          if (shareResetRef.current) clearTimeout(shareResetRef.current);
-          shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
-        })
-        .catch(fallbackOpen);
-    } else {
-      fallbackOpen();
+    setShareLoading(true);
+    try {
+      // Generate share link via API
+      const res = await authFetch(`/api/courses/${courseId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) throw new Error("Failed to generate share link");
+
+      const data = await res.json();
+      const shareUrl = `${window.location.origin}${data.shareUrl}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      if (shareResetRef.current) clearTimeout(shareResetRef.current);
+      shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
+    } catch (err) {
+      console.error("Error sharing course:", err);
+    } finally {
+      setShareLoading(false);
     }
   };
 

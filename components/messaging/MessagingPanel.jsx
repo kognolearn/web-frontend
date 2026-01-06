@@ -6,11 +6,28 @@ import ConversationList from "./ConversationList";
 import ConversationThread from "./ConversationThread";
 import NewConversationModal from "./NewConversationModal";
 
-export default function MessagingPanel({ studyGroupId, currentUserId, members = [] }) {
+export default function MessagingPanel({
+  studyGroupId,
+  currentUserId,
+  members = [],
+  embedded = false,
+  fullPage = false,
+  initialConversationId = null
+}) {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewConversation, setShowNewConversation] = useState(false);
+
+  // Auto-select initial conversation if provided
+  useEffect(() => {
+    if (initialConversationId && conversations.length > 0 && !selectedConversation) {
+      const conv = conversations.find(c => c.id === initialConversationId);
+      if (conv) {
+        setSelectedConversation(conv);
+      }
+    }
+  }, [initialConversationId, conversations, selectedConversation]);
 
   const fetchConversations = useCallback(async () => {
     if (!studyGroupId) return;
@@ -67,10 +84,14 @@ export default function MessagingPanel({ studyGroupId, currentUserId, members = 
     );
   }
 
+  const containerClasses = fullPage || embedded
+    ? "flex h-full overflow-hidden"
+    : "flex h-[500px] rounded-xl overflow-hidden border border-[var(--border)]";
+
   return (
-    <div className="flex h-[500px] rounded-xl overflow-hidden border border-[var(--border)]">
+    <div className={containerClasses}>
       {/* Conversation list */}
-      <div className="w-80 border-r border-[var(--border)] bg-[var(--surface-1)] flex flex-col">
+      <div className={`${fullPage ? 'w-80' : 'w-72'} border-r border-[var(--border)] bg-[var(--surface-1)] flex flex-col`}>
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
           <h3 className="font-semibold text-[var(--foreground)]">Messages</h3>
           <button

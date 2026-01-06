@@ -29,7 +29,7 @@ export default function ReportPostModal({ isOpen, onClose, postId, studyGroupId 
     setError(null);
 
     try {
-      const res = await authFetch(`/api/community/${studyGroupId}/posts/${postId}/report`, {
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${postId}/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),

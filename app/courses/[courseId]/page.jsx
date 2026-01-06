@@ -7,6 +7,8 @@ import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
+import DiscussionTabContent from "@/components/community/DiscussionTabContent";
+import MessagesTabContent from "@/components/messaging/MessagesTabContent";
 import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import TimerControlsModal from "@/components/courses/TimerControlsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
@@ -724,7 +726,16 @@ export default function CoursePage() {
     }
 
     const newId = options.id || `tab-${Date.now()}`;
-    const defaultTitle = options.title || (type === 'course' ? 'Course Content' : 'Chat');
+    const getDefaultTitle = () => {
+      switch (type) {
+        case 'course': return 'Course Content';
+        case 'chat': return 'Chat';
+        case 'discussion': return 'Discussion';
+        case 'messages': return 'Messages';
+        default: return 'Tab';
+      }
+    };
+    const defaultTitle = options.title || getDefaultTitle();
     const baseTab = { id: newId, type, title: defaultTitle, selectedLessonId: null, selectedContentType: null };
 
     if (type === 'chat') {
@@ -752,6 +763,10 @@ export default function CoursePage() {
         inferredTitle = existingChat?.name || null;
       }
       const nextTab = { ...baseTab, title: inferredTitle || defaultTitle, activeChatId: targetChatId };
+      setTabs((prev) => [...prev, nextTab]);
+    } else if (type === 'discussion' || type === 'messages') {
+      // Community tabs don't need special state management
+      const nextTab = { ...baseTab, conversationId: options.conversationId || null };
       setTabs((prev) => [...prev, nextTab]);
     } else {
       const fallbackChatId = options.chatId || sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null;
@@ -995,20 +1010,31 @@ export default function CoursePage() {
                 )}
                 
                 {/* Tab Icon */}
-                <motion.span 
+                <motion.span
                   className="flex-shrink-0 relative z-10"
-                  animate={{ 
-                    rotate: draggingTabId === tab.id && isDraggingToDock ? [0, -10, 10, 0] : 0 
+                  animate={{
+                    rotate: draggingTabId === tab.id && isDraggingToDock ? [0, -10, 10, 0] : 0
                   }}
                   transition={{ repeat: Infinity, duration: 0.4 }}
                 >
-                  {tab.type === 'chat' ? (
+                  {tab.type === 'chat' && (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
-                  ) : (
+                  )}
+                  {tab.type === 'course' && (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  )}
+                  {tab.type === 'discussion' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                    </svg>
+                  )}
+                  {tab.type === 'messages' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   )}
                 </motion.span>
@@ -1075,6 +1101,25 @@ export default function CoursePage() {
                   </svg>
                 </button>
               </OnboardingTooltip>
+              <div className="w-px h-5 bg-[var(--border)]/50 mx-1" />
+              <button
+                onClick={() => addTab('discussion')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="Discussion"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => addTab('messages')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="Messages"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </button>
             </div>
         </div>
       )}
@@ -1138,67 +1183,100 @@ export default function CoursePage() {
 
         {renderedTabs.map(tab => {
           const isTabActive = tab.id === effectiveActiveTabId;
+          const renderTabContent = () => {
+            switch (tab.type) {
+              case 'course':
+                return (
+                  <CourseTabContent
+                    isActive={isTabActive}
+                    courseId={courseId}
+                    userId={userId}
+                    courseName={courseName}
+                    studyPlan={studyPlan}
+                    loading={loading}
+                    error={error}
+                    refetchStudyPlan={refetchStudyPlan}
+                    secondsRemaining={secondsRemaining}
+                    handleTimerUpdate={handleTimerUpdate}
+                    isTimerPaused={isTimerPaused}
+                    onPauseToggle={toggleTimerPause}
+                    initialLessonId={tab.selectedLessonId}
+                    initialContentType={tab.selectedContentType}
+                    onViewStateChange={getTabViewStateChangeHandler(tab.id)}
+                    onTabTitleChange={getTabTitleChangeHandler(tab.id)}
+                    onCurrentLessonChange={handleCurrentLessonChange}
+                    isSettingsModalOpen={isSettingsModalOpen}
+                    setIsSettingsModalOpen={setIsSettingsModalOpen}
+                    isTimerControlsOpen={isTimerControlsOpen}
+                    setIsTimerControlsOpen={setIsTimerControlsOpen}
+                    isEditCourseModalOpen={isEditCourseModalOpen}
+                    setIsEditCourseModalOpen={setIsEditCourseModalOpen}
+                    onOpenChatTab={handleOpenChatTab}
+                    onOpenDiscussionTab={() => addTab('discussion')}
+                    onOpenMessagesTab={() => addTab('messages')}
+                    onChatTabReturn={handleChatTabReturn}
+                    chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
+                    onChatOpenRequestHandled={() => setChatOpenRequest(null)}
+                    hasHiddenContent={hasHiddenContent}
+                    onHiddenContentClick={() => setIsHiddenContentModalOpen(true)}
+                    sharedChatState={sharedChatState}
+                    onSharedChatStateChange={handleSharedChatStateChange}
+                    activeChatId={tab.activeChatId}
+                    onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
+                    focusTimerRef={focusTimerRef}
+                    focusTimerState={focusTimerState}
+                    isDeepStudyCourse={isDeepStudyCourse}
+                  />
+                );
+              case 'chat':
+                return (
+                  <ChatTabContent
+                    isActive={isTabActive}
+                    courseId={courseId}
+                    courseName={courseName}
+                    studyPlan={studyPlan}
+                    onClose={() => closeTab(null, tab.id)}
+                    sharedChatState={sharedChatState}
+                    onSharedChatStateChange={handleSharedChatStateChange}
+                    initialChatId={tab.activeChatId}
+                    onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
+                  />
+                );
+              case 'discussion':
+                return (
+                  <DiscussionTabContent
+                    isActive={isTabActive}
+                    courseId={courseId}
+                    userId={userId}
+                    onClose={() => closeTab(null, tab.id)}
+                    onOpenMessagesTab={() => addTab('messages')}
+                  />
+                );
+              case 'messages':
+                return (
+                  <MessagesTabContent
+                    isActive={isTabActive}
+                    courseId={courseId}
+                    userId={userId}
+                    onClose={() => closeTab(null, tab.id)}
+                    onOpenDiscussionTab={() => addTab('discussion')}
+                    initialConversationId={tab.conversationId}
+                  />
+                );
+              default:
+                return null;
+            }
+          };
           return (
-          <div 
-            key={tab.id} 
+          <div
+            key={tab.id}
             className="absolute inset-0 w-full h-full"
-            style={{ 
+            style={{
               display: isTabActive ? 'block' : 'none',
               zIndex: isTabActive ? 10 : 0
             }}
           >
-            {tab.type === 'course' ? (
-              <CourseTabContent
-                isActive={isTabActive}
-                courseId={courseId}
-                userId={userId}
-                courseName={courseName}
-                studyPlan={studyPlan}
-                loading={loading}
-                error={error}
-                refetchStudyPlan={refetchStudyPlan}
-                secondsRemaining={secondsRemaining}
-                handleTimerUpdate={handleTimerUpdate}
-                isTimerPaused={isTimerPaused}
-                onPauseToggle={toggleTimerPause}
-                initialLessonId={tab.selectedLessonId}
-                initialContentType={tab.selectedContentType}
-                onViewStateChange={getTabViewStateChangeHandler(tab.id)}
-                onTabTitleChange={getTabTitleChangeHandler(tab.id)}
-                onCurrentLessonChange={handleCurrentLessonChange}
-                isSettingsModalOpen={isSettingsModalOpen}
-                setIsSettingsModalOpen={setIsSettingsModalOpen}
-                isTimerControlsOpen={isTimerControlsOpen}
-                setIsTimerControlsOpen={setIsTimerControlsOpen}
-                isEditCourseModalOpen={isEditCourseModalOpen}
-                setIsEditCourseModalOpen={setIsEditCourseModalOpen}
-                onOpenChatTab={handleOpenChatTab}
-                onChatTabReturn={handleChatTabReturn}
-                chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
-                onChatOpenRequestHandled={() => setChatOpenRequest(null)}
-                hasHiddenContent={hasHiddenContent}
-                onHiddenContentClick={() => setIsHiddenContentModalOpen(true)}
-                sharedChatState={sharedChatState}
-                onSharedChatStateChange={handleSharedChatStateChange}
-                activeChatId={tab.activeChatId}
-                onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
-                focusTimerRef={focusTimerRef}
-                focusTimerState={focusTimerState}
-                isDeepStudyCourse={isDeepStudyCourse}
-              />
-            ) : (
-              <ChatTabContent
-                isActive={isTabActive}
-                courseId={courseId}
-                courseName={courseName}
-                studyPlan={studyPlan}
-                onClose={() => closeTab(null, tab.id)}
-                sharedChatState={sharedChatState}
-                onSharedChatStateChange={handleSharedChatStateChange}
-                initialChatId={tab.activeChatId}
-                onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
-              />
-            )}
+            {renderTabContent()}
           </div>
         );
         })}

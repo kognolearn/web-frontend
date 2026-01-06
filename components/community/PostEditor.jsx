@@ -37,7 +37,7 @@ export default function PostEditor({
         const formData = new FormData();
         formData.append("file", file);
 
-        const res = await authFetch(`/api/community/${studyGroupId}/upload`, {
+        const res = await authFetch(`/api/community/groups/${studyGroupId}/upload`, {
           method: "POST",
           body: formData,
         });
@@ -81,7 +81,7 @@ export default function PostEditor({
     setError(null);
 
     try {
-      const res = await authFetch(`/api/community/${studyGroupId}/posts`, {
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

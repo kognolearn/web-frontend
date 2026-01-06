@@ -31,7 +31,7 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
         ...(sortBy === "top" && { timeRange }),
       });
 
-      const res = await authFetch(`/api/community/${studyGroupId}/posts?${params}`);
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts?${params}`);
       if (!res.ok) throw new Error("Failed to fetch posts");
 
       const data = await res.json();
@@ -56,7 +56,7 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
     if (!studyGroupId) return;
 
     try {
-      const res = await authFetch(`/api/pins/${studyGroupId}/group`);
+      const res = await authFetch(`/api/pins/groups/${studyGroupId}`);
       if (!res.ok) throw new Error("Failed to fetch pinned posts");
 
       const data = await res.json();
