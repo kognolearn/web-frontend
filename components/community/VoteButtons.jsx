@@ -62,42 +62,42 @@ export default function VoteButtons({
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="inline-flex items-center rounded-xl bg-[var(--surface-2)]/80 p-0.5">
       <button
         onClick={() => handleVote(1)}
         disabled={isVoting}
-        className={`p-1.5 rounded-lg transition-colors ${
+        className={`p-2 rounded-lg transition-all ${
           currentUserVote === 1
-            ? 'text-green-500 bg-green-500/10'
+            ? 'text-green-500 bg-green-500/15'
             : 'text-[var(--muted-foreground)] hover:text-green-500 hover:bg-green-500/10'
-        }`}
+        } disabled:opacity-50`}
         title="Upvote"
       >
-        <svg className="w-4 h-4" fill={currentUserVote === 1 ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        <svg className="w-4 h-4" fill={currentUserVote === 1 ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
         </svg>
       </button>
 
-      <span className={`text-sm font-medium min-w-[2ch] text-center ${
+      <span className={`min-w-[2.5rem] text-center text-sm font-bold tabular-nums ${
         currentScore > 0 ? 'text-green-500' :
         currentScore < 0 ? 'text-red-500' :
         'text-[var(--muted-foreground)]'
       }`}>
-        {currentScore}
+        {currentScore > 0 ? `+${currentScore}` : currentScore}
       </span>
 
       <button
         onClick={() => handleVote(-1)}
         disabled={isVoting}
-        className={`p-1.5 rounded-lg transition-colors ${
+        className={`p-2 rounded-lg transition-all ${
           currentUserVote === -1
-            ? 'text-red-500 bg-red-500/10'
+            ? 'text-red-500 bg-red-500/15'
             : 'text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-500/10'
-        }`}
+        } disabled:opacity-50`}
         title="Downvote"
       >
-        <svg className="w-4 h-4" fill={currentUserVote === -1 ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        <svg className="w-4 h-4" fill={currentUserVote === -1 ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
     </div>

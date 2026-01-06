@@ -21,17 +21,23 @@ export default function PostList({
     return (
       <div className="space-y-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] animate-pulse">
+          <div key={i} className="p-5 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] animate-pulse">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-[var(--surface-2)]" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 w-32 rounded bg-[var(--surface-2)]" />
-                <div className="h-3 w-24 rounded bg-[var(--surface-2)]" />
+                <div className="h-4 w-28 rounded-lg bg-[var(--surface-2)]" />
+                <div className="h-3 w-20 rounded-lg bg-[var(--surface-2)]" />
               </div>
             </div>
-            <div className="mt-3 space-y-2">
-              <div className="h-4 w-full rounded bg-[var(--surface-2)]" />
-              <div className="h-4 w-3/4 rounded bg-[var(--surface-2)]" />
+            <div className="mt-4 space-y-2.5">
+              <div className="h-4 w-full rounded-lg bg-[var(--surface-2)]" />
+              <div className="h-4 w-4/5 rounded-lg bg-[var(--surface-2)]" />
+              <div className="h-4 w-2/3 rounded-lg bg-[var(--surface-2)]" />
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border)]/50 flex items-center gap-3">
+              <div className="h-8 w-24 rounded-xl bg-[var(--surface-2)]" />
+              <div className="h-8 w-16 rounded-lg bg-[var(--surface-2)]" />
+              <div className="h-8 w-20 rounded-lg bg-[var(--surface-2)]" />
             </div>
           </div>
         ))}

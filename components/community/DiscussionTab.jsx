@@ -256,11 +256,14 @@ export default function DiscussionTab({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="px-6 py-5 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Discussion</h2>
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--foreground)]">Discussion</h2>
+          <p className="text-sm text-[var(--muted-foreground)] mt-0.5">{total} post{total !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="flex items-center gap-2">
           <SortDropdown
             sortBy={sortBy}
             timeRange={timeRange}
@@ -268,7 +271,7 @@ export default function DiscussionTab({
           />
           <button
             onClick={() => setShowEditor(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-hover)] transition-all shadow-sm hover:shadow-md"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -288,14 +291,23 @@ export default function DiscussionTab({
 
       {/* Active pin votes */}
       {pinVotes.length > 0 && (
-        <div className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Pin Votes</h3>
-            {pinVotesLoading && (
-              <span className="text-xs text-[var(--muted-foreground)]">Updating...</span>
-            )}
+        <div className="rounded-2xl bg-gradient-to-br from-amber-500/5 to-orange-500/5 border border-amber-500/20 overflow-hidden">
+          <div className="px-5 py-3 border-b border-amber-500/10 bg-amber-500/5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">Active Pin Votes</h3>
+              </div>
+              {pinVotesLoading && (
+                <span className="text-xs text-[var(--muted-foreground)] animate-pulse">Updating...</span>
+              )}
+            </div>
           </div>
-          <div className="space-y-3">
+          <div className="p-4 space-y-3">
             {pinVotes.map((vote) => {
               const yesCount = vote.voteCount?.yes || 0;
               const noCount = vote.voteCount?.no || 0;
@@ -304,44 +316,72 @@ export default function DiscussionTab({
               const hoursLeft = deadline
                 ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60)))
                 : null;
+              const yesPercent = totalVotes > 0 ? (yesCount / totalVotes) * 100 : 50;
               return (
-                <div key={vote.id} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--foreground)]">
-                        {vote.post?.author?.displayName || "Unknown"}
-                        <span className="text-xs text-[var(--muted-foreground)] ml-2">
-                          nominated by {vote.nominatedBy?.displayName || "Unknown"}
-                        </span>
-                      </p>
-                      <p className="text-sm text-[var(--foreground)] mt-1 line-clamp-2">
+                <div key={vote.id} className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-7 h-7 rounded-full bg-[var(--primary)]/20 flex items-center justify-center text-xs font-semibold text-[var(--primary)]">
+                          {vote.post?.author?.displayName?.[0]?.toUpperCase() || "?"}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-[var(--foreground)]">
+                            {vote.post?.author?.displayName || "Unknown"}
+                          </p>
+                          <p className="text-[10px] text-[var(--muted-foreground)]">
+                            nominated by {vote.nominatedBy?.displayName || "Unknown"}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-[var(--foreground)] line-clamp-2 mb-3">
                         {vote.post?.content}
                       </p>
-                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
-                        {totalVotes} vote{totalVotes === 1 ? "" : "s"} - {yesCount} yes / {noCount} no
-                        {hoursLeft !== null && ` - ${hoursLeft}h left`}
-                      </p>
+                      {/* Vote progress bar */}
+                      <div className="space-y-1.5">
+                        <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-300"
+                            style={{ width: `${yesPercent}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-[var(--muted-foreground)]">
+                          <span>{yesCount} yes / {noCount} no</span>
+                          {hoursLeft !== null && (
+                            <span className="flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {hoursLeft}h left
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0">
+                    <div className="flex gap-2 shrink-0">
                       <button
                         onClick={() => handleVoteOnPin(vote.postId, vote.id, true)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                           vote.userVote === true
-                            ? "bg-green-500 text-white"
-                            : "bg-[var(--surface-1)] text-[var(--foreground)] hover:bg-green-500/10"
+                            ? "bg-green-500 text-white shadow-sm"
+                            : "bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-green-500/20 hover:text-green-600"
                         }`}
                       >
-                        Vote Yes
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
                       </button>
                       <button
                         onClick={() => handleVoteOnPin(vote.postId, vote.id, false)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                           vote.userVote === false
-                            ? "bg-red-500 text-white"
-                            : "bg-[var(--surface-1)] text-[var(--foreground)] hover:bg-red-500/10"
+                            ? "bg-red-500 text-white shadow-sm"
+                            : "bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-red-500/20 hover:text-red-600"
                         }`}
                       >
-                        Vote No
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -359,13 +399,14 @@ export default function DiscussionTab({
           <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-2xl w-full p-6">
             <button
               onClick={() => setShowEditor(false)}
-              className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+              className="absolute top-4 right-4 p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">Create Post</h3>
+            <h3 className="text-lg font-bold text-[var(--foreground)] mb-1">Create Post</h3>
+            <p className="text-sm text-[var(--muted-foreground)] mb-5">Share your thoughts with the study group</p>
             <PostEditor
               studyGroupId={studyGroupId}
               onPostCreated={handlePostCreated}
@@ -377,7 +418,10 @@ export default function DiscussionTab({
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm flex items-center gap-3">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           {error}
         </div>
       )}
@@ -401,31 +445,42 @@ export default function DiscussionTab({
 
       {/* Load more */}
       {hasMore && (
-        <div className="flex justify-center pt-4">
+        <div className="flex justify-center pt-2 pb-4">
           <button
             onClick={handleLoadMore}
             disabled={loading}
-            className="px-6 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-colors disabled:opacity-50"
+            className="px-8 py-2.5 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-xl transition-all border border-[var(--primary)]/20 hover:border-[var(--primary)]/40 disabled:opacity-50"
           >
-            {loading ? "Loading..." : "Load More"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Loading...
+              </span>
+            ) : "Load More Posts"}
           </button>
         </div>
       )}
 
       {/* Empty state */}
       {!loading && posts.length === 0 && !error && (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 flex items-center justify-center mb-5">
+            <svg className="w-10 h-10 text-[var(--primary)]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">No posts yet</h3>
-          <p className="text-[var(--muted-foreground)] mb-4">Be the first to start a discussion!</p>
+          <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">No posts yet</h3>
+          <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-sm">Be the first to start a discussion with your study group!</p>
           <button
             onClick={() => setShowEditor(true)}
-            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors"
+            className="px-6 py-3 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-hover)] transition-all shadow-sm hover:shadow-md flex items-center gap-2"
           >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
             Create First Post
           </button>
         </div>
