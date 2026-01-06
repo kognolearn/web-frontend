@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const backendUrl = process.env.BACKEND_API_URL || "http://localhost:5001";
+
 const nextConfig = {
 	api: {
 		bodyParser: {
@@ -7,7 +9,10 @@ const nextConfig = {
 	},
 	// Provide sane defaults for local development without requiring env files.
 	env: {
-		BACKEND_API_URL: process.env.BACKEND_API_URL || "http://localhost:5001",
+		BACKEND_API_URL: backendUrl,
+		ONBOARDING_USE_MOCKS:
+			process.env.ONBOARDING_USE_MOCKS ??
+			(process.env.NODE_ENV === "production" ? "false" : "true"),
 	},
 };
 
