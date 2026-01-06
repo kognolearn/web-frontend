@@ -3,19 +3,34 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { authFetch } from "@/lib/api";
-import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
 
 export default function JoinCoursePage() {
   const router = useRouter();
   const params = useParams();
   const shareToken = params.shareToken;
-  const { user, loading: authLoading } = useAuth();
 
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [shareInfo, setShareInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // Check auth state
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (shareToken) {
