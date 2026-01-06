@@ -37,7 +37,9 @@ export default function ShareCourseModal({ isOpen, onClose, courseId }) {
       }
 
       const data = await res.json();
-      setShareLink(data.shareUrl);
+      // Build full URL from the relative shareUrl
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      setShareLink(`${baseUrl}${data.shareUrl}`);
     } catch (err) {
       console.error("Error generating share link:", err);
       setError(err.message);
