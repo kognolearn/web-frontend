@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
+import { authFetch } from "@/lib/api";
 
 export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress }) {
   const router = useRouter();
-  const shareLink = `https://www.kognolearn.com/share/${courseId}`;
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
   const shareResetRef = useRef(null);
 
   const handleDeleteClick = (e) => {
@@ -15,24 +16,32 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     if (onDelete) onDelete();
   };
 
-  const handleShareClick = (e) => {
+  const handleShareClick = async (e) => {
     e.stopPropagation();
-    const fallbackOpen = () => {
-      if (typeof window !== "undefined") {
-        window.open(shareLink, "_blank", "noopener,noreferrer");
-      }
-    };
+    if (shareLoading) return;
 
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(shareLink)
-        .then(() => {
-          setShareCopied(true);
-          if (shareResetRef.current) clearTimeout(shareResetRef.current);
-          shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
-        })
-        .catch(fallbackOpen);
-    } else {
-      fallbackOpen();
+    setShareLoading(true);
+    try {
+      // Generate share link via API
+      const res = await authFetch(`/api/courses/${courseId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) throw new Error("Failed to generate share link");
+
+      const data = await res.json();
+      const shareUrl = `${window.location.origin}${data.shareUrl}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      if (shareResetRef.current) clearTimeout(shareResetRef.current);
+      shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
+    } catch (err) {
+      console.error("Error sharing course:", err);
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -75,61 +84,67 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   const timeLabel = isCompleted ? "Done" : shouldShowTimeRemaining ? formatTimeRemaining(secondsToComplete) : null;
   const isPending = status === 'pending' || status === 'generating';
 
-  // Pending/Building state - show a special loading card
+  // Pending/Building state - show a premium loading card
   if (isPending) {
     return (
       <div
         role="button"
         tabIndex={-1}
         aria-label={`Course ${courseCode} is being built`}
-        className="relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/50 border border-amber-500/30"
+        className="building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80"
       >
-        {/* Animated gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5" />
-        
-        {/* Shimmer effect */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-amber-400/10 to-transparent transform -skew-x-12 animate-[shimmer_2s_linear_infinite]" style={{ width: '50%' }} />
+        {/* Subtle animated border */}
+        <div className="absolute inset-0 rounded-2xl border border-[var(--primary)]/30" />
+
+        {/* Premium shine effect - diagonal sweep */}
+        <div className="absolute inset-[-100%] overflow-visible">
+          <div className="shine-sweep absolute inset-0" />
         </div>
+
+        {/* Soft inner glow */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[var(--primary)]/[0.06] via-transparent to-[var(--primary)]/[0.03]" />
 
         {/* Content */}
         <div className="relative z-10 flex flex-col p-5 h-full">
-          {/* Building badge */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/25">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-              </span>
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Building</span>
-            </div>
-          </div>
-
           {/* Title */}
-          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug mb-auto">
+          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug">
             {courseCode}
           </h3>
-          
-          {/* Loading indicator */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-[var(--muted-foreground)]">Generating content...</span>
-            </div>
-            <div className="h-1 rounded-full bg-[var(--surface-2)] overflow-hidden">
-              <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-amber-500 to-orange-400 animate-[loading_1.5s_ease-in-out_infinite]" />
-            </div>
-          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Subtle status text */}
+          <p className="text-xs text-[var(--muted-foreground)]/60 tracking-wide">
+            Building your course...
+          </p>
         </div>
 
         <style jsx>{`
-          @keyframes shimmer {
-            0% { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(300%) skewX(-12deg); }
+          @keyframes shine {
+            0% {
+              transform: translateX(-100%) rotate(25deg);
+            }
+            100% {
+              transform: translateX(250%) rotate(25deg);
+            }
           }
-          @keyframes loading {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(150%); }
-            100% { transform: translateX(-100%); }
+          .shine-sweep::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 0;
+            width: 35%;
+            height: 400%;
+            background: linear-gradient(
+              90deg,
+              transparent 0%,
+              rgba(var(--primary-rgb), 0.1) 40%,
+              rgba(var(--primary-rgb), 0.2) 50%,
+              rgba(var(--primary-rgb), 0.1) 60%,
+              transparent 100%
+            );
+            animation: shine 3s ease-in-out infinite;
           }
         `}</style>
       </div>

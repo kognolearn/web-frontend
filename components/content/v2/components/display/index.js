@@ -9,3 +9,8 @@ export { default as ImageViewer } from "./ImageViewer";
 export { default as DiagramViewer } from "./DiagramViewer";
 export { default as DataTableViewer } from "./DataTableViewer";
 export { default as PdfViewer } from "./PdfViewer";
+export { default as SideBySideCompare } from "./SideBySideCompare";
+export { default as TimelineViewer } from "./TimelineViewer";
+export { default as MapViewer } from "./MapViewer";
+export { default as CitationList } from "./CitationList";
+export { default as GlossaryPanel } from "./GlossaryPanel";

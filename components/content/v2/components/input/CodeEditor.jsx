@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Copy, Check, RotateCcw } from "lucide-react";
+import { Copy, Check, RotateCcw, ExternalLink } from "lucide-react";
 
 /**
  * CodeEditor - Code input with syntax highlighting (basic)
@@ -95,19 +95,37 @@ export default function CodeEditor({
   let borderClass = "border-[var(--border)]";
   if (isGraded && grade) {
     if (grade.status === "correct" || grade.passed) {
-      borderClass = "border-emerald-500";
+      borderClass = "border-success";
     } else if (grade.status === "incorrect" || grade.passed === false) {
-      borderClass = "border-rose-500";
+      borderClass = "border-danger";
     }
   }
+
+  // Check if this is a text/math-friendly language
+  const isLatexFriendly = ["markdown", "latex", "tex", "text", "plaintext"].includes(
+    language?.toLowerCase()
+  );
 
   return (
     <div id={id} className="v2-code-editor">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--surface-2)]">
-        <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-          {language}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
+            {language}
+          </span>
+          {isLatexFriendly && (
+            <a
+              href="/help/latex"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+            >
+              Supports LaTeX math notation
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {initial_code && !isGraded && (
             <button
@@ -128,7 +146,7 @@ export default function CodeEditor({
           >
             {copied ? (
               <>
-                <Check className="w-3 h-3 text-emerald-500" />
+                <Check className="w-3 h-3 text-success" />
                 Copied
               </>
             ) : (
@@ -190,13 +208,13 @@ export default function CodeEditor({
       {isGraded && grade?.feedback && (
         <div className={`mt-3 p-3 rounded-xl border ${
           grade.status === "correct" || grade.passed
-            ? "border-emerald-500/30 bg-emerald-500/10"
-            : "border-rose-500/30 bg-rose-500/10"
+            ? "border-success/50 bg-success/10"
+            : "border-danger/50 bg-danger/10"
         }`}>
           <p className={`text-sm ${
             grade.status === "correct" || grade.passed
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-rose-600 dark:text-rose-400"
+              ? "text-success"
+              : "text-danger"
           }`}>
             {grade.feedback}
           </p>

@@ -7,8 +7,6 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
-import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
-import PersonalizationModal from "@/components/ui/PersonalizationModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
@@ -18,6 +16,8 @@ import {
   removeCourseCreateJob,
   upsertCourseCreateJob,
 } from "@/utils/courseJobs";
+import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -54,6 +54,17 @@ function resolveJobCourseId(job) {
   return null;
 }
 
+function getCourseTitle(course) {
+  if (!course || typeof course !== "object") return "Untitled Course";
+  return (
+    course.title ||
+    course.course_title ||
+    course.name ||
+    course.courseName ||
+    "Untitled Course"
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -68,11 +79,11 @@ export default function DashboardPage() {
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
   const [pendingJobs, setPendingJobs] = useState([]);
-  
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
-  const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
   const profileMenuRef = useRef(null);
 
   // Close profile menu when clicking outside
@@ -339,6 +350,32 @@ export default function DashboardPage() {
     };
   }, [user]);
 
+  // Fetch subscription status
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch('/api/stripe?endpoint=subscription-status');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setSubscriptionStatus(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch subscription status:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const isFreeTier = subscriptionStatus?.planLevel === 'free' || !subscriptionStatus?.hasSubscription;
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/");
@@ -357,6 +394,19 @@ export default function DashboardPage() {
     } else {
       throw new Error("Failed to delete course");
     }
+  };
+
+  const handleCreateCourseClick = (e) => {
+    // Check if user is on free tier and has hit the course limit
+    const courseLimit = 1; // Free tier limit
+
+    if (isFreeTier && courses.length >= courseLimit) {
+      e.preventDefault();
+      setShowCourseLimitModal(true);
+      return false;
+    }
+    // Allow navigation to proceed
+    return true;
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
@@ -500,7 +550,7 @@ export default function DashboardPage() {
                 Kogno
               </span>
             </Link>
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
               {hasCheckedAdmin && isAdmin && (
                 <Link
                   href="/admin"
@@ -523,47 +573,49 @@ export default function DashboardPage() {
                   </svg>
                 </Link>
               )}
-              {/* Profile icon with dropdown */}
+              {/* Notifications */}
+              <NotificationBell />
+              {/* Profile with connected subscription badge */}
               <div className="relative z-[100]" ref={profileMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold transition-all hover:opacity-90 hover:scale-105"
+                  className="group flex items-center transition-all"
                   title="Profile Menu"
                 >
-                  {userInitials}
+                  {/* Avatar with optional connected badge */}
+                  <div className="relative flex items-center">
+                    {/* Avatar circle */}
+                    <div className="relative z-10 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold ring-2 ring-[var(--surface-1)] group-hover:ring-[var(--primary)]/20 transition-all">
+                      {userInitials}
+                    </div>
+                    {/* Pro badge - positioned to overlap slightly */}
+                    {subscriptionStatus?.planLevel === "paid" && (
+                      <div className="hidden sm:flex items-center gap-1 h-6 pl-5 pr-2.5 -ml-4 rounded-r-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Pro
+                      </div>
+                    )}
+                  </div>
                 </button>
                 
                 {/* Profile dropdown menu */}
                 {isProfileMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl">
                     <div className="p-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileMenuOpen(false);
-                          setIsProfileSettingsModalOpen(true);
-                        }}
+                      <Link
+                        href="/settings"
+                        onClick={() => setIsProfileMenuOpen(false)}
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        Profile Settings
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileMenuOpen(false);
-                          setIsPersonalizationModalOpen(true);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                        </svg>
-                        Personalization
-                      </button>
+                        Settings
+                      </Link>
                       <button
                         type="button"
                         onClick={handleSendFeedback}
@@ -606,12 +658,15 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {pendingCount > 0 ? (
-                <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-500"></span>
-                  Building: {pendingCount}
-                </div>
-              ) : null}
+              <Link
+                href="/exams/ad-hoc"
+                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Grade exam
+              </Link>
             </div>
           </header>
         </div>
@@ -619,7 +674,7 @@ export default function DashboardPage() {
         <main className="space-y-6">
           {!hasCourses ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Link href="/courses/create" className="btn btn-primary btn-lg">
+              <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
@@ -642,11 +697,12 @@ export default function DashboardPage() {
               >
                 <Link
                   href="/courses/create"
+                  onClick={handleCreateCourseClick}
                   className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
                 >
                   {/* Hover gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
-                  
+
                   <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -657,12 +713,7 @@ export default function DashboardPage() {
               </OnboardingTooltip>
 
               {courses.map((course) => {
-                const courseTitle =
-                  course?.title ||
-                  course?.course_title ||
-                  course?.name ||
-                  course?.courseName ||
-                  "Untitled Course";
+                const courseTitle = getCourseTitle(course);
                 // Show as pending/building if course status is pending or generating
                 const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
@@ -692,15 +743,80 @@ export default function DashboardPage() {
         onConfirm={handleDeleteCourse}
       />
 
-      <ProfileSettingsModal
-        isOpen={isProfileSettingsModalOpen}
-        onClose={() => setIsProfileSettingsModalOpen(false)}
-      />
+      {/* Course Limit Modal */}
+      {showCourseLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowCourseLimitModal(false)}
+          />
 
-      <PersonalizationModal
-        isOpen={isPersonalizationModalOpen}
-        onClose={() => setIsPersonalizationModalOpen(false)}
-      />
+          {/* Modal */}
+          <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Close button */}
+            <button
+              onClick={() => setShowCourseLimitModal(false)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">
+                Free Plan Limit Reached
+              </h3>
+              <p className="text-[var(--muted-foreground)]">
+                You've reached the maximum of 1 course on the free plan. Upgrade to Pro for unlimited courses, exams, and cheatsheets.
+              </p>
+            </div>
+
+            {/* Features list */}
+            <div className="bg-[var(--surface-2)] rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-[var(--foreground)] mb-3">Pro includes:</p>
+              <ul className="space-y-2">
+                {['Unlimited courses', 'Unlimited practice exams', 'Unlimited cheatsheets', 'Priority support'].map((feature) => (
+                  <li key={feature} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/pricing"
+                onClick={() => setShowCourseLimitModal(false)}
+                className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors text-center"
+              >
+                Upgrade to Pro
+              </Link>
+              <button
+                onClick={() => setShowCourseLimitModal(false)}
+                className="w-full py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors"
+              >
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from "lucide-rea
  * @param {string} props.id - Component ID
  * @param {string} props.audio_url - Audio file URL
  * @param {string} [props.transcript] - Optional transcript text
- * @param {boolean} [props.waveform] - Show waveform visualization (placeholder)
+ * @param {boolean} [props.waveform] - Show waveform visualization
  * @param {boolean} [props.playback_rate_control] - Show playback rate control
  */
 export default function AudioPlayer({
@@ -21,12 +21,14 @@ export default function AudioPlayer({
   playback_rate_control = true,
 }) {
   const audioRef = useRef(null);
+  const waveformRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [waveformError, setWaveformError] = useState(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -46,6 +48,61 @@ export default function AudioPlayer({
       audio.removeEventListener("ended", handleEnded);
     };
   }, []);
+
+  useEffect(() => {
+    if (!waveform || !audio_url) return;
+    let active = true;
+    const renderWaveform = async () => {
+      try {
+        setWaveformError(null);
+        const response = await fetch(audio_url);
+        if (!response.ok) throw new Error("Failed to load audio");
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const buffer = await audioContext.decodeAudioData(arrayBuffer);
+        const rawData = buffer.getChannelData(0);
+        const samples = 120;
+        const blockSize = Math.floor(rawData.length / samples);
+        const peaks = [];
+        for (let i = 0; i < samples; i += 1) {
+          let sum = 0;
+          for (let j = 0; j < blockSize; j += 1) {
+            sum += Math.abs(rawData[i * blockSize + j]);
+          }
+          peaks.push(sum / blockSize);
+        }
+        await audioContext.close();
+
+        if (!active || !waveformRef.current) return;
+        const canvas = waveformRef.current;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = cssWidth * dpr;
+        canvas.height = cssHeight * dpr;
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        ctx.fillStyle = "rgba(123, 163, 122, 0.35)";
+        const barWidth = cssWidth / samples;
+        peaks.forEach((peak, index) => {
+          const barHeight = peak * cssHeight;
+          ctx.fillRect(
+            index * barWidth,
+            cssHeight - barHeight,
+            Math.max(1, barWidth * 0.8),
+            barHeight
+          );
+        });
+      } catch (err) {
+        if (active) setWaveformError(err?.message || "Waveform unavailable");
+      }
+    };
+    renderWaveform();
+    return () => {
+      active = false;
+    };
+  }, [waveform, audio_url]);
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return "0:00";
@@ -167,8 +224,8 @@ export default function AudioPlayer({
                 style={{ width: `${progress}%` }}
               />
               {waveform && (
-                <div className="absolute inset-0 opacity-20">
-                  {/* Placeholder waveform visualization */}
+                <div className="absolute inset-0 opacity-40">
+                  <canvas ref={waveformRef} className="h-full w-full" />
                 </div>
               )}
             </div>
@@ -200,6 +257,12 @@ export default function AudioPlayer({
           </button>
         </div>
       </div>
+
+      {waveform && waveformError && (
+        <div className="text-xs text-[var(--muted-foreground)]">
+          {waveformError}
+        </div>
+      )}
 
       {/* Transcript */}
       {transcript && (

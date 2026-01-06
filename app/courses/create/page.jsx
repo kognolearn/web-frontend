@@ -536,6 +536,9 @@ function CreateCoursePageContent() {
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [userId, setUserId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
+  const [contentVersion, setContentVersion] = useState(1);
 
   const [isTopicsLoading, setIsTopicsLoading] = useState(false);
   const [topicsError, setTopicsError] = useState(null);
@@ -707,6 +710,40 @@ function CreateCoursePageContent() {
       active = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch("/api/admin/status");
+        if (!res.ok) {
+          throw new Error(`Failed to verify admin (${res.status})`);
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          const admin = body?.isAdmin === true;
+          setIsAdmin(admin);
+          if (!admin) {
+            setContentVersion(1);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check admin status:", err);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setContentVersion(1);
+        }
+      } finally {
+        if (!cancelled) setHasCheckedAdmin(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const handleCourseInputChange = useCallback((event) => {
     setCourseTitle(event.target.value);
@@ -1516,8 +1553,8 @@ function CreateCoursePageContent() {
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
       payload.seconds_to_complete = secondsToComplete;
 
-      // Enable V2 section-based content pipeline
-      payload.content_version = 2;
+      const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
+      payload.content_version = resolvedContentVersion;
 
       // Include onboarding context if available
       try {
@@ -1599,6 +1636,9 @@ function CreateCoursePageContent() {
     ragSessionId,
     resolveSubtopicConfidence,
     router,
+    contentVersion,
+    hasCheckedAdmin,
+    isAdmin,
     studyMode,
     studyHours,
     studyMinutes,
@@ -2525,29 +2565,66 @@ Series & convergence"
                   </svg>
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateCourse}
-                  disabled={!canProceedFromStep3 || courseGenerating}
-                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {courseGenerating ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      Create Course
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </>
+                <div className="flex items-center gap-3">
+                  {hasCheckedAdmin && isAdmin && (
+                    <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                        Content
+                      </span>
+                      <div className="inline-flex rounded-md bg-[var(--surface-1)] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setContentVersion(1)}
+                          disabled={courseGenerating}
+                          aria-pressed={contentVersion === 1}
+                          className={`px-2 py-1 text-[11px] font-semibold rounded transition ${
+                            contentVersion === 1
+                              ? "bg-[var(--primary)] text-white shadow-sm"
+                              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          v1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContentVersion(2)}
+                          disabled={courseGenerating}
+                          aria-pressed={contentVersion === 2}
+                          className={`px-2 py-1 text-[11px] font-semibold rounded transition ${
+                            contentVersion === 2
+                              ? "bg-[var(--primary)] text-white shadow-sm"
+                              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          v2
+                        </button>
+                      </div>
+                    </div>
                   )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateCourse}
+                    disabled={!canProceedFromStep3 || courseGenerating}
+                    className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {courseGenerating ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        Create Course
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
             </div>

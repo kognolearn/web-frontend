@@ -27,10 +27,21 @@ export default function StepwiseDerivation({
   grade,
   isGraded = false,
   isGradable = false,
-  given = [],
-  goal = "",
+  given,
+  goal,
+  // Alternative prop names
+  starting_expression,
+  goal_expression,
   max_steps = 10,
 }) {
+  // Normalize props to handle alternative naming conventions
+  const normalizedGiven = given ?? (
+    starting_expression
+      ? (Array.isArray(starting_expression) ? starting_expression : [starting_expression])
+      : []
+  );
+  const normalizedGoal = goal ?? goal_expression ?? "";
+
   const [steps, setSteps] = useState(value || [""]);
 
   const currentSteps = value !== undefined ? value : steps;
@@ -74,7 +85,7 @@ export default function StepwiseDerivation({
           Given
         </h4>
         <div className="space-y-2">
-          {given.map((premise, index) => (
+          {normalizedGiven.map((premise, index) => (
             <div key={index} className="flex items-center gap-2">
               <span className="text-sm text-[var(--muted-foreground)]">
                 ({index + 1})
@@ -100,7 +111,7 @@ export default function StepwiseDerivation({
             <div key={index} className="flex items-start gap-2">
               {/* Step number */}
               <span className="text-sm text-[var(--muted-foreground)] mt-3 w-6">
-                {given.length + index + 1}.
+                {normalizedGiven.length + index + 1}.
               </span>
 
               {/* Step input */}
@@ -181,7 +192,7 @@ export default function StepwiseDerivation({
           Goal: Derive
         </h4>
         <div className="text-[var(--foreground)]">
-          <MathJax inline>{`\\(${goal}\\)`}</MathJax>
+          <MathJax inline>{`\\(${normalizedGoal}\\)`}</MathJax>
         </div>
       </div>
 

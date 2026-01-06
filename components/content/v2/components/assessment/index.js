@@ -14,6 +14,7 @@ export { default as TableInput } from "./TableInput";
 export { default as ImageHotspot } from "./ImageHotspot";
 export { default as DiagramLabeler } from "./DiagramLabeler";
 export { default as EvidenceHighlighter } from "./EvidenceHighlighter";
+export { default as AnnotationHighlighter } from "./AnnotationHighlighter";
 export { default as StepwiseDerivation } from "./StepwiseDerivation";
 export { default as ProofBuilder } from "./ProofBuilder";
 export { default as CodeQuestion } from "./CodeQuestion";

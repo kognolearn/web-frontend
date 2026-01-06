@@ -59,12 +59,12 @@ export default function LongFormResponse({
   let borderClass = "border-[var(--border)]";
   if (isGraded && grade) {
     if (grade.passed) {
-      borderClass = "border-emerald-500";
+      borderClass = "border-success";
     } else {
-      borderClass = "border-rose-500";
+      borderClass = "border-danger";
     }
   } else if (wordCountStatus === "above") {
-    borderClass = "border-rose-500";
+    borderClass = "border-danger";
   }
 
   return (
@@ -118,9 +118,9 @@ export default function LongFormResponse({
           className={`
             ${
               wordCountStatus === "below"
-                ? "text-amber-600 dark:text-amber-400"
+                ? "text-warning"
                 : wordCountStatus === "above"
-                ? "text-rose-600 dark:text-rose-400"
+                ? "text-danger"
                 : "text-[var(--muted-foreground)]"
             }
           `}
@@ -144,8 +144,8 @@ export default function LongFormResponse({
         <div
           className={`p-4 rounded-xl border ${
             grade.passed
-              ? "border-emerald-500 bg-emerald-500/5"
-              : "border-rose-500 bg-rose-500/5"
+              ? "border-success bg-success/5"
+              : "border-danger bg-danger/5"
           }`}
         >
           {grade.earnedPoints !== undefined && grade.points !== undefined && (
@@ -153,8 +153,8 @@ export default function LongFormResponse({
               <span
                 className={`text-lg font-semibold ${
                   grade.passed
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
+                    ? "text-success"
+                    : "text-danger"
                 }`}
               >
                 {grade.earnedPoints}/{grade.points} points
@@ -165,8 +165,8 @@ export default function LongFormResponse({
             <p
               className={`text-sm ${
                 grade.passed
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-rose-700 dark:text-rose-300"
+                  ? "text-success opacity-90"
+                  : "text-danger opacity-90"
               }`}
             >
               {grade.feedback}
@@ -190,10 +190,10 @@ export default function LongFormResponse({
                   <span
                     className={`font-medium ${
                       criterion.earned >= criterion.max * 0.7
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "text-success"
                         : criterion.earned >= criterion.max * 0.4
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-rose-600 dark:text-rose-400"
+                        ? "text-warning"
+                        : "text-danger"
                     }`}
                   >
                     {criterion.earned}/{criterion.max}

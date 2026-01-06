@@ -158,6 +158,44 @@ function parseTableCells(rowContent) {
   return cells;
 }
 
+function parseImageBlock(lines, startIdx) {
+  let i = startIdx + 1;
+  const fields = {};
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
+    if (/^:::/i.test(line)) {
+      i++;
+      break;
+    }
+
+    const match = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+    if (match) {
+      fields[match[1].toLowerCase()] = match[2].trim();
+    }
+    i++;
+  }
+
+  if (!fields.url) {
+    return null;
+  }
+
+  return {
+    type: "image",
+    url: fields.url,
+    fullUrl: fields.full_url || fields.fullurl,
+    caption: fields.caption || "",
+    alt: fields.alt || "",
+    author: fields.author || "",
+    license: fields.license || "",
+    endIdx: i,
+  };
+}
+
 /**
  * Parse content string into structured blocks for rendering
  * Handles: headings, paragraphs, lists, code blocks, math, questions, emphasis
@@ -212,6 +250,15 @@ function parseContent(content) {
     if (!trimmed) {
       i++;
       continue;
+    }
+
+    if (/^:::\s*image/i.test(trimmed)) {
+      const imageBlock = parseImageBlock(lines, i);
+      if (imageBlock) {
+        blocks.push(imageBlock);
+        i = imageBlock.endIdx;
+        continue;
+      }
     }
     
     // Question block (starts with "Question:" or "**Question:**" or "**Check Your Understanding**")
@@ -1203,6 +1250,41 @@ export default function ReadingRenderer({
                   <HeadingTag key={idx} className={headingClasses[block.level] || headingClasses[3]}>
                     <InlineContent text={block.content} />
                   </HeadingTag>
+                );
+
+              case "image":
+                const credit = [block.author, block.license].filter(Boolean).join(" | ");
+                const imageAlt = block.alt || block.caption || "Reading image";
+                const imageElement = (
+                  <img
+                    src={block.url}
+                    alt={imageAlt}
+                    loading="lazy"
+                    className="w-full h-auto rounded-xl"
+                  />
+                );
+                return (
+                  <figure key={idx} className="my-6">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+                      {block.fullUrl ? (
+                        <a href={block.fullUrl} target="_blank" rel="noopener noreferrer">
+                          {imageElement}
+                        </a>
+                      ) : (
+                        imageElement
+                      )}
+                    </div>
+                    {(block.caption || credit) && (
+                      <figcaption className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                        {block.caption && <InlineContent text={block.caption} />}
+                        {credit && (
+                          <span className="block mt-1 text-xs text-[var(--muted-foreground)]">
+                            {credit}
+                          </span>
+                        )}
+                      </figcaption>
+                    )}
+                  </figure>
                 );
                 
               case "paragraph":

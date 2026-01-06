@@ -20,6 +20,7 @@ import { useV2Grading } from "./useV2Grading";
  * @param {string} props.nodeId - Node ID for API calls
  * @param {number} [props.activeSectionIndex=0] - Index of the section to display
  * @param {Function} [props.onGradeComplete] - Callback when grading completes
+ * @param {boolean} [props.isAdmin=false] - Whether to enable admin-only UI
  */
 export default function V2ContentRenderer({
   content,
@@ -27,6 +28,7 @@ export default function V2ContentRenderer({
   nodeId,
   activeSectionIndex = 0,
   onGradeComplete,
+  isAdmin = false,
 }) {
   // Validate content is v2
   if (!content || content.version !== 2) {
@@ -50,6 +52,7 @@ export default function V2ContentRenderer({
         nodeId={nodeId}
         activeSectionIndex={activeSectionIndex}
         onGradeComplete={onGradeComplete}
+        isAdmin={isAdmin}
       />
     </V2ContentProvider>
   );
@@ -58,7 +61,7 @@ export default function V2ContentRenderer({
 /**
  * Inner component that has access to V2Content context
  */
-function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGradeComplete }) {
+function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGradeComplete, isAdmin }) {
   const { setSectionGraded, setSectionProgress } = useV2Content();
   const [gradingSection, setGradingSection] = useState(null);
 
@@ -134,6 +137,7 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
         sectionIndex={activeSectionIndex}
         onGrade={handleGradeSection}
         isGrading={isGrading && gradingSection === currentSection.id}
+        isAdmin={isAdmin}
       />
     </div>
   );

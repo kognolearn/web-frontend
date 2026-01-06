@@ -30,6 +30,13 @@ export default function SignUpForm() {
     setLoading(true);
     setError("");
 
+    // Validate @uw.edu email
+    if (!formData.email.toLowerCase().endsWith("@uw.edu")) {
+      setError("Only @uw.edu email addresses are allowed.");
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
       const { data, error } = await supabase.auth.signUp({
@@ -97,8 +104,9 @@ export default function SignUpForm() {
           required
           disabled={loading}
           className="w-full px-4 py-3 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="you@example.com"
+          placeholder="you@uw.edu"
         />
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]/70">Must be a @uw.edu email address</p>
       </div>
 
       <div>
