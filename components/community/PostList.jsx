@@ -10,6 +10,12 @@ export default function PostList({
   onPostDeleted,
   onVoteUpdate,
   onRefresh,
+  onNominatePin,
+  onPersonalPinToggle,
+  activePinPostIds,
+  groupPinnedPostIds,
+  personalPinnedPostIds,
+  highlightedPostId,
 }) {
   if (loading && posts.length === 0) {
     return (
@@ -44,6 +50,15 @@ export default function PostList({
           onDeleted={() => onPostDeleted(post.id)}
           onVoteUpdate={onVoteUpdate}
           onRefresh={onRefresh}
+          onNominatePin={onNominatePin}
+          onPersonalPinToggle={onPersonalPinToggle}
+          isPinVoteActive={activePinPostIds?.has(post.id)}
+          isGroupPinned={groupPinnedPostIds?.has(post.id)}
+          isPersonalPinned={personalPinnedPostIds?.has(post.id)}
+          activePinPostIds={activePinPostIds}
+          groupPinnedPostIds={groupPinnedPostIds}
+          personalPinnedPostIds={personalPinnedPostIds}
+          highlighted={highlightedPostId === post.id}
         />
       ))}
     </div>

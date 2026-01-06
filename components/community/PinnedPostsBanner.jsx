@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 
-export default function PinnedPostsBanner({ posts, studyGroupId, currentUserId }) {
+export default function PinnedPostsBanner({ groupPins = [], personalPins = [] }) {
   const [expanded, setExpanded] = useState(false);
 
-  if (!posts || posts.length === 0) return null;
+  const allPins = [...groupPins, ...personalPins];
+  if (allPins.length === 0) return null;
 
-  const displayPosts = expanded ? posts : posts.slice(0, 2);
+  const displayPins = expanded ? allPins : allPins.slice(0, 2);
 
   return (
     <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
@@ -16,12 +17,12 @@ export default function PinnedPostsBanner({ posts, studyGroupId, currentUserId }
           <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2zm-3 2H9.4l1.6-1.6V4h2v8.4l1.6 1.6H13z" />
         </svg>
         <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-          Pinned Posts ({posts.length})
+          Pinned Posts ({allPins.length})
         </h3>
       </div>
 
       <div className="space-y-2">
-        {displayPosts.map((pin) => (
+        {displayPins.map((pin) => (
           <div
             key={pin.id}
             className="p-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border)]"
@@ -36,7 +37,7 @@ export default function PinnedPostsBanner({ posts, studyGroupId, currentUserId }
                     {pin.post?.author?.displayName || "[Former Member]"}
                   </span>
                   <span className="text-xs text-[var(--muted-foreground)]">
-                    pinned by {pin.pinnedBy?.displayName || "Unknown"}
+                    {pin.pinType === "personal" ? "pinned for you" : `pinned by ${pin.pinnedBy?.displayName || "Unknown"}`}
                   </span>
                 </div>
                 <p className="text-sm text-[var(--foreground)] line-clamp-2">
@@ -48,12 +49,12 @@ export default function PinnedPostsBanner({ posts, studyGroupId, currentUserId }
         ))}
       </div>
 
-      {posts.length > 2 && (
+      {allPins.length > 2 && (
         <button
           onClick={() => setExpanded(!expanded)}
           className="mt-3 text-sm text-amber-700 dark:text-amber-400 hover:underline"
         >
-          {expanded ? "Show less" : `Show ${posts.length - 2} more`}
+          {expanded ? "Show less" : `Show ${allPins.length - 2} more`}
         </button>
       )}
     </div>

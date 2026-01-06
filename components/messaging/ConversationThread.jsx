@@ -14,6 +14,7 @@ export default function ConversationThread({
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
+  const [canSend, setCanSend] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
@@ -37,6 +38,7 @@ export default function ConversationThread({
       }
       setHasMore(data.hasMore);
       setPage(pageNum);
+      setCanSend(data.canSend !== false);
 
       // Mark as read
       await authFetch(`/api/messaging/conversations/${conversation.id}/read`, {
@@ -94,6 +96,7 @@ export default function ConversationThread({
         { method: "POST" }
       );
       if (!res.ok) throw new Error("Failed to leave conversation");
+      setCanSend(false);
       onLeft?.();
     } catch (err) {
       console.error("Error leaving conversation:", err);
@@ -135,8 +138,7 @@ export default function ConversationThread({
     return groups;
   }, {});
 
-  const currentParticipant = conversation.participants?.find(p => p.userId === currentUserId);
-  const hasLeft = currentParticipant?.leftAt != null;
+  const canSendMessage = canSend;
 
   return (
     <div className="flex flex-col h-full">
@@ -249,10 +251,10 @@ export default function ConversationThread({
       </div>
 
       {/* Composer */}
-      {hasLeft ? (
+      {!canSendMessage ? (
         <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)] text-center">
           <p className="text-sm text-[var(--muted-foreground)]">
-            You have left this conversation and cannot send messages.
+            Messages are read-only in this conversation.
           </p>
         </div>
       ) : (

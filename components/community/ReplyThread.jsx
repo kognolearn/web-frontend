@@ -10,6 +10,11 @@ export default function ReplyThread({
   currentUserId,
   onRefresh,
   depth = 1,
+  onNominatePin,
+  onPersonalPinToggle,
+  activePinPostIds,
+  groupPinnedPostIds,
+  personalPinnedPostIds,
 }) {
   const [replies, setReplies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +91,14 @@ export default function ReplyThread({
           onDeleted={() => handleReplyDeleted(reply.id)}
           onVoteUpdate={handleVoteUpdate}
           onRefresh={onRefresh}
+          onNominatePin={onNominatePin}
+          onPersonalPinToggle={onPersonalPinToggle}
+          activePinPostIds={activePinPostIds}
+          groupPinnedPostIds={groupPinnedPostIds}
+          personalPinnedPostIds={personalPinnedPostIds}
+          isPinVoteActive={activePinPostIds?.has(reply.id)}
+          isGroupPinned={groupPinnedPostIds?.has(reply.id)}
+          isPersonalPinned={personalPinnedPostIds?.has(reply.id)}
           isReply
           depth={depth < maxDepth ? depth : maxDepth}
         />

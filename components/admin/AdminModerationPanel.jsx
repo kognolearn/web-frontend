@@ -99,10 +99,27 @@ export default function AdminModerationPanel() {
     }
   };
 
+  const handleBanUser = async (userId, studyGroupId) => {
+    const reason = prompt("Reason for ban (optional):") || null;
+    try {
+      const res = await authFetch(`/api/moderation/users/${userId}/ban`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, studyGroupId }),
+      });
+      if (!res.ok) throw new Error("Failed to ban user");
+      fetchReports(reportsPage);
+      fetchBans(bansPage);
+    } catch (err) {
+      console.error("Error banning user:", err);
+      alert("Failed to ban user");
+    }
+  };
+
   const handleUnbanUser = async (userId) => {
     if (!confirm("Are you sure you want to unban this user?")) return;
     try {
-      const res = await authFetch(`/api/moderation/bans/${userId}`, {
+      const res = await authFetch(`/api/moderation/users/${userId}/ban`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to unban user");
@@ -261,6 +278,14 @@ export default function AdminModerationPanel() {
                                     className="px-2 py-1 text-xs font-medium text-red-600 bg-red-100 rounded hover:bg-red-200 transition-colors"
                                   >
                                     Delete Post
+                                  </button>
+                                )}
+                                {report.post?.author?.id && (
+                                  <button
+                                    onClick={() => handleBanUser(report.post.author.id, report.post.studyGroupId)}
+                                    className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors"
+                                  >
+                                    Ban User
                                   </button>
                                 )}
                               </>

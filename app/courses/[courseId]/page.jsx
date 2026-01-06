@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
 import CourseTabContent from "@/components/courses/CourseTabContent";
@@ -102,6 +102,7 @@ const unlockStudyPlan = (plan) => {
 export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -766,7 +767,11 @@ export default function CoursePage() {
       setTabs((prev) => [...prev, nextTab]);
     } else if (type === 'discussion' || type === 'messages') {
       // Community tabs don't need special state management
-      const nextTab = { ...baseTab, conversationId: options.conversationId || null };
+      const nextTab = {
+        ...baseTab,
+        conversationId: options.conversationId || null,
+        postId: options.postId || null,
+      };
       setTabs((prev) => [...prev, nextTab]);
     } else {
       const fallbackChatId = options.chatId || sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null;
@@ -777,6 +782,35 @@ export default function CoursePage() {
     setActiveTabId(newId);
     return newId;
   };
+
+  useEffect(() => {
+    if (!searchParams) return;
+    const tabParam = searchParams.get("tab");
+    if (!tabParam) return;
+
+    const conversationId = searchParams.get("conversation");
+    const postId = searchParams.get("post");
+
+    if (!["discussion", "messages"].includes(tabParam)) return;
+
+    const existingTab = tabs.find((tab) => tab.type === tabParam);
+    if (existingTab) {
+      if (tabParam === "messages" && conversationId && existingTab.conversationId !== conversationId) {
+        setTabs((prev) => prev.map((tab) => (
+          tab.id === existingTab.id ? { ...tab, conversationId } : tab
+        )));
+      }
+      if (tabParam === "discussion" && postId && existingTab.postId !== postId) {
+        setTabs((prev) => prev.map((tab) => (
+          tab.id === existingTab.id ? { ...tab, postId } : tab
+        )));
+      }
+      setActiveTabId(existingTab.id);
+      return;
+    }
+
+    addTab(tabParam, { conversationId, postId });
+  }, [searchParams, tabs]);
 
   const handleOpenChatTab = (payload) => {
     let mergedState = sharedChatStateRef.current;
@@ -1250,6 +1284,7 @@ export default function CoursePage() {
                     userId={userId}
                     onClose={() => closeTab(null, tab.id)}
                     onOpenMessagesTab={() => addTab('messages')}
+                    initialPostId={tab.postId}
                   />
                 );
               case 'messages':

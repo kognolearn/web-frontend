@@ -10,9 +10,11 @@ export default function DiscussionTabContent({
   courseId,
   userId,
   onClose,
-  onOpenMessagesTab
+  onOpenMessagesTab,
+  initialPostId = null,
 }) {
   const [studyGroup, setStudyGroup] = useState(null);
+  const [memberCount, setMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -24,8 +26,10 @@ export default function DiscussionTabContent({
       if (res.ok) {
         const data = await res.json();
         setStudyGroup(data.studyGroup);
+        setMemberCount(data.memberCount || 0);
       } else if (res.status === 404) {
         setStudyGroup(null);
+        setMemberCount(0);
       }
     } catch (err) {
       console.error("Error fetching study group:", err);
@@ -49,10 +53,10 @@ export default function DiscussionTabContent({
         </svg>
       </div>
       <h3 className="text-xl font-semibold text-[var(--foreground)] mb-2">
-        No Study Group Yet
+        No one here yet
       </h3>
       <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-md">
-        Share this course with classmates to create a study group. Once shared, you can discuss topics, ask questions, and help each other learn.
+        No one here yet &mdash; share this course with others to work on it together.
       </p>
       <button
         onClick={() => setIsShareModalOpen(true)}
@@ -131,6 +135,9 @@ export default function DiscussionTabContent({
           <DiscussionTab
             studyGroupId={studyGroup.id}
             currentUserId={userId}
+            memberCount={memberCount}
+            onShareRequested={() => setIsShareModalOpen(true)}
+            initialPostId={initialPostId}
           />
         )}
       </div>

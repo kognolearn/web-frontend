@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
+import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
@@ -398,9 +399,12 @@ export default function DashboardPage() {
 
   const handleCreateCourseClick = (e) => {
     // Check if user is on free tier and has hit the course limit
-    const courseLimit = 1; // Free tier limit
+    const totalLimit = 2;
+    const generatedLimit = 1;
+    const totalCount = courses.length;
+    const generatedCount = courses.filter(c => c.is_generated).length;
 
-    if (isFreeTier && courses.length >= courseLimit) {
+    if (isFreeTier && (totalCount >= totalLimit || generatedCount >= generatedLimit)) {
       e.preventDefault();
       setShowCourseLimitModal(true);
       return false;
@@ -428,6 +432,7 @@ export default function DashboardPage() {
   })();
   
   const hasCourses = courses.length > 0;
+  const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
     c.status === "pending" || c.status === "generating"
@@ -743,80 +748,17 @@ export default function DashboardPage() {
         onConfirm={handleDeleteCourse}
       />
 
-      {/* Course Limit Modal */}
-      {showCourseLimitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowCourseLimitModal(false)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-            {/* Close button */}
-            <button
-              onClick={() => setShowCourseLimitModal(false)}
-              className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {/* Icon */}
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">
-                Free Plan Limit Reached
-              </h3>
-              <p className="text-[var(--muted-foreground)]">
-                You've reached the maximum of 1 course on the free plan. Upgrade to Pro for unlimited courses, exams, and cheatsheets.
-              </p>
-            </div>
-
-            {/* Features list */}
-            <div className="bg-[var(--surface-2)] rounded-lg p-4 mb-6">
-              <p className="text-sm font-medium text-[var(--foreground)] mb-3">Pro includes:</p>
-              <ul className="space-y-2">
-                {['Unlimited courses', 'Unlimited practice exams', 'Unlimited cheatsheets', 'Priority support'].map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3">
-              <Link
-                href="/pricing"
-                onClick={() => setShowCourseLimitModal(false)}
-                className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors text-center"
-              >
-                Upgrade to Pro
-              </Link>
-              <button
-                onClick={() => setShowCourseLimitModal(false)}
-                className="w-full py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors"
-              >
-                Maybe Later
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseLimitModal
+        isOpen={showCourseLimitModal}
+        onClose={() => setShowCourseLimitModal(false)}
+        courses={courses}
+        userId={user?.id}
+        limit={courses.length >= 2 ? 2 : 1}
+        mode={courses.length >= 2 ? "total" : (generatedCourseCount >= 1 ? "generated" : "total")}
+        onCourseDeleted={(courseId) => {
+          setCourses((prev) => prev.filter((c) => c.id !== courseId));
+        }}
+      />
     </div>
   );
 }

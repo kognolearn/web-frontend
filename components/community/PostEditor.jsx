@@ -6,11 +6,15 @@ import { authFetch } from "@/lib/api";
 export default function PostEditor({
   studyGroupId,
   parentPostId = null,
+  postId = null,
   onPostCreated,
+  onPostUpdated,
   onCancel,
   isReply = false,
+  mode = "create",
+  initialContent = "",
 }) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(initialContent);
   const [images, setImages] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -19,6 +23,8 @@ export default function PostEditor({
 
   const maxLength = 10000;
   const maxImages = 4;
+  const allowImages = mode === "create";
+  const isReplyPost = Boolean(parentPostId);
 
   const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -81,27 +87,52 @@ export default function PostEditor({
     setError(null);
 
     try {
-      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts`, {
-        method: "POST",
+      const isEdit = mode === "edit";
+      const endpoint = isEdit
+        ? `/api/community/groups/${studyGroupId}/posts/${postId}`
+        : isReplyPost
+          ? `/api/community/groups/${studyGroupId}/posts/${parentPostId}/reply`
+          : `/api/community/groups/${studyGroupId}/posts`;
+
+      const res = await authFetch(endpoint, {
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: content.trim(),
-          imageUrls: images,
-          parentPostId,
-        }),
+        body: JSON.stringify(
+          isEdit
+            ? { content: content.trim() }
+            : isReplyPost
+              ? {
+                  content: content.trim(),
+                  imageUrls: images,
+                }
+              : {
+                  content: content.trim(),
+                  imageUrls: images,
+                  parentPostId,
+                }
+        ),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create post");
+        const defaultMessage = isEdit ? "Failed to update post" : "Failed to create post";
+        throw new Error(data.error || defaultMessage);
       }
 
-      const data = await res.json();
-      onPostCreated?.(data.post);
+      if (isEdit) {
+        const updatedAt = data?.post?.updated_at || data?.post?.updatedAt || new Date().toISOString();
+        const updatedContent = data?.post?.content || content.trim();
+        onPostUpdated?.({
+          content: updatedContent,
+          updatedAt,
+        });
+      } else {
+        onPostCreated?.(isReplyPost ? data.reply : data.post);
+      }
       setContent("");
       setImages([]);
     } catch (err) {
-      console.error("Error creating post:", err);
+      console.error(isEdit ? "Error updating post:" : "Error creating post:", err);
       setError(err.message);
     } finally {
       setIsSubmitting(false);
@@ -159,24 +190,24 @@ export default function PostEditor({
       {/* Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {!isReply && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading || images.length >= maxImages}
-                className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Add images"
-              >
-                {isUploading ? (
+        {allowImages && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!allowImages || isUploading || images.length >= maxImages}
+            className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Add images"
+          >
+            {isUploading ? (
                   <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -212,10 +243,10 @@ export default function PostEditor({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Posting...
+                {mode === "edit" ? "Saving..." : "Posting..."}
               </>
             ) : (
-              isReply ? "Reply" : "Post"
+              mode === "edit" ? "Save" : isReply ? "Reply" : "Post"
             )}
           </button>
         </div>

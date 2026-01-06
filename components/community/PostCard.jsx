@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authFetch } from "@/lib/api";
 import VoteButtons from "./VoteButtons";
 import ReplyThread from "./ReplyThread";
@@ -15,20 +15,36 @@ export default function PostCard({
   onDeleted,
   onVoteUpdate,
   onRefresh,
+  onNominatePin,
+  onPersonalPinToggle,
+  isPinVoteActive = false,
+  isGroupPinned = false,
+  isPersonalPinned = false,
+  activePinPostIds,
+  groupPinnedPostIds,
+  personalPinnedPostIds,
   isReply = false,
   depth = 0,
+  highlighted = false,
 }) {
+  const [localPost, setLocalPost] = useState(post);
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyEditor, setShowReplyEditor] = useState(false);
+  const [showEditEditor, setShowEditEditor] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isBlocked, setIsBlocked] = useState(post.isBlocked);
   const [showBlockedContent, setShowBlockedContent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const isAuthor = post.author?.id === currentUserId;
-  const isDeleted = post.isDeleted;
-  const hasReplies = post.replyCount > 0;
+  useEffect(() => {
+    setLocalPost(post);
+    setIsBlocked(post.isBlocked);
+  }, [post]);
+
+  const isAuthor = localPost.author?.id === currentUserId;
+  const isDeleted = localPost.isDeleted;
+  const hasReplies = localPost.replyCount > 0;
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -50,7 +66,7 @@ export default function PostCard({
 
     setIsDeleting(true);
     try {
-      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${post.id}`, {
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${localPost.id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete post");
@@ -67,6 +83,34 @@ export default function PostCard({
     setShowReplyEditor(false);
     setShowReplies(true);
     onRefresh?.();
+  };
+
+  const handlePostUpdated = (updatedPost) => {
+    setLocalPost(prev => ({
+      ...prev,
+      content: updatedPost?.content ?? prev.content,
+      updatedAt: updatedPost?.updatedAt ?? prev.updatedAt,
+    }));
+    setShowEditEditor(false);
+  };
+
+  const handleBlockToggle = async () => {
+    const targetUserId = localPost.author?.id;
+    if (!targetUserId) return;
+
+    try {
+      const res = await authFetch(`/api/blocks/${targetUserId}`, {
+        method: isBlocked ? "DELETE" : "POST",
+      });
+      if (!res.ok) throw new Error("Failed to update block");
+      setIsBlocked(!isBlocked);
+      if (isBlocked) {
+        setShowBlockedContent(true);
+      }
+    } catch (err) {
+      console.error("Error updating block:", err);
+      alert("Failed to update block status");
+    }
   };
 
   if (isBlocked && !showBlockedContent) {
@@ -89,21 +133,21 @@ export default function PostCard({
   }
 
   return (
-    <div className={`p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] ${depth > 0 ? 'ml-8' : ''}`}>
+    <div className={`p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] ${depth > 0 ? 'ml-8' : ''} ${highlighted ? 'ring-2 ring-[var(--primary)]' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full bg-[var(--primary)]/20 flex items-center justify-center text-sm font-semibold text-[var(--primary)]">
-            {post.author?.displayName?.[0]?.toUpperCase() || "?"}
+            {localPost.author?.displayName?.[0]?.toUpperCase() || "?"}
           </div>
           <div>
             <p className="text-sm font-medium text-[var(--foreground)]">
-              {post.author?.displayName || "[Former Member]"}
+              {localPost.author?.displayName || "[Former Member]"}
             </p>
             <p className="text-xs text-[var(--muted-foreground)]">
-              {formatDate(post.createdAt)}
-              {post.updatedAt && post.updatedAt !== post.createdAt && " (edited)"}
+              {formatDate(localPost.createdAt)}
+              {localPost.updatedAt && localPost.updatedAt !== localPost.createdAt && " (edited)"}
             </p>
           </div>
         </div>
@@ -124,22 +168,57 @@ export default function PostCard({
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg z-20">
                 {isAuthor && (
-                  <button
-                    onClick={() => { setShowMenu(false); handleDelete(); }}
-                    disabled={isDeleting}
-                    className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
-                  >
-                    {isDeleting ? "Deleting..." : "Delete"}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => { setShowMenu(false); setShowEditEditor(true); }}
+                      className="w-full text-left px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => { setShowMenu(false); handleDelete(); }}
+                      disabled={isDeleting}
+                      className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </button>
+                  </>
                 )}
                 {!isAuthor && (
+                  <>
+                    <button
+                      onClick={() => { setShowMenu(false); setShowReportModal(true); }}
+                      className="w-full text-left px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                    >
+                      Report
+                    </button>
+                    <button
+                      onClick={() => { setShowMenu(false); handleBlockToggle(); }}
+                      className="w-full text-left px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                    >
+                      {isBlocked ? "Unblock User" : "Block User"}
+                    </button>
+                  </>
+                )}
+                {!isPinVoteActive && !isGroupPinned && (
                   <button
-                    onClick={() => { setShowMenu(false); setShowReportModal(true); }}
+                    onClick={() => { setShowMenu(false); onNominatePin?.(localPost.id); }}
                     className="w-full text-left px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
                   >
-                    Report
+                    Nominate for Pinning
                   </button>
                 )}
+                {isGroupPinned && (
+                  <span className="block px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                    Pinned for group
+                  </span>
+                )}
+                <button
+                  onClick={() => { setShowMenu(false); onPersonalPinToggle?.(localPost.id, isPersonalPinned); }}
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                >
+                  {isPersonalPinned ? "Unpin for Me" : "Pin for Me"}
+                </button>
               </div>
             </>
           )}
@@ -148,14 +227,25 @@ export default function PostCard({
 
       {/* Content */}
       <div className="mt-3">
-        <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap break-words">
-          {post.content}
-        </p>
+        {showEditEditor ? (
+          <PostEditor
+            studyGroupId={studyGroupId}
+            postId={localPost.id}
+            initialContent={localPost.content}
+            onPostUpdated={(updated) => handlePostUpdated(updated)}
+            onCancel={() => setShowEditEditor(false)}
+            mode="edit"
+          />
+        ) : (
+          <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap break-words">
+            {localPost.content}
+          </p>
+        )}
 
         {/* Images */}
-        {post.imageUrls?.length > 0 && (
+        {localPost.imageUrls?.length > 0 && !showEditEditor && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {post.imageUrls.map((url, i) => (
+            {localPost.imageUrls.map((url, i) => (
               <img
                 key={i}
                 src={url}
@@ -170,13 +260,13 @@ export default function PostCard({
 
       {/* Actions */}
       <div className="mt-3 flex items-center gap-4">
-        <VoteButtons
-          postId={post.id}
-          studyGroupId={studyGroupId}
-          score={post.score || 0}
-          userVote={post.userVote}
-          onVoteUpdate={onVoteUpdate}
-        />
+          <VoteButtons
+            postId={localPost.id}
+            studyGroupId={studyGroupId}
+            score={localPost.score || 0}
+            userVote={localPost.userVote}
+            onVoteUpdate={onVoteUpdate}
+          />
 
         <button
           onClick={() => setShowReplyEditor(!showReplyEditor)}
@@ -196,7 +286,7 @@ export default function PostCard({
             <svg className={`w-4 h-4 transition-transform ${showReplies ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
-            {post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}
+            {localPost.replyCount} {localPost.replyCount === 1 ? "reply" : "replies"}
           </button>
         )}
       </div>
@@ -206,7 +296,7 @@ export default function PostCard({
         <div className="mt-4 pl-4 border-l-2 border-[var(--border)]">
           <PostEditor
             studyGroupId={studyGroupId}
-            parentPostId={post.id}
+            parentPostId={localPost.id}
             onPostCreated={handleReplyCreated}
             onCancel={() => setShowReplyEditor(false)}
             isReply
@@ -217,10 +307,15 @@ export default function PostCard({
       {/* Replies */}
       {showReplies && (
         <ReplyThread
-          postId={post.id}
+          postId={localPost.id}
           studyGroupId={studyGroupId}
           currentUserId={currentUserId}
           onRefresh={onRefresh}
+          onNominatePin={onNominatePin}
+          onPersonalPinToggle={onPersonalPinToggle}
+          activePinPostIds={activePinPostIds}
+          groupPinnedPostIds={groupPinnedPostIds}
+          personalPinnedPostIds={personalPinnedPostIds}
           depth={depth + 1}
         />
       )}
@@ -229,7 +324,7 @@ export default function PostCard({
       <ReportPostModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
-        postId={post.id}
+        postId={localPost.id}
         studyGroupId={studyGroupId}
       />
     </div>

@@ -20,7 +20,7 @@ export default function StudyGroupPanel({ studyGroupId, courseId, currentUserId 
       }
 
       try {
-        const res = await authFetch(`/api/courses/${courseId}/study-group`);
+        const res = await authFetch(`/api/community/groups/${studyGroupId}/members`);
         if (!res.ok) throw new Error("Failed to fetch study group");
         const data = await res.json();
         setMembers(data.members || []);
@@ -33,7 +33,7 @@ export default function StudyGroupPanel({ studyGroupId, courseId, currentUserId 
     };
 
     fetchMembers();
-  }, [studyGroupId, courseId]);
+  }, [studyGroupId]);
 
   if (loading) {
     return (

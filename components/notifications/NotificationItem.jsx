@@ -63,12 +63,13 @@ export default function NotificationItem({ notification, onMarkAsRead, onDelete,
 
     // Navigate based on notification type and data
     const data = notification.data || {};
-    if (notification.type === "post_reply" && data.studyGroupId && data.postId) {
-      router.push(`/courses/${data.studyGroupId}?tab=discussion&post=${data.postId}`);
-    } else if (notification.type === "dm_message" && data.conversationId) {
-      router.push(`/courses/${data.studyGroupId}?tab=messages&conversation=${data.conversationId}`);
-    } else if (notification.type === "pin_vote_result" && data.studyGroupId) {
-      router.push(`/courses/${data.studyGroupId}?tab=discussion`);
+    const courseId = data.courseId || data.studyGroupId;
+    if (notification.type === "post_reply" && courseId && data.postId) {
+      router.push(`/courses/${courseId}?tab=discussion&post=${data.postId}`);
+    } else if (notification.type === "dm_message" && courseId && data.conversationId) {
+      router.push(`/courses/${courseId}?tab=messages&conversation=${data.conversationId}`);
+    } else if (notification.type === "pin_vote_result" && courseId) {
+      router.push(`/courses/${courseId}?tab=discussion`);
     }
 
     onClose();

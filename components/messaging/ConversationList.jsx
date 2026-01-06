@@ -68,6 +68,8 @@ export default function ConversationList({
       {conversations.map((conversation) => {
         const isSelected = selectedId === conversation.id;
         const hasUnread = conversation.unreadCount > 0;
+        const lastMessageText = conversation.lastMessage?.content || conversation.lastMessage;
+        const lastMessageAt = conversation.lastMessage?.createdAt || conversation.lastMessageAt || conversation.updatedAt;
 
         return (
           <button
@@ -105,12 +107,12 @@ export default function ConversationList({
                     {getConversationName(conversation)}
                   </span>
                   <span className="text-xs text-[var(--muted-foreground)] shrink-0">
-                    {formatTime(conversation.lastMessageAt)}
+                    {formatTime(lastMessageAt)}
                   </span>
                 </div>
-                {conversation.lastMessage && (
+                {lastMessageText && (
                   <p className={`text-xs truncate mt-0.5 ${hasUnread ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
-                    {conversation.lastMessage}
+                    {lastMessageText}
                   </p>
                 )}
               </div>

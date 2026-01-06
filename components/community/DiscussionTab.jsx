@@ -1,15 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { authFetch } from "@/lib/api";
 import PostList from "./PostList";
 import PostEditor from "./PostEditor";
 import PinnedPostsBanner from "./PinnedPostsBanner";
 import SortDropdown from "./SortDropdown";
 
-export default function DiscussionTab({ studyGroupId, currentUserId }) {
+export default function DiscussionTab({
+  studyGroupId,
+  currentUserId,
+  memberCount = 0,
+  onShareRequested,
+  initialPostId = null,
+}) {
   const [posts, setPosts] = useState([]);
-  const [pinnedPosts, setPinnedPosts] = useState([]);
+  const [groupPins, setGroupPins] = useState([]);
+  const [personalPins, setPersonalPins] = useState([]);
+  const [pinVotes, setPinVotes] = useState([]);
+  const [pinVotesLoading, setPinVotesLoading] = useState(false);
+  const [highlightPostId, setHighlightPostId] = useState(initialPostId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState("recent");
@@ -60,16 +70,61 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
       if (!res.ok) throw new Error("Failed to fetch pinned posts");
 
       const data = await res.json();
-      setPinnedPosts(data.pinnedPosts || []);
+      setGroupPins(data.groupPins || []);
+      setPersonalPins(data.personalPins || []);
     } catch (err) {
       console.error("Error fetching pinned posts:", err);
+    }
+  }, [studyGroupId]);
+
+  const fetchPinVotes = useCallback(async () => {
+    if (!studyGroupId) return;
+
+    try {
+      setPinVotesLoading(true);
+      const res = await authFetch(`/api/pins/groups/${studyGroupId}/votes`);
+      if (!res.ok) throw new Error("Failed to fetch pin votes");
+      const data = await res.json();
+      setPinVotes(data.votes || []);
+    } catch (err) {
+      console.error("Error fetching pin votes:", err);
+    } finally {
+      setPinVotesLoading(false);
     }
   }, [studyGroupId]);
 
   useEffect(() => {
     fetchPosts(1);
     fetchPinnedPosts();
-  }, [fetchPosts, fetchPinnedPosts]);
+    fetchPinVotes();
+  }, [fetchPosts, fetchPinnedPosts, fetchPinVotes]);
+
+  useEffect(() => {
+    setHighlightPostId(initialPostId);
+  }, [initialPostId]);
+
+  useEffect(() => {
+    if (!studyGroupId || !initialPostId) return;
+
+    const fetchHighlightedPost = async () => {
+      try {
+        const res = await authFetch(`/api/community/groups/${studyGroupId}/posts/${initialPostId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const highlightedPost = data.post;
+        if (!highlightedPost) return;
+
+        setPosts((prev) => {
+          const exists = prev.some((p) => p.id === highlightedPost.id);
+          return exists ? prev : [highlightedPost, ...prev];
+        });
+      } catch (err) {
+        console.error("Error fetching highlighted post:", err);
+      }
+    };
+
+    fetchHighlightedPost();
+  }, [studyGroupId, initialPostId]);
 
   const handlePostCreated = (newPost) => {
     setPosts(prev => [newPost, ...prev]);
@@ -100,7 +155,79 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
     setPage(1);
   };
 
-  if (!studyGroupId) {
+  const activePinPostIds = useMemo(
+    () => new Set((pinVotes || []).map((vote) => vote.postId)),
+    [pinVotes]
+  );
+  const personalPinnedPostIds = useMemo(
+    () => new Set((personalPins || []).map((pin) => pin.postId)),
+    [personalPins]
+  );
+  const groupPinnedPostIds = useMemo(
+    () => new Set((groupPins || []).map((pin) => pin.postId)),
+    [groupPins]
+  );
+
+  const handleNominatePin = async (postId) => {
+    try {
+      const res = await authFetch(`/api/pins/groups/${studyGroupId}/posts/${postId}/nominate`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to nominate post");
+      }
+      await fetchPinVotes();
+    } catch (err) {
+      console.error("Error nominating post:", err);
+      alert(err.message || "Failed to nominate post");
+    }
+  };
+
+  const handleVoteOnPin = async (postId, pinVoteId, vote) => {
+    try {
+      const res = await authFetch(`/api/pins/groups/${studyGroupId}/posts/${postId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinVoteId, vote }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to vote on pin");
+      }
+      await Promise.all([fetchPinVotes(), fetchPinnedPosts()]);
+    } catch (err) {
+      console.error("Error voting on pin:", err);
+      alert(err.message || "Failed to vote on pin");
+    }
+  };
+
+  const handlePersonalPinToggle = async (postId, isPinned) => {
+    try {
+      const res = isPinned
+        ? await authFetch(`/api/pins/personal/${postId}?studyGroupId=${studyGroupId}`, {
+            method: "DELETE",
+          })
+        : await authFetch(`/api/pins/personal/${postId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ studyGroupId }),
+          });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update pin");
+      }
+      await fetchPinnedPosts();
+    } catch (err) {
+      console.error("Error updating personal pin:", err);
+      alert(err.message || "Failed to update pin");
+    }
+  };
+
+  const isSoloGroup = memberCount <= 1;
+
+  if (!studyGroupId || isSoloGroup) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
@@ -110,8 +237,16 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
         </div>
         <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">No one here yet</h3>
         <p className="text-[var(--muted-foreground)] max-w-sm">
-          Share this course with friends to start discussions and study together.
+          No one here yet &mdash; share this course with others to work on it together.
         </p>
+        {onShareRequested && (
+          <button
+            onClick={onShareRequested}
+            className="mt-4 px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors"
+          >
+            Share Course
+          </button>
+        )}
       </div>
     );
   }
@@ -140,12 +275,77 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
       </div>
 
       {/* Pinned posts */}
-      {pinnedPosts.length > 0 && (
+      {(groupPins.length > 0 || personalPins.length > 0) && (
         <PinnedPostsBanner
-          posts={pinnedPosts}
-          studyGroupId={studyGroupId}
-          currentUserId={currentUserId}
+          groupPins={groupPins}
+          personalPins={personalPins}
         />
+      )}
+
+      {/* Active pin votes */}
+      {pinVotes.length > 0 && (
+        <div className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border)]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">Pin Votes</h3>
+            {pinVotesLoading && (
+              <span className="text-xs text-[var(--muted-foreground)]">Updating...</span>
+            )}
+          </div>
+          <div className="space-y-3">
+            {pinVotes.map((vote) => {
+              const yesCount = vote.voteCount?.yes || 0;
+              const noCount = vote.voteCount?.no || 0;
+              const totalVotes = yesCount + noCount;
+              const deadline = vote.voteDeadline ? new Date(vote.voteDeadline) : null;
+              const hoursLeft = deadline
+                ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60)))
+                : null;
+              return (
+                <div key={vote.id} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[var(--foreground)]">
+                        {vote.post?.author?.displayName || "Unknown"}
+                        <span className="text-xs text-[var(--muted-foreground)] ml-2">
+                          nominated by {vote.nominatedBy?.displayName || "Unknown"}
+                        </span>
+                      </p>
+                      <p className="text-sm text-[var(--foreground)] mt-1 line-clamp-2">
+                        {vote.post?.content}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
+                        {totalVotes} vote{totalVotes === 1 ? "" : "s"} - {yesCount} yes / {noCount} no
+                        {hoursLeft !== null && ` - ${hoursLeft}h left`}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => handleVoteOnPin(vote.postId, vote.id, true)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          vote.userVote === true
+                            ? "bg-green-500 text-white"
+                            : "bg-[var(--surface-1)] text-[var(--foreground)] hover:bg-green-500/10"
+                        }`}
+                      >
+                        Vote Yes
+                      </button>
+                      <button
+                        onClick={() => handleVoteOnPin(vote.postId, vote.id, false)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          vote.userVote === false
+                            ? "bg-red-500 text-white"
+                            : "bg-[var(--surface-1)] text-[var(--foreground)] hover:bg-red-500/10"
+                        }`}
+                      >
+                        Vote No
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Post editor modal */}
@@ -187,6 +387,12 @@ export default function DiscussionTab({ studyGroupId, currentUserId }) {
         onPostDeleted={handlePostDeleted}
         onVoteUpdate={handleVoteUpdate}
         onRefresh={() => fetchPosts(1)}
+        onNominatePin={handleNominatePin}
+        onPersonalPinToggle={handlePersonalPinToggle}
+        activePinPostIds={activePinPostIds}
+        groupPinnedPostIds={groupPinnedPostIds}
+        personalPinnedPostIds={personalPinnedPostIds}
+        highlightedPostId={highlightPostId}
       />
 
       {/* Load more */}

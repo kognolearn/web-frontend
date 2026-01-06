@@ -11,9 +11,9 @@ export default function SortDropdown({ sortBy, timeRange, onChange }) {
   ];
 
   const timeRangeOptions = [
-    { value: "hour", label: "Past Hour" },
-    { value: "day", label: "Today" },
-    { value: "week", label: "This Week" },
+    { value: "hour", label: "Last Hour" },
+    { value: "day", label: "Last Day" },
+    { value: "week", label: "Last Week" },
     { value: "all", label: "All Time" },
   ];
 
@@ -43,7 +43,7 @@ export default function SortDropdown({ sortBy, timeRange, onChange }) {
         </svg>
         <span>{currentSortLabel}</span>
         {sortBy === "top" && currentTimeLabel && (
-          <span className="text-[var(--muted-foreground)]">· {currentTimeLabel}</span>
+          <span className="text-[var(--muted-foreground)]">- {currentTimeLabel}</span>
         )}
         <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

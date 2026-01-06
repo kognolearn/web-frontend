@@ -18,6 +18,7 @@ export default function CommunityPanel({
 }) {
   const [activeTab, setActiveTab] = useState("discussion");
   const [studyGroup, setStudyGroup] = useState(null);
+  const [memberCount, setMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -29,8 +30,10 @@ export default function CommunityPanel({
       if (res.ok) {
         const data = await res.json();
         setStudyGroup(data.studyGroup);
+        setMemberCount(data.memberCount || 0);
       } else if (res.status === 404) {
         setStudyGroup(null);
+        setMemberCount(0);
       }
     } catch (err) {
       console.error("Error fetching study group:", err);
@@ -75,7 +78,7 @@ export default function CommunityPanel({
         No one here yet
       </h3>
       <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-xs">
-        Share this course with classmates to start a study group. You can discuss topics, share notes, and message each other.
+        No one here yet &mdash; share this course with others to work on it together.
       </p>
       <button
         onClick={() => setIsShareModalOpen(true)}
@@ -205,6 +208,8 @@ export default function CommunityPanel({
                       <DiscussionTab
                         studyGroupId={studyGroup.id}
                         currentUserId={userId}
+                        memberCount={memberCount}
+                        onShareRequested={() => setIsShareModalOpen(true)}
                       />
                     )}
                     {activeTab === "messages" && (
@@ -217,6 +222,7 @@ export default function CommunityPanel({
                     {activeTab === "members" && (
                       <StudyGroupPanel
                         studyGroupId={studyGroup.id}
+                        courseId={courseId}
                         currentUserId={userId}
                         onStartDM={(memberId) => {
                           setActiveTab("messages");

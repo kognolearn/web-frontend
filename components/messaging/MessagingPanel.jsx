@@ -9,7 +9,7 @@ import NewConversationModal from "./NewConversationModal";
 export default function MessagingPanel({
   studyGroupId,
   currentUserId,
-  members = [],
+  members: providedMembers = [],
   embedded = false,
   fullPage = false,
   initialConversationId = null
@@ -18,6 +18,7 @@ export default function MessagingPanel({
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewConversation, setShowNewConversation] = useState(false);
+  const [members, setMembers] = useState(providedMembers);
 
   // Auto-select initial conversation if provided
   useEffect(() => {
@@ -51,6 +52,24 @@ export default function MessagingPanel({
     return () => clearInterval(interval);
   }, [fetchConversations]);
 
+  const fetchMembers = useCallback(async () => {
+    if (!studyGroupId) return;
+    try {
+      const res = await authFetch(`/api/community/groups/${studyGroupId}/members`);
+      if (!res.ok) throw new Error("Failed to fetch members");
+      const data = await res.json();
+      setMembers(Array.isArray(data.members) ? data.members : []);
+    } catch (err) {
+      console.error("Error fetching members:", err);
+    }
+  }, [studyGroupId]);
+
+  useEffect(() => {
+    if (studyGroupId) {
+      fetchMembers();
+    }
+  }, [studyGroupId, fetchMembers]);
+
   const handleConversationCreated = (conversation) => {
     setConversations(prev => {
       const exists = prev.some(c => c.id === conversation.id);
@@ -61,10 +80,24 @@ export default function MessagingPanel({
     setShowNewConversation(false);
   };
 
+  const markConversationLeft = (conversation) => {
+    if (!conversation) return conversation;
+    const updatedParticipants = Array.isArray(conversation.participants)
+      ? conversation.participants.map((participant) => (
+          participant.userId === currentUserId
+            ? { ...participant, leftAt: new Date().toISOString(), isActive: false }
+            : participant
+        ))
+      : conversation.participants;
+    return { ...conversation, participants: updatedParticipants };
+  };
+
   const handleConversationLeft = (conversationId) => {
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    setConversations(prev => prev.map(c => (
+      c.id === conversationId ? markConversationLeft(c) : c
+    )));
     if (selectedConversation?.id === conversationId) {
-      setSelectedConversation(null);
+      setSelectedConversation(prev => markConversationLeft(prev));
     }
   };
 

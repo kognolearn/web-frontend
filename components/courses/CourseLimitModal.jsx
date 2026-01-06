@@ -10,7 +10,8 @@ export default function CourseLimitModal({
   courses = [],
   userId,
   onCourseDeleted,
-  limit = 2
+  limit = 2,
+  mode = "total" // "total" | "generated"
 }) {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -75,10 +76,12 @@ export default function CourseLimitModal({
         {/* Content */}
         <div className="text-center mb-6">
           <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">
-            Course Limit Reached
+            {mode === "generated" ? "Generated Course Limit Reached" : "Course Limit Reached"}
           </h3>
           <p className="text-[var(--muted-foreground)]">
-            You've reached the maximum of {limit} courses on the free plan. Leave an existing course or upgrade to Pro for unlimited courses.
+            {mode === "generated"
+              ? `You've reached the maximum of ${limit} generated course${limit > 1 ? "s" : ""} on the free plan. Leave your generated course or upgrade to premium to generate more.`
+              : `You're already in ${limit} courses on the free plan. Leave one to join a new course, or upgrade to premium to keep all courses.`}
           </p>
         </div>
 
@@ -113,8 +116,12 @@ export default function CourseLimitModal({
                       <p className="text-sm font-medium text-[var(--foreground)] truncate">
                         {course.title || course.course_title || 'Untitled Course'}
                       </p>
-                      {course.is_shared_copy && (
+                      {course.is_generated ? (
+                        <p className="text-xs text-[var(--muted-foreground)]">Generated course</p>
+                      ) : course.is_shared_copy ? (
                         <p className="text-xs text-[var(--muted-foreground)]">Shared course</p>
+                      ) : (
+                        <p className="text-xs text-[var(--muted-foreground)]">Course</p>
                       )}
                     </div>
                   </div>
@@ -139,7 +146,7 @@ export default function CourseLimitModal({
 
         {/* Pro features */}
         <div className="bg-[var(--surface-2)] rounded-lg p-4 mb-6">
-          <p className="text-sm font-medium text-[var(--foreground)] mb-3">Upgrade to Pro:</p>
+          <p className="text-sm font-medium text-[var(--foreground)] mb-3">Upgrade to premium:</p>
           <ul className="space-y-2">
             {['Unlimited courses', 'Unlimited practice exams', 'Unlimited cheatsheets', 'Priority support'].map((feature) => (
               <li key={feature} className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
@@ -178,7 +185,7 @@ export default function CourseLimitModal({
             onClick={onClose}
             className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors text-center"
           >
-            Upgrade to Pro
+            Upgrade to Premium
           </Link>
           <button
             onClick={onClose}
