@@ -1586,6 +1586,10 @@ function CreateCoursePageContent() {
         throw new Error(asyncDisabled || body?.error || "Failed to create course. Please try again.");
       }
 
+      if (payload.onboarding_context) {
+        localStorage.removeItem('kogno_onboarding_session');
+      }
+
       const jobId = resolveJobId(body);
       if (jobId) {
         upsertCourseCreateJob(userId, {
