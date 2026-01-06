@@ -210,6 +210,8 @@ export default function CoursePage() {
           activeChatId: tab.activeChatId ?? null,
           selectedLessonId: tab.selectedLessonId ?? null,
           selectedContentType: tab.selectedContentType ?? null,
+          conversationId: tab.conversationId ?? null,
+          postId: tab.postId ?? null,
         })),
         activeTabId,
       };
@@ -365,21 +367,33 @@ export default function CoursePage() {
 
             hydratedTabs = storedTabs.reduce((acc, tab, idx) => {
               if (!tab || typeof tab !== "object") return acc;
-              const type = tab.type === "chat" ? "chat" : "course";
+              const validTypes = ["course", "chat", "discussion", "messages"];
+              const type = validTypes.includes(tab.type) ? tab.type : "course";
               let id = typeof tab.id === "string" && tab.id.trim() ? tab.id : `tab-restored-${idx}`;
               if (seenIds.has(id)) {
                 id = `${id}-${idx}`;
               }
               seenIds.add(id);
+              const getDefaultTitle = (tabType) => {
+                switch (tabType) {
+                  case "course": return "Course Content";
+                  case "chat": return "Chat";
+                  case "discussion": return "Discussion";
+                  case "messages": return "Messages";
+                  default: return "Tab";
+                }
+              };
               const title = typeof tab.title === "string" && tab.title.trim()
                 ? tab.title
-                : (type === "course" ? "Course Content" : "Chat");
+                : getDefaultTitle(type);
               const activeChatId = typeof tab.activeChatId === "string"
                 ? tab.activeChatId
                 : (type === "course" ? initialChatIdRef.current : null);
               const selectedLessonId = typeof tab.selectedLessonId === "string" ? tab.selectedLessonId : null;
               const selectedContentType = typeof tab.selectedContentType === "string" ? tab.selectedContentType : null;
-              acc.push({ id, type, title, activeChatId, selectedLessonId, selectedContentType });
+              const conversationId = typeof tab.conversationId === "string" ? tab.conversationId : null;
+              const postId = typeof tab.postId === "string" ? tab.postId : null;
+              acc.push({ id, type, title, activeChatId, selectedLessonId, selectedContentType, conversationId, postId });
               return acc;
             }, []);
 
