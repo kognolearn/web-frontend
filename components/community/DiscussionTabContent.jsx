@@ -83,7 +83,7 @@ export default function DiscussionTabContent({
           <div>
             <h2 className="font-semibold text-[var(--foreground)]">Discussion</h2>
             <p className="text-xs text-[var(--muted-foreground)]">
-              {studyGroup ? `${studyGroup.memberCount || 0} member${(studyGroup.memberCount || 0) !== 1 ? 's' : ''} in study group` : 'Share to start discussing'}
+              {studyGroup ? `${memberCount} member${memberCount !== 1 ? 's' : ''} in study group` : 'Share to start discussing'}
             </p>
           </div>
         </div>

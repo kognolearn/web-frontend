@@ -125,7 +125,7 @@ export default function CommunityPanel({
                   <div>
                     <h2 className="font-semibold text-[var(--foreground)]">Community</h2>
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      {studyGroup ? `${studyGroup.memberCount || 0} member${(studyGroup.memberCount || 0) !== 1 ? 's' : ''}` : 'Study together'}
+                      {studyGroup ? `${memberCount} member${memberCount !== 1 ? 's' : ''}` : 'Study together'}
                     </p>
                   </div>
                 </div>

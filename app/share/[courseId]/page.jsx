@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
+import CourseLimitModal from "@/components/courses/CourseLimitModal";
 
 export default function ShareCoursePage() {
   const router = useRouter();
@@ -20,6 +21,8 @@ export default function ShareCoursePage() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
+  const [userCourses, setUserCourses] = useState([]);
 
   const sharePath = `/share/${courseId}`;
   const redirectTarget = searchParams.get("redirectTo") || sharePath;
@@ -97,11 +100,21 @@ export default function ShareCoursePage() {
           seconds_to_complete: totalSeconds,
         }),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to load course.");
-      }
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 403 && data?.error?.toLowerCase()?.includes("limit")) {
+          // Assumption: hitting the free-tier limit should offer a leave-or-upgrade choice.
+          setSubmitting(false);
+          setShowCourseLimitModal(true);
+          const coursesRes = await authFetch("/api/courses");
+          if (coursesRes.ok) {
+            const coursesData = await coursesRes.json();
+            setUserCourses(Array.isArray(coursesData?.courses) ? coursesData.courses : []);
+          }
+          return;
+        }
+        throw new Error(data.error || data.message || "Failed to load course.");
+      }
       setSubmitSuccess("Course loaded. Redirecting…");
       if (data?.courseId) {
         router.push(`/courses/${data.courseId}`);
@@ -242,6 +255,15 @@ export default function ShareCoursePage() {
           </div>
         </div>
       </div>
+      <CourseLimitModal
+        isOpen={showCourseLimitModal}
+        onClose={() => setShowCourseLimitModal(false)}
+        courses={userCourses}
+        userId={user?.id}
+        onCourseDeleted={(courseId) => {
+          setUserCourses((prev) => prev.filter((c) => c.id !== courseId));
+        }}
+      />
     </div>
   );
 }

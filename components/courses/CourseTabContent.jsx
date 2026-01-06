@@ -1666,18 +1666,27 @@ export default function CourseTabContent({
   };
 
   const handleShareCourse = useCallback(async () => {
-    const link = `https://www.kognolearn.com/share/${courseId}`;
+    if (!courseId) return;
     try {
+      const res = await authFetch(`/api/courses/${courseId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) throw new Error("Failed to generate share link");
+      const data = await res.json();
+      const shareUrl = typeof window !== "undefined"
+        ? `${window.location.origin}${data.shareUrl}`
+        : data.shareUrl;
+
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(shareUrl);
         setShareCopied(true);
       } else if (typeof window !== "undefined") {
-        window.open(link, "_blank", "noopener,noreferrer");
+        window.open(shareUrl, "_blank", "noopener,noreferrer");
       }
-    } catch (_) {
-      if (typeof window !== "undefined") {
-        window.open(link, "_blank", "noopener,noreferrer");
-      }
+    } catch (err) {
+      console.error("Error sharing course:", err);
     } finally {
       if (shareResetRef.current) clearTimeout(shareResetRef.current);
       shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
