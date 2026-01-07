@@ -58,7 +58,8 @@ export default function VideoBlock({
   lessonId,
   userId,
   videoCompleted: initialVideoCompleted = false,
-  onVideoViewed
+  onVideoViewed,
+  isPreview = false
 }) {
   const normalized = normalizeUrl(url);
   const hasMarkedCompleted = useRef(false);
@@ -66,6 +67,23 @@ export default function VideoBlock({
 
   // Mark video as completed when component mounts (video page is viewed)
   useEffect(() => {
+    if (isPreview) {
+      if (normalized.type === "none") return;
+      if (hasMarkedCompleted.current) return;
+      hasMarkedCompleted.current = true;
+      if (onVideoViewed) {
+        refreshTimeoutRef.current = setTimeout(() => {
+          onVideoViewed();
+        }, 1000);
+      }
+      return () => {
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+          refreshTimeoutRef.current = null;
+        }
+      };
+    }
+
     // Skip if already marked completed or if already completed from backend
     if (hasMarkedCompleted.current || initialVideoCompleted) {
       if (initialVideoCompleted && onVideoViewed && !hasMarkedCompleted.current) {
@@ -114,7 +132,7 @@ export default function VideoBlock({
         refreshTimeoutRef.current = null;
       }
     };
-  }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed]);
+  }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed, isPreview]);
 
   if (normalized.type === "none") {
     return (
