@@ -75,6 +75,10 @@ export default function ReviewPage() {
   const [courseName, setCourseName] = useState("");
   const [secondsToComplete, setSecondsToComplete] = useState(3600); // default 1 hour
 
+  // Total flashcard count for stats display
+  const [totalFlashcardCount, setTotalFlashcardCount] = useState(0);
+  const [flashcardCountLoading, setFlashcardCountLoading] = useState(true);
+
   // Initialize user
   useEffect(() => {
     const initUser = async () => {
@@ -125,6 +129,28 @@ export default function ReviewPage() {
     };
     
     fetchCourseData();
+  }, [userId, courseId]);
+
+  // Fetch total flashcard count for display
+  useEffect(() => {
+    if (!userId || !courseId) return;
+
+    const fetchFlashcardCount = async () => {
+      setFlashcardCountLoading(true);
+      try {
+        const res = await authFetch(`/api/courses/${courseId}/flashcards/count`);
+        if (res.ok) {
+          const data = await res.json();
+          setTotalFlashcardCount(data.count || 0);
+        }
+      } catch (err) {
+        console.error("Error fetching flashcard count:", err);
+      } finally {
+        setFlashcardCountLoading(false);
+      }
+    };
+
+    fetchFlashcardCount();
   }, [userId, courseId]);
 
   // Fetch questions that need review
@@ -502,9 +528,9 @@ export default function ReviewPage() {
                 <div className="w-px bg-[var(--border)]" />
                 <div>
                   <p className="text-2xl font-bold text-[var(--foreground)]">
-                    {studyPlanLoading ? "..." : allLessons.length}
+                    {flashcardCountLoading ? "..." : totalFlashcardCount}
                   </p>
-                  <p className="text-sm text-[var(--muted-foreground)]">Lessons with flashcards</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Total flashcards</p>
                 </div>
               </div>
             </motion.div>
