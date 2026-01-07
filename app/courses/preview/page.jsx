@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { Suspense, useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as api from "@/lib/onboarding";
 import LessonPreviewRenderer from "@/components/courses/LessonPreviewRenderer";
 import CompletionModal from "@/components/onboarding/CompletionModal";
 import { supabase } from "@/lib/supabase/client";
 
-export default function CoursePreviewPage() {
+function CoursePreviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const jobId = searchParams.get("jobId");
@@ -242,5 +242,19 @@ export default function CoursePreviewPage() {
         onGenerate={handleGenerateFullCourse}
       />
     </div>
+  );
+}
+
+export default function CoursePreviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen bg-[var(--background)]">
+          <div className="w-8 h-8 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <CoursePreviewContent />
+    </Suspense>
   );
 }
