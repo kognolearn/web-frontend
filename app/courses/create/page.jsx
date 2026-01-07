@@ -25,6 +25,7 @@ import {
   scoreToFamiliarityBand
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
+import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
 import { motion } from "framer-motion";
 
 const searchDebounceMs = 350;
@@ -473,6 +474,23 @@ function CreateCoursePageContent() {
     d.setDate(d.getDate() + 7);
     return toDateInputValue(d);
   }, []);
+
+  // UI mode: 'wizard' or 'chat' - read from localStorage on mount
+  const [uiMode, setUiMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kogno_course_create_ui_mode');
+      return saved === 'wizard' ? 'wizard' : 'chat'; // Default to chat
+    }
+    return 'chat';
+  });
+
+  // Persist UI mode preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kogno_course_create_ui_mode', uiMode);
+    }
+  }, [uiMode]);
+
   const [studyHours, setStudyHours] = useState(5);
   const [studyMinutes, setStudyMinutes] = useState(0);
   const [studyTimeError, setStudyTimeError] = useState(false);
@@ -1683,6 +1701,17 @@ function CreateCoursePageContent() {
 
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
+  // Show chat-based UI if uiMode is 'chat'
+  if (uiMode === 'chat') {
+    return (
+      <ConversationalCourseUI
+        onComplete={() => router.push('/dashboard')}
+        onBack={() => router.push('/dashboard')}
+        onSwitchToWizard={() => setUiMode('wizard')}
+      />
+    );
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] py-8 text-[var(--foreground)] transition-colors">
       {/* Animated background */}
@@ -1694,15 +1723,27 @@ function CreateCoursePageContent() {
       <div className={`relative mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${totalSubtopics > 0 && currentStep === 3 ? "max-w-[90rem]" : "max-w-5xl"}`}>
         {/* Header */}
         <div className="mb-6">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-4"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to dashboard
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={() => setUiMode('chat')}
+              className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Switch to Chat Mode
+            </button>
+          </div>
           <h1 className="text-2xl font-bold sm:text-3xl mb-1">Create New Course</h1>
           <p className="text-sm text-[var(--muted-foreground)]">Build your personalized learning plan in 3 simple steps</p>
         </div>

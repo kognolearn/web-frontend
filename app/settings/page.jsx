@@ -44,6 +44,9 @@ export default function SettingsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  // Course creation UI preference
+  const [courseCreateUiMode, setCourseCreateUiMode] = useState("chat");
+
   useEffect(() => {
     async function loadUser() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -70,6 +73,21 @@ export default function SettingsPage() {
     }
     loadUser();
   }, [router]);
+
+  // Load course creation UI preference from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kogno_course_create_ui_mode');
+      if (saved) setCourseCreateUiMode(saved);
+    }
+  }, []);
+
+  // Save course creation UI preference to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kogno_course_create_ui_mode', courseCreateUiMode);
+    }
+  }, [courseCreateUiMode]);
 
   const handleSaveProfile = async () => {
     setProfileLoading(true);
@@ -616,6 +634,87 @@ export default function SettingsPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Course Creation Section */}
+        <section className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="px-6 py-5 border-b border-[var(--border)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Course Creation</h2>
+                <p className="text-sm text-[var(--muted-foreground)]">Choose your preferred course setup experience</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setCourseCreateUiMode("chat")}
+                className={`flex items-start gap-4 p-4 rounded-xl border transition-all text-left ${
+                  courseCreateUiMode === "chat"
+                    ? "border-[var(--primary)] bg-[var(--primary)]/10"
+                    : "border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-muted)]/50"
+                }`}
+              >
+                <div className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 ${
+                  courseCreateUiMode === "chat"
+                    ? "bg-[var(--primary)] text-white"
+                    : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
+                }`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className={`font-medium ${
+                    courseCreateUiMode === "chat" ? "text-[var(--primary)]" : "text-[var(--foreground)]"
+                  }`}>
+                    Chat Mode
+                  </p>
+                  <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                    Conversational setup guided by Kogno step-by-step
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCourseCreateUiMode("wizard")}
+                className={`flex items-start gap-4 p-4 rounded-xl border transition-all text-left ${
+                  courseCreateUiMode === "wizard"
+                    ? "border-[var(--primary)] bg-[var(--primary)]/10"
+                    : "border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-muted)]/50"
+                }`}
+              >
+                <div className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 ${
+                  courseCreateUiMode === "wizard"
+                    ? "bg-[var(--primary)] text-white"
+                    : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
+                }`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                </div>
+                <div>
+                  <p className={`font-medium ${
+                    courseCreateUiMode === "wizard" ? "text-[var(--primary)]" : "text-[var(--foreground)]"
+                  }`}>
+                    Wizard Mode
+                  </p>
+                  <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                    Classic form-based wizard with all options visible
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
         </section>
