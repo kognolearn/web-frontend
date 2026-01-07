@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import OnboardingChat from "@/components/onboarding/OnboardingChat";
 
 export default async function Home() {
   const cookieStore = await cookies();
@@ -81,18 +82,40 @@ export default async function Home() {
         </div>
       </nav>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6 pb-20">
+      <div className="relative z-10 mx-auto max-w-7xl px-6 pb-20">
         {/* Hero Section */}
-        <section className="pt-16 pb-20 text-center">
-          <div className="max-w-3xl mx-auto space-y-8">
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
-              Learn smarter,
-              <span className="block text-[var(--primary)]">not harder</span>
-            </h1>
-            <p className="text-lg sm:text-xl text-[var(--muted-foreground)] max-w-2xl mx-auto leading-relaxed">
-              Personalized study plans, flashcards, and progress tracking—all in one place.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+        <section className="pt-8 lg:pt-16 pb-20">
+          <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+            <div className="flex-1 space-y-8 text-center lg:text-left">
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
+                Learn smarter,
+                <span className="block text-[var(--primary)]">not harder</span>
+              </h1>
+              <p className="text-lg sm:text-xl text-[var(--muted-foreground)] max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+                Personalized study plans, flashcards, and progress tracking—all in one place.
+              </p>
+              
+              <div className="hidden lg:flex items-center gap-4 pt-4">
+                <Link 
+                  href="/auth/create-account" 
+                  className="px-8 py-3.5 text-base font-medium rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-all shadow-lg shadow-[var(--primary)]/25 hover:shadow-xl hover:shadow-[var(--primary)]/30 hover:-translate-y-0.5"
+                >
+                  Start learning free
+                </Link>
+                <Link 
+                  href="/auth/sign-in" 
+                  className="px-8 py-3.5 text-base font-medium rounded-xl border border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-1)] transition-all"
+                >
+                  Sign in
+                </Link>
+              </div>
+            </div>
+
+            <div className="w-full lg:w-[480px] flex-shrink-0">
+              <OnboardingChat />
+            </div>
+
+            <div className="lg:hidden flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 w-full">
               <Link 
                 href="/auth/create-account" 
                 className="w-full sm:w-auto px-8 py-3.5 text-base font-medium rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-all shadow-lg shadow-[var(--primary)]/25 hover:shadow-xl hover:shadow-[var(--primary)]/30 hover:-translate-y-0.5"
