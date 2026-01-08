@@ -3,6 +3,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import "@/styles/jsxgraph.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { CodeEditorSettingsProvider } from "@/components/editor/CodeEditorSettingsProvider";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
@@ -61,11 +62,13 @@ export default function RootLayout({ children }) {
       <body className={`${nunito.variable} antialiased`}>
         <MathJaxContext config={mathJaxConfig}>
           <ThemeProvider>
-            <OnboardingProvider>
-              <SupabaseSessionProvider />
-              {children}
-              <FeedbackWidget />
-            </OnboardingProvider>
+            <CodeEditorSettingsProvider>
+              <OnboardingProvider>
+                <SupabaseSessionProvider />
+                {children}
+                <FeedbackWidget />
+              </OnboardingProvider>
+            </CodeEditorSettingsProvider>
           </ThemeProvider>
         </MathJaxContext>
       </body>

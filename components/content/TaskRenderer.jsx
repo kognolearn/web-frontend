@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { CheckCircle2, Circle, GripVertical, MapPin, ExternalLink } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
 import { getComponent } from "@/components/content/v2/ComponentRegistry";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
@@ -152,8 +153,12 @@ function CodeEditor({
   label,
 }) {
   const { theme: appTheme } = useTheme();
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
   const resolvedLanguage = language && language.trim() ? language : "plaintext";
-  const editorTheme = propTheme || (appTheme === "dark" ? "vs-dark" : "light");
+
+  // Use user's editor theme preference, or fall back to app theme
+  const editorTheme = propTheme || editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
+
   const isMarkdown = resolvedLanguage === "markdown";
   const previewContent = useMemo(
     () => (isMarkdown ? autoWrapMarkdownMath(value) : ""),
@@ -163,6 +168,15 @@ function CodeEditor({
   const isLatexFriendly = ["markdown", "latex", "tex", "text", "plaintext"].includes(
     resolvedLanguage.toLowerCase()
   );
+
+  // Get Monaco options from user settings
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      ...options, // Allow prop overrides
+    };
+  }, [getMonacoOptions, options]);
 
   return (
     <div className="space-y-2">
@@ -196,12 +210,7 @@ function CodeEditor({
             language={resolvedLanguage}
             height={height}
             theme={editorTheme}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              scrollBeyondLastLine: false,
-              ...options,
-            }}
+            options={monacoOptions}
           />
         </div>
       </div>
@@ -701,7 +710,7 @@ function NotSupported({ type }) {
   );
 }
 
-export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false }) {
+export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false, onTaskComplete }) {
   const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
   const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -874,6 +883,11 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
         result,
         grade,
       });
+
+      // Notify parent when task passes
+      if (grade?.passed && onTaskComplete) {
+        onTaskComplete();
+      }
     } catch (error) {
       if (error?.name === "AbortError") return;
       console.error("[TaskRenderer] Grading failed:", error);
@@ -881,7 +895,7 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, isSubmitting, submitAnswers]);
+  }, [answers, isSubmitting, submitAnswers, onTaskComplete]);
 
   const gradeSummary = useMemo(() => {
     const grade = gradePayload?.grade;
