@@ -1110,8 +1110,87 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
                       <div className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider mb-2">
                         Feedback
                       </div>
-                      <div className="text-sm text-[var(--foreground)] leading-relaxed">
+                      <pre className="text-sm text-[var(--foreground)] leading-relaxed whitespace-pre-wrap font-sans">
                         {feedback}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {/* Test Case Results for code_runner */}
+                  {resultItem.evaluator === "code_runner" && Array.isArray(details?.results) && details.results.length > 0 ? (
+                    <div className="px-4 py-4 border-b border-[var(--border)]">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">
+                          Test Results
+                        </span>
+                        <span className={`text-sm font-semibold ${
+                          resultItem.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                        }`}>
+                          {details.passed_count ?? 0}/{details.total_count ?? details.results.length} passed
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {details.results.map((testResult, testIdx) => (
+                          <div key={testIdx} className="group relative">
+                            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-default ${
+                              testResult.passed
+                                ? "bg-[var(--success)]/20 border-[var(--success)] text-[var(--success)]"
+                                : "bg-[var(--danger)]/20 border-[var(--danger)] text-[var(--danger)]"
+                            }`}>
+                              {testResult.passed ? (
+                                <CheckCircle2 className="w-4 h-4" />
+                              ) : (
+                                <Circle className="w-4 h-4" />
+                              )}
+                            </div>
+                            {/* Tooltip on hover */}
+                            <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[90vw] hidden group-hover:block">
+                              <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-xl shadow-xl p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium text-[var(--foreground)]">
+                                    {testResult.description || `Test ${testIdx + 1}`}
+                                  </span>
+                                  <span className={`text-xs font-medium ${
+                                    testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                                  }`}>
+                                    {testResult.passed ? "Passed" : "Failed"}
+                                  </span>
+                                </div>
+                                {testResult.input && (
+                                  <div>
+                                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Input</span>
+                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                                      {testResult.input}
+                                    </pre>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Expected</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                                    {testResult.expected_output || "(empty)"}
+                                  </pre>
+                                </div>
+                                {!testResult.passed && (
+                                  <div>
+                                    <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Your Output</span>
+                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                                      {testResult.actual_output || "(no output)"}
+                                    </pre>
+                                  </div>
+                                )}
+                                {testResult.stderr && (
+                                  <div>
+                                    <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Error</span>
+                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs text-[var(--danger)] overflow-x-auto max-h-20 overflow-y-auto whitespace-pre-wrap">
+                                      {testResult.stderr}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-[var(--surface-1)] border-r border-b border-[var(--border)] rotate-45" />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : null}
