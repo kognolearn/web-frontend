@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { cleanupAnonUser } from "@/lib/onboarding";
 
 export default function SignUpForm() {
   const router = useRouter();
@@ -58,6 +59,7 @@ export default function SignUpForm() {
 
       // If sign up is successful, redirect to target
       if (data.user) {
+        await cleanupAnonUser();
         router.push(redirectTo || "/dashboard");
       }
     } catch (err) {

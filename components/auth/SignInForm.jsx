@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import { cleanupAnonUser } from "@/lib/onboarding";
 
 export default function SignInForm() {
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function SignInForm() {
       }
 
       if (data?.user) {
+        await cleanupAnonUser();
         router.push(redirectTo || "/dashboard");
       }
     } catch (err) {

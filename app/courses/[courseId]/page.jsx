@@ -16,7 +16,6 @@ import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch } from "@/lib/api";
-import { cleanupAnonUser } from "@/lib/onboarding";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
@@ -165,7 +164,6 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
-  const anonUserIdRef = useRef(null);
 
   const previewParam = searchParams?.get('preview');
   const isPreviewRoute = previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
@@ -189,10 +187,6 @@ export default function CoursePage() {
   useEffect(() => {
     sharedChatStateRef.current = sharedChatState;
   }, [sharedChatState]);
-
-  useEffect(() => {
-    anonUserIdRef.current = anonUserId;
-  }, [anonUserId]);
 
   // Tab State
   const [tabs, setTabs] = useState(() => {
@@ -324,26 +318,6 @@ export default function CoursePage() {
     secondsRemainingRef.current = secondsRemaining;
   }, [secondsRemaining]);
 
-  const requestPreviewCleanup = useCallback((useBeacon = false) => {
-    if (!isOnboardingPreview) return;
-    const anonId = anonUserIdRef.current || readAnonUserId();
-    if (!anonId) return;
-
-    if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      const payload = JSON.stringify({ anonUserId: anonId });
-      const blob = new Blob([payload], { type: 'application/json' });
-      navigator.sendBeacon('/api/onboarding/cleanup-anon', blob);
-      try {
-        window.localStorage.removeItem(ANON_USER_ID_KEY);
-      } catch (error) {
-        console.warn('Failed to clear anon user id:', error);
-      }
-      return;
-    }
-
-    void cleanupAnonUser(anonId);
-  }, [isOnboardingPreview, cleanupAnonUser]);
-
   // Send PATCH request on page unload and every 5 minutes
   useEffect(() => {
     if (isOnboardingPreview) return;
@@ -387,23 +361,6 @@ export default function CoursePage() {
       handleBeforeUnload();
     };
   }, [userId, courseId, initialSeconds, isOnboardingPreview]);
-
-  useEffect(() => {
-    if (!isOnboardingPreview || typeof window === 'undefined') return;
-    const handleBeforeUnload = () => {
-      requestPreviewCleanup(true);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [isOnboardingPreview, requestPreviewCleanup]);
-
-  useEffect(() => {
-    return () => {
-      requestPreviewCleanup();
-    };
-  }, [requestPreviewCleanup]);
 
   useEffect(() => {
     if (!userId || !courseId) return;
@@ -1596,7 +1553,6 @@ export default function CoursePage() {
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
-                      requestPreviewCleanup();
                       router.push('/auth/sign-up');
                     }}
                     className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
@@ -1605,7 +1561,6 @@ export default function CoursePage() {
                   </button>
                   <button
                     onClick={() => {
-                      requestPreviewCleanup();
                       router.push('/auth/sign-in');
                     }}
                     className="w-full px-4 py-3 text-sm font-medium bg-[var(--surface-2)] text-[var(--foreground)] rounded-xl hover:bg-[var(--surface-muted)] transition-colors"

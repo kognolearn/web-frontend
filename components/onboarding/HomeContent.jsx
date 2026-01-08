@@ -55,6 +55,7 @@ export default function HomeContent() {
   const [hasStarted, setHasStarted] = useState(false);
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
+  const onboardingSessionStartedRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -82,6 +83,17 @@ export default function HomeContent() {
     setMessages(prev => [...prev, { type: 'user', text, id: Date.now() + Math.random() }]);
   };
 
+  const ensureOnboardingSession = async () => {
+    if (onboardingSessionStartedRef.current) return;
+    onboardingSessionStartedRef.current = true;
+    setHasStarted(true);
+    try {
+      await api.startNewOnboardingSession();
+    } catch (error) {
+      console.warn('Failed to start new onboarding session:', error);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
     const val = input.trim();
@@ -89,7 +101,7 @@ export default function HomeContent() {
     addUserMessage(val);
 
     if (!hasStarted) {
-      setHasStarted(true);
+      void ensureOnboardingSession();
     }
 
     if (step === STEPS.ASK_COURSE) {
@@ -150,7 +162,7 @@ export default function HomeContent() {
     }
 
     if (!hasStarted) {
-      setHasStarted(true);
+      await ensureOnboardingSession();
     }
 
     setLoading(true);

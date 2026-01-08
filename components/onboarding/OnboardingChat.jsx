@@ -53,6 +53,7 @@ export default function OnboardingChat({ onFirstMessage }) {
   const [hasStarted, setHasStarted] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const onboardingSessionStartedRef = useRef(false);
 
   const scrollContainerRef = useRef(null);
 
@@ -82,6 +83,17 @@ export default function OnboardingChat({ onFirstMessage }) {
     setMessages(prev => [...prev, { type: 'user', text, id: Date.now() + Math.random() }]);
   };
 
+  const ensureOnboardingSession = async () => {
+    if (onboardingSessionStartedRef.current) return;
+    onboardingSessionStartedRef.current = true;
+    setHasStarted(true);
+    try {
+      await api.startNewOnboardingSession();
+    } catch (error) {
+      console.warn('Failed to start new onboarding session:', error);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
     const val = input.trim();
@@ -90,7 +102,7 @@ export default function OnboardingChat({ onFirstMessage }) {
 
     // Notify parent when first message is sent
     if (!hasStarted) {
-      setHasStarted(true);
+      void ensureOnboardingSession();
       onFirstMessage?.();
     }
 
