@@ -1129,67 +1129,68 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
                           {details.passed_count ?? 0}/{details.total_count ?? details.results.length} passed
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="space-y-2">
                         {details.results.map((testResult, testIdx) => (
-                          <div key={testIdx} className="group relative">
-                            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-default ${
+                          <details
+                            key={testIdx}
+                            className={`rounded-lg border overflow-hidden ${
                               testResult.passed
-                                ? "bg-[var(--success)]/20 border-[var(--success)] text-[var(--success)]"
-                                : "bg-[var(--danger)]/20 border-[var(--danger)] text-[var(--danger)]"
-                            }`}>
-                              {testResult.passed ? (
-                                <CheckCircle2 className="w-4 h-4" />
-                              ) : (
-                                <Circle className="w-4 h-4" />
-                              )}
-                            </div>
-                            {/* Tooltip on hover */}
-                            <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[90vw] hidden group-hover:block">
-                              <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-xl shadow-xl p-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-medium text-[var(--foreground)]">
-                                    {testResult.description || `Test ${testIdx + 1}`}
-                                  </span>
-                                  <span className={`text-xs font-medium ${
-                                    testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
-                                  }`}>
-                                    {testResult.passed ? "Passed" : "Failed"}
-                                  </span>
-                                </div>
-                                {testResult.input && (
-                                  <div>
-                                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Input</span>
-                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                                      {testResult.input}
-                                    </pre>
-                                  </div>
+                                ? "border-[var(--success)]/50 bg-[var(--success)]/5"
+                                : "border-[var(--danger)]/50 bg-[var(--danger)]/5"
+                            }`}
+                          >
+                            <summary className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none hover:bg-black/5">
+                              <span className={`flex-shrink-0 ${
+                                testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                              }`}>
+                                {testResult.passed ? (
+                                  <CheckCircle2 className="w-4 h-4" />
+                                ) : (
+                                  <Circle className="w-4 h-4" />
                                 )}
+                              </span>
+                              <span className="text-sm font-medium text-[var(--foreground)] flex-1">
+                                {testResult.description || `Test ${testIdx + 1}`}
+                              </span>
+                              <span className={`text-xs font-medium ${
+                                testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                              }`}>
+                                {testResult.passed ? "Passed" : "Failed"}
+                              </span>
+                            </summary>
+                            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-[var(--border)]/30">
+                              {testResult.input && (
                                 <div>
-                                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Expected</span>
-                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                                    {testResult.expected_output || "(empty)"}
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Input</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto">
+                                    {testResult.input}
                                   </pre>
                                 </div>
-                                {!testResult.passed && (
-                                  <div>
-                                    <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Your Output</span>
-                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                                      {testResult.actual_output || "(no output)"}
-                                    </pre>
-                                  </div>
-                                )}
-                                {testResult.stderr && (
-                                  <div>
-                                    <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Error</span>
-                                    <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs text-[var(--danger)] overflow-x-auto max-h-20 overflow-y-auto whitespace-pre-wrap">
-                                      {testResult.stderr}
-                                    </pre>
-                                  </div>
-                                )}
+                              )}
+                              <div>
+                                <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Expected Output</span>
+                                <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto">
+                                  {testResult.expected_output || "(empty)"}
+                                </pre>
                               </div>
-                              <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-[var(--surface-1)] border-r border-b border-[var(--border)] rotate-45" />
+                              {!testResult.passed && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Your Output</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs overflow-x-auto">
+                                    {testResult.actual_output || "(no output)"}
+                                  </pre>
+                                </div>
+                              )}
+                              {testResult.stderr && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Error</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs text-[var(--danger)] overflow-x-auto whitespace-pre-wrap">
+                                    {testResult.stderr}
+                                  </pre>
+                                </div>
+                              )}
                             </div>
-                          </div>
+                          </details>
                         ))}
                       </div>
                     </div>
