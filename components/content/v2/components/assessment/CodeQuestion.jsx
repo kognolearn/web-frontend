@@ -162,12 +162,33 @@ export default function CodeQuestion({
         </div>
       </div>
 
+      {/* Execution error display */}
+      {isGraded && grade?.stderr && (
+        <div className="rounded-xl border border-rose-500 bg-rose-500/5 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-rose-600 dark:text-rose-400 uppercase tracking-wide">
+              Execution Error
+            </span>
+          </div>
+          <pre className="p-3 rounded-lg bg-rose-500/10 font-mono text-xs text-rose-700 dark:text-rose-300 overflow-x-auto whitespace-pre-wrap">
+            {grade.stderr}
+          </pre>
+        </div>
+      )}
+
       {/* Test cases */}
       {visibleTestCases.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
-            Test Cases
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+              Test Cases
+            </h4>
+            {isGraded && grade?.testResults && (
+              <span className="text-xs text-[var(--muted-foreground)]">
+                {grade.passedCount ?? 0}/{grade.totalCount ?? grade.testResults.length} passed
+              </span>
+            )}
+          </div>
           <div className="space-y-2">
             {visibleTestCases.map((testCase, index) => {
               const testResult = isGraded ? grade?.testResults?.[index] : null;
@@ -188,7 +209,7 @@ export default function CodeQuestion({
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-[var(--muted-foreground)]">
-                      Test Case {index + 1}
+                      {testResult?.description || `Test Case ${index + 1}`}
                     </span>
                     {testResult && (
                       <span
@@ -223,14 +244,28 @@ export default function CodeQuestion({
                   </div>
 
                   {/* Actual output if failed */}
-                  {testResult && !testResult.passed && testResult.actual_output && (
-                    <div className="mt-2">
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        Your Output:
-                      </span>
-                      <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs overflow-x-auto">
-                        {testResult.actual_output}
-                      </pre>
+                  {testResult && !testResult.passed && (
+                    <div className="mt-3 space-y-2">
+                      {testResult.actual_output !== undefined && (
+                        <div>
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            Your Output:
+                          </span>
+                          <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs overflow-x-auto">
+                            {testResult.actual_output || "(no output)"}
+                          </pre>
+                        </div>
+                      )}
+                      {testResult.stderr && (
+                        <div>
+                          <span className="text-xs text-rose-600 dark:text-rose-400">
+                            Error:
+                          </span>
+                          <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs text-rose-700 dark:text-rose-300 overflow-x-auto whitespace-pre-wrap">
+                            {testResult.stderr}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
