@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
+import ReasoningLoader from "./ReasoningLoader";
 
 /**
  * Typing indicator with bouncing dots
@@ -163,6 +164,7 @@ export default function KognoMessage({
   content,
   isTyping = false,
   isLoading = false,
+  showReasoning = false,
   options = [],
   onOptionSelect,
   selectedOption,
@@ -259,7 +261,10 @@ export default function KognoMessage({
             )}
 
             {/* Loading indicator */}
-            {isLoading && <LoadingSpinner />}
+            {isLoading && !showReasoning && <LoadingSpinner />}
+
+            {/* Reasoning loader for topic generation */}
+            {showReasoning && <ReasoningLoader className="mt-4" />}
 
             {/* Action buttons */}
             {(confirmLabel || skippable) && !isLoading && (

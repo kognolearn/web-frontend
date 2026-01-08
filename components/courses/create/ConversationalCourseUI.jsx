@@ -240,15 +240,19 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       >
         {conversation.messages.map((message) => {
           if (message.role === "assistant") {
+            const isCurrentlyLoading =
+              message.inputType === "loading" ||
+              (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
+            const showReasoning =
+              message.stepId === "topics_loading" && isCurrentlyLoading;
+
             return (
               <KognoMessage
                 key={message.id}
                 content={message.content}
                 isTyping={false}
-                isLoading={
-                  message.inputType === "loading" ||
-                  (message.stepId === conversation.currentStep?.id && conversation.pendingAction)
-                }
+                isLoading={isCurrentlyLoading}
+                showReasoning={showReasoning}
                 options={message.options}
                 onOptionSelect={conversation.handleOptionSelect}
                 selectedOption={conversation.previousResponses[message.stepId]}
