@@ -216,7 +216,7 @@ export default function OnboardingChat({ onFirstMessage }) {
                 setStep(STEPS.COMPLETED);
                 addBotMessage("Ready! Taking you there now.");
                 setTimeout(() => {
-                     const nextUrl = status.resultUrl || status.redirectUrl;
+                     const nextUrl = status.resultUrl || status.redirectUrl || (status.courseId ? `/courses/${status.courseId}?preview=1&jobId=${jobId}` : null);
                      if (nextUrl) router.push(nextUrl);
                      else router.push('/dashboard');
                 }, 1000);

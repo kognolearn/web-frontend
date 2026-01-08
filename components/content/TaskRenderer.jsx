@@ -701,7 +701,7 @@ function NotSupported({ type }) {
   );
 }
 
-export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId }) {
+export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false }) {
   const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
   const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -801,6 +801,10 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId }) {
   }, []);
 
   const submitAnswers = useCallback(async (answersToSubmit, signal) => {
+    if (isPreview) {
+      throw new Error("Task grading is disabled in preview mode.");
+    }
+
     if (onSubmit) {
       return onSubmit(answersToSubmit, { signal });
     }
@@ -826,7 +830,7 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId }) {
       signal,
       errorLabel: "grade task",
     });
-  }, [courseId, nodeId, onSubmit]);
+  }, [courseId, nodeId, onSubmit, isPreview]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;

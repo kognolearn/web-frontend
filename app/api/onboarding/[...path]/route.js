@@ -11,7 +11,8 @@ export async function POST(request, { params }) {
 
 async function proxyRequest(request, params, method) {
   try {
-    const pathSegments = Array.isArray(params?.path) ? params.path : [];
+    const resolvedParams = await params;
+    const pathSegments = Array.isArray(resolvedParams?.path) ? resolvedParams.path : [];
     const pathSuffix = pathSegments.length ? `/${pathSegments.join("/")}` : "";
 
     const incomingUrl = new URL(request.url);

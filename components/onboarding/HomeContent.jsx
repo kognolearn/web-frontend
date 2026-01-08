@@ -217,9 +217,11 @@ export default function HomeContent() {
           setStep(STEPS.COMPLETED);
           addBotMessage("Ready! Taking you there now.");
           setTimeout(() => {
-            const nextUrl = status.resultUrl || status.redirectUrl;
-            if (nextUrl) router.push(nextUrl);
-            else router.push('/dashboard');
+            if (status.courseId) {
+              router.push(`/courses/${status.courseId}`);
+            } else {
+              router.push('/dashboard');
+            }
           }, 1000);
         } else if (status.status === 'failed') {
           clearInterval(stallInterval);

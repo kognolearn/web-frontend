@@ -16,10 +16,42 @@ import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch } from "@/lib/api";
+import { cleanupAnonUser } from "@/lib/onboarding";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
+const ANON_USER_ID_KEY = 'kogno_anon_user_id';
 const getCourseTabsStorageKey = (userId, courseId) => `${COURSE_TABS_STORAGE_PREFIX}_${userId}_${courseId}`;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isValidUuid = (value) => typeof value === 'string' && UUID_REGEX.test(value);
+
+const readAnonUserId = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem(ANON_USER_ID_KEY);
+    return isValidUuid(stored) ? stored : null;
+  } catch (error) {
+    console.warn('Failed to read anon user id:', error);
+    return null;
+  }
+};
+
+const buildPreviewPlanUrl = (courseId, anonUserId) => {
+  const params = new URLSearchParams({
+    courseId: String(courseId),
+    anonUserId: String(anonUserId),
+  });
+  return `/api/onboarding/preview/plan?${params.toString()}`;
+};
+
+const filterPreviewPlan = (plan) => {
+  if (!plan) return plan;
+  const modules = Array.isArray(plan.modules)
+    ? plan.modules.filter((module) => !module.is_practice_exam_module)
+    : plan.modules;
+  return { ...plan, modules };
+};
 
 const normalizeCourseMode = (value) => {
   if (!value) return null;
@@ -104,6 +136,7 @@ export default function CoursePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState(null);
+  const [anonUserId, setAnonUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
@@ -119,6 +152,8 @@ export default function CoursePage() {
   const [isHiddenContentModalOpen, setIsHiddenContentModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
+  const [isOnboardingPreview, setIsOnboardingPreview] = useState(false);
+  const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
     const initialChat = createBlankChat();
     return {
@@ -130,6 +165,11 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
+  const anonUserIdRef = useRef(null);
+
+  const previewParam = searchParams?.get('preview');
+  const isPreviewRoute = previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
+  const isPreviewMode = isPreviewRoute || isOnboardingPreview;
   
   // Focus timer state - lifted from CourseTabContent
   const focusTimerRef = useRef(null);
@@ -149,6 +189,10 @@ export default function CoursePage() {
   useEffect(() => {
     sharedChatStateRef.current = sharedChatState;
   }, [sharedChatState]);
+
+  useEffect(() => {
+    anonUserIdRef.current = anonUserId;
+  }, [anonUserId]);
 
   // Tab State
   const [tabs, setTabs] = useState(() => {
@@ -178,12 +222,35 @@ export default function CoursePage() {
           data: { user },
         } = await supabase.auth.getUser();
         if (!mounted) return;
-        if (!user) {
-          setError("No user session found.");
+
+        const storedAnonId = readAnonUserId();
+
+        if (isPreviewRoute) {
+          if (storedAnonId) {
+            setAnonUserId(storedAnonId);
+            setUserId(storedAnonId);
+            setIsOnboardingPreview(true);
+            return;
+          }
+          setError("Preview session expired.");
           setLoading(false);
           return;
         }
-        setUserId(user.id);
+
+        if (user) {
+          setUserId(user.id);
+          return;
+        }
+
+        if (storedAnonId) {
+          setAnonUserId(storedAnonId);
+          setUserId(storedAnonId);
+          setIsOnboardingPreview(true);
+          return;
+        }
+
+        setError("No user session found.");
+        setLoading(false);
       } catch (e) {
         if (!mounted) return;
         setError("Failed to load user.");
@@ -193,7 +260,7 @@ export default function CoursePage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isPreviewRoute]);
 
   // Persist tabs for this course/user
   useEffect(() => {
@@ -257,8 +324,29 @@ export default function CoursePage() {
     secondsRemainingRef.current = secondsRemaining;
   }, [secondsRemaining]);
 
+  const requestPreviewCleanup = useCallback((useBeacon = false) => {
+    if (!isOnboardingPreview) return;
+    const anonId = anonUserIdRef.current || readAnonUserId();
+    if (!anonId) return;
+
+    if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      const payload = JSON.stringify({ anonUserId: anonId });
+      const blob = new Blob([payload], { type: 'application/json' });
+      navigator.sendBeacon('/api/onboarding/cleanup-anon', blob);
+      try {
+        window.localStorage.removeItem(ANON_USER_ID_KEY);
+      } catch (error) {
+        console.warn('Failed to clear anon user id:', error);
+      }
+      return;
+    }
+
+    void cleanupAnonUser(anonId);
+  }, [isOnboardingPreview, cleanupAnonUser]);
+
   // Send PATCH request on page unload and every 5 minutes
   useEffect(() => {
+    if (isOnboardingPreview) return;
     if (!userId || !courseId || initialSeconds === null) return;
 
     const saveProgress = async () => {
@@ -298,7 +386,24 @@ export default function CoursePage() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       handleBeforeUnload();
     };
-  }, [userId, courseId, initialSeconds]);
+  }, [userId, courseId, initialSeconds, isOnboardingPreview]);
+
+  useEffect(() => {
+    if (!isOnboardingPreview || typeof window === 'undefined') return;
+    const handleBeforeUnload = () => {
+      requestPreviewCleanup(true);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isOnboardingPreview, requestPreviewCleanup]);
+
+  useEffect(() => {
+    return () => {
+      requestPreviewCleanup();
+    };
+  }, [requestPreviewCleanup]);
 
   useEffect(() => {
     if (!userId || !courseId) return;
@@ -308,30 +413,34 @@ export default function CoursePage() {
     setHasHydratedTabs(false);
     (async () => {
       try {
-        const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
-        const res = await authFetch(url);
+        const url = isPreviewMode
+          ? buildPreviewPlanUrl(courseId, userId)
+          : `/api/courses/${encodeURIComponent(courseId)}/plan`;
+        const res = isPreviewMode ? await fetch(url) : await authFetch(url);
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed: ${res.status}`);
         }
         const json = await res.json();
         if (aborted) return;
+        const previewCourse = isPreviewMode ? json?.course : null;
+        const planPayload = isPreviewMode ? filterPreviewPlan(json) : json;
 
         const planMode = normalizeCourseMode(
-          json?.mode || json?.course_mode || json?.study_mode || json?.studyMode
+          planPayload?.mode || planPayload?.course_mode || planPayload?.study_mode || planPayload?.studyMode
         );
         if (planMode) {
           setCourseMode(planMode);
         }
 
         const isDeepCourse = planMode === "deep";
-        setHasHiddenContent(isDeepCourse ? false : json.has_hidden_content === true);
+        setHasHiddenContent(isDeepCourse ? false : planPayload.has_hidden_content === true);
         if (isDeepCourse) {
           setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
           setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
         }
 
-        const unlocked = unlockStudyPlan(json);
+        const unlocked = unlockStudyPlan(planPayload);
         const modules = Array.isArray(unlocked?.modules) ? unlocked.modules : [];
         const lessonList = modules
           .filter((module) => !module.is_practice_exam_module)
@@ -436,40 +545,79 @@ export default function CoursePage() {
         setActiveTabId(resolvedActiveId);
         setHasHydratedTabs(true);
 
-        void (async () => {
-          try {
-            const courseMetaUrl = `/api/courses`;
-            const courseMetaRes = await authFetch(courseMetaUrl);
-            if (!courseMetaRes.ok || aborted) return;
-            const body = await courseMetaRes.json();
-            const courses = Array.isArray(body?.courses) ? body.courses : [];
-            const courseMeta = courses.find((course) => course.id === courseId);
+        if (isPreviewMode && previewCourse) {
+          const title =
+            previewCourse.title ||
+            previewCourse.course_title ||
+            previewCourse.name ||
+            previewCourse.courseName;
+          if (title) setCourseName(title);
 
-            if (courseMeta) {
-              const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
-              if (title) setCourseName(title);
-
-              const metaMode = normalizeCourseMode(
-                courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
-              );
-              if (metaMode && !planMode) {
-                setCourseMode(metaMode);
-              }
-              if (metaMode === "deep") {
-                setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
-                setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
-                if (!planMode) {
-                  setHasHiddenContent(false);
-                }
-              } else if (typeof courseMeta.seconds_to_complete === "number") {
-                setSecondsRemaining(courseMeta.seconds_to_complete);
-                setInitialSeconds(courseMeta.seconds_to_complete);
-              }
-            }
-          } catch (e) {
-            console.error("Failed to load course metadata:", e);
+          const metaMode = normalizeCourseMode(
+            previewCourse.metadata?.mode ||
+            previewCourse.mode ||
+            previewCourse.course_mode ||
+            previewCourse.study_mode ||
+            previewCourse.studyMode
+          );
+          if (metaMode && !planMode) {
+            setCourseMode(metaMode);
           }
-        })();
+          if (metaMode === "deep") {
+            setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+            setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+            if (!planMode) {
+              setHasHiddenContent(false);
+            }
+          } else if (typeof previewCourse.seconds_to_complete === "number") {
+            setSecondsRemaining(previewCourse.seconds_to_complete);
+            setInitialSeconds(previewCourse.seconds_to_complete);
+          }
+
+          if (previewCourse.metadata?.is_onboarding_preview === true) {
+            setIsOnboardingPreview(true);
+          }
+        } else {
+          void (async () => {
+            try {
+              const courseMetaUrl = `/api/courses`;
+              const courseMetaRes = await authFetch(courseMetaUrl);
+              if (!courseMetaRes.ok || aborted) return;
+              const body = await courseMetaRes.json();
+              const courses = Array.isArray(body?.courses) ? body.courses : [];
+              const courseMeta = courses.find((course) => course.id === courseId);
+
+              if (courseMeta) {
+                const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
+                if (title) setCourseName(title);
+
+                const metaMode = normalizeCourseMode(
+                  courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
+                );
+                if (metaMode && !planMode) {
+                  setCourseMode(metaMode);
+                }
+                if (metaMode === "deep") {
+                  setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+                  setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+                  if (!planMode) {
+                    setHasHiddenContent(false);
+                  }
+                } else if (typeof courseMeta.seconds_to_complete === "number") {
+                  setSecondsRemaining(courseMeta.seconds_to_complete);
+                  setInitialSeconds(courseMeta.seconds_to_complete);
+                }
+
+                // Check if this is an onboarding preview course
+                if (courseMeta.metadata?.is_onboarding_preview === true) {
+                  setIsOnboardingPreview(true);
+                }
+              }
+            } catch (e) {
+              console.error("Failed to load course metadata:", e);
+            }
+          })();
+        }
       } catch (e) {
         if (aborted) return;
         setError(e?.message || "Failed to load study plan.");
@@ -482,32 +630,35 @@ export default function CoursePage() {
     return () => {
       aborted = true;
     };
-  }, [userId, courseId]);
+  }, [userId, courseId, isPreviewMode]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
     try {
-      const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
-      const res = await authFetch(url);
+      const url = isPreviewMode
+        ? buildPreviewPlanUrl(courseId, userId)
+        : `/api/courses/${encodeURIComponent(courseId)}/plan`;
+      const res = isPreviewMode ? await fetch(url) : await authFetch(url);
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
       }
       const json = await res.json();
+      const planPayload = isPreviewMode ? filterPreviewPlan(json) : json;
 
       const planMode = normalizeCourseMode(
-        json?.mode || json?.course_mode || json?.study_mode || json?.studyMode
+        planPayload?.mode || planPayload?.course_mode || planPayload?.study_mode || planPayload?.studyMode
       );
       if (planMode) {
         setCourseMode(planMode);
       }
       const isDeepCourse = planMode === "deep" || courseMode === "deep";
-      setHasHiddenContent(isDeepCourse ? false : json.has_hidden_content === true);
+      setHasHiddenContent(isDeepCourse ? false : planPayload.has_hidden_content === true);
       if (isDeepCourse) {
         setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
         setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
       }
       
-      const newPlan = unlockStudyPlan(json);
+      const newPlan = unlockStudyPlan(planPayload);
       
       // Smart merge: preserve current lesson visibility when time decreases
       setStudyPlan((prevPlan) => {
@@ -570,9 +721,10 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
-  }, [userId, courseId, courseMode]);
+  }, [userId, courseId, courseMode, isPreviewMode]);
 
   const handleTimerUpdate = useCallback(async (newSeconds) => {
+    if (isOnboardingPreview) return;
     if (!userId || !courseId) return;
     const nextSeconds = isDeepStudyCourse ? MAX_DEEP_STUDY_SECONDS : newSeconds;
     setSecondsRemaining(nextSeconds);
@@ -590,7 +742,7 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to update timer:', e);
     }
-  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse]);
+  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse, isOnboardingPreview]);
 
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
@@ -933,8 +1085,28 @@ export default function CoursePage() {
 
   return (
     <div className="flex flex-col h-screen bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
+      {/* Preview Mode Banner */}
+      {isOnboardingPreview && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[var(--primary)]/20 via-[var(--primary)]/10 to-[var(--primary)]/20 border-b border-[var(--primary)]/30">
+          <div className="flex items-center gap-3">
+            <span className="px-2 py-0.5 text-xs font-semibold bg-[var(--primary)] text-white rounded-full">
+              Preview
+            </span>
+            <span className="text-sm text-[var(--foreground)]">
+              You're viewing a preview lesson. Sign up to generate your full course!
+            </span>
+          </div>
+          <button
+            onClick={() => setShowPreviewCompletionModal(true)}
+            className="px-4 py-1.5 text-sm font-medium bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
+          >
+            Generate Full Course
+          </button>
+        </div>
+      )}
+
       {/* Tab Bar */}
-      {!isMobileView && (
+      {!isMobileView && !isOnboardingPreview && (
         <div 
           className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
             isExternalChatHovering 
@@ -1274,6 +1446,7 @@ export default function CoursePage() {
                     focusTimerRef={focusTimerRef}
                     focusTimerState={focusTimerState}
                     isDeepStudyCourse={isDeepStudyCourse}
+                    isOnboardingPreview={isOnboardingPreview}
                   />
                 );
               case 'chat':
@@ -1389,6 +1562,68 @@ export default function CoursePage() {
         onAddTime={handleAddTimeFromModal}
         variant="hidden-content"
       />
+
+      {/* Preview Completion Modal */}
+      <AnimatePresence>
+        {showPreviewCompletionModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowPreviewCompletionModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[var(--surface-1)] rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-[var(--border)]"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
+                  Ready to ace your class?
+                </h2>
+                <p className="text-[var(--muted-foreground)] mb-6">
+                  Sign up to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      requestPreviewCleanup();
+                      router.push('/auth/sign-up');
+                    }}
+                    className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
+                  >
+                    Sign up for free
+                  </button>
+                  <button
+                    onClick={() => {
+                      requestPreviewCleanup();
+                      router.push('/auth/sign-in');
+                    }}
+                    className="w-full px-4 py-3 text-sm font-medium bg-[var(--surface-2)] text-[var(--foreground)] rounded-xl hover:bg-[var(--surface-muted)] transition-colors"
+                  >
+                    Already have an account? Sign in
+                  </button>
+                  <button
+                    onClick={() => setShowPreviewCompletionModal(false)}
+                    className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
+                  >
+                    Continue exploring
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Hidden Drag Preview Source (for setDragImage) */}
       <div 

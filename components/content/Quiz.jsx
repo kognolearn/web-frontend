@@ -529,6 +529,7 @@ export default function Quiz({
   courseId,
   lessonId,
   onQuizCompleted,
+  isPreview = false,
 }) {
   const normalizedQuestions = useMemo(() => {
     if (questions && typeof questions === "object" && !Array.isArray(questions)) {
@@ -826,7 +827,7 @@ export default function Quiz({
     const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
 
     // Update progress if tracking info is available
-    if (userId && courseId && lessonId) {
+    if (!isPreview && userId && courseId && lessonId) {
       try {
         const allCorrect = totalCount > 0 && correctCount === totalCount;
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
@@ -894,7 +895,7 @@ export default function Quiz({
     });
     setCurrentIndex(0);
     setIsSubmitting(false);
-  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted]);
+  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted, isPreview]);
 
   const handleNavigate = useCallback(
     (direction) => {
@@ -918,7 +919,7 @@ export default function Quiz({
 
   const handleFlagQuestion = useCallback(
     async (questionId) => {
-      if (!isSubmitted || !userId || !courseId) return;
+      if (isPreview || !isSubmitted || !userId || !courseId) return;
       
       // Only allow flagging for correct questions
       const question = normalizedQuestions.find(q => q.id === questionId);
@@ -964,7 +965,7 @@ export default function Quiz({
         console.error('Error flagging question:', error);
       }
     },
-    [isSubmitted, userId, courseId, flaggedQuestions, normalizedQuestions, responses]
+    [isSubmitted, userId, courseId, flaggedQuestions, normalizedQuestions, responses, isPreview]
   );
 
   const questionLabelId = currentQuestion ? `quiz-question-${currentQuestion.id}` : undefined;

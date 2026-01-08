@@ -831,7 +831,7 @@ function InlineContent({ text }) {
 /**
  * Interactive question component with answer reveal
  */
-function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered }) {
+function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered, isPreview = false }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
@@ -885,9 +885,17 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       setSubmitted(true);
       // Get the original option index for the backend
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
-      
+
       // Submit to backend API
-      if (courseId && lessonId && userId && questionIndex !== undefined) {
+      if (isPreview && onAnswered) {
+        onAnswered({
+          questionIndex,
+          selectedAnswer: originalOptionIndex,
+        });
+        return;
+      }
+
+      if (!isPreview && courseId && lessonId && userId && questionIndex !== undefined) {
         try {
           const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/inline-questions`, {
             method: 'PATCH',
@@ -920,7 +928,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
         }
       }
     }
-  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
+  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered, isPreview]);
 
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
@@ -1138,7 +1146,8 @@ export default function ReadingRenderer({
   userId,
   inlineQuestionSelections = {}, 
   readingCompleted: initialReadingCompleted = false,
-  onReadingCompleted 
+  onReadingCompleted,
+  isPreview = false,
 }) {
   const blocks = useMemo(() => parseContent(content), [content]);
   const [inlineSelections, setInlineSelections] = useState(() =>
@@ -1159,7 +1168,7 @@ export default function ReadingRenderer({
   }, [lessonKey, inlineQuestionSelections, initialReadingCompleted]);
 
   useEffect(() => {
-    if (!courseId || !lessonId || !userId) {
+    if (isPreview || !courseId || !lessonId || !userId) {
       setInlineStatusLoaded(true);
       return;
     }
@@ -1198,7 +1207,7 @@ export default function ReadingRenderer({
     return () => {
       ac.abort();
     };
-  }, [courseId, lessonId, userId]);
+  }, [courseId, lessonId, userId, isPreview]);
 
   useEffect(() => {
     if (!onReadingCompleted || !inlineStatusLoaded) return;
@@ -1415,6 +1424,7 @@ export default function ReadingRenderer({
                     userId={userId}
                     initialAnswer={inlineSelections?.[currentQuestionIndex]}
                     onAnswered={handleInlineQuestionUpdate}
+                    isPreview={isPreview}
                   />
                 );
                 
