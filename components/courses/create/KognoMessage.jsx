@@ -165,6 +165,7 @@ export default function KognoMessage({
   isTyping = false,
   isLoading = false,
   showReasoning = false,
+  reasoningCompleted = false,
   options = [],
   onOptionSelect,
   selectedOption,
@@ -264,7 +265,9 @@ export default function KognoMessage({
             {isLoading && !showReasoning && <LoadingSpinner />}
 
             {/* Reasoning loader for topic generation */}
-            {showReasoning && <ReasoningLoader className="mt-4" />}
+            {(showReasoning || reasoningCompleted) && (
+              <ReasoningLoader className="mt-4" completed={reasoningCompleted} />
+            )}
 
             {/* Action buttons */}
             {(confirmLabel || skippable) && !isLoading && (

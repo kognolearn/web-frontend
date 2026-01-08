@@ -159,20 +159,12 @@ export const CONVERSATION_FLOW = [
     isTransient: true, // This step is auto-advanced when loading completes
   },
 
-  // Step 9: Topics Generated
+  // Step 9: Topics Generated with refinement options
   {
     id: 'topics_generated',
     kognoMessage: "Here's what I came up with! I found {topicCount} topics across {moduleCount} modules. Take a look and let me know what you think.",
-    inputType: 'topics',
+    inputType: 'topics_with_refinement',
     showTopicEditor: true,
-    skippable: false,
-  },
-
-  // Step 10: Topic Refinement
-  {
-    id: 'topic_refinement',
-    kognoMessage: "Want me to adjust anything? You can tell me to add topics, remove some, or focus on specific areas.",
-    inputType: 'text',
     field: 'topicModifyPrompt',
     placeholder: 'e.g., Add more calculus topics, remove the history section...',
     skippable: true,

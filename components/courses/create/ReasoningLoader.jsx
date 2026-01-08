@@ -84,7 +84,7 @@ function shuffleArray(array) {
   return shuffled;
 }
 
-export default function ReasoningLoader({ className = "" }) {
+export default function ReasoningLoader({ className = "", completed = false }) {
   const [currentThought, setCurrentThought] = useState("");
   const [shuffledQueue, setShuffledQueue] = useState([]);
   const queueIndexRef = useRef(0);
@@ -96,9 +96,9 @@ export default function ReasoningLoader({ className = "" }) {
     setCurrentThought(shuffled[0]);
   }, []);
 
-  // Cycle through thoughts periodically
+  // Cycle through thoughts periodically (only when not completed)
   useEffect(() => {
-    if (shuffledQueue.length === 0) return;
+    if (shuffledQueue.length === 0 || completed) return;
 
     const showNextThought = () => {
       queueIndexRef.current = (queueIndexRef.current + 1) % shuffledQueue.length;
@@ -117,7 +117,22 @@ export default function ReasoningLoader({ className = "" }) {
     const interval = setInterval(showNextThought, 2500 + Math.random() * 1500);
 
     return () => clearInterval(interval);
-  }, [shuffledQueue]);
+  }, [shuffledQueue, completed]);
+
+  if (completed) {
+    return (
+      <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden ${className}`}>
+        <div className="px-4 py-3 flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full bg-[var(--primary)] flex items-center justify-center">
+            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <span className="text-sm font-medium text-[var(--foreground)]">Completed building your topic list</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden ${className}`}>
