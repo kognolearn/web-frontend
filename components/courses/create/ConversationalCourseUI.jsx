@@ -286,11 +286,12 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             const isCurrentlyLoading =
               message.inputType === "loading" ||
               (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
+            // Show animated reasoning only while topics are being generated
             const showReasoning =
-              message.stepId === "topics_loading" && isCurrentlyLoading;
-            // Show completed reasoning on the topics_loading message once topics are generated
+              message.stepId === "topics_loading" && !flowState.overviewTopics?.length;
+            // Show completed reasoning once topics exist
             const reasoningCompleted =
-              message.stepId === "topics_loading" && !isCurrentlyLoading && flowState.overviewTopics?.length > 0;
+              message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
 
             return (
               <KognoMessage
