@@ -103,7 +103,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     if (currentStep.id === "creating" && !flowState.courseGenerating) {
       advanceToNextStep();
     }
-  }, [currentStep, flowState.isTopicsLoading, flowState.overviewTopics, flowState.courseGenerating]);
+  }, [currentStep, flowState.isTopicsLoading, flowState.overviewTopics, flowState.courseGenerating, advanceToNextStep]);
 
   // Add a Kogno (assistant) message
   const addKognoMessage = useCallback(
@@ -309,12 +309,13 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       try {
         switch (action) {
           case "generateTopics":
-            // Show loading step message
+            // Show loading step message and advance to loading step
             const loadingStep = getStepById("topics_loading");
             if (loadingStep) {
+              setCurrentStepIndex(loadingStep.index);
               await addKognoMessage(loadingStep.kognoMessage, loadingStep, { immediate: true });
             }
-            // Trigger topic generation
+            // Trigger topic generation (useEffect will advance to topics_generated when done)
             await flowState.handleGenerateTopics();
             break;
 
@@ -335,9 +336,10 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             break;
 
           case "createCourse":
-            // Show creating step message
+            // Show creating step message and advance to creating step
             const creatingStep = getStepById("creating");
             if (creatingStep) {
+              setCurrentStepIndex(creatingStep.index);
               await addKognoMessage(creatingStep.kognoMessage, creatingStep, { immediate: true });
             }
             // Trigger course creation
@@ -362,7 +364,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         setPendingAction(null);
       }
     },
-    [flowState, currentStep, addKognoMessage]
+    [flowState, currentStep, addKognoMessage, advanceToNextStep]
   );
 
   // Advance to the next step
