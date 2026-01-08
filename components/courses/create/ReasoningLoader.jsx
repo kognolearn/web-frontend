@@ -85,67 +85,39 @@ function shuffleArray(array) {
 }
 
 export default function ReasoningLoader({ className = "" }) {
-  const [thoughts, setThoughts] = useState([]);
+  const [currentThought, setCurrentThought] = useState("");
   const [shuffledQueue, setShuffledQueue] = useState([]);
   const queueIndexRef = useRef(0);
-  const containerRef = useRef(null);
 
   // Initialize shuffled queue
   useEffect(() => {
-    setShuffledQueue(shuffleArray(REASONING_THOUGHTS));
+    const shuffled = shuffleArray(REASONING_THOUGHTS);
+    setShuffledQueue(shuffled);
+    setCurrentThought(shuffled[0]);
   }, []);
 
-  // Add new thoughts periodically
+  // Cycle through thoughts periodically
   useEffect(() => {
     if (shuffledQueue.length === 0) return;
 
-    // Add first thought immediately
-    if (thoughts.length === 0) {
-      setThoughts([shuffledQueue[0]]);
-      queueIndexRef.current = 1;
-    }
+    const showNextThought = () => {
+      queueIndexRef.current = (queueIndexRef.current + 1) % shuffledQueue.length;
 
-    const addNextThought = () => {
-      const nextIndex = queueIndexRef.current;
-
-      if (nextIndex >= shuffledQueue.length) {
-        // Reshuffle and start over
+      // Reshuffle when we've gone through all thoughts
+      if (queueIndexRef.current === 0) {
         const newQueue = shuffleArray(REASONING_THOUGHTS);
         setShuffledQueue(newQueue);
-        queueIndexRef.current = 0;
-        return;
+        setCurrentThought(newQueue[0]);
+      } else {
+        setCurrentThought(shuffledQueue[queueIndexRef.current]);
       }
-
-      setThoughts((prev) => {
-        // Keep last 6 thoughts visible
-        const newThoughts = [...prev, shuffledQueue[nextIndex]].slice(-6);
-        return newThoughts;
-      });
-      queueIndexRef.current = nextIndex + 1;
     };
 
-    // Random interval between 800ms and 2000ms
-    const getRandomInterval = () => 800 + Math.random() * 1200;
+    // Slower interval: 2500-4000ms
+    const interval = setInterval(showNextThought, 2500 + Math.random() * 1500);
 
-    let timeoutId;
-    const scheduleNext = () => {
-      timeoutId = setTimeout(() => {
-        addNextThought();
-        scheduleNext();
-      }, getRandomInterval());
-    };
-
-    scheduleNext();
-
-    return () => clearTimeout(timeoutId);
-  }, [shuffledQueue, thoughts.length]);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [thoughts]);
+    return () => clearInterval(interval);
+  }, [shuffledQueue]);
 
   return (
     <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden ${className}`}>
@@ -158,51 +130,27 @@ export default function ReasoningLoader({ className = "" }) {
         <span className="text-sm font-medium text-[var(--foreground)]">Building your topic list</span>
       </div>
 
-      {/* Reasoning thoughts */}
-      <div
-        ref={containerRef}
-        className="p-4 space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin"
-      >
-        <AnimatePresence mode="popLayout">
-          {thoughts.map((thought, index) => {
-            const isLatest = index === thoughts.length - 1;
-            const opacity = isLatest ? 1 : 0.4 + (index / thoughts.length) * 0.4;
-
-            return (
-              <motion.div
-                key={`${thought}-${index}`}
-                initial={{ opacity: 0, y: 10, height: 0 }}
-                animate={{ opacity, y: 0, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="flex items-start gap-2"
-              >
-                <span
-                  className={`text-xs mt-0.5 ${
-                    isLatest ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"
-                  }`}
-                >
-                  {isLatest ? "●" : "○"}
-                </span>
-                <span
-                  className={`text-sm font-mono ${
-                    isLatest
-                      ? "text-[var(--foreground)]"
-                      : "text-[var(--muted-foreground)]"
-                  }`}
-                >
-                  {thought}
-                </span>
-                {isLatest && (
-                  <motion.span
-                    className="inline-block w-1.5 h-4 bg-[var(--primary)] ml-0.5"
-                    animate={{ opacity: [1, 0] }}
-                    transition={{ duration: 0.6, repeat: Infinity, repeatType: "reverse" }}
-                  />
-                )}
-              </motion.div>
-            );
-          })}
+      {/* Reasoning thought */}
+      <div className="p-4 h-14 flex items-center">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentThought}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+            className="flex items-center gap-2"
+          >
+            <span className="text-xs text-[var(--primary)]">●</span>
+            <span className="text-sm font-mono text-[var(--foreground)]">
+              {currentThought}
+            </span>
+            <motion.span
+              className="inline-block w-1.5 h-4 bg-[var(--primary)] ml-0.5"
+              animate={{ opacity: [1, 0.3] }}
+              transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse" }}
+            />
+          </motion.div>
         </AnimatePresence>
       </div>
 
