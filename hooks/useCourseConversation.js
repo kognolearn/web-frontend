@@ -90,21 +90,6 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     return () => clearTimeout(timer);
   }, [flowState.authStatus]);
 
-  // Watch for loading state changes to auto-advance transient steps
-  useEffect(() => {
-    if (!currentStep) return;
-
-    // When topics finish loading, advance from topics_loading to topics_generated
-    if (currentStep.id === "topics_loading" && !flowState.isTopicsLoading && flowState.overviewTopics.length > 0) {
-      advanceToNextStep();
-    }
-
-    // When course finishes generating (if we're still on creating step)
-    if (currentStep.id === "creating" && !flowState.courseGenerating) {
-      advanceToNextStep();
-    }
-  }, [currentStep, flowState.isTopicsLoading, flowState.overviewTopics, flowState.courseGenerating, advanceToNextStep]);
-
   // Add a Kogno (assistant) message
   const addKognoMessage = useCallback(
     async (content, stepConfig = {}, options = {}) => {
@@ -175,6 +160,97 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       return message;
     },
     []
+  );
+
+  // Advance to the next step
+  // Must be defined before handlers that depend on it
+  const advanceToNextStep = useCallback(async (stateOverrides = {}) => {
+    // Merge current state with any overrides (for values that were just set but not yet reflected in state)
+    const mergedState = { ...state, ...stateOverrides };
+    const nextStep = getNextStep(currentStepIndex, mergedState);
+
+    if (!nextStep) {
+      // Conversation complete
+      return;
+    }
+
+    setCurrentStepIndex(nextStep.index);
+
+    if (onStepChange) {
+      onStepChange(nextStep);
+    }
+
+    // Interpolate message with merged state to include just-set values
+    const interpolatedMessage = interpolateMessage(nextStep.kognoMessage, mergedState);
+
+    // Add Kogno message for the next step (pass already-interpolated message)
+    await addKognoMessage(interpolatedMessage, nextStep);
+  }, [currentStepIndex, state, addKognoMessage, onStepChange]);
+
+  // Execute step action
+  const executeStepAction = useCallback(
+    async (action, value) => {
+      setPendingAction(action);
+
+      try {
+        switch (action) {
+          case "generateTopics":
+            // Show loading step message and advance to loading step
+            const loadingStep = getStepById("topics_loading");
+            if (loadingStep) {
+              setCurrentStepIndex(loadingStep.index);
+              await addKognoMessage(loadingStep.kognoMessage, loadingStep, { immediate: true });
+            }
+            // Trigger topic generation (useEffect will advance to topics_generated when done)
+            await flowState.handleGenerateTopics();
+            break;
+
+          case "modifyTopics":
+            if (value) {
+              await flowState.handleModifyTopics(value);
+              // Stay on same step for multiple modifications
+              if (currentStep.allowMultiple) {
+                // Add Kogno response after modification
+                await addKognoMessage(
+                  "Done! Here are your updated topics. Want to make any other changes?",
+                  currentStep
+                );
+                return;
+              }
+            }
+            advanceToNextStep();
+            break;
+
+          case "createCourse":
+            // Show creating step message and advance to creating step
+            const creatingStep = getStepById("creating");
+            if (creatingStep) {
+              setCurrentStepIndex(creatingStep.index);
+              await addKognoMessage(creatingStep.kognoMessage, creatingStep, { immediate: true });
+            }
+            // Trigger course creation
+            await flowState.handleGenerateCourse();
+            break;
+
+          case "redirect":
+            // Redirect is handled by handleGenerateCourse
+            break;
+
+          default:
+            advanceToNextStep();
+        }
+      } catch (error) {
+        console.error("Step action failed:", error);
+        // Add error message
+        await addKognoMessage(
+          `Oops, something went wrong: ${error.message}. Would you like to try again?`,
+          { inputType: "confirm", confirmLabel: "Try Again", action }
+        );
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [flowState, currentStep, addKognoMessage, advanceToNextStep]
   );
 
   // Handle user submitting a response for the current step
@@ -299,97 +375,22 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     } else {
       advanceToNextStep();
     }
-  }, [currentStep, addUserResponse]);
+  }, [currentStep, addUserResponse, executeStepAction, advanceToNextStep]);
 
-  // Execute step action
-  const executeStepAction = useCallback(
-    async (action, value) => {
-      setPendingAction(action);
+  // Watch for loading state changes to auto-advance transient steps
+  useEffect(() => {
+    if (!currentStep) return;
 
-      try {
-        switch (action) {
-          case "generateTopics":
-            // Show loading step message and advance to loading step
-            const loadingStep = getStepById("topics_loading");
-            if (loadingStep) {
-              setCurrentStepIndex(loadingStep.index);
-              await addKognoMessage(loadingStep.kognoMessage, loadingStep, { immediate: true });
-            }
-            // Trigger topic generation (useEffect will advance to topics_generated when done)
-            await flowState.handleGenerateTopics();
-            break;
-
-          case "modifyTopics":
-            if (value) {
-              await flowState.handleModifyTopics(value);
-              // Stay on same step for multiple modifications
-              if (currentStep.allowMultiple) {
-                // Add Kogno response after modification
-                await addKognoMessage(
-                  "Done! Here are your updated topics. Want to make any other changes?",
-                  currentStep
-                );
-                return;
-              }
-            }
-            advanceToNextStep();
-            break;
-
-          case "createCourse":
-            // Show creating step message and advance to creating step
-            const creatingStep = getStepById("creating");
-            if (creatingStep) {
-              setCurrentStepIndex(creatingStep.index);
-              await addKognoMessage(creatingStep.kognoMessage, creatingStep, { immediate: true });
-            }
-            // Trigger course creation
-            await flowState.handleGenerateCourse();
-            break;
-
-          case "redirect":
-            // Redirect is handled by handleGenerateCourse
-            break;
-
-          default:
-            advanceToNextStep();
-        }
-      } catch (error) {
-        console.error("Step action failed:", error);
-        // Add error message
-        await addKognoMessage(
-          `Oops, something went wrong: ${error.message}. Would you like to try again?`,
-          { inputType: "confirm", confirmLabel: "Try Again", action }
-        );
-      } finally {
-        setPendingAction(null);
-      }
-    },
-    [flowState, currentStep, addKognoMessage, advanceToNextStep]
-  );
-
-  // Advance to the next step
-  const advanceToNextStep = useCallback(async (stateOverrides = {}) => {
-    // Merge current state with any overrides (for values that were just set but not yet reflected in state)
-    const mergedState = { ...state, ...stateOverrides };
-    const nextStep = getNextStep(currentStepIndex, mergedState);
-
-    if (!nextStep) {
-      // Conversation complete
-      return;
+    // When topics finish loading, advance from topics_loading to topics_generated
+    if (currentStep.id === "topics_loading" && !flowState.isTopicsLoading && flowState.overviewTopics.length > 0) {
+      advanceToNextStep();
     }
 
-    setCurrentStepIndex(nextStep.index);
-
-    if (onStepChange) {
-      onStepChange(nextStep);
+    // When course finishes generating (if we're still on creating step)
+    if (currentStep.id === "creating" && !flowState.courseGenerating) {
+      advanceToNextStep();
     }
-
-    // Interpolate message with merged state to include just-set values
-    const interpolatedMessage = interpolateMessage(nextStep.kognoMessage, mergedState);
-
-    // Add Kogno message for the next step (pass already-interpolated message)
-    await addKognoMessage(interpolatedMessage, nextStep);
-  }, [currentStepIndex, state, addKognoMessage, onStepChange]);
+  }, [currentStep, flowState.isTopicsLoading, flowState.overviewTopics, flowState.courseGenerating, advanceToNextStep]);
 
   // Go back to a previous step (for editing)
   const goBack = useCallback(
