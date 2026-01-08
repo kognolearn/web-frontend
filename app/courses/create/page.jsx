@@ -506,6 +506,7 @@ function CreateCoursePageContent() {
   // Course title and optional university
   const [courseTitle, setCourseTitle] = useState("");
   const [collegeName, setCollegeName] = useState("");
+  const [savedSchool, setSavedSchool] = useState("");
   const [prefillApplied, setPrefillApplied] = useState(false);
   const [courseId, setCourseId] = useState(null);
 
@@ -586,8 +587,19 @@ function CreateCoursePageContent() {
     [overviewTopics]
   );
 
+  const trimmedCourseTitle = courseTitle.trim();
+  const trimmedCollegeName = collegeName.trim();
+  const savedSchoolName = savedSchool.trim();
+  const hasSavedSchool = Boolean(savedSchoolName);
+  const collegePromptName = trimmedCollegeName || savedSchoolName;
+  const coursePrompt = trimmedCourseTitle
+    ? hasSavedSchool && collegePromptName
+      ? `${trimmedCourseTitle} at ${collegePromptName}, right?`
+      : `Great! And where are you taking ${trimmedCourseTitle}?`
+    : "";
+
   const hasStudyTime = studyHours > 0 || studyMinutes > 0;
-  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim();
+  const canProceedFromStep1 = Boolean(trimmedCourseTitle && trimmedCollegeName);
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
@@ -713,9 +725,12 @@ function CreateCoursePageContent() {
         setAuthStatus("ready");
         
         // Pre-fill college name from user's saved school if not already set
-        const savedSchool = user.user_metadata?.school;
-        if (savedSchool && !collegeName) {
-          setCollegeName(savedSchool);
+        const savedSchool = typeof user.user_metadata?.school === "string"
+          ? user.user_metadata.school.trim()
+          : "";
+        setSavedSchool(savedSchool);
+        if (savedSchool) {
+          setCollegeName((prev) => (prev ? prev : savedSchool));
         }
       } catch (error) {
         if (!active) return;
@@ -1839,6 +1854,11 @@ function CreateCoursePageContent() {
               </div>
 
               <div className="space-y-4">
+                {coursePrompt && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--foreground)] shadow-sm">
+                    {coursePrompt}
+                  </div>
+                )}
                 {/* Course Title & University */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>

@@ -131,8 +131,51 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       return null;
     }
 
-    // Topics and confidence have their own editors
-    if (inputType === "topics" || inputType === "confidence") {
+    // Topics with refinement: show text input + "Topics look good!" + regenerate
+    if (inputType === "topics_with_refinement") {
+      return (
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)] space-y-3">
+          {/* Modification prompt input */}
+          <CourseInputRenderer
+            inputType="text"
+            placeholder={placeholder || "Tell me what to change..."}
+            onSubmit={(value) => conversation.handleSubmitResponse(value, value)}
+            disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+          />
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={conversation.handleSkip}
+              disabled={flowState.isTopicsLoading}
+              className="flex-1 py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {skipLabel || "Topics look good!"}
+            </button>
+            <button
+              type="button"
+              onClick={flowState.handleGenerateTopics}
+              disabled={flowState.isTopicsLoading}
+              className="py-3 px-4 border border-[var(--border)] rounded-xl text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] disabled:opacity-40 transition-all flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Regenerate
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Confidence has its own editor
+    if (inputType === "confidence") {
       return (
         <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
           <button
@@ -146,12 +189,24 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       );
     }
 
+    // Format display text based on input type
+    const handleInputSubmit = (value) => {
+      let displayText = value;
+      if (inputType === "duration" && typeof value === "object") {
+        const parts = [];
+        if (value.hours > 0) parts.push(`${value.hours} hour${value.hours !== 1 ? "s" : ""}`);
+        if (value.minutes > 0) parts.push(`${value.minutes} minute${value.minutes !== 1 ? "s" : ""}`);
+        displayText = parts.join(" ") || "0 minutes";
+      }
+      conversation.handleSubmitResponse(value, displayText);
+    };
+
     return (
       <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
         <CourseInputRenderer
           inputType={inputType}
           placeholder={placeholder}
-          onSubmit={(value) => conversation.handleSubmitResponse(value, value)}
+          onSubmit={handleInputSubmit}
           disabled={flowState.isTopicsLoading || flowState.courseGenerating}
           files={conversation.currentFiles}
           onFileChange={conversation.handleFileUpload}
@@ -228,15 +283,23 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       >
         {conversation.messages.map((message) => {
           if (message.role === "assistant") {
+            const isCurrentlyLoading =
+              message.inputType === "loading" ||
+              (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
+            const showReasoning =
+              message.stepId === "topics_loading" && isCurrentlyLoading;
+            // Show completed reasoning on the topics_loading message once topics are generated
+            const reasoningCompleted =
+              message.stepId === "topics_loading" && !isCurrentlyLoading && flowState.overviewTopics?.length > 0;
+
             return (
               <KognoMessage
                 key={message.id}
                 content={message.content}
                 isTyping={false}
-                isLoading={
-                  message.inputType === "loading" ||
-                  (message.stepId === conversation.currentStep?.id && conversation.pendingAction)
-                }
+                isLoading={isCurrentlyLoading}
+                showReasoning={showReasoning}
+                reasoningCompleted={reasoningCompleted}
                 options={message.options}
                 onOptionSelect={conversation.handleOptionSelect}
                 selectedOption={conversation.previousResponses[message.stepId]}
