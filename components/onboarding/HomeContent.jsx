@@ -10,10 +10,8 @@ import * as api from '@/lib/onboarding';
 const STEPS = {
   ASK_COURSE: 'ASK_COURSE',
   ASK_COLLEGE: 'ASK_COLLEGE',
-  VALIDATE_COURSE: 'VALIDATE_COURSE',
   SHOW_TOPICS: 'SHOW_TOPICS',
   ASK_TOPIC_CUSTOM: 'ASK_TOPIC_CUSTOM',
-  VALIDATE_TOPIC: 'VALIDATE_TOPIC',
   START_JOB: 'START_JOB',
   WAIT_JOB: 'WAIT_JOB',
   COMPLETED: 'COMPLETED',
@@ -108,7 +106,7 @@ export default function HomeContent() {
       setTimeout(() => addBotMessage("Got it. And which college are you at?"), 600);
     } else if (step === STEPS.ASK_COLLEGE) {
       setData(prev => ({ ...prev, collegeName: val }));
-      await validateCourseData(val);
+      await fetchTopicsForCourse(val);
     } else if (step === STEPS.ASK_TOPIC_CUSTOM) {
       await handleTopicSelection(val);
     }
@@ -121,30 +119,24 @@ export default function HomeContent() {
     await handleTopicSelection(val);
   };
 
-  const validateCourseData = async (college) => {
+  const fetchTopicsForCourse = async (college) => {
     setLoading(true);
-    setStep(STEPS.VALIDATE_COURSE);
     try {
       const currentData = { ...data, collegeName: college };
-      const res = await api.validateCourse(currentData);
-
-      if (res.valid) {
-        const normalizedCourse = res.normalizedCourseName || currentData.courseName;
-        const normalizedCollege = res.normalizedCollegeName || currentData.collegeName;
-        const normalizedData = { courseName: normalizedCourse, collegeName: normalizedCollege };
-        setData(prev => ({ ...prev, ...normalizedData }));
-
-        const topicRes = await api.getHardTopics(normalizedData);
-        setTopics(topicRes.topics || []);
+      const topicRes = await api.getHardTopics(currentData);
+      const nextTopics = Array.isArray(topicRes?.topics) ? topicRes.topics : [];
+      if (nextTopics.length > 0) {
+        setData(prev => ({ ...prev, ...currentData }));
+        setTopics(nextTopics);
         setStep(STEPS.SHOW_TOPICS);
         addBotMessage("Here are the hardest topics I could find. Pick one below, or tell me another one - I can teach it to you in 5 minutes.");
       } else {
         setStep(STEPS.ASK_COURSE);
-        addBotMessage("Hmm, I couldn't find that course. Mind checking the name and college again? What's the course name?");
+        addBotMessage("Hmm, I couldn't find topics for that course. Mind checking the name and college again? What's the course name?");
       }
     } catch (e) {
       console.error(e);
-      addBotMessage("Sorry, I had trouble checking that. Let's try again. What's the course name?");
+      addBotMessage("Sorry, I had trouble finding topics for that course. Let's try again. What's the course name?");
       setStep(STEPS.ASK_COURSE);
     } finally {
       setLoading(false);
@@ -164,30 +156,15 @@ export default function HomeContent() {
     }
 
     setLoading(true);
-    setStep(STEPS.VALIDATE_TOPIC);
+    setStep(STEPS.START_JOB);
 
     try {
       const currentData = { ...data, topic };
-      const validRes = await api.validateTopic(currentData);
-
-      if (validRes.valid) {
-        const normalizedTopic = validRes.normalizedTopic || topic;
-        const normalizedData = { ...data, topic: normalizedTopic };
-        setData(prev => ({ ...prev, topic: normalizedTopic }));
-        setStep(STEPS.START_JOB);
-        const jobRes = await api.generateLesson(normalizedData);
-        setJobId(jobRes.jobId);
-        setStep(STEPS.WAIT_JOB);
-        addBotMessage("On it! Creating your personalized lesson...");
-      } else {
-        setStep(STEPS.SHOW_TOPICS);
-        if (Array.isArray(validRes.suggestedTopics) && validRes.suggestedTopics.length) {
-          setTopics(validRes.suggestedTopics);
-          addBotMessage("That topic doesn't seem to fit the course. Try one of these instead, or be more specific.");
-        } else {
-          addBotMessage("That topic doesn't seem to fit the course. Try picking one from the list or be more specific.");
-        }
-      }
+      setData(prev => ({ ...prev, topic }));
+      const jobRes = await api.generateLesson(currentData);
+      setJobId(jobRes.jobId);
+      setStep(STEPS.WAIT_JOB);
+      addBotMessage("On it! Creating your personalized lesson...");
     } catch (e) {
       addBotMessage("Something went wrong. Please try picking a topic again.");
       setStep(STEPS.SHOW_TOPICS);
@@ -241,6 +218,10 @@ export default function HomeContent() {
         }
       } catch (e) {
         console.error(e);
+        clearInterval(stallInterval);
+        clearInterval(pollInterval);
+        setStep(STEPS.SHOW_TOPICS);
+        addBotMessage("I couldn't check the lesson status. Try another topic?");
       }
     }, 1500);
 
