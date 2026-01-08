@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { authFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase/client";
 import NotificationDropdown from "./NotificationDropdown";
 
 export default function NotificationBell() {
@@ -9,6 +10,7 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState(null);
   const bellRef = useRef(null);
   const isFetchingRef = useRef(false);
 
@@ -40,12 +42,81 @@ export default function NotificationBell() {
     }
   }, []);
 
-  // Initial fetch and polling
+  // Get current user ID for realtime subscription filter
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.id) {
+        setUserId(data.user.id);
+      }
+    });
+  }, []);
+
+  // Initial fetch and realtime subscription
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+
+    if (!userId) return;
+
+    // Subscribe to notifications table changes for the current user
+    const channel = supabase
+      .channel("notifications-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          // New notification received - increment unread count
+          setUnreadCount((prev) => prev + 1);
+          // Add to notifications list if dropdown is open
+          setNotifications((prev) => [payload.new, ...prev].slice(0, 20));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          // Notification updated (e.g., marked as read)
+          const wasUnread = !payload.old.read_at;
+          const isNowRead = !!payload.new.read_at;
+          if (wasUnread && isNowRead) {
+            setUnreadCount((prev) => Math.max(0, prev - 1));
+          }
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === payload.new.id ? payload.new : n))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          // Notification deleted
+          if (!payload.old.read_at) {
+            setUnreadCount((prev) => Math.max(0, prev - 1));
+          }
+          setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchUnreadCount]);
 
   // Fetch notifications when dropdown opens
   useEffect(() => {

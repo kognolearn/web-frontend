@@ -39,6 +39,18 @@ function sleep(ms, signal) {
   });
 }
 
+function maybeParseJson(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 export function getAsyncDisabledMessage(status, payload) {
   if (status !== 503) return null;
   const messageCandidates = [
@@ -170,8 +182,8 @@ export async function resolveAsyncJobResponse(response, { signal, errorLabel } =
       throw new Error("Missing jobId from async response.");
     }
     const job = await pollJob(jobId, { signal });
-    return { payload, job, result: job?.result ?? null };
+    return { payload, job, result: maybeParseJson(job?.result ?? null) };
   }
 
-  return { payload, job: null, result: payload };
+  return { payload, job: null, result: maybeParseJson(payload) };
 }
