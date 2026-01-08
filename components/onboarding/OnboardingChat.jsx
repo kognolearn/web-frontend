@@ -89,9 +89,7 @@ export default function OnboardingChat({ onFirstMessage }) {
     setHasStarted(true);
     try {
       await api.startNewOnboardingSession();
-    } catch (error) {
-      console.warn('Failed to start new onboarding session:', error);
-    }
+    } catch (error) {}
   };
 
   const handleSend = async () => {
