@@ -114,7 +114,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     if (conversation.isKognoTyping) return null;
     if (conversation.pendingAction) return null;
 
-    const { inputType, placeholder, accept, skippable, skipLabel, confirmLabel } = conversation.currentStep;
+    const { inputType, placeholder, confirmPlaceholder, accept, skippable, skipLabel, confirmLabel, getDefaultValue } = conversation.currentStep;
 
     // Options are rendered in KognoMessage
     if (inputType === "options") {
@@ -201,11 +201,16 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       conversation.handleSubmitResponse(value, displayText);
     };
 
+    // Compute default value from step config if available
+    const defaultValue = getDefaultValue ? getDefaultValue(conversation.state) : "";
+
     return (
       <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
         <CourseInputRenderer
           inputType={inputType}
           placeholder={placeholder}
+          confirmPlaceholder={confirmPlaceholder}
+          defaultValue={defaultValue}
           onSubmit={handleInputSubmit}
           disabled={flowState.isTopicsLoading || flowState.courseGenerating}
           files={conversation.currentFiles}

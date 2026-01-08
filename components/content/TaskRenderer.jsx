@@ -154,7 +154,41 @@ function CodeEditor({
 }) {
   const { theme: appTheme } = useTheme();
   const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
-  const resolvedLanguage = language && language.trim() ? language : "plaintext";
+  const editorRef = useRef(null);
+
+  // Map common language names to Monaco language IDs
+  const languageMap = {
+    c: "c",
+    cpp: "cpp",
+    "c++": "cpp",
+    python: "python",
+    py: "python",
+    javascript: "javascript",
+    js: "javascript",
+    typescript: "typescript",
+    ts: "typescript",
+    java: "java",
+    csharp: "csharp",
+    "c#": "csharp",
+    go: "go",
+    rust: "rust",
+    ruby: "ruby",
+    php: "php",
+    swift: "swift",
+    kotlin: "kotlin",
+    sql: "sql",
+    html: "html",
+    css: "css",
+    json: "json",
+    xml: "xml",
+    yaml: "yaml",
+    markdown: "markdown",
+    shell: "shell",
+    bash: "shell",
+  };
+
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
 
   // Use user's editor theme preference, or fall back to app theme
   const editorTheme = propTheme || editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
@@ -178,6 +212,16 @@ function CodeEditor({
     };
   }, [getMonacoOptions, options]);
 
+  // Handle editor mount to configure additional settings
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+
+    // Configure semantic highlighting if available
+    if (monaco.languages.registerDocumentSemanticTokensProvider) {
+      // Monaco will use built-in semantic highlighting for supported languages
+    }
+  }, []);
+
   return (
     <div className="space-y-2">
       {label ? (
@@ -189,7 +233,7 @@ function CodeEditor({
         {/* Header bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)]">
           <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-            {resolvedLanguage}
+            {rawLanguage || "plaintext"}
           </span>
           {isLatexFriendly && (
             <a
@@ -211,6 +255,7 @@ function CodeEditor({
             height={height}
             theme={editorTheme}
             options={monacoOptions}
+            onMount={handleEditorDidMount}
           />
         </div>
       </div>

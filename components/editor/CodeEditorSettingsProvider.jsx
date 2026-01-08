@@ -92,15 +92,14 @@ export function CodeEditorSettingsProvider({ children }) {
   }, []);
 
   // Get Monaco editor options from settings
+  // Note: theme is NOT included here - it's passed separately to Monaco
   const getMonacoOptions = useCallback(() => {
     return {
-      theme: settings.theme,
       fontSize: settings.fontSize,
       fontFamily: settings.fontFamily,
       lineNumbers: settings.lineNumbers ? "on" : "off",
       minimap: { enabled: settings.minimap },
       wordWrap: settings.wordWrap ? "on" : "off",
-      "bracketPairColorization.enabled": settings.bracketPairColorization,
       fontLigatures: settings.fontLigatures,
       tabSize: settings.tabSize,
       renderWhitespace: settings.renderWhitespace,
@@ -110,6 +109,10 @@ export function CodeEditorSettingsProvider({ children }) {
       autoClosingBrackets: settings.autoClosingBrackets,
       formatOnPaste: settings.formatOnPaste,
       formatOnType: settings.formatOnType,
+      // Bracket pair colorization
+      bracketPairColorization: {
+        enabled: settings.bracketPairColorization,
+      },
       // Additional VS Code-like defaults
       scrollBeyondLastLine: false,
       automaticLayout: true,
@@ -152,10 +155,54 @@ export function CodeEditorSettingsProvider({ children }) {
   );
 }
 
+// Default Monaco options for SSR/fallback
+const defaultMonacoOptions = {
+  fontSize: 14,
+  fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+  lineNumbers: "on",
+  minimap: { enabled: false },
+  wordWrap: "off",
+  fontLigatures: true,
+  tabSize: 2,
+  renderWhitespace: "none",
+  cursorBlinking: "blink",
+  cursorStyle: "line",
+  smoothScrolling: true,
+  autoClosingBrackets: "always",
+  formatOnPaste: false,
+  formatOnType: false,
+  bracketPairColorization: { enabled: true },
+  scrollBeyondLastLine: false,
+  automaticLayout: true,
+  padding: { top: 12, bottom: 12 },
+  scrollbar: {
+    verticalScrollbarSize: 10,
+    horizontalScrollbarSize: 10,
+    useShadows: false,
+  },
+  overviewRulerBorder: false,
+  hideCursorInOverviewRuler: true,
+  renderLineHighlight: "line",
+  matchBrackets: "always",
+  guides: { bracketPairs: true, indentation: true },
+  folding: true,
+  foldingHighlight: true,
+  showFoldingControls: "mouseover",
+};
+
 export function useCodeEditorSettings() {
   const ctx = useContext(CodeEditorSettingsContext);
+
+  // Provide safe defaults if context is not available (SSR or missing provider)
   if (!ctx) {
-    throw new Error("useCodeEditorSettings must be used within a CodeEditorSettingsProvider");
+    return {
+      settings: defaultSettings,
+      updateSetting: () => {},
+      updateSettings: () => {},
+      resetSettings: () => {},
+      getMonacoOptions: () => defaultMonacoOptions,
+      mounted: false,
+    };
   }
   return ctx;
 }
