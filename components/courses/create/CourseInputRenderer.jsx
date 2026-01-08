@@ -295,14 +295,26 @@ export default function CourseInputRenderer({
 
   // Duration picker
   if (inputType === "duration") {
+    const handleDurationChange = ({ hours: h, minutes: m }) => {
+      onHoursChange(h);
+      onMinutesChange(m);
+    };
+
     return (
       <div className="space-y-4">
         <DurationInput
           hours={hours}
           minutes={minutes}
-          onHoursChange={onHoursChange}
-          onMinutesChange={onMinutesChange}
+          onChange={handleDurationChange}
           disabled={disabled}
+          summaryLabel="Time until exam"
+          quickOptions={[
+            { label: "1 hour", minutes: 60 },
+            { label: "3 hours", minutes: 180 },
+            { label: "1 day", minutes: 1440 },
+            { label: "3 days", minutes: 4320 },
+            { label: "1 week", minutes: 10080 },
+          ]}
         />
         <div className="flex justify-end">
           <button

@@ -146,12 +146,24 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       );
     }
 
+    // Format display text based on input type
+    const handleInputSubmit = (value) => {
+      let displayText = value;
+      if (inputType === "duration" && typeof value === "object") {
+        const parts = [];
+        if (value.hours > 0) parts.push(`${value.hours} hour${value.hours !== 1 ? "s" : ""}`);
+        if (value.minutes > 0) parts.push(`${value.minutes} minute${value.minutes !== 1 ? "s" : ""}`);
+        displayText = parts.join(" ") || "0 minutes";
+      }
+      conversation.handleSubmitResponse(value, displayText);
+    };
+
     return (
       <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
         <CourseInputRenderer
           inputType={inputType}
           placeholder={placeholder}
-          onSubmit={(value) => conversation.handleSubmitResponse(value, value)}
+          onSubmit={handleInputSubmit}
           disabled={flowState.isTopicsLoading || flowState.courseGenerating}
           files={conversation.currentFiles}
           onFileChange={conversation.handleFileUpload}

@@ -190,39 +190,50 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         stepId: currentStep.id,
       });
 
+      // Track state overrides for immediate use in advanceToNextStep
+      const stateOverrides = {};
+
       // Update the flow state based on the step's field
       if (currentStep.field) {
         switch (currentStep.field) {
           case "courseTitle":
             flowState.setCourseTitle(value);
+            stateOverrides.courseTitle = value;
             break;
           case "collegeName":
             flowState.setCollegeName(value);
+            stateOverrides.collegeName = value;
             break;
           case "studyMode":
             flowState.setStudyMode(value);
+            stateOverrides.studyMode = value;
             break;
           case "studyDuration":
             if (typeof value === "object") {
               flowState.setStudyHours(value.hours || 0);
               flowState.setStudyMinutes(value.minutes || 0);
+              stateOverrides.studyHours = value.hours || 0;
+              stateOverrides.studyMinutes = value.minutes || 0;
             }
             break;
           case "syllabusChoice":
           case "examChoice":
             // These are stored in previousResponses
+            stateOverrides[currentStep.field] = value;
             break;
           case "syllabusFiles":
             // Files are handled separately
             break;
           case "syllabusText":
             flowState.setSyllabusText(value);
+            stateOverrides.syllabusText = value;
             break;
           case "examFiles":
             // Files are handled separately
             break;
           case "examNotes":
             flowState.setExamNotes(value);
+            stateOverrides.examNotes = value;
             break;
           case "topicModifyPrompt":
             // Handled via action
@@ -234,11 +245,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       if (currentStep.action) {
         await executeStepAction(currentStep.action, value);
       } else {
-        // Advance to next step
-        advanceToNextStep();
+        // Advance to next step with state overrides
+        advanceToNextStep(stateOverrides);
       }
     },
-    [currentStep, flowState, addUserResponse]
+    [currentStep, flowState, addUserResponse, advanceToNextStep]
   );
 
   // Handle skip button
@@ -355,8 +366,10 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   );
 
   // Advance to the next step
-  const advanceToNextStep = useCallback(async () => {
-    const nextStep = getNextStep(currentStepIndex, state);
+  const advanceToNextStep = useCallback(async (stateOverrides = {}) => {
+    // Merge current state with any overrides (for values that were just set but not yet reflected in state)
+    const mergedState = { ...state, ...stateOverrides };
+    const nextStep = getNextStep(currentStepIndex, mergedState);
 
     if (!nextStep) {
       // Conversation complete
@@ -369,8 +382,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       onStepChange(nextStep);
     }
 
-    // Add Kogno message for the next step
-    await addKognoMessage(nextStep.kognoMessage, nextStep);
+    // Interpolate message with merged state to include just-set values
+    const interpolatedMessage = interpolateMessage(nextStep.kognoMessage, mergedState);
+
+    // Add Kogno message for the next step (pass already-interpolated message)
+    await addKognoMessage(interpolatedMessage, nextStep);
   }, [currentStepIndex, state, addKognoMessage, onStepChange]);
 
   // Go back to a previous step (for editing)
