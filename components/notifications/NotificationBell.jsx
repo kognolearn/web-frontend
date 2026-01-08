@@ -64,7 +64,7 @@ export default function NotificationBell() {
         "postgres_changes",
         {
           event: "INSERT",
-          schema: "public",
+          schema: "api",
           table: "notifications",
           filter: `user_id=eq.${userId}`,
         },
@@ -79,7 +79,7 @@ export default function NotificationBell() {
         "postgres_changes",
         {
           event: "UPDATE",
-          schema: "public",
+          schema: "api",
           table: "notifications",
           filter: `user_id=eq.${userId}`,
         },
@@ -99,7 +99,7 @@ export default function NotificationBell() {
         "postgres_changes",
         {
           event: "DELETE",
-          schema: "public",
+          schema: "api",
           table: "notifications",
           filter: `user_id=eq.${userId}`,
         },
