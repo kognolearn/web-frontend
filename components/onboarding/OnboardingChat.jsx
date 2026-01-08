@@ -41,7 +41,7 @@ const UserMessage = ({ children }) => (
   </motion.div>
 );
 
-export default function OnboardingChat() {
+export default function OnboardingChat({ onFirstMessage }) {
   const router = useRouter();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -50,11 +50,16 @@ export default function OnboardingChat() {
   const [loading, setLoading] = useState(false);
   const [topics, setTopics] = useState([]);
   const [jobId, setJobId] = useState(null);
+  const [hasStarted, setHasStarted] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const scrollContainerRef = useRef(null);
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -82,6 +87,12 @@ export default function OnboardingChat() {
     const val = input.trim();
     setInput('');
     addUserMessage(val);
+
+    // Notify parent when first message is sent
+    if (!hasStarted) {
+      setHasStarted(true);
+      onFirstMessage?.();
+    }
 
     if (step === STEPS.ASK_COURSE) {
       setData(prev => ({ ...prev, courseName: val }));
@@ -228,7 +239,7 @@ export default function OnboardingChat() {
 
   return (
     <div className="w-full max-w-lg mx-auto bg-[var(--surface-1)]/30 backdrop-blur-md rounded-3xl border border-white/10 overflow-hidden flex flex-col h-[500px] shadow-2xl relative z-20">
-      <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 scrollbar-hide">
         <AnimatePresence initial={false}>
           {messages.map((m) => (
             m.type === 'bot' ? <BotMessage key={m.id}>{m.text}</BotMessage> : <UserMessage key={m.id}>{m.text}</UserMessage>
@@ -304,7 +315,6 @@ export default function OnboardingChat() {
             </div>
         )}
       </div>
-// ... existing code ...
     </div>
   );
 }
