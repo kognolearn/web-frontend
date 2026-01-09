@@ -572,32 +572,26 @@ export default function HomeContent() {
       {/* Input area - fixed at bottom */}
       <div className="relative z-10 border-t border-white/5 bg-[var(--background)]/80 backdrop-blur-xl px-4 sm:px-6 py-4">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-end gap-3">
-            <textarea
+          <div className="relative">
+            <input
               ref={inputRef}
+              type="text"
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px`;
-              }}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
+                if (e.key === 'Enter') {
                   handleUserSend(input);
                 }
               }}
               placeholder="Type your message..."
               disabled={isInputDisabled}
-              rows={1}
-              className="flex-1 bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-3 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 resize-none overflow-hidden"
-              style={{ maxHeight: '150px' }}
+              className="w-full bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-4 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 pr-14"
               autoFocus
             />
             <button
               onClick={() => handleUserSend(input)}
               disabled={!input.trim() || isInputDisabled}
-              className="p-3 bg-[var(--primary)] text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90 transition-colors flex-shrink-0"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-[var(--primary)] text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
