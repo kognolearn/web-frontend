@@ -75,7 +75,7 @@ export const CONVERSATION_FLOW = [
   // Step 5: Syllabus Intro
   {
     id: 'syllabus_intro',
-    kognoMessage: "Now let's get your course materials. Do you have a syllabus or course outline you can share?",
+    kognoMessage: "Now let's get your course materials. The more detail you share - like course calendars, order of topics, or exam info - the better I can tailor this course to your current quarter's class. Do you have a syllabus or course outline you can share?",
     inputType: 'options',
     field: 'syllabusChoice',
     options: [

@@ -4,8 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import * as api from '@/lib/onboarding';
+
+const REFERRAL_STORAGE_KEY = "kogno_ref";
+const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
 
@@ -62,6 +65,8 @@ const UserMessage = ({ children }) => (
 
 export default function HomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get('ref');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [topics, setTopics] = useState([]);
@@ -104,6 +109,21 @@ export default function HomeContent() {
     scrollToBottom();
   }, [messages, topics, isThinking, isJobRunning]);
 
+  // Capture referral code from URL and store in localStorage
+  useEffect(() => {
+    if (refCode) {
+      try {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          code: refCode,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
+  }, [refCode]);
+
+  // Initial greeting
   useEffect(() => {
     const timer = setTimeout(() => {
       addBotMessage(INITIAL_MESSAGE, 'task');

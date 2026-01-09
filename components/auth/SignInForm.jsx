@@ -1,21 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { cleanupAnonUser } from "@/lib/onboarding";
 
+const REFERRAL_STORAGE_KEY = "kogno_ref";
+
 export default function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+  const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Capture referral code from URL and store in localStorage (for if user goes to sign-up)
+  useEffect(() => {
+    if (refCode) {
+      try {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          code: refCode,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
+  }, [refCode]);
 
   const handleChange = (e) => {
     setFormData({

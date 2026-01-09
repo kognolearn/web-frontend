@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { cleanupAnonUser } from "@/lib/onboarding";
+
+const REFERRAL_STORAGE_KEY = "kogno_ref";
+const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export default function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+  const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -16,6 +20,20 @@ export default function SignUpForm() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Capture referral code from URL and store in localStorage
+  useEffect(() => {
+    if (refCode) {
+      try {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          code: refCode,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
+  }, [refCode]);
 
   const handleChange = (e) => {
     setFormData({
@@ -57,9 +75,34 @@ export default function SignUpForm() {
         return;
       }
 
-      // If sign up is successful, redirect to target
+      // If sign up is successful, attribute referral and redirect
       if (data.user) {
         await cleanupAnonUser();
+
+        // Attribute referral if there's a stored code
+        try {
+          const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
+          if (storedRefRaw) {
+            const storedRef = JSON.parse(storedRefRaw);
+            // Check if referral code is still valid (within 30 days)
+            if (storedRef?.code && Date.now() - storedRef.timestamp < REFERRAL_EXPIRY_MS) {
+              await fetch("/api/referrals/attribute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  referredUserId: data.user.id,
+                  code: storedRef.code,
+                }),
+              });
+              // Clear the stored referral code after attribution
+              localStorage.removeItem(REFERRAL_STORAGE_KEY);
+            }
+          }
+        } catch (refErr) {
+          // Don't block signup for referral errors
+          console.error("Failed to attribute referral:", refErr);
+        }
+
         router.push(redirectTo || "/dashboard");
       }
     } catch (err) {
