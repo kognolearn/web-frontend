@@ -103,7 +103,8 @@ export default function SignUpForm() {
           console.error("Failed to attribute referral:", refErr);
         }
 
-        router.push(redirectTo || "/dashboard");
+        // Redirect to download page to get the desktop app
+        router.push(redirectTo || "/download");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
