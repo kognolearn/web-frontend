@@ -21,22 +21,13 @@ export const CONVERSATION_FLOW = [
   // Step 2: University/Institution
   {
     id: 'university',
-    // Dynamic message based on whether user has a saved school
-    kognoMessage: (state) => {
-      if (state.collegeName && state.collegeName.trim()) {
-        return `At ${state.collegeName}, right?`;
-      }
-      return "Great! And where are you taking {courseTitle}?";
-    },
-    inputType: 'text_confirm',
+    kognoMessage: "Great! And where are you taking {courseTitle}?",
+    inputType: 'text',
     field: 'collegeName',
     placeholder: 'e.g., MIT, Stanford, UCLA',
-    confirmPlaceholder: 'Type to change or press Enter to confirm',
     validation: (v) => v && v.trim().length > 0,
     validationMessage: 'Please enter your institution name',
     skippable: false,
-    // Use collegeName from state as default value
-    getDefaultValue: (state) => state.collegeName || '',
   },
 
   // Step 3: Study Mode
@@ -247,18 +238,13 @@ export function getStepById(stepId) {
 
 /**
  * Interpolate template strings in message
- * @param {string|Function} message - Message with {variable} placeholders or a function that returns message
+ * @param {string} message - Message with {variable} placeholders
  * @param {object} state - State object with values
  * @returns {string} - Interpolated message
  */
 export function interpolateMessage(message, state) {
   if (!message) return '';
-
-  // Support function-based messages for dynamic content
-  const messageStr = typeof message === 'function' ? message(state) : message;
-  if (!messageStr) return '';
-
-  return messageStr.replace(/\{(\w+)\}/g, (match, key) => {
+  return message.replace(/\{(\w+)\}/g, (match, key) => {
     if (key === 'topicCount') {
       return state.overviewTopics?.reduce((sum, m) => sum + (m.subtopics?.length || 0), 0) || 0;
     }

@@ -70,35 +70,15 @@ export function useV2Grading({ courseId, nodeId }) {
       let resultsMap = {};
       if (Array.isArray(grade.results)) {
         for (const r of grade.results) {
-          const details = r.details || {};
-
-          // Build component grade object with all relevant fields
-          const componentGrade = {
+          resultsMap[r.component_id] = {
             status: r.passed ? 'correct' : 'incorrect',
             passed: r.passed,
-            score: r.score,
-            points: r.points_possible,
-            earnedPoints: r.points_earned,
-            evaluator: r.evaluator,
-            // Feedback from LLM evaluator or other sources
-            feedback: details.feedback || null,
-            // Expected/actual for comparison evaluators
-            expected: details.expected,
-            actual: details.actual,
-            // For code_runner: test case results
-            testResults: details.results || null,
-            passedCount: details.passed_count,
-            totalCount: details.total_count,
-            // Execution details (stdout, stderr, error)
-            stdout: details.stdout || null,
-            stderr: details.stderr || null,
-            error: details.error || null,
-            executionTimeMs: details.execution_time_ms || null,
-            // Preserve full details for specialized displays
-            details: details,
+            points: r.points,
+            earnedPoints: r.earned_points,
+            feedback: r.details?.feedback,
+            expected: r.details?.expected,
+            received: r.details?.received,
           };
-
-          resultsMap[r.component_id] = componentGrade;
         }
       } else if (grade.results && typeof grade.results === 'object') {
         resultsMap = grade.results;

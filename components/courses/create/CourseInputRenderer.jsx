@@ -187,11 +187,9 @@ function FileUploadZone({
 export default function CourseInputRenderer({
   inputType,
   value = "",
-  defaultValue = "",
   onChange,
   onSubmit,
   placeholder = "",
-  confirmPlaceholder = "",
   disabled = false,
   files = [],
   onFileChange,
@@ -202,9 +200,7 @@ export default function CourseInputRenderer({
   onHoursChange,
   onMinutesChange,
 }) {
-  // For text_confirm, use defaultValue if no value provided
-  const initialValue = inputType === "text_confirm" && defaultValue ? defaultValue : value;
-  const [localValue, setLocalValue] = useState(initialValue);
+  const [localValue, setLocalValue] = useState(value);
   const inputRef = useRef(null);
 
   const handleKeyDown = useCallback(
@@ -253,73 +249,6 @@ export default function CourseInputRenderer({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
           </svg>
         </button>
-      </div>
-    );
-  }
-
-  // Text confirm input (for pre-filled values that can be confirmed or changed)
-  if (inputType === "text_confirm") {
-    const hasDefaultValue = defaultValue && defaultValue.trim();
-    const valueChanged = localValue !== defaultValue;
-
-    const handleConfirmKeyDown = (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        // Submit either the typed value or the default value
-        const valueToSubmit = localValue.trim() || defaultValue;
-        if (valueToSubmit) {
-          onSubmit(valueToSubmit);
-          setLocalValue("");
-        }
-      }
-    };
-
-    const handleConfirmSubmit = () => {
-      const valueToSubmit = localValue.trim() || defaultValue;
-      if (valueToSubmit) {
-        onSubmit(valueToSubmit);
-        setLocalValue("");
-      }
-    };
-
-    return (
-      <div className="space-y-2">
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <input
-              ref={inputRef}
-              type="text"
-              value={localValue}
-              onChange={(e) => setLocalValue(e.target.value)}
-              onKeyDown={handleConfirmKeyDown}
-              placeholder={hasDefaultValue ? confirmPlaceholder || "Type to change or press Enter to confirm" : placeholder}
-              disabled={disabled}
-              className="w-full px-4 py-3 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleConfirmSubmit}
-            disabled={disabled || (!localValue.trim() && !defaultValue)}
-            className="flex-shrink-0 p-3 rounded-xl bg-[var(--primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-            title={hasDefaultValue && !valueChanged ? "Confirm" : "Submit"}
-          >
-            {hasDefaultValue && !valueChanged ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-            )}
-          </button>
-        </div>
-        {hasDefaultValue && !localValue && (
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Press Enter to confirm or type a different institution
-          </p>
-        )}
       </div>
     );
   }

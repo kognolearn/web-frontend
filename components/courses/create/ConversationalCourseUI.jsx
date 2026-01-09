@@ -114,7 +114,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     if (conversation.isKognoTyping) return null;
     if (conversation.pendingAction) return null;
 
-    const { inputType, placeholder, confirmPlaceholder, accept, skippable, skipLabel, confirmLabel, getDefaultValue } = conversation.currentStep;
+    const { inputType, placeholder, accept, skippable, skipLabel, confirmLabel } = conversation.currentStep;
 
     // Options are rendered in KognoMessage
     if (inputType === "options") {
@@ -201,16 +201,11 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       conversation.handleSubmitResponse(value, displayText);
     };
 
-    // Compute default value from step config if available
-    const defaultValue = getDefaultValue ? getDefaultValue(conversation.state) : "";
-
     return (
       <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
         <CourseInputRenderer
           inputType={inputType}
           placeholder={placeholder}
-          confirmPlaceholder={confirmPlaceholder}
-          defaultValue={defaultValue}
           onSubmit={handleInputSubmit}
           disabled={flowState.isTopicsLoading || flowState.courseGenerating}
           files={conversation.currentFiles}
@@ -291,12 +286,11 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             const isCurrentlyLoading =
               message.inputType === "loading" ||
               (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
-            // Show animated reasoning only while topics are being generated
             const showReasoning =
-              message.stepId === "topics_loading" && !flowState.overviewTopics?.length;
-            // Show completed reasoning once topics exist
+              message.stepId === "topics_loading" && isCurrentlyLoading;
+            // Show completed reasoning on the topics_loading message once topics are generated
             const reasoningCompleted =
-              message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
+              message.stepId === "topics_loading" && !isCurrentlyLoading && flowState.overviewTopics?.length > 0;
 
             return (
               <KognoMessage

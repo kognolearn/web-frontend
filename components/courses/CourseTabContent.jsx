@@ -117,7 +117,6 @@ function ItemContent({
   onReadingCompleted,
   onFlashcardsCompleted,
   onVideoViewed,
-  onTaskComplete,
   moduleQuizTab,
   isAdmin,
   isPreview
@@ -402,7 +401,6 @@ function ItemContent({
             courseId={courseId}
             nodeId={id}
             isPreview={isPreview}
-            onTaskComplete={onTaskComplete}
           />
         </div>
       );
@@ -1358,12 +1356,6 @@ export default function CourseTabContent({
       }
     }
   }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, isOnboardingPreview]);
-
-  const handleTaskCompleted = useCallback(() => {
-    if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, { force: true });
-    }
-  }, [selectedLesson?.id, courseId, fetchLessonContent]);
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {
@@ -3229,7 +3221,6 @@ export default function CourseTabContent({
                     onReadingCompleted={handleReadingCompleted}
                     onFlashcardsCompleted={handleFlashcardsCompleted}
                     onVideoViewed={handleVideoViewed}
-                    onTaskComplete={handleTaskCompleted}
                     moduleQuizTab={moduleQuizTab}
                     isAdmin={hasCheckedAdmin && isAdmin}
                     isPreview={isOnboardingPreview}
