@@ -7,82 +7,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import * as api from '@/lib/onboarding';
 
-const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
-
-const TASK_STEPS = {
-  NONE: 'NONE',
-  ASK_COLLEGE: 'ASK_COLLEGE',
+const STEPS = {
   ASK_COURSE: 'ASK_COURSE',
+  ASK_COLLEGE: 'ASK_COLLEGE',
   SHOW_TOPICS: 'SHOW_TOPICS',
+  ASK_TOPIC_CUSTOM: 'ASK_TOPIC_CUSTOM',
+  START_JOB: 'START_JOB',
   WAIT_JOB: 'WAIT_JOB',
-  FINAL_MESSAGE: 'FINAL_MESSAGE',
-  DONE: 'DONE',
+  COMPLETED: 'COMPLETED',
 };
-
-const TASK_ORDER = {
-  [TASK_STEPS.ASK_COLLEGE]: 1,
-  [TASK_STEPS.ASK_COURSE]: 2,
-  [TASK_STEPS.SHOW_TOPICS]: 3,
-  [TASK_STEPS.FINAL_MESSAGE]: 4,
-};
-
-const FALLBACKS = {
-  gate: 'Tell me how you learn on your own and how you follow through.',
-  chat: 'Got it. Tell me more.',
-  task: 'Okay. What college are you at?',
-  topics: "I couldn't find topics for that. What's the course name again?",
-  generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
-  status: "I couldn't check the lesson status. Want to pick a topic again?",
-};
-
-const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
-const isInitialMessage = (value) => normalizeText(value) === normalizeText(INITIAL_MESSAGE);
-
-const FALLBACK_VARIANTS = {
-  gate: [
-    'Tell me how you learn on your own and how you follow through.',
-    'What do you do when learning gets hard and no one is guiding you?',
-  ],
-  chat: [
-    'Got it. Tell me more.',
-    'Okay. Keep going.',
-  ],
-};
-
-const TASK_FALLBACKS = {
-  [TASK_STEPS.ASK_COLLEGE]: [
-    'Which college are you at?',
-    'Where do you go to school?',
-  ],
-  [TASK_STEPS.ASK_COURSE]: [
-    'What is the hardest course you are taking right now?',
-    'Which class is the toughest for you this term?',
-  ],
-  [TASK_STEPS.SHOW_TOPICS]: [
-    'Pick a topic from the list or suggest another. I can teach it in 5 minutes.',
-    'Choose a topic from the list or name a different one. I can teach it in 5 minutes.',
-  ],
-  [TASK_STEPS.FINAL_MESSAGE]: [
-    'Your lesson is ready. Redirecting now.',
-    'Your lesson is ready. Sending you there now.',
-  ],
-};
-
-const pickFallback = (variants, lastText) => {
-  const safeVariants = Array.isArray(variants) && variants.length > 0 ? variants : [];
-  if (!safeVariants.length) return '';
-  const last = normalizeText(lastText);
-  const next = safeVariants.find((item) => normalizeText(item) !== last);
-  return next || safeVariants[0];
-};
-
-const resolveTaskFallback = (step, lastText) => {
-  const variants = TASK_FALLBACKS[step] || [FALLBACKS.task];
-  return pickFallback(variants, lastText);
-};
-
-const resolveChatFallback = (lastText) => pickFallback(FALLBACK_VARIANTS.chat, lastText || '');
-const resolveGateFallback = (lastText) => pickFallback(FALLBACK_VARIANTS.gate, lastText || '');
 
 const BotMessage = ({ children }) => (
   <motion.div
@@ -112,36 +45,15 @@ export default function HomeContent() {
   const router = useRouter();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [step, setStep] = useState(STEPS.ASK_COURSE);
+  const [data, setData] = useState({ courseName: '', collegeName: '', topic: '' });
+  const [loading, setLoading] = useState(false);
   const [topics, setTopics] = useState([]);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
-  const [taskStep, setTaskStep] = useState(TASK_STEPS.NONE);
-  const [isJobRunning, setIsJobRunning] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const [jobId, setJobId] = useState(null);
-  const [showTopics, setShowTopics] = useState(false);
-
+  const [hasStarted, setHasStarted] = useState(false);
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
   const onboardingSessionStartedRef = useRef(false);
-  const messagesRef = useRef([]);
-  const queueRef = useRef([]);
-  const pendingBotRef = useRef(false);
-  const lastBotTypeRef = useRef(null);
-  const gateConvincedRef = useRef(false);
-  const taskStepRef = useRef(TASK_STEPS.NONE);
-  const dataRef = useRef({ collegeName: '', courseName: '', topic: '' });
-  const topicsRef = useRef([]);
-  const pendingRequestsRef = useRef(0);
-  const latestChatTurnRef = useRef(0);
-  const latestGateTurnRef = useRef(0);
-  const taskRequestIdRef = useRef(0);
-  const redirectUrlRef = useRef(null);
-  const flowCompleteRef = useRef(false);
-  const turnCounterRef = useRef(0);
-  const awaitingTaskRef = useRef(false);
-  const deferredChatRef = useRef(null);
-  const initialMessageSentRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -151,155 +63,22 @@ export default function HomeContent() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, topics, isThinking, isJobRunning]);
+  }, [messages, loading, topics]);
 
+  // Initial greeting
   useEffect(() => {
-    if (initialMessageSentRef.current) return;
-    initialMessageSentRef.current = true;
     const timer = setTimeout(() => {
-      addBotMessage(INITIAL_MESSAGE, 'task');
-    }, 400);
+      addBotMessage("Hey! I'm Kogno. What's the hardest class you're taking right now?");
+    }, 500);
     return () => clearTimeout(timer);
   }, []);
 
-  const syncMessages = (next) => {
-    messagesRef.current = next;
-    return next;
-  };
-
-  const addBotMessage = (text, type = 'chat', meta = {}) => {
-    const message = { type: 'bot', text, id: Date.now() + Math.random() };
-    setMessages((prev) => syncMessages([...prev, message]));
-    lastBotTypeRef.current = type;
-    if (meta?.step === TASK_STEPS.SHOW_TOPICS) {
-      setShowTopics(true);
-    } else if (meta?.step && meta.step !== TASK_STEPS.SHOW_TOPICS) {
-      setShowTopics(false);
-    }
-    if (type === 'task' && awaitingTaskRef.current) {
-      awaitingTaskRef.current = false;
-      if (deferredChatRef.current) {
-        enqueueMessage(deferredChatRef.current);
-        deferredChatRef.current = null;
-      }
-    }
-
-    if (meta?.final && !flowCompleteRef.current) {
-      flowCompleteRef.current = true;
-      setIsRedirecting(true);
-      const targetUrl = meta?.redirectUrl || redirectUrlRef.current;
-      if (targetUrl) {
-        setTimeout(() => router.push(targetUrl), 10000);
-      }
-    }
+  const addBotMessage = (text) => {
+    setMessages(prev => [...prev, { type: 'bot', text, id: Date.now() + Math.random() }]);
   };
 
   const addUserMessage = (text) => {
-    const message = { type: 'user', text, id: Date.now() + Math.random() };
-    setMessages((prev) => syncMessages([...prev, message]));
-  };
-
-  const setTaskStepSafe = (next) => {
-    taskStepRef.current = next;
-    setTaskStep(next);
-  };
-
-  const updateData = (updates) => {
-    dataRef.current = { ...dataRef.current, ...updates };
-  };
-
-  const setTopicsSafe = (nextTopics) => {
-    topicsRef.current = Array.isArray(nextTopics) ? nextTopics : [];
-    setTopics(topicsRef.current);
-  };
-
-  const shouldSkipTaskStep = (step) => {
-    if (step === TASK_STEPS.ASK_COLLEGE && dataRef.current.collegeName) return true;
-    if (step === TASK_STEPS.ASK_COURSE && dataRef.current.courseName) return true;
-    if (step === TASK_STEPS.FINAL_MESSAGE && flowCompleteRef.current) return true;
-    return false;
-  };
-
-  const getLastBotText = () => {
-    const reversed = [...messagesRef.current].reverse();
-    const lastBot = reversed.find((msg) => msg.type === 'bot');
-    return lastBot?.text || '';
-  };
-
-  const sanitizeQueueEntry = (entry) => {
-    if (!entry || !entry.text) return null;
-    const lastBotText = getLastBotText();
-    if (!lastBotText) return entry;
-    if (normalizeText(entry.text) !== normalizeText(lastBotText)) return entry;
-
-    if (entry.type === 'task') {
-      const fallback = resolveTaskFallback(entry?.meta?.step, lastBotText);
-      if (!fallback) return null;
-      return { ...entry, text: fallback };
-    }
-
-    const fallback = resolveChatFallback(lastBotText);
-    if (!fallback) return null;
-    return { ...entry, text: fallback };
-  };
-
-  const setThinkingDelta = (delta) => {
-    pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current + delta);
-    setIsThinking(pendingRequestsRef.current > 0);
-  };
-
-  const buildLlmMessages = () =>
-    messagesRef.current.map((msg) => ({
-      role: msg.type === 'user' ? 'user' : 'assistant',
-      content: msg.text,
-    }));
-
-  const enqueueMessage = (rawEntry) => {
-    const entry = sanitizeQueueEntry(rawEntry);
-    if (!entry) return;
-    if (entry.type === 'task' && shouldSkipTaskStep(entry?.meta?.step)) return;
-    const queue = queueRef.current;
-    const existingIndex = queue.findIndex((item) => item.type === entry.type);
-
-    if (existingIndex !== -1) {
-      if (entry.type === 'chat') {
-        queue[existingIndex] = entry;
-      } else if (entry.type === 'task') {
-        const existing = queue[existingIndex];
-        const existingOrder = TASK_ORDER[existing?.meta?.step] || 0;
-        const nextOrder = TASK_ORDER[entry?.meta?.step] || 0;
-        if (entry?.meta?.final || nextOrder >= existingOrder) {
-          queue[existingIndex] = entry;
-        } else {
-          return;
-        }
-      } else {
-        return;
-      }
-    } else {
-      queue.push(entry);
-    }
-
-    if (queue.length > 2) {
-      const taskEntry = queue.find((item) => item.type === 'task');
-      const chatEntry = queue.find((item) => item.type === 'chat');
-      queueRef.current = [taskEntry, chatEntry].filter(Boolean);
-    }
-
-    flushQueue();
-  };
-
-  const flushQueue = () => {
-    if (!pendingBotRef.current) return;
-    const queue = queueRef.current;
-    if (!queue.length) return;
-    const next = queue.shift();
-    addBotMessage(next.text, next.type, next.meta);
-    pendingBotRef.current = false;
-  };
-
-  const dropQueuedChat = () => {
-    queueRef.current = queueRef.current.filter((item) => item.type !== 'chat');
+    setMessages(prev => [...prev, { type: 'user', text, id: Date.now() + Math.random() }]);
   };
 
   const ensureOnboardingSession = async () => {
@@ -311,231 +90,146 @@ export default function HomeContent() {
     } catch (error) {}
   };
 
-  const requestGatekeeper = async (turnId) => {
-    latestGateTurnRef.current = turnId;
-    setThinkingDelta(1);
-    try {
-      const response = await api.getChatStep({
-        mode: 'gatekeeper',
-        messages: buildLlmMessages(),
-      });
-
-      if (turnId !== latestGateTurnRef.current) return;
-      const convinced = Boolean(response?.convinced);
-      const reply = response?.reply || '';
-      const safeReply = isInitialMessage(reply) ? resolveGateFallback(getLastBotText()) : reply;
-
-      if (!convinced) {
-        enqueueMessage({ type: 'task', text: safeReply || resolveGateFallback(getLastBotText()) });
-        return;
-      }
-
-      gateConvincedRef.current = true;
-      setTaskStepSafe(TASK_STEPS.ASK_COLLEGE);
-      awaitingTaskRef.current = true;
-      requestTaskMessage(TASK_STEPS.ASK_COLLEGE);
-      requestChatResponse(turnId);
-    } catch (error) {
-      enqueueMessage({ type: 'task', text: resolveGateFallback(getLastBotText()) });
-    } finally {
-      setThinkingDelta(-1);
-    }
-  };
-
-  const requestChatResponse = async (turnId) => {
-    latestChatTurnRef.current = turnId;
-    setThinkingDelta(1);
-    try {
-      const response = await api.getChatStep({
-        mode: 'chat',
-        messages: buildLlmMessages(),
-      });
-
-      if (turnId !== latestChatTurnRef.current) return;
-      const reply = response?.reply || '';
-      const entry = { type: 'chat', text: reply || resolveChatFallback(getLastBotText()) };
-      if (awaitingTaskRef.current) {
-        deferredChatRef.current = entry;
-        return;
-      }
-      enqueueMessage(entry);
-    } catch (error) {
-      const entry = { type: 'chat', text: resolveChatFallback(getLastBotText()) };
-      if (awaitingTaskRef.current) {
-        deferredChatRef.current = entry;
-        return;
-      }
-      enqueueMessage(entry);
-    } finally {
-      setThinkingDelta(-1);
-    }
-  };
-
-  const requestTaskMessage = async (step, meta = {}) => {
-    if (shouldSkipTaskStep(step)) return;
-    const requestId = taskRequestIdRef.current + 1;
-    taskRequestIdRef.current = requestId;
-    setThinkingDelta(1);
-    try {
-      const metaWithStep = { ...meta, step };
-      const response = await api.getChatStep({
-        mode: 'task',
-        messages: buildLlmMessages(),
-        task: {
-          step,
-          collegeName: dataRef.current.collegeName,
-          courseName: dataRef.current.courseName,
-          topic: dataRef.current.topic,
-          topics: topicsRef.current,
-        },
-      });
-
-      if (requestId !== taskRequestIdRef.current) return;
-      const reply = response?.reply || '';
-      enqueueMessage({ type: 'task', text: reply || resolveTaskFallback(step, getLastBotText()), meta: metaWithStep });
-    } catch (error) {
-      enqueueMessage({ type: 'task', text: resolveTaskFallback(step, getLastBotText()), meta: { ...meta, step } });
-    } finally {
-      setThinkingDelta(-1);
-    }
-  };
-
-  const fetchTopicsAndAsk = async () => {
-    setThinkingDelta(1);
-    try {
-      const topicRes = await api.getHardTopics({
-        collegeName: dataRef.current.collegeName,
-        courseName: dataRef.current.courseName,
-      });
-
-      const nextTopics = Array.isArray(topicRes?.topics) ? topicRes.topics : [];
-      if (nextTopics.length === 0) {
-        enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-        setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-        setShowTopics(false);
-        setTopicsSafe([]);
-        return;
-      }
-
-      setTopicsSafe(nextTopics);
-      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-      await requestTaskMessage(TASK_STEPS.SHOW_TOPICS);
-    } catch (error) {
-      enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-      setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-      setShowTopics(false);
-      setTopicsSafe([]);
-    } finally {
-      setThinkingDelta(-1);
-    }
-  };
-
-  const startLessonGeneration = async (selectedTopic) => {
-    setIsJobRunning(true);
-    try {
-      const jobRes = await api.generateLesson({
-        collegeName: dataRef.current.collegeName,
-        courseName: dataRef.current.courseName,
-        topic: selectedTopic,
-      });
-      setJobId(jobRes.jobId);
-    } catch (error) {
-      setIsJobRunning(false);
-      enqueueMessage({ type: 'task', text: FALLBACKS.generation });
-      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-      setShowTopics(true);
-    }
-  };
-
-  const processTaskResponse = (text) => {
-    const step = taskStepRef.current;
-
-    if (step === TASK_STEPS.ASK_COLLEGE) {
-      updateData({ collegeName: text });
-      setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-      requestTaskMessage(TASK_STEPS.ASK_COURSE);
-      return;
-    }
-
-    if (step === TASK_STEPS.ASK_COURSE) {
-      updateData({ courseName: text });
-      fetchTopicsAndAsk();
-      return;
-    }
-
-    if (step === TASK_STEPS.SHOW_TOPICS) {
-      updateData({ topic: text });
-      setShowTopics(false);
-      setTaskStepSafe(TASK_STEPS.WAIT_JOB);
-      startLessonGeneration(text);
-    }
-  };
-
-  const handleUserSend = async (value) => {
-    const trimmed = value.trim();
-    if (!trimmed || isRedirecting) return;
-
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const val = input.trim();
     setInput('');
-    addUserMessage(trimmed);
+    addUserMessage(val);
 
     if (!hasStarted) {
       void ensureOnboardingSession();
     }
 
-    pendingBotRef.current = true;
-    dropQueuedChat();
-    flushQueue();
-
-    const turnId = ++turnCounterRef.current;
-
-    if (!gateConvincedRef.current) {
-      requestGatekeeper(turnId);
-      return;
+    if (step === STEPS.ASK_COURSE) {
+      setData(prev => ({ ...prev, courseName: val }));
+      setStep(STEPS.ASK_COLLEGE);
+      setTimeout(() => addBotMessage("Got it. And which college are you at?"), 600);
+    } else if (step === STEPS.ASK_COLLEGE) {
+      setData(prev => ({ ...prev, collegeName: val }));
+      await fetchTopicsForCourse(val);
+    } else if (step === STEPS.ASK_TOPIC_CUSTOM) {
+      await handleTopicSelection(val);
     }
-
-    if (lastBotTypeRef.current === 'task') {
-      processTaskResponse(trimmed);
-    }
-
-    requestChatResponse(turnId);
   };
 
-  useEffect(() => {
-    if (taskStep !== TASK_STEPS.WAIT_JOB || !jobId) return;
+  const handleCustomTopicSubmit = async () => {
+    if (!input.trim()) return;
+    const val = input.trim();
+    setInput('');
+    await handleTopicSelection(val);
+  };
 
+  const fetchTopicsForCourse = async (college) => {
+    setLoading(true);
+    try {
+      const currentData = { ...data, collegeName: college };
+      const topicRes = await api.getHardTopics(currentData);
+      const nextTopics = Array.isArray(topicRes?.topics) ? topicRes.topics : [];
+      if (nextTopics.length > 0) {
+        setData(prev => ({ ...prev, ...currentData }));
+        setTopics(nextTopics);
+        setStep(STEPS.SHOW_TOPICS);
+        addBotMessage("Here are the hardest topics I could find. Pick one below, or tell me another one - I can teach it to you in 5 minutes.");
+      } else {
+        setStep(STEPS.ASK_COURSE);
+        addBotMessage("Hmm, I couldn't find topics for that course. Mind checking the name and college again? What's the course name?");
+      }
+    } catch (e) {
+      console.error(e);
+      addBotMessage("Sorry, I had trouble finding topics for that course. Let's try again. What's the course name?");
+      setStep(STEPS.ASK_COURSE);
+    } finally {
+      setLoading(false);
+      if (step === STEPS.ASK_COURSE) {
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    }
+  };
+
+  const handleTopicSelection = async (topic) => {
+    if (step === STEPS.SHOW_TOPICS) {
+      addUserMessage(topic);
+    }
+
+    if (!hasStarted) {
+      await ensureOnboardingSession();
+    }
+
+    setLoading(true);
+    setStep(STEPS.START_JOB);
+
+    try {
+      const currentData = { ...data, topic };
+      setData(prev => ({ ...prev, topic }));
+      const jobRes = await api.generateLesson(currentData);
+      setJobId(jobRes.jobId);
+      setStep(STEPS.WAIT_JOB);
+      addBotMessage("On it! Creating your personalized lesson...");
+    } catch (e) {
+      addBotMessage("Something went wrong. Please try picking a topic again.");
+      setStep(STEPS.SHOW_TOPICS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Polling for job status
+  useEffect(() => {
+    if (step !== STEPS.WAIT_JOB || !jobId) return;
+
+    let stallInterval;
     let pollInterval;
+
+    const stalls = [
+      "Analyzing past exams...",
+      "Structuring the key concepts...",
+      "Generating practice questions...",
+      "Almost there..."
+    ];
+    let stallIndex = 0;
+
+    stallInterval = setInterval(() => {
+      if (stallIndex < stalls.length) {
+        addBotMessage(stalls[stallIndex]);
+        stallIndex++;
+      }
+    }, 2500);
 
     pollInterval = setInterval(async () => {
       try {
         const status = await api.getLessonStatus(jobId);
         if (status.status === 'completed') {
+          clearInterval(stallInterval);
           clearInterval(pollInterval);
-          setIsJobRunning(false);
-          redirectUrlRef.current = status.resultUrl || status.redirectUrl || (status.courseId ? `/courses/${status.courseId}?preview=1&jobId=${jobId}` : '/dashboard');
-          setTaskStepSafe(TASK_STEPS.FINAL_MESSAGE);
-          requestTaskMessage(TASK_STEPS.FINAL_MESSAGE, { final: true, redirectUrl: redirectUrlRef.current });
+          setStep(STEPS.COMPLETED);
+          addBotMessage("Ready! Taking you there now.");
+          setTimeout(() => {
+            if (status.courseId) {
+              router.push(`/courses/${status.courseId}`);
+            } else {
+              router.push('/dashboard');
+            }
+          }, 1000);
         } else if (status.status === 'failed') {
+          clearInterval(stallInterval);
           clearInterval(pollInterval);
-          setIsJobRunning(false);
-          enqueueMessage({ type: 'task', text: FALLBACKS.status });
-          setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-          setShowTopics(true);
+          setStep(STEPS.SHOW_TOPICS);
+          addBotMessage("Oops, I couldn't generate that lesson. Try another topic?");
         }
-      } catch (error) {
+      } catch (e) {
+        console.error(e);
+        clearInterval(stallInterval);
         clearInterval(pollInterval);
-        setIsJobRunning(false);
-        enqueueMessage({ type: 'task', text: FALLBACKS.status });
-        setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-        setShowTopics(true);
+        setStep(STEPS.SHOW_TOPICS);
+        addBotMessage("I couldn't check the lesson status. Try another topic?");
       }
     }, 1500);
 
     return () => {
+      clearInterval(stallInterval);
       clearInterval(pollInterval);
     };
-  }, [taskStep, jobId]);
-
-  const isInputDisabled = isRedirecting;
+  }, [step, jobId, router]);
 
   return (
     <div className="relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden">
@@ -621,7 +315,7 @@ export default function HomeContent() {
           </AnimatePresence>
 
           {/* Loading indicator */}
-          {(isThinking || isJobRunning) && (
+          {loading && (
             <div className="flex justify-start mb-4">
               <div className="bg-[var(--surface-1)] px-4 py-3 rounded-2xl rounded-tl-none border border-white/5">
                 <div className="flex space-x-1">
@@ -633,17 +327,17 @@ export default function HomeContent() {
             </div>
           )}
 
-          {/* Topic chips when available */}
-          {showTopics && topics.length > 0 && (
+          {/* Topic chips when in SHOW_TOPICS step */}
+          {step === STEPS.SHOW_TOPICS && topics.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex flex-wrap gap-2 mb-4"
             >
-              {topics.map((t) => (
+              {topics.map(t => (
                 <button
                   key={t}
-                  onClick={() => handleUserSend(t)}
+                  onClick={() => handleTopicSelection(t)}
                   className="px-4 py-2 text-sm bg-[var(--surface-1)] hover:bg-[var(--primary)] hover:text-white border border-white/10 rounded-full transition-colors"
                 >
                   {t}
@@ -665,17 +359,27 @@ export default function HomeContent() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  handleUserSend(input);
+                  if (step === STEPS.SHOW_TOPICS) {
+                    handleCustomTopicSubmit();
+                  } else {
+                    handleSend();
+                  }
                 }
               }}
-              placeholder="Type your message..."
-              disabled={isInputDisabled}
+              placeholder={
+                step === STEPS.WAIT_JOB
+                  ? "Generating lesson..."
+                  : step === STEPS.SHOW_TOPICS
+                    ? "Or type a topic..."
+                    : "Type your answer..."
+              }
+              disabled={loading || step === STEPS.WAIT_JOB || step === STEPS.COMPLETED}
               className="w-full bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-4 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 pr-14"
               autoFocus
             />
             <button
-              onClick={() => handleUserSend(input)}
-              disabled={!input.trim() || isInputDisabled}
+              onClick={step === STEPS.SHOW_TOPICS ? handleCustomTopicSubmit : handleSend}
+              disabled={!input.trim() || loading || step === STEPS.WAIT_JOB || step === STEPS.COMPLETED}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-[var(--primary)] text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
