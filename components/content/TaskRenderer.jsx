@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { CheckCircle2, Circle, GripVertical, MapPin, ExternalLink } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
 import { getComponent } from "@/components/content/v2/ComponentRegistry";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
@@ -152,8 +153,46 @@ function CodeEditor({
   label,
 }) {
   const { theme: appTheme } = useTheme();
-  const resolvedLanguage = language && language.trim() ? language : "plaintext";
-  const editorTheme = propTheme || (appTheme === "dark" ? "vs-dark" : "light");
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
+  const editorRef = useRef(null);
+
+  // Map common language names to Monaco language IDs
+  const languageMap = {
+    c: "c",
+    cpp: "cpp",
+    "c++": "cpp",
+    python: "python",
+    py: "python",
+    javascript: "javascript",
+    js: "javascript",
+    typescript: "typescript",
+    ts: "typescript",
+    java: "java",
+    csharp: "csharp",
+    "c#": "csharp",
+    go: "go",
+    rust: "rust",
+    ruby: "ruby",
+    php: "php",
+    swift: "swift",
+    kotlin: "kotlin",
+    sql: "sql",
+    html: "html",
+    css: "css",
+    json: "json",
+    xml: "xml",
+    yaml: "yaml",
+    markdown: "markdown",
+    shell: "shell",
+    bash: "shell",
+  };
+
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
+
+  // Use user's editor theme preference, or fall back to app theme
+  const editorTheme = propTheme || editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
+
   const isMarkdown = resolvedLanguage === "markdown";
   const previewContent = useMemo(
     () => (isMarkdown ? autoWrapMarkdownMath(value) : ""),
@@ -163,6 +202,25 @@ function CodeEditor({
   const isLatexFriendly = ["markdown", "latex", "tex", "text", "plaintext"].includes(
     resolvedLanguage.toLowerCase()
   );
+
+  // Get Monaco options from user settings
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      ...options, // Allow prop overrides
+    };
+  }, [getMonacoOptions, options]);
+
+  // Handle editor mount to configure additional settings
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+
+    // Configure semantic highlighting if available
+    if (monaco.languages.registerDocumentSemanticTokensProvider) {
+      // Monaco will use built-in semantic highlighting for supported languages
+    }
+  }, []);
 
   return (
     <div className="space-y-2">
@@ -175,7 +233,7 @@ function CodeEditor({
         {/* Header bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)]">
           <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-            {resolvedLanguage}
+            {rawLanguage || "plaintext"}
           </span>
           {isLatexFriendly && (
             <a
@@ -196,12 +254,8 @@ function CodeEditor({
             language={resolvedLanguage}
             height={height}
             theme={editorTheme}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              scrollBeyondLastLine: false,
-              ...options,
-            }}
+            options={monacoOptions}
+            onMount={handleEditorDidMount}
           />
         </div>
       </div>
@@ -701,7 +755,7 @@ function NotSupported({ type }) {
   );
 }
 
-export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false }) {
+export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false, onTaskComplete }) {
   const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
   const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -874,6 +928,11 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
         result,
         grade,
       });
+
+      // Notify parent when task passes
+      if (grade?.passed && onTaskComplete) {
+        onTaskComplete();
+      }
     } catch (error) {
       if (error?.name === "AbortError") return;
       console.error("[TaskRenderer] Grading failed:", error);
@@ -881,7 +940,7 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, isSubmitting, submitAnswers]);
+  }, [answers, isSubmitting, submitAnswers, onTaskComplete]);
 
   const gradeSummary = useMemo(() => {
     const grade = gradePayload?.grade;
@@ -1110,8 +1169,88 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
                       <div className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider mb-2">
                         Feedback
                       </div>
-                      <div className="text-sm text-[var(--foreground)] leading-relaxed">
+                      <pre className="text-sm text-[var(--foreground)] leading-relaxed whitespace-pre-wrap font-sans">
                         {feedback}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {/* Test Case Results for code_runner */}
+                  {resultItem.evaluator === "code_runner" && Array.isArray(details?.results) && details.results.length > 0 ? (
+                    <div className="px-4 py-4 border-b border-[var(--border)]">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">
+                          Test Results
+                        </span>
+                        <span className={`text-sm font-semibold ${
+                          resultItem.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                        }`}>
+                          {details.passed_count ?? 0}/{details.total_count ?? details.results.length} passed
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {details.results.map((testResult, testIdx) => (
+                          <details
+                            key={testIdx}
+                            className={`rounded-lg border overflow-hidden ${
+                              testResult.passed
+                                ? "border-[var(--success)]/50 bg-[var(--success)]/5"
+                                : "border-[var(--danger)]/50 bg-[var(--danger)]/5"
+                            }`}
+                          >
+                            <summary className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none hover:bg-black/5">
+                              <span className={`flex-shrink-0 ${
+                                testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                              }`}>
+                                {testResult.passed ? (
+                                  <CheckCircle2 className="w-4 h-4" />
+                                ) : (
+                                  <Circle className="w-4 h-4" />
+                                )}
+                              </span>
+                              <span className="text-sm font-medium text-[var(--foreground)] flex-1">
+                                {testResult.description || `Test ${testIdx + 1}`}
+                              </span>
+                              <span className={`text-xs font-medium ${
+                                testResult.passed ? "text-[var(--success)]" : "text-[var(--danger)]"
+                              }`}>
+                                {testResult.passed ? "Passed" : "Failed"}
+                              </span>
+                            </summary>
+                            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-[var(--border)]/30">
+                              {testResult.input && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Input</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto">
+                                    {testResult.input}
+                                  </pre>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Expected Output</span>
+                                <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto">
+                                  {testResult.expected_output || "(empty)"}
+                                </pre>
+                              </div>
+                              {!testResult.passed && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Your Output</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs overflow-x-auto">
+                                    {testResult.actual_output || "(no output)"}
+                                  </pre>
+                                </div>
+                              )}
+                              {testResult.stderr && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wide text-[var(--danger)]">Error</span>
+                                  <pre className="mt-1 p-2 rounded-lg bg-[var(--danger)]/10 font-mono text-xs text-[var(--danger)] overflow-x-auto whitespace-pre-wrap">
+                                    {testResult.stderr}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        ))}
                       </div>
                     </div>
                   ) : null}

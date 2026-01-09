@@ -204,6 +204,18 @@ export default function CodeEditor({
         </div>
       </div>
 
+      {/* Execution error display */}
+      {isGraded && (grade?.stderr || grade?.error) && (
+        <div className="mt-3 rounded-xl border border-danger bg-danger/5 p-4 space-y-2">
+          <span className="text-xs font-medium text-danger uppercase tracking-wide">
+            {grade.error ? "Error" : "Execution Error"}
+          </span>
+          <pre className="p-3 rounded-lg bg-danger/10 font-mono text-xs text-danger overflow-x-auto whitespace-pre-wrap">
+            {grade.error || grade.stderr}
+          </pre>
+        </div>
+      )}
+
       {/* Grade feedback */}
       {isGraded && grade?.feedback && (
         <div className={`mt-3 p-3 rounded-xl border ${
