@@ -111,13 +111,6 @@ export default function HomeContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
-    }
-  }, [input]);
-
   const syncMessages = (next) => {
     messagesRef.current = next;
     return next;
