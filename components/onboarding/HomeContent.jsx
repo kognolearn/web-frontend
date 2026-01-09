@@ -35,6 +35,54 @@ const FALLBACKS = {
   status: "I couldn't check the lesson status. Want to pick a topic again?",
 };
 
+const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+const isInitialMessage = (value) => normalizeText(value) === normalizeText(INITIAL_MESSAGE);
+
+const FALLBACK_VARIANTS = {
+  gate: [
+    'Tell me how you learn on your own and how you follow through.',
+    'What do you do when learning gets hard and no one is guiding you?',
+  ],
+  chat: [
+    'Got it. Tell me more.',
+    'Okay. Keep going.',
+  ],
+};
+
+const TASK_FALLBACKS = {
+  [TASK_STEPS.ASK_COLLEGE]: [
+    'Which college are you at?',
+    'Where do you go to school?',
+  ],
+  [TASK_STEPS.ASK_COURSE]: [
+    'What is the hardest course you are taking right now?',
+    'Which class is the toughest for you this term?',
+  ],
+  [TASK_STEPS.SHOW_TOPICS]: [
+    'Pick a topic from the list or suggest another. I can teach it in 5 minutes.',
+    'Choose a topic from the list or name a different one. I can teach it in 5 minutes.',
+  ],
+  [TASK_STEPS.FINAL_MESSAGE]: [
+    'Your lesson is ready. Redirecting now.',
+    'Your lesson is ready. Sending you there now.',
+  ],
+};
+
+const pickFallback = (variants, lastText) => {
+  const safeVariants = Array.isArray(variants) && variants.length > 0 ? variants : [];
+  if (!safeVariants.length) return '';
+  const last = normalizeText(lastText);
+  const next = safeVariants.find((item) => normalizeText(item) !== last);
+  return next || safeVariants[0];
+};
+
+const resolveTaskFallback = (step, lastText) => {
+  const variants = TASK_FALLBACKS[step] || [FALLBACKS.task];
+  return pickFallback(variants, lastText);
+};
+
+const resolveChatFallback = (lastText) => pickFallback(FALLBACK_VARIANTS.chat, lastText || '');
+const resolveGateFallback = (lastText) => pickFallback(FALLBACK_VARIANTS.gate, lastText || '');
 
 const BotMessage = ({ children }) => (
   <motion.div
@@ -93,6 +141,7 @@ export default function HomeContent() {
   const turnCounterRef = useRef(0);
   const awaitingTaskRef = useRef(false);
   const deferredChatRef = useRef(null);
+  const initialMessageSentRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -105,6 +154,8 @@ export default function HomeContent() {
   }, [messages, topics, isThinking, isJobRunning]);
 
   useEffect(() => {
+    if (initialMessageSentRef.current) return;
+    initialMessageSentRef.current = true;
     const timer = setTimeout(() => {
       addBotMessage(INITIAL_MESSAGE, 'task');
     }, 400);
@@ -162,6 +213,36 @@ export default function HomeContent() {
     setTopics(topicsRef.current);
   };
 
+  const shouldSkipTaskStep = (step) => {
+    if (step === TASK_STEPS.ASK_COLLEGE && dataRef.current.collegeName) return true;
+    if (step === TASK_STEPS.ASK_COURSE && dataRef.current.courseName) return true;
+    if (step === TASK_STEPS.FINAL_MESSAGE && flowCompleteRef.current) return true;
+    return false;
+  };
+
+  const getLastBotText = () => {
+    const reversed = [...messagesRef.current].reverse();
+    const lastBot = reversed.find((msg) => msg.type === 'bot');
+    return lastBot?.text || '';
+  };
+
+  const sanitizeQueueEntry = (entry) => {
+    if (!entry || !entry.text) return null;
+    const lastBotText = getLastBotText();
+    if (!lastBotText) return entry;
+    if (normalizeText(entry.text) !== normalizeText(lastBotText)) return entry;
+
+    if (entry.type === 'task') {
+      const fallback = resolveTaskFallback(entry?.meta?.step, lastBotText);
+      if (!fallback) return null;
+      return { ...entry, text: fallback };
+    }
+
+    const fallback = resolveChatFallback(lastBotText);
+    if (!fallback) return null;
+    return { ...entry, text: fallback };
+  };
+
   const setThinkingDelta = (delta) => {
     pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current + delta);
     setIsThinking(pendingRequestsRef.current > 0);
@@ -173,8 +254,10 @@ export default function HomeContent() {
       content: msg.text,
     }));
 
-  const enqueueMessage = (entry) => {
+  const enqueueMessage = (rawEntry) => {
+    const entry = sanitizeQueueEntry(rawEntry);
     if (!entry) return;
+    if (entry.type === 'task' && shouldSkipTaskStep(entry?.meta?.step)) return;
     const queue = queueRef.current;
     const existingIndex = queue.findIndex((item) => item.type === entry.type);
 
@@ -240,9 +323,10 @@ export default function HomeContent() {
       if (turnId !== latestGateTurnRef.current) return;
       const convinced = Boolean(response?.convinced);
       const reply = response?.reply || '';
+      const safeReply = isInitialMessage(reply) ? resolveGateFallback(getLastBotText()) : reply;
 
       if (!convinced) {
-        enqueueMessage({ type: 'task', text: reply || FALLBACKS.gate });
+        enqueueMessage({ type: 'task', text: safeReply || resolveGateFallback(getLastBotText()) });
         return;
       }
 
@@ -252,7 +336,7 @@ export default function HomeContent() {
       requestTaskMessage(TASK_STEPS.ASK_COLLEGE);
       requestChatResponse(turnId);
     } catch (error) {
-      enqueueMessage({ type: 'task', text: FALLBACKS.gate });
+      enqueueMessage({ type: 'task', text: resolveGateFallback(getLastBotText()) });
     } finally {
       setThinkingDelta(-1);
     }
@@ -269,14 +353,14 @@ export default function HomeContent() {
 
       if (turnId !== latestChatTurnRef.current) return;
       const reply = response?.reply || '';
-      const entry = { type: 'chat', text: reply || FALLBACKS.chat };
+      const entry = { type: 'chat', text: reply || resolveChatFallback(getLastBotText()) };
       if (awaitingTaskRef.current) {
         deferredChatRef.current = entry;
         return;
       }
       enqueueMessage(entry);
     } catch (error) {
-      const entry = { type: 'chat', text: FALLBACKS.chat };
+      const entry = { type: 'chat', text: resolveChatFallback(getLastBotText()) };
       if (awaitingTaskRef.current) {
         deferredChatRef.current = entry;
         return;
@@ -288,6 +372,7 @@ export default function HomeContent() {
   };
 
   const requestTaskMessage = async (step, meta = {}) => {
+    if (shouldSkipTaskStep(step)) return;
     const requestId = taskRequestIdRef.current + 1;
     taskRequestIdRef.current = requestId;
     setThinkingDelta(1);
@@ -307,9 +392,9 @@ export default function HomeContent() {
 
       if (requestId !== taskRequestIdRef.current) return;
       const reply = response?.reply || '';
-      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: metaWithStep });
+      enqueueMessage({ type: 'task', text: reply || resolveTaskFallback(step, getLastBotText()), meta: metaWithStep });
     } catch (error) {
-      enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
+      enqueueMessage({ type: 'task', text: resolveTaskFallback(step, getLastBotText()), meta: { ...meta, step } });
     } finally {
       setThinkingDelta(-1);
     }
