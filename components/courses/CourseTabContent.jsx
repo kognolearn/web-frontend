@@ -345,9 +345,9 @@ function ItemContent({
       }
       
       return (
-        <Quiz 
+        <Quiz
           key={id}
-          questions={data?.questions || data} 
+          questions={data?.questions || []}
           onQuestionChange={onQuizQuestionChange}
           onQuizCompleted={handleQuizCompleted}
           userId={userId}

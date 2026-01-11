@@ -1856,11 +1856,6 @@ function CreateCoursePageContent() {
               </div>
 
               <div className="space-y-4">
-                {coursePrompt && (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--foreground)] shadow-sm">
-                    {coursePrompt}
-                  </div>
-                )}
                 {/* Course Title & University */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
