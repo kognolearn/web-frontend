@@ -16,6 +16,7 @@ import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch } from "@/lib/api";
+import { isDesktopApp } from "@/lib/platform";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
@@ -177,6 +178,13 @@ export default function CoursePage() {
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
+
+  // Redirect web users to download page (backup guard - middleware handles this primarily)
+  useEffect(() => {
+    if (!isDesktopApp()) {
+      router.replace('/download');
+    }
+  }, [router]);
 
   useEffect(() => {
     if (isDeepStudyCourse) {

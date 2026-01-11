@@ -19,6 +19,7 @@ import {
 } from "@/utils/courseJobs";
 import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { isDesktopApp } from "@/lib/platform";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -86,6 +87,13 @@ export default function DashboardPage() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
   const profileMenuRef = useRef(null);
+
+  // Redirect web users to download page (backup guard - middleware handles this primarily)
+  useEffect(() => {
+    if (!isDesktopApp()) {
+      router.replace('/download');
+    }
+  }, [router]);
 
   // Close profile menu when clicking outside
   useEffect(() => {

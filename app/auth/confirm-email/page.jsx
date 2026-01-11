@@ -21,9 +21,9 @@ function ConfirmEmailContent() {
         // Check if user exists and email is confirmed
         if (user && user.email_confirmed_at) {
           setChecking(true);
-          // Email is confirmed, redirect to dashboard
+          // Email is confirmed, redirect to download
           setTimeout(() => {
-            router.push("/dashboard");
+            router.push("/download");
           }, 1000);
         }
       } catch (error) {
@@ -74,7 +74,7 @@ function ConfirmEmailContent() {
                 Email Confirmed!
               </h1>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Redirecting you to dashboard...
+                Redirecting you to download the app...
               </p>
             </div>
           </div>

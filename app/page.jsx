@@ -22,7 +22,7 @@ export default async function Home() {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect("/dashboard");
+    redirect("/download");
   }
 
   return <HomeContent />;

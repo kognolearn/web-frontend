@@ -3,17 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
 
 export default function CheckoutSuccessPage() {
   const router = useRouter();
   const [countdown, setCountdown] = useState(5);
+  const [isApp, setIsApp] = useState(false);
+
+  useEffect(() => {
+    setIsApp(isDesktopApp());
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          router.push("/dashboard");
+          // Desktop app users go to dashboard, web users go to download
+          router.push(getRedirectDestination("/dashboard"));
           return 0;
         }
         return prev - 1;
@@ -22,6 +29,10 @@ export default function CheckoutSuccessPage() {
 
     return () => clearInterval(timer);
   }, [router]);
+
+  const destination = isApp ? "/dashboard" : "/download";
+  const destinationLabel = isApp ? "dashboard" : "download";
+  const buttonLabel = isApp ? "Go to Dashboard" : "Download the App";
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center px-4">
@@ -52,21 +63,15 @@ export default function CheckoutSuccessPage() {
           </p>
 
           <div className="text-sm text-[var(--text-secondary)] mb-6">
-            Redirecting to dashboard in {countdown} seconds...
+            Redirecting to {destinationLabel} in {countdown} seconds...
           </div>
 
           <div className="flex flex-col gap-3">
             <Link
-              href="/dashboard"
+              href={destination}
               className="w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors"
             >
-              Go to Dashboard
-            </Link>
-            <Link
-              href="/subscription"
-              className="w-full py-3 px-4 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg font-medium hover:bg-[var(--border)] transition-colors"
-            >
-              View Subscription
+              {buttonLabel}
             </Link>
           </div>
         </div>

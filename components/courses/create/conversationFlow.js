@@ -75,40 +75,29 @@ export const CONVERSATION_FLOW = [
   // Step 5: Syllabus Intro
   {
     id: 'syllabus_intro',
-    kognoMessage: "Now let's get your course materials. The more detail you share - like course calendars, order of topics, or exam info - the better I can tailor this course to your current quarter's class. Do you have a syllabus or course outline you can share?",
+    kognoMessage: "Now let's get your course materials. The more detail you share - like course calendars, order of topics, or exam info - the better I can tailor this course to your current quarter's class.",
     inputType: 'options',
     field: 'syllabusChoice',
     options: [
-      { id: 'upload', label: 'Upload files', icon: 'upload', description: 'PDF, Word, PowerPoint, or images' },
-      { id: 'paste', label: 'Paste text', icon: 'text', description: 'Copy and paste your syllabus' },
-      { id: 'both', label: 'Both', icon: 'both', description: 'Upload files and paste text' },
-      { id: 'skip', label: 'Skip for now', icon: 'skip', description: "I'll add materials later" },
+      { id: 'upload', label: 'Upload content', icon: 'upload', description: 'Paste text and/or upload files (PDFs, docs, images)', recommended: true },
+      { id: 'skip', label: 'Skip', icon: 'skip', description: "I'll add materials later" },
     ],
     skippable: true,
   },
 
-  // Step 5a: Syllabus Upload
+  // Step 5a: Syllabus Content (combined text + files)
   {
-    id: 'syllabus_upload',
-    kognoMessage: "Drop your syllabus files here or click to upload. I can read PDFs, Word docs, PowerPoints, and images.",
-    inputType: 'file',
-    field: 'syllabusFiles',
-    condition: (state) => state.syllabusChoice === 'upload' || state.syllabusChoice === 'both',
+    id: 'syllabus_content',
+    kognoMessage: "Share your syllabus content below. You can paste text and/or attach files.",
+    inputType: 'content_with_attachments',
+    field: 'syllabusContent',
+    textField: 'syllabusText',
+    filesField: 'syllabusFiles',
+    condition: (state) => state.syllabusChoice === 'upload',
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
+    placeholder: 'Paste your syllabus, course outline, or any relevant text here...',
     skippable: true,
-    skipLabel: 'Done uploading',
-  },
-
-  // Step 5b: Syllabus Text
-  {
-    id: 'syllabus_text',
-    kognoMessage: "Paste any additional syllabus content or course objectives here:",
-    inputType: 'textarea',
-    field: 'syllabusText',
-    condition: (state) => state.syllabusChoice === 'paste' || state.syllabusChoice === 'both',
-    placeholder: 'Course objectives, weekly schedule, topics covered...',
-    skippable: true,
-    skipLabel: 'Skip',
+    skipLabel: 'Done',
   },
 
   // Step 6: Exam Intro
@@ -118,36 +107,25 @@ export const CONVERSATION_FLOW = [
     inputType: 'options',
     field: 'examChoice',
     options: [
-      { id: 'upload', label: 'Upload practice exams', icon: 'exam', description: 'Past tests or practice materials' },
-      { id: 'describe', label: 'Describe exam format', icon: 'text', description: 'Tell me about the exam' },
-      { id: 'both', label: 'Both', icon: 'both', description: 'Upload and describe' },
-      { id: 'skip', label: "I don't have any", icon: 'skip', description: 'Skip exam materials' },
+      { id: 'upload', label: 'Upload content', icon: 'exam', description: 'Paste text and/or upload files (past tests, study guides)', recommended: true },
+      { id: 'skip', label: 'Skip', icon: 'skip', description: "I don't have any exam materials" },
     ],
     skippable: true,
   },
 
-  // Step 6a: Exam Upload
+  // Step 6a: Exam Content (combined text + files)
   {
-    id: 'exam_upload',
-    kognoMessage: "Upload your practice exams or past tests:",
-    inputType: 'file',
-    field: 'examFiles',
-    condition: (state) => state.examChoice === 'upload' || state.examChoice === 'both',
+    id: 'exam_content',
+    kognoMessage: "Share your exam materials below. You can paste text and/or attach files.",
+    inputType: 'content_with_attachments',
+    field: 'examContent',
+    textField: 'examNotes',
+    filesField: 'examFiles',
+    condition: (state) => state.examChoice === 'upload',
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
+    placeholder: 'Paste exam info, topics covered, question types, or any relevant details...',
     skippable: true,
-    skipLabel: 'Done uploading',
-  },
-
-  // Step 6b: Exam Notes
-  {
-    id: 'exam_notes',
-    kognoMessage: "Tell me about the exam - topics covered, question types, chapters, anything that helps:",
-    inputType: 'textarea',
-    field: 'examNotes',
-    condition: (state) => state.examChoice === 'describe' || state.examChoice === 'both',
-    placeholder: 'e.g., Chapters 1-4, focus on probability, multiple choice and short answer...',
-    skippable: true,
-    skipLabel: 'Skip',
+    skipLabel: 'Done',
   },
 
   // Step 7: Generate Topics Prompt

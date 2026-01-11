@@ -6,6 +6,7 @@ import { authFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
 import CourseLimitModal from "@/components/courses/CourseLimitModal";
+import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
 
 export default function JoinCoursePage() {
   const router = useRouter();
@@ -98,8 +99,12 @@ export default function JoinCoursePage() {
         throw new Error(data.error || "Failed to join course");
       }
 
-      // Redirect to the new course
-      router.push(`/courses/${data.courseId}`);
+      // Desktop app users go to the course, web users go to download
+      if (isDesktopApp()) {
+        router.push(`/courses/${data.courseId}`);
+      } else {
+        router.push("/download");
+      }
     } catch (err) {
       console.error("Error joining course:", err);
       setError(err.message);
@@ -133,10 +138,10 @@ export default function JoinCoursePage() {
           <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2">Invalid Link</h1>
           <p className="text-[var(--muted-foreground)] mb-6">{error}</p>
           <Link
-            href="/dashboard"
+            href="/download"
             className="inline-block px-6 py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:bg-[var(--primary-hover)] transition-colors"
           >
-            Go to Dashboard
+            Download the App
           </Link>
         </div>
       </div>
@@ -210,7 +215,7 @@ export default function JoinCoursePage() {
           )}
 
           <Link
-            href="/dashboard"
+            href="/download"
             className="block w-full py-3 px-4 text-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
             Cancel

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { isDesktopApp } from "@/lib/platform";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -46,6 +47,13 @@ export default function SettingsPage() {
 
   // Course creation UI preference
   const [courseCreateUiMode, setCourseCreateUiMode] = useState("chat");
+
+  // Redirect web users to download page (backup guard - middleware handles this primarily)
+  useEffect(() => {
+    if (!isDesktopApp()) {
+      router.replace('/download');
+    }
+  }, [router]);
 
   useEffect(() => {
     async function loadUser() {

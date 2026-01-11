@@ -27,6 +27,7 @@ import {
 import TopicExplorer from "@/components/courses/TopicExplorer";
 import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
 import { motion } from "framer-motion";
+import { getRedirectDestination } from "@/lib/platform";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
@@ -1483,9 +1484,9 @@ function CreateCoursePageContent() {
     const redirectToDashboard = () => {
       if (navigationTriggered) return;
       navigationTriggered = true;
-      
-      // Navigate to dashboard first
-      router.push("/dashboard");
+
+      // Desktop app users go to dashboard, web users go to download
+      router.push(getRedirectDestination("/dashboard"));
       
       // Dispatch multiple refresh events spaced 1 second apart to ensure the dashboard picks up the new course
       // This is needed because on production, the initial event may fire before the dashboard is ready
@@ -1719,7 +1720,8 @@ function CreateCoursePageContent() {
   const showFloatingNav = !navVisibility.top && !navVisibility.bottom;
 
   const handleFloatingBack = () => {
-    if (currentStep === 1) router.push("/dashboard");
+    // Desktop app users go to dashboard, web users go to download
+    if (currentStep === 1) router.push(getRedirectDestination("/dashboard"));
     else setCurrentStep(prev => prev - 1);
   };
 

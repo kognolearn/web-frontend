@@ -114,20 +114,28 @@ function OptionCard({ option, onSelect, isSelected, disabled }) {
       whileHover={{ scale: disabled ? 1 : 1.02 }}
       whileTap={{ scale: disabled ? 1 : 0.98 }}
       className={`
-        w-full text-left p-4 rounded-xl border transition-all
+        w-full text-left p-4 rounded-xl border transition-all relative
         ${
           isSelected
             ? "border-[var(--primary)] bg-[var(--primary)]/10"
+            : option.recommended
+            ? "border-[var(--primary)]/60 bg-[var(--surface-1)] hover:border-[var(--primary)] hover:bg-[var(--surface-2)]"
             : "border-[var(--border)] bg-[var(--surface-1)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]"
         }
         ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
       `}
     >
+      {/* Recommended badge */}
+      {option.recommended && (
+        <div className="absolute -top-2 left-4 px-2 py-0.5 bg-[var(--primary)] text-white text-[10px] font-semibold uppercase rounded-full tracking-wide">
+          Recommended
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <div
           className={`
             flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center
-            ${isSelected ? "bg-[var(--primary)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"}
+            ${isSelected ? "bg-[var(--primary)] text-white" : option.recommended ? "bg-[var(--primary)]/20 text-[var(--primary)]" : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"}
           `}
         >
           {iconMap[option.icon] || iconMap.text}

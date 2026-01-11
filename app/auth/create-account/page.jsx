@@ -35,7 +35,7 @@ export default async function CreateAccountPage({ searchParams }) {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect(redirectTo || "/dashboard");
+    redirect("/download");
   }
 
   return (

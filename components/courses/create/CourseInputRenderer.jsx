@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import DurationInput from "@/components/ui/DurationInput";
 
 /**
@@ -182,6 +182,229 @@ function FileUploadZone({
 }
 
 /**
+ * Combined content input with auto-growing textarea and file attachments
+ */
+function ContentWithAttachments({
+  text = "",
+  onTextChange,
+  files = [],
+  onFilesChange,
+  onFileRemove,
+  onSubmit,
+  accept,
+  disabled = false,
+  placeholder = "",
+}) {
+  const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  // Calculate rows based on content (1-4 rows)
+  const calculateRows = useCallback((value) => {
+    if (!value) return 1;
+    const lineCount = (value.match(/\n/g) || []).length + 1;
+    // Estimate character-based rows (roughly 60 chars per line)
+    const charRows = Math.ceil(value.length / 60);
+    return Math.min(4, Math.max(1, Math.max(lineCount, charRows)));
+  }, []);
+
+  const [rows, setRows] = useState(() => calculateRows(text));
+
+  useEffect(() => {
+    setRows(calculateRows(text));
+  }, [text, calculateRows]);
+
+  const handleTextChange = useCallback((e) => {
+    const newValue = e.target.value;
+    onTextChange(newValue);
+    setRows(calculateRows(newValue));
+  }, [onTextChange, calculateRows]);
+
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "copy";
+    }
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  }, [isDragActive]);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const related = e.relatedTarget;
+    if (
+      typeof Node !== "undefined" &&
+      related instanceof Node &&
+      e.currentTarget.contains(related)
+    ) {
+      return;
+    }
+    setIsDragActive(false);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const droppedFiles = Array.from(e.dataTransfer?.files || []);
+    if (droppedFiles.length > 0) {
+      onFilesChange(droppedFiles);
+    }
+  }, [onFilesChange]);
+
+  const handleFileChange = useCallback((e) => {
+    if (!e.target.files) return;
+    const selectedFiles = Array.from(e.target.files);
+    if (selectedFiles.length > 0) {
+      onFilesChange(selectedFiles);
+    }
+    e.target.value = "";
+  }, [onFilesChange]);
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const hasContent = text.trim().length > 0 || files.length > 0;
+
+  return (
+    <div
+      className="space-y-3"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Combined input area */}
+      <div
+        className={`
+          relative bg-[var(--surface-2)] border rounded-xl transition-all
+          ${isDragActive
+            ? "border-[var(--primary)] bg-[var(--primary)]/5"
+            : "border-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--primary)]/50 focus-within:border-[var(--primary)]"
+          }
+          ${disabled ? "opacity-50" : ""}
+        `}
+      >
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleTextChange}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={rows}
+          className="w-full px-4 pt-3 pb-2 bg-transparent text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none resize-none"
+        />
+
+        {/* Bottom bar with attachment button */}
+        <div className="flex items-center justify-between px-3 pb-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={accept}
+            onChange={handleFileChange}
+            disabled={disabled}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded-lg transition-all"
+            title="Attach files"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            <span>Attach files</span>
+          </button>
+
+          {isDragActive && (
+            <span className="text-sm text-[var(--primary)] font-medium">
+              Drop files here
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* File list */}
+      {files.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--muted-foreground)] font-medium uppercase tracking-wide">
+            Attached files ({files.length})
+          </p>
+          {files.map((file, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-3 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]"
+            >
+              <div className="w-8 h-8 rounded bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">
+                <svg
+                  className="w-4 h-4 text-[var(--primary)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--foreground)] truncate">{file.name}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">{formatFileSize(file.size)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onFileRemove(file.name)}
+                disabled={disabled}
+                className="p-1.5 text-[var(--muted-foreground)] hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded transition-colors"
+                title="Remove file"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => onSubmit({ text, files })}
+          disabled={disabled || !hasContent}
+          className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center gap-2"
+        >
+          <span>Done</span>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Dynamic input renderer based on current question type
  */
 export default function CourseInputRenderer({
@@ -200,6 +423,10 @@ export default function CourseInputRenderer({
   minutes,
   onHoursChange,
   onMinutesChange,
+  // Props for content_with_attachments
+  contentText = "",
+  onContentTextChange,
+  onContentSubmit,
 }) {
   // For text_confirm, use defaultValue if no value provided
   const initialValue = inputType === "text_confirm" && defaultValue ? defaultValue : value;
@@ -371,6 +598,23 @@ export default function CourseInputRenderer({
         onFileRemove={onFileRemove}
         accept={accept}
         disabled={disabled}
+      />
+    );
+  }
+
+  // Combined content input with text and file attachments
+  if (inputType === "content_with_attachments") {
+    return (
+      <ContentWithAttachments
+        text={contentText}
+        onTextChange={onContentTextChange}
+        files={files}
+        onFilesChange={onFileChange}
+        onFileRemove={onFileRemove}
+        onSubmit={onContentSubmit}
+        accept={accept}
+        disabled={disabled}
+        placeholder={placeholder}
       />
     );
   }

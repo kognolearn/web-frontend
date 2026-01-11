@@ -37,7 +37,7 @@ export default function AuthCallbackPage() {
               setStatus("success");
               // Wait a moment to show success message, then redirect
               setTimeout(() => {
-                router.push("/dashboard");
+                router.push("/download");
               }, 2000);
             }
           } else {
@@ -49,7 +49,7 @@ export default function AuthCallbackPage() {
           const { data: { user } } = await supabase.auth.getUser();
           
           if (user) {
-            router.push("/dashboard");
+            router.push("/download");
           } else {
             setStatus("error");
             setError("Invalid confirmation link");
@@ -125,7 +125,7 @@ export default function AuthCallbackPage() {
                 Your account has been successfully verified.
               </p>
               <p className="text-sm text-[var(--muted-foreground)] mt-2">
-                Redirecting you to dashboard...
+                Redirecting you to download the app...
               </p>
             </div>
           )}

@@ -29,6 +29,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   const [previousResponses, setPreviousResponses] = useState({});
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
+  const [contentText, setContentText] = useState(""); // Text content for combined input
   const messagesEndRef = useRef(null);
   const hasInitialized = useRef(false);
 
@@ -304,12 +305,18 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             flowState.setSyllabusText(value);
             stateOverrides.syllabusText = value;
             break;
+          case "syllabusContent":
+            // Combined text + files - handled by handleContentSubmit
+            break;
           case "examFiles":
             // Files are handled separately
             break;
           case "examNotes":
             flowState.setExamNotes(value);
             stateOverrides.examNotes = value;
+            break;
+          case "examContent":
+            // Combined text + files - handled by handleContentSubmit
             break;
           case "topicModifyPrompt":
             // Handled via action
@@ -451,13 +458,16 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     (files) => {
       if (!currentStep) return;
 
-      if (currentStep.field === "syllabusFiles") {
+      // Check filesField for combined input, or field for legacy file-only input
+      const filesField = currentStep.filesField || currentStep.field;
+
+      if (filesField === "syllabusFiles") {
         flowState.handleSyllabusFileChange(files);
-      } else if (currentStep.field === "examFiles") {
+      } else if (filesField === "examFiles") {
         flowState.handleExamFileChange(files);
       }
 
-      // Don't auto-advance - user clicks "Done uploading"
+      // Don't auto-advance - user clicks "Done uploading" or submits content
     },
     [currentStep, flowState]
   );
@@ -467,9 +477,12 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     (fileName) => {
       if (!currentStep) return;
 
-      if (currentStep.field === "syllabusFiles") {
+      // Check filesField for combined input, or field for legacy file-only input
+      const filesField = currentStep.filesField || currentStep.field;
+
+      if (filesField === "syllabusFiles") {
         flowState.handleRemoveSyllabusFile(fileName);
-      } else if (currentStep.field === "examFiles") {
+      } else if (filesField === "examFiles") {
         flowState.handleRemoveExamFile(fileName);
       }
     },
@@ -480,14 +493,78 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   const currentFiles = useMemo(() => {
     if (!currentStep) return [];
 
-    if (currentStep.field === "syllabusFiles") {
+    // Check filesField for combined input, or field for legacy file-only input
+    const filesField = currentStep.filesField || currentStep.field;
+
+    if (filesField === "syllabusFiles") {
       return flowState.syllabusFiles;
-    } else if (currentStep.field === "examFiles") {
+    } else if (filesField === "examFiles") {
       return flowState.examFiles;
     }
 
     return [];
   }, [currentStep, flowState.syllabusFiles, flowState.examFiles]);
+
+  // Handle content text change for combined input
+  const handleContentTextChange = useCallback((text) => {
+    setContentText(text);
+  }, []);
+
+  // Handle combined content submission (text + files)
+  const handleContentSubmit = useCallback(
+    async (text, files) => {
+      if (!currentStep) return;
+
+      // Build display text for the user message
+      const hasText = text && text.trim().length > 0;
+      const hasFiles = files && files.length > 0;
+
+      let displayText = "";
+      if (hasText && hasFiles) {
+        displayText = `${text.trim().substring(0, 100)}${text.length > 100 ? "..." : ""} (+ ${files.length} file${files.length > 1 ? "s" : ""})`;
+      } else if (hasText) {
+        displayText = text.trim().substring(0, 150) + (text.length > 150 ? "..." : "");
+      } else if (hasFiles) {
+        displayText = `${files.length} file${files.length > 1 ? "s" : ""} uploaded`;
+      } else {
+        displayText = "(No content added)";
+      }
+
+      // Add user response message
+      addUserResponse(
+        { text: text || "", fileCount: files?.length || 0 },
+        displayText,
+        { files, stepId: currentStep.id }
+      );
+
+      // Update the flow state
+      const textField = currentStep.textField;
+      const filesField = currentStep.filesField;
+
+      if (textField === "syllabusText") {
+        flowState.setSyllabusText(text || "");
+      } else if (textField === "examNotes") {
+        flowState.setExamNotes(text || "");
+      }
+
+      // Files should already be in state from handleFileUpload calls
+      // But let's make sure they're set (in case of direct submission)
+      if (files && files.length > 0) {
+        if (filesField === "syllabusFiles") {
+          // Files already tracked via handleFileUpload
+        } else if (filesField === "examFiles") {
+          // Files already tracked via handleFileUpload
+        }
+      }
+
+      // Reset content text for next input
+      setContentText("");
+
+      // Advance to next step
+      advanceToNextStep();
+    },
+    [currentStep, flowState, addUserResponse, advanceToNextStep]
+  );
 
   return {
     // Messages
@@ -514,6 +591,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     handleFileUpload,
     handleFileRemove,
     goBack,
+
+    // Combined content handlers
+    contentText,
+    handleContentTextChange,
+    handleContentSubmit,
 
     // Files
     currentFiles,

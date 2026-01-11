@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
+import { getRedirectDestination } from "@/lib/platform";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { upsertCourseCreateJob } from "@/utils/courseJobs";
 import { getAsyncDisabledMessage } from "@/utils/asyncJobs";
@@ -105,13 +106,27 @@ function fileToBase64(file) {
   });
 }
 
-async function buildFilePayload(files, { contentKey = "base64", includeSize = true } = {}) {
+async function buildFilePayload(files, { contentKey = "base64", includeSize = true, useOpenRouterFormat = false } = {}) {
   const payloads = await Promise.all(
     files.map(async (file) => {
       const base64 = await fileToBase64(file);
+      const mimeType = file.type || "application/octet-stream";
+
+      // OpenRouter format for file uploads
+      if (useOpenRouterFormat) {
+        return {
+          type: "file",
+          file: {
+            filename: file.name,
+            file_data: `data:${mimeType};base64,${base64}`,
+          },
+        };
+      }
+
+      // Legacy format
       const payload = {
         name: file.name,
-        type: file.type || "application/octet-stream",
+        type: mimeType,
         [contentKey]: base64,
       };
       if (includeSize) {
@@ -766,11 +781,11 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     }
 
     if (syllabusFiles.length > 0) {
-      payload.syllabusFiles = await buildFilePayload(syllabusFiles);
+      payload.syllabusFiles = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
     }
 
     if (examFiles.length > 0) {
-      payload.examFiles = await buildFilePayload(examFiles);
+      payload.examFiles = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
     }
 
     const MAX_RETRIES = 3;
@@ -974,7 +989,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       if (navigationTriggered) return;
       navigationTriggered = true;
 
-      router.push("/dashboard");
+      // Desktop app users go to dashboard, web users go to download
+      router.push(getRedirectDestination("/dashboard"));
 
       const dispatchRefreshEvent = () => {
         try {
@@ -1043,7 +1059,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
       if (syllabusFiles.length > 0) {
         safeSetCourseGenerationMessage("Encoding syllabus materials…");
-        const syllabusPayload = await buildFilePayload(syllabusFiles);
+        const syllabusPayload = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
         if (syllabusPayload.length > 0) {
           payload.syllabusFiles = syllabusPayload;
         }
@@ -1056,7 +1072,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
       if (examFiles.length > 0) {
         safeSetCourseGenerationMessage("Packaging exam references…");
-        const examPayload = await buildFilePayload(examFiles, { contentKey: "content", includeSize: false });
+        const examPayload = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
         if (examPayload.length > 0) {
           payload.examFiles = examPayload;
         }

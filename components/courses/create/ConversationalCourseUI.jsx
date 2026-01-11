@@ -189,6 +189,38 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       );
     }
 
+    // Combined content with attachments (text + files)
+    if (inputType === "content_with_attachments") {
+      return (
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
+          <CourseInputRenderer
+            inputType="content_with_attachments"
+            placeholder={placeholder}
+            disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+            contentText={conversation.contentText}
+            onContentTextChange={conversation.handleContentTextChange}
+            files={conversation.currentFiles}
+            onFileChange={conversation.handleFileUpload}
+            onFileRemove={conversation.handleFileRemove}
+            onContentSubmit={() => {
+              conversation.handleContentSubmit(conversation.contentText, conversation.currentFiles);
+            }}
+            accept={accept}
+          />
+          {/* Skip button */}
+          {skippable && (
+            <button
+              type="button"
+              onClick={conversation.handleSkip}
+              className="w-full mt-2 py-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              {skipLabel || "Skip"}
+            </button>
+          )}
+        </div>
+      );
+    }
+
     // Format display text based on input type
     const handleInputSubmit = (value) => {
       let displayText = value;

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { cleanupAnonUser } from "@/lib/onboarding";
+import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 
@@ -61,7 +62,8 @@ export default function SignInForm() {
 
       if (data?.user) {
         await cleanupAnonUser();
-        router.push(redirectTo || "/dashboard");
+        // Desktop app users go to dashboard, web users go to download
+        router.push(getRedirectDestination(redirectTo || "/dashboard"));
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
