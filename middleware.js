@@ -13,6 +13,7 @@ const WEB_ALLOWED_PATHS = [
   '/share',           // Share pages
   '/api',             // API routes (needed by desktop app)
   '/help',            // Help pages
+  '/admin',           // Admin routes (has its own auth flow)
 ]
 
 /**
@@ -111,6 +112,53 @@ export async function middleware(request) {
         return NextResponse.redirect('https://kognolearn.com')
       }
     }
+  }
+
+  // Handle admin routes with separate auth flow
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    // Always allow the admin sign-in page
+    if (request.nextUrl.pathname === '/admin/sign-in') {
+      // If already authenticated and is admin, redirect to admin dashboard
+      if (user) {
+        const { data: adminData } = await supabase
+          .from('admins')
+          .select('email')
+          .eq('email', user.email)
+          .single()
+
+        if (adminData) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/admin'
+          return NextResponse.redirect(url)
+        }
+      }
+      return response
+    }
+
+    // For other admin routes, require authentication
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/sign-in'
+      return NextResponse.redirect(url)
+    }
+
+    // Check if user is admin
+    const { data: adminData, error } = await supabase
+      .from('admins')
+      .select('email')
+      .eq('email', user.email)
+      .single()
+
+    if (error || !adminData) {
+      // Not an admin - redirect to admin sign-in with error
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/sign-in'
+      url.searchParams.set('error', 'not_admin')
+      return NextResponse.redirect(url)
+    }
+
+    // User is admin, allow access
+    return response
   }
 
   // Redirect authenticated web users away from product routes to /download
