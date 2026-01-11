@@ -191,7 +191,6 @@ export default function CourseInputRenderer({
   onChange,
   onSubmit,
   placeholder = "",
-  confirmPlaceholder = "",
   disabled = false,
   files = [],
   onFileChange,
@@ -260,66 +259,78 @@ export default function CourseInputRenderer({
   // Text confirm input (for pre-filled values that can be confirmed or changed)
   if (inputType === "text_confirm") {
     const hasDefaultValue = defaultValue && defaultValue.trim();
-    const valueChanged = localValue !== defaultValue;
+    const [showInput, setShowInput] = useState(!hasDefaultValue);
 
     const handleConfirmKeyDown = (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        // Submit either the typed value or the default value
-        const valueToSubmit = localValue.trim() || defaultValue;
-        if (valueToSubmit) {
-          onSubmit(valueToSubmit);
+        if (localValue.trim()) {
+          onSubmit(localValue);
           setLocalValue("");
         }
       }
     };
 
     const handleConfirmSubmit = () => {
-      const valueToSubmit = localValue.trim() || defaultValue;
-      if (valueToSubmit) {
-        onSubmit(valueToSubmit);
+      if (localValue.trim()) {
+        onSubmit(localValue);
         setLocalValue("");
       }
     };
 
-    return (
-      <div className="space-y-2">
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <input
-              ref={inputRef}
-              type="text"
-              value={localValue}
-              onChange={(e) => setLocalValue(e.target.value)}
-              onKeyDown={handleConfirmKeyDown}
-              placeholder={hasDefaultValue ? confirmPlaceholder || "Type to change or press Enter to confirm" : placeholder}
-              disabled={disabled}
-              className="w-full px-4 py-3 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all"
-            />
-          </div>
+    // If there's a default value and we haven't clicked "No" yet, show Yes/No buttons
+    if (hasDefaultValue && !showInput) {
+      return (
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={handleConfirmSubmit}
-            disabled={disabled || (!localValue.trim() && !defaultValue)}
-            className="flex-shrink-0 p-3 rounded-xl bg-[var(--primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-            title={hasDefaultValue && !valueChanged ? "Confirm" : "Submit"}
+            onClick={() => onSubmit(defaultValue)}
+            disabled={disabled}
+            className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
-            {hasDefaultValue && !valueChanged ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-            )}
+            Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowInput(true);
+              setLocalValue("");
+            }}
+            disabled={disabled}
+            className="px-6 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-muted)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            No
           </button>
         </div>
-        {hasDefaultValue && !localValue && (
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Press Enter to confirm or type a different institution
-          </p>
-        )}
+      );
+    }
+
+    // Show text input (either no default value, or user clicked "No")
+    return (
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onKeyDown={handleConfirmKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            autoFocus={hasDefaultValue}
+            className="w-full px-4 py-3 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleConfirmSubmit}
+          disabled={disabled || !localValue.trim()}
+          className="flex-shrink-0 p-3 rounded-xl bg-[var(--primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          </svg>
+        </button>
       </div>
     );
   }

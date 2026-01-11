@@ -63,6 +63,48 @@ const UserMessage = ({ children }) => (
   </motion.div>
 );
 
+const CollegeInputForm = ({ onSubmit }) => {
+  const [value, setValue] = useState('');
+
+  const handleSubmit = () => {
+    if (value.trim()) {
+      onSubmit(value.trim());
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-end gap-2 mb-4"
+    >
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Enter your college name..."
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        className="flex-1 px-4 py-3 bg-[var(--surface-1)] border border-white/10 rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={!value.trim()}
+        className="p-3 bg-[var(--primary)] text-white rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </button>
+    </motion.div>
+  );
+};
+
 export default function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,6 +119,8 @@ export default function HomeContent() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
+  const [collegeConfirmation, setCollegeConfirmation] = useState(null); // college name to confirm
+  const [showCollegeInput, setShowCollegeInput] = useState(false); // show input after clicking "No"
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -152,6 +196,23 @@ export default function HomeContent() {
     } else if (meta?.step && meta.step !== TASK_STEPS.SHOW_TOPICS) {
       setShowTopics(false);
     }
+
+    // Check if this is a college confirmation message (e.g., "At MIT, right?")
+    if (meta?.step === TASK_STEPS.ASK_COLLEGE && text) {
+      const confirmMatch = text.match(/^(?:At|at)\s+(.+?)(?:,\s*|\s+)right\?$/i);
+      if (confirmMatch && confirmMatch[1]) {
+        setCollegeConfirmation(confirmMatch[1].trim());
+        setShowCollegeInput(false);
+      } else {
+        setCollegeConfirmation(null);
+        setShowCollegeInput(false);
+      }
+    } else if (meta?.step && meta.step !== TASK_STEPS.ASK_COLLEGE) {
+      // Clear college confirmation when moving to other steps
+      setCollegeConfirmation(null);
+      setShowCollegeInput(false);
+    }
+
     if (type === 'task' && awaitingTaskRef.current) {
       awaitingTaskRef.current = false;
       if (deferredChatRef.current) {
@@ -479,6 +540,58 @@ export default function HomeContent() {
 
   const isInputDisabled = isRedirecting;
 
+  // Handler for confirming college (user clicked "Yes")
+  const handleCollegeConfirm = () => {
+    if (!collegeConfirmation) return;
+
+    addUserMessage('Yes');
+    setCollegeConfirmation(null);
+    setShowCollegeInput(false);
+
+    if (!hasStarted) {
+      void ensureOnboardingSession();
+    }
+
+    pendingBotRef.current = true;
+    dropQueuedChat();
+    flushQueue();
+
+    const turnId = ++turnCounterRef.current;
+
+    // Process as if user confirmed the college
+    updateData({ collegeName: collegeConfirmation });
+    setTaskStepSafe(TASK_STEPS.ASK_COURSE);
+    requestTaskMessage(TASK_STEPS.ASK_COURSE);
+    requestChatResponse(turnId);
+  };
+
+  // Handler for declining college confirmation (user clicked "No")
+  const handleCollegeDecline = () => {
+    setShowCollegeInput(true);
+  };
+
+  // Handler for submitting a different college name
+  const handleCollegeSubmit = (collegeName) => {
+    addUserMessage(collegeName);
+    setCollegeConfirmation(null);
+    setShowCollegeInput(false);
+
+    if (!hasStarted) {
+      void ensureOnboardingSession();
+    }
+
+    pendingBotRef.current = true;
+    dropQueuedChat();
+    flushQueue();
+
+    const turnId = ++turnCounterRef.current;
+
+    updateData({ collegeName });
+    setTaskStepSafe(TASK_STEPS.ASK_COURSE);
+    requestTaskMessage(TASK_STEPS.ASK_COURSE);
+    requestChatResponse(turnId);
+  };
+
   return (
     <div className="relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden">
       {/* Background effects */}
@@ -573,6 +686,33 @@ export default function HomeContent() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* College confirmation buttons */}
+          {collegeConfirmation && !showCollegeInput && !isThinking && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 mb-4"
+            >
+              <button
+                onClick={handleCollegeConfirm}
+                className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+              >
+                Yes
+              </button>
+              <button
+                onClick={handleCollegeDecline}
+                className="px-6 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+              >
+                No
+              </button>
+            </motion.div>
+          )}
+
+          {/* College input when user clicked "No" */}
+          {showCollegeInput && !isThinking && (
+            <CollegeInputForm onSubmit={handleCollegeSubmit} />
           )}
 
           {/* Topic chips when available */}
