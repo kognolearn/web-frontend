@@ -9,6 +9,10 @@ import * as api from '@/lib/onboarding';
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const ONBOARDING_SESSION_KEY = "kogno_onboarding_session_v1";
+const ONBOARDING_SESSION_VERSION = 1;
+const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
+const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
 
 const TASK_STEPS = {
@@ -123,6 +127,7 @@ export default function HomeContent() {
   const [taskStep, setTaskStep] = useState(TASK_STEPS.NONE);
   const [isJobRunning, setIsJobRunning] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [chatEnded, setChatEnded] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
   const [collegeConfirmation, setCollegeConfirmation] = useState(null); // college name to confirm
@@ -131,6 +136,12 @@ export default function HomeContent() {
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
   const onboardingSessionStartedRef = useRef(false);
+  const sessionActiveRef = useRef(false);
+  const restoredSessionRef = useRef(false);
+  const chatEndedRef = useRef(false);
+  const tabIdRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const sessionOwnerRef = useRef(false);
   const messagesRef = useRef([]);
   const queueRef = useRef([]);
   const pendingBotRef = useRef(false);
@@ -155,6 +166,85 @@ export default function HomeContent() {
     }
   };
 
+  const generateSessionId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `session-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  };
+
+  const getTabId = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const existing = window.sessionStorage.getItem(ONBOARDING_TAB_KEY);
+      if (existing) return existing;
+      const created = generateSessionId();
+      window.sessionStorage.setItem(ONBOARDING_TAB_KEY, created);
+      return created;
+    } catch (error) {
+      console.warn('Unable to access sessionStorage for tab id:', error);
+      return generateSessionId();
+    }
+  };
+
+  const initTabId = () => {
+    if (!tabIdRef.current) {
+      tabIdRef.current = getTabId();
+    }
+    return tabIdRef.current;
+  };
+
+  const readStoredSession = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(ONBOARDING_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed?.version !== ONBOARDING_SESSION_VERSION) return null;
+      return parsed;
+    } catch (error) {
+      console.warn('Unable to read onboarding session:', error);
+      return null;
+    }
+  };
+
+  const clearStoredSession = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(ONBOARDING_SESSION_KEY);
+    } catch (error) {
+      console.warn('Unable to clear onboarding session:', error);
+    }
+  };
+
+  const persistSession = (overrides = {}) => {
+    if (typeof window === 'undefined') return;
+    if (!sessionActiveRef.current || !sessionOwnerRef.current) return;
+    const tabId = initTabId();
+    try {
+      const payload = {
+        version: ONBOARDING_SESSION_VERSION,
+        sessionId: sessionIdRef.current,
+        ownerTabId: tabId,
+        status: overrides.status || (flowCompleteRef.current ? 'completed' : 'active'),
+        updatedAt: Date.now(),
+        messages: messagesRef.current,
+        taskStep: taskStepRef.current,
+        data: dataRef.current,
+        topics: topicsRef.current,
+        showTopics: typeof overrides.showTopics === 'boolean' ? overrides.showTopics : showTopics,
+        jobId: overrides.jobId ?? jobId,
+        isJobRunning: overrides.isJobRunning ?? isJobRunning,
+        redirectUrl: overrides.redirectUrl ?? redirectUrlRef.current,
+        gateConvinced: gateConvincedRef.current,
+        hasStarted: overrides.hasStarted ?? hasStarted,
+      };
+      window.localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Unable to persist onboarding session:', error);
+    }
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, topics, isThinking, isJobRunning]);
@@ -173,8 +263,74 @@ export default function HomeContent() {
     }
   }, [refCode]);
 
+  useEffect(() => {
+    initTabId();
+    const stored = readStoredSession();
+    if (!stored || stored.status !== 'active') return;
+
+    const isOwner = stored.ownerTabId && stored.ownerTabId === tabIdRef.current;
+    if (!isOwner) {
+      sessionOwnerRef.current = false;
+      return;
+    }
+
+    restoredSessionRef.current = true;
+    sessionActiveRef.current = true;
+    onboardingSessionStartedRef.current = true;
+    setHasStarted(true);
+    sessionIdRef.current = stored.sessionId || null;
+    sessionOwnerRef.current = true;
+
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = generateSessionId();
+    }
+
+    if (Array.isArray(stored.messages) && stored.messages.length > 0) {
+      const restored = syncMessages(stored.messages);
+      setMessages(restored);
+    }
+
+    if (stored.data && typeof stored.data === 'object') {
+      updateData(stored.data);
+    }
+
+    if (Array.isArray(stored.topics)) {
+      setTopicsSafe(stored.topics);
+    }
+
+    if (typeof stored.showTopics === 'boolean') {
+      setShowTopics(stored.showTopics);
+    }
+
+    if (stored.jobId) {
+      setJobId(stored.jobId);
+    }
+
+    if (stored.redirectUrl) {
+      redirectUrlRef.current = stored.redirectUrl;
+    }
+
+    if (stored.taskStep) {
+      setTaskStepSafe(stored.taskStep);
+    }
+
+    if (stored.isJobRunning || stored.taskStep === TASK_STEPS.WAIT_JOB) {
+      setIsJobRunning(true);
+    }
+
+    if (stored.gateConvinced || (stored.taskStep && stored.taskStep !== TASK_STEPS.NONE)) {
+      gateConvincedRef.current = true;
+    }
+
+    if (sessionOwnerRef.current && stored.taskStep === TASK_STEPS.WAIT_TOPICS &&
+        (!Array.isArray(stored.topics) || stored.topics.length === 0)) {
+      fetchTopicsAndAsk();
+    }
+  }, []);
+
   // Initial greeting
   useEffect(() => {
+    if (restoredSessionRef.current) return;
     const timer = setTimeout(() => {
       addBotMessage(INITIAL_MESSAGE, 'task');
     }, 400);
@@ -187,6 +343,11 @@ export default function HomeContent() {
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
     }
   }, [input]);
+
+  useEffect(() => {
+    if (!sessionActiveRef.current) return;
+    persistSession();
+  }, [messages, taskStep, topics, showTopics, jobId, isJobRunning, hasStarted]);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -227,6 +388,53 @@ export default function HomeContent() {
     }
   };
 
+  const markChatEnded = () => {
+    if (chatEndedRef.current) return;
+    chatEndedRef.current = true;
+    setChatEnded(true);
+    sessionActiveRef.current = false;
+    sessionOwnerRef.current = false;
+    pendingRequestsRef.current = 0;
+    setIsThinking(false);
+    setIsJobRunning(false);
+    setIsRedirecting(false);
+    setShowTopics(false);
+    awaitingTaskRef.current = false;
+    deferredChatRef.current = null;
+    pendingBotRef.current = false;
+    queueRef.current = [];
+    setTaskStepSafe(TASK_STEPS.DONE);
+    addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
+  };
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== ONBOARDING_SESSION_KEY) return;
+      if (!sessionOwnerRef.current) return;
+      if (!event.newValue) {
+        if (sessionActiveRef.current) {
+          markChatEnded();
+        }
+        return;
+      }
+      try {
+        const next = JSON.parse(event.newValue);
+        if (next?.version !== ONBOARDING_SESSION_VERSION) return;
+        const tabId = initTabId();
+        if (sessionIdRef.current && next.sessionId && next.sessionId !== sessionIdRef.current) {
+          markChatEnded();
+        } else if (!sessionIdRef.current && next.ownerTabId && next.ownerTabId !== tabId) {
+          markChatEnded();
+        }
+      } catch (error) {
+        console.warn('Unable to parse onboarding session update:', error);
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   const addUserMessage = (text) => {
     const message = { type: 'user', text, id: Date.now() + Math.random() };
     appendMessage(message);
@@ -249,6 +457,64 @@ export default function HomeContent() {
   const setThinkingDelta = (delta) => {
     pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current + delta);
     setIsThinking(pendingRequestsRef.current > 0);
+  };
+
+  const resetSessionState = () => {
+    messagesRef.current = [];
+    setMessages([]);
+    setInput('');
+    setCollegeConfirmation(null);
+    setShowCollegeInput(false);
+    setShowTopics(false);
+    setTopicsSafe([]);
+    setJobId(null);
+    setIsJobRunning(false);
+    setIsRedirecting(false);
+    setHasStarted(false);
+    setTaskStepSafe(TASK_STEPS.NONE);
+    pendingRequestsRef.current = 0;
+    setIsThinking(false);
+    gateConvincedRef.current = false;
+    awaitingTaskRef.current = false;
+    deferredChatRef.current = null;
+    pendingBotRef.current = false;
+    lastBotTypeRef.current = null;
+    queueRef.current = [];
+    latestChatTurnRef.current = 0;
+    latestGateTurnRef.current = 0;
+    taskRequestIdRef.current = 0;
+    redirectUrlRef.current = null;
+    flowCompleteRef.current = false;
+    turnCounterRef.current = 0;
+    dataRef.current = { collegeName: '', courseName: '', topic: '' };
+    sessionActiveRef.current = false;
+    sessionOwnerRef.current = false;
+    sessionIdRef.current = null;
+  };
+
+  const startFreshSession = async () => {
+    initTabId();
+    resetSessionState();
+    chatEndedRef.current = false;
+    setChatEnded(false);
+    sessionActiveRef.current = true;
+    sessionOwnerRef.current = true;
+    sessionIdRef.current = generateSessionId();
+    onboardingSessionStartedRef.current = true;
+    restoredSessionRef.current = false;
+    setHasStarted(true);
+    clearStoredSession();
+    void api.startNewOnboardingSession();
+    addBotMessage(INITIAL_MESSAGE, 'task');
+    persistSession({ status: 'active', hasStarted: true, jobId: null, isJobRunning: false, showTopics: false });
+  };
+
+  const shouldStartFreshSession = () => {
+    initTabId();
+    const stored = readStoredSession();
+    if (!stored || stored.status !== 'active') return false;
+    if (!stored.ownerTabId) return true;
+    return stored.ownerTabId !== tabIdRef.current;
   };
 
   const buildLlmMessages = () =>
@@ -305,11 +571,22 @@ export default function HomeContent() {
 
   const ensureOnboardingSession = async () => {
     if (onboardingSessionStartedRef.current) return;
+    initTabId();
     onboardingSessionStartedRef.current = true;
+    sessionActiveRef.current = true;
+    sessionOwnerRef.current = true;
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = generateSessionId();
+    }
+    chatEndedRef.current = false;
+    setChatEnded(false);
     setHasStarted(true);
+    if (restoredSessionRef.current) return;
+    clearStoredSession();
     try {
       await api.startNewOnboardingSession();
     } catch (error) {}
+    persistSession({ status: 'active', hasStarted: true });
   };
 
   const requestGatekeeper = async (turnId) => {
@@ -402,6 +679,7 @@ export default function HomeContent() {
   };
 
   const fetchTopicsAndAsk = async () => {
+    if (!sessionOwnerRef.current) return;
     setThinkingDelta(1);
     try {
       const topicRes = await api.getHardTopics({
@@ -431,6 +709,7 @@ export default function HomeContent() {
   };
 
   const startLessonGeneration = async (selectedTopic) => {
+    if (!sessionOwnerRef.current) return;
     setIsJobRunning(true);
     try {
       const jobRes = await api.generateLesson({
@@ -439,6 +718,7 @@ export default function HomeContent() {
         topic: selectedTopic,
       });
       setJobId(jobRes.jobId);
+      persistSession({ jobId: jobRes.jobId, isJobRunning: true });
     } catch (error) {
       setIsJobRunning(false);
       enqueueMessage({ type: 'task', text: FALLBACKS.generation });
@@ -476,7 +756,11 @@ export default function HomeContent() {
 
   const handleUserSend = async (value) => {
     const trimmed = value.trim();
-    if (!trimmed || isRedirecting) return;
+    if (!trimmed || isRedirecting || chatEndedRef.current) return;
+
+    if (shouldStartFreshSession()) {
+      await startFreshSession();
+    }
 
     setInput('');
     addUserMessage(trimmed);
@@ -523,6 +807,7 @@ export default function HomeContent() {
 
   useEffect(() => {
     if (taskStep !== TASK_STEPS.WAIT_JOB || !jobId) return;
+    if (!sessionOwnerRef.current) return;
 
     let pollInterval;
 
@@ -555,11 +840,11 @@ export default function HomeContent() {
     };
   }, [taskStep, jobId]);
 
-  const isInputDisabled = isRedirecting;
+  const isInputDisabled = isRedirecting || chatEnded;
 
   // Handler for confirming college (user clicked "Yes")
   const handleCollegeConfirm = () => {
-    if (!collegeConfirmation) return;
+    if (!collegeConfirmation || chatEndedRef.current) return;
 
     addUserMessage('Yes');
     setCollegeConfirmation(null);
@@ -584,11 +869,13 @@ export default function HomeContent() {
 
   // Handler for declining college confirmation (user clicked "No")
   const handleCollegeDecline = () => {
+    if (chatEndedRef.current) return;
     setShowCollegeInput(true);
   };
 
   // Handler for submitting a different college name
   const handleCollegeSubmit = (collegeName) => {
+    if (chatEndedRef.current) return;
     addUserMessage(collegeName);
     setCollegeConfirmation(null);
     setShowCollegeInput(false);
@@ -706,7 +993,7 @@ export default function HomeContent() {
           )}
 
           {/* College confirmation buttons */}
-          {collegeConfirmation && !showCollegeInput && !isThinking && (
+          {collegeConfirmation && !showCollegeInput && !isThinking && !chatEnded && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -728,12 +1015,12 @@ export default function HomeContent() {
           )}
 
           {/* College input when user clicked "No" */}
-          {showCollegeInput && !isThinking && (
+          {showCollegeInput && !isThinking && !chatEnded && (
             <CollegeInputForm onSubmit={handleCollegeSubmit} />
           )}
 
           {/* Topic chips when available */}
-          {showTopics && topics.length > 0 && (
+          {showTopics && topics.length > 0 && !chatEnded && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
