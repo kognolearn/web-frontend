@@ -1593,10 +1593,6 @@ const previewParam = searchParams?.get('preview');
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
-                      if (!previewCompletionShownRef.current) {
-                        setShowPreviewCompletionModal(false);
-                        return;
-                      }
                       setCreateAccountAccess('onboarding');
                       router.push('/auth/create-account');
                     }}
