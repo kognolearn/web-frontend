@@ -9,7 +9,6 @@ import * as api from '@/lib/onboarding';
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
 const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
 
 const TASK_STEPS = {
@@ -338,7 +337,6 @@ export default function HomeContent() {
       setTaskStepSafe(TASK_STEPS.ASK_COLLEGE);
       awaitingTaskRef.current = true;
       requestTaskMessage(TASK_STEPS.ASK_COLLEGE);
-      requestChatResponse(turnId);
     } catch (error) {
       enqueueMessage({ type: 'task', text: FALLBACKS.gate });
     } finally {
@@ -496,8 +494,13 @@ export default function HomeContent() {
       return;
     }
 
-    if (lastBotTypeRef.current === 'task') {
+    // Determine if we should process this as a task response or chat
+    const currentStep = taskStepRef.current;
+    const isTaskInputStep = [TASK_STEPS.ASK_COLLEGE, TASK_STEPS.ASK_COURSE, TASK_STEPS.SHOW_TOPICS].includes(currentStep);
+
+    if (isTaskInputStep) {
       processTaskResponse(trimmed);
+      return;
     }
 
     requestChatResponse(turnId);
