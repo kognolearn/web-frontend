@@ -50,7 +50,18 @@ async function proxyRequest(request, method) {
         }
       }
 
+      const contentType = res.headers.get("content-type") || "";
       const bodyText = await res.text();
+
+      // Pass through YAML responses as-is
+      if (contentType.includes("yaml") || contentType.includes("yml")) {
+        return new Response(bodyText, {
+          status: res.status,
+          headers: { "Content-Type": "text/yaml" },
+        });
+      }
+
+      // Parse JSON responses
       let data;
       try {
         data = bodyText ? JSON.parse(bodyText) : {};
