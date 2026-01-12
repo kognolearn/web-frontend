@@ -13,6 +13,8 @@ const ONBOARDING_SESSION_KEY = "kogno_onboarding_session_v1";
 const ONBOARDING_SESSION_VERSION = 1;
 const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
 const CHAT_ENDED_MESSAGE = "This chat has ended.";
+const LIMIT_REACHED_MESSAGE =
+  "You have hit the limit on the number of attempts you can use this feature.";
 const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
 
 const TASK_STEPS = {
@@ -128,6 +130,7 @@ export default function HomeContent() {
   const [isJobRunning, setIsJobRunning] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [chatEnded, setChatEnded] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
   const [collegeConfirmation, setCollegeConfirmation] = useState(null); // college name to confirm
@@ -146,6 +149,7 @@ export default function HomeContent() {
   const queueRef = useRef([]);
   const pendingBotRef = useRef(false);
   const lastBotTypeRef = useRef(null);
+  const limitReachedRef = useRef(false);
   const gateConvincedRef = useRef(false);
   const taskStepRef = useRef(TASK_STEPS.NONE);
   const dataRef = useRef({ collegeName: '', courseName: '', topic: '' });
@@ -228,6 +232,7 @@ export default function HomeContent() {
         ownerTabId: tabId,
         status: overrides.status || (flowCompleteRef.current ? 'completed' : 'active'),
         updatedAt: Date.now(),
+        anonUserId: api.getAnonUserId(),
         messages: messagesRef.current,
         taskStep: taskStepRef.current,
         data: dataRef.current,
@@ -459,6 +464,30 @@ export default function HomeContent() {
     setIsThinking(pendingRequestsRef.current > 0);
   };
 
+  const handleLimitReached = (error) => {
+    const isLimitError = error?.limitReached || error?.code === 'ONBOARDING_LIMIT_REACHED';
+    if (!isLimitError) return false;
+    if (limitReachedRef.current) return true;
+
+    const message = error?.message || LIMIT_REACHED_MESSAGE;
+    limitReachedRef.current = true;
+    setLimitReached(true);
+    pendingRequestsRef.current = 0;
+    setIsThinking(false);
+    setIsJobRunning(false);
+    setIsRedirecting(false);
+    setShowTopics(false);
+    setCollegeConfirmation(null);
+    setShowCollegeInput(false);
+    awaitingTaskRef.current = false;
+    deferredChatRef.current = null;
+    pendingBotRef.current = false;
+    lastBotTypeRef.current = null;
+    queueRef.current = [];
+    addBotMessage(message, 'chat');
+    return true;
+  };
+
   const resetSessionState = () => {
     messagesRef.current = [];
     setMessages([]);
@@ -494,6 +523,9 @@ export default function HomeContent() {
 
   const startFreshSession = async () => {
     initTabId();
+    if (limitReachedRef.current) {
+      return;
+    }
     resetSessionState();
     chatEndedRef.current = false;
     setChatEnded(false);
@@ -612,6 +644,7 @@ export default function HomeContent() {
       awaitingTaskRef.current = true;
       requestTaskMessage(TASK_STEPS.ASK_COLLEGE);
     } catch (error) {
+      if (handleLimitReached(error)) return;
       enqueueMessage({ type: 'task', text: FALLBACKS.gate });
     } finally {
       setThinkingDelta(-1);
@@ -639,6 +672,7 @@ export default function HomeContent() {
       }
       enqueueMessage(entry);
     } catch (error) {
+      if (handleLimitReached(error)) return;
       const entry = { type: 'chat', text: FALLBACKS.chat };
       if (awaitingTaskRef.current) {
         deferredChatRef.current = entry;
@@ -672,6 +706,7 @@ export default function HomeContent() {
       const reply = response?.reply || '';
       enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: metaWithStep });
     } catch (error) {
+      if (handleLimitReached(error)) return;
       enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
     } finally {
       setThinkingDelta(-1);
@@ -710,6 +745,7 @@ export default function HomeContent() {
 
   const startLessonGeneration = async (selectedTopic) => {
     if (!sessionOwnerRef.current) return;
+    if (limitReachedRef.current) return;
     setIsJobRunning(true);
     try {
       const jobRes = await api.generateLesson({
@@ -720,6 +756,10 @@ export default function HomeContent() {
       setJobId(jobRes.jobId);
       persistSession({ jobId: jobRes.jobId, isJobRunning: true });
     } catch (error) {
+      if (handleLimitReached(error)) {
+        setIsJobRunning(false);
+        return;
+      }
       setIsJobRunning(false);
       enqueueMessage({ type: 'task', text: FALLBACKS.generation });
       setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
@@ -756,7 +796,7 @@ export default function HomeContent() {
 
   const handleUserSend = async (value) => {
     const trimmed = value.trim();
-    if (!trimmed || isRedirecting || chatEndedRef.current) return;
+    if (!trimmed || isRedirecting || chatEndedRef.current || limitReachedRef.current) return;
 
     if (shouldStartFreshSession()) {
       await startFreshSession();
@@ -840,11 +880,11 @@ export default function HomeContent() {
     };
   }, [taskStep, jobId]);
 
-  const isInputDisabled = isRedirecting || chatEnded;
+  const isInputDisabled = isRedirecting || chatEnded || limitReached;
 
   // Handler for confirming college (user clicked "Yes")
   const handleCollegeConfirm = () => {
-    if (!collegeConfirmation || chatEndedRef.current) return;
+    if (!collegeConfirmation || chatEndedRef.current || limitReachedRef.current) return;
 
     addUserMessage('Yes');
     setCollegeConfirmation(null);
@@ -869,13 +909,13 @@ export default function HomeContent() {
 
   // Handler for declining college confirmation (user clicked "No")
   const handleCollegeDecline = () => {
-    if (chatEndedRef.current) return;
+    if (chatEndedRef.current || limitReachedRef.current) return;
     setShowCollegeInput(true);
   };
 
   // Handler for submitting a different college name
   const handleCollegeSubmit = (collegeName) => {
-    if (chatEndedRef.current) return;
+    if (chatEndedRef.current || limitReachedRef.current) return;
     addUserMessage(collegeName);
     setCollegeConfirmation(null);
     setShowCollegeInput(false);
@@ -923,12 +963,22 @@ export default function HomeContent() {
           <Image src="/images/kogno_logo.png" alt="Kogno" width={32} height={32} />
           Kogno
         </Link>
-        <Link
-          href="/auth/sign-in"
-          className="px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white border border-transparent hover:bg-transparent hover:text-[var(--foreground)] hover:border-[var(--border)] transition-all"
-        >
-          Sign in
-        </Link>
+        <div className="flex items-center gap-3">
+          {limitReached && (
+            <Link
+              href="/sign-up"
+              className="px-5 py-2 text-sm font-medium rounded-xl border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
+            >
+              Sign up
+            </Link>
+          )}
+          <Link
+            href="/auth/sign-in"
+            className="px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white border border-transparent hover:bg-transparent hover:text-[var(--foreground)] hover:border-[var(--border)] transition-all"
+          >
+            Sign in
+          </Link>
+        </div>
       </header>
 
       {/* Chat area - takes up remaining space */}
@@ -993,7 +1043,7 @@ export default function HomeContent() {
           )}
 
           {/* College confirmation buttons */}
-          {collegeConfirmation && !showCollegeInput && !isThinking && !chatEnded && (
+          {collegeConfirmation && !showCollegeInput && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1015,12 +1065,12 @@ export default function HomeContent() {
           )}
 
           {/* College input when user clicked "No" */}
-          {showCollegeInput && !isThinking && !chatEnded && (
+          {showCollegeInput && !isThinking && !chatEnded && !limitReached && (
             <CollegeInputForm onSubmit={handleCollegeSubmit} />
           )}
 
           {/* Topic chips when available */}
-          {showTopics && topics.length > 0 && !chatEnded && (
+          {showTopics && topics.length > 0 && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

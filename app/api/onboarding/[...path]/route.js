@@ -32,6 +32,22 @@ async function proxyRequest(request, params, method) {
     if (authHeader) {
       headers["Authorization"] = authHeader;
     }
+    const userAgent = request.headers.get("user-agent");
+    if (userAgent) {
+      headers["User-Agent"] = userAgent;
+    }
+    const acceptLanguage = request.headers.get("accept-language");
+    if (acceptLanguage) {
+      headers["Accept-Language"] = acceptLanguage;
+    }
+    const forwardedFor = request.headers.get("x-forwarded-for");
+    if (forwardedFor) {
+      headers["X-Forwarded-For"] = forwardedFor;
+    }
+    const realIp = request.headers.get("x-real-ip");
+    if (realIp) {
+      headers["X-Real-Ip"] = realIp;
+    }
 
     const body =
       method === "POST" || method === "PATCH" || method === "PUT"

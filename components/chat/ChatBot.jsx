@@ -761,7 +761,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       const selection = window.getSelection();
       const text = selection?.toString().trim();
 
-      if (!text) {
+      if (!text || !selection || selection.rangeCount === 0) {
         clearPendingSelection();
         return;
       }
@@ -778,25 +778,23 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
         ? anchorNode.parentElement
         : anchorNode;
 
-      if (!element) {
+      if (!element || typeof element.closest !== 'function') {
         clearPendingSelection();
         return;
       }
 
       // Check if the selection is within allowed areas
-      const isInMainContent = element.closest('main'); // Main content area of the page
-      const isInChatMessage = element.closest('[data-chat-message="true"]'); // Chat messages
       const isInButton = element.closest('button'); // Exclude buttons
       const isInInput = element.closest('input, textarea, [contenteditable="true"]'); // Exclude inputs
       const isInHeader = element.closest('header'); // Exclude page headers
       const isInNav = element.closest('nav'); // Exclude navigation
-      const isInChatHeader = element.closest('.border-b.border-\\[var\\(--border\\)\\].bg-\\[var\\(--surface-1\\)\\]'); // Exclude chat header
-      const isInChatSidebar = element.closest('.w-56.border-r'); // Exclude chat sidebar
+      const isInChatHeader = element.closest('[data-chat-ui="header"]'); // Exclude chat header
+      const isInChatSidebar = element.closest('[data-chat-ui="sidebar"]'); // Exclude chat sidebar
 
       // Only capture text from main content or chat messages, but not from UI controls
-      if ((isInMainContent || isInChatMessage) && !isInButton && !isInInput && !isInHeader && !isInNav && !isInChatHeader && !isInChatSidebar) {
+      if (!isInButton && !isInInput && !isInHeader && !isInNav && !isInChatHeader && !isInChatSidebar) {
         const range = selection.getRangeAt(0);
-        const rects = Array.from(range.getClientRects())
+        let rects = Array.from(range.getClientRects())
           .filter((rect) => rect.width > 0 && rect.height > 0)
           .map((rect) => ({
             top: rect.top,
@@ -806,8 +804,18 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
           }));
 
         if (!rects.length) {
-          clearPendingSelection();
-          return;
+          const fallbackRect = range.getBoundingClientRect();
+          if (fallbackRect.width > 0 && fallbackRect.height > 0) {
+            rects = [{
+              top: fallbackRect.top,
+              left: fallbackRect.left,
+              width: fallbackRect.width,
+              height: fallbackRect.height,
+            }];
+          } else {
+            clearPendingSelection();
+            return;
+          }
         }
 
         const boundingRect = range.getBoundingClientRect();
@@ -833,8 +841,8 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
       }
     };
 
-    document.addEventListener('mouseup', handleSelection);
-    return () => document.removeEventListener('mouseup', handleSelection);
+    document.addEventListener('mouseup', handleSelection, true);
+    return () => document.removeEventListener('mouseup', handleSelection, true);
   }, [isActive, clearPendingSelection]);
 
   useEffect(() => {
@@ -2339,7 +2347,8 @@ Instructions:
   const chatContent = (
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
-      <div 
+      <div
+        data-chat-ui="header"
         className={`flex h-14 items-center justify-between border-b border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 px-4 ${isPopped ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseDown={isPopped ? handleDragStart : undefined}
         onDoubleClick={() => {
@@ -2457,7 +2466,10 @@ Instructions:
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Chat History */}
         {isSidebarOpen && (
-          <div className="w-56 border-r border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar">
+          <div
+            data-chat-ui="sidebar"
+            className="w-56 border-r border-[var(--border)] backdrop-blur-xl bg-[var(--surface-1)]/80 overflow-y-auto flex-shrink-0 custom-scrollbar"
+          >
             {sidebarListContent}
           </div>
         )}

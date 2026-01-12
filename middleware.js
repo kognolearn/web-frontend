@@ -6,6 +6,7 @@ import { isDownloadRedirectEnabled } from './lib/featureFlags'
 const WEB_ALLOWED_PATHS = [
   '/',                // Home/onboarding (exact match)
   '/auth',            // All auth routes
+  '/sign-up',         // Sign-up redirect route
   '/download',        // Download page
   '/pricing',         // Pricing page
   '/checkout',        // Checkout flow
