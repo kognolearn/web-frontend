@@ -37,6 +37,7 @@ const terminalJobStatuses = new Set([
   "canceled",
   "cancelled",
 ]);
+const ONBOARDING_CONTINUATION_CONSUMED_KEY = "kogno_onboarding_course_consumed";
 
 function extractJobPayload(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -121,6 +122,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const loadOnboardingContinuation = () => {
+      let shouldConsume = false;
+      try {
+        shouldConsume = sessionStorage.getItem(ONBOARDING_CONTINUATION_CONSUMED_KEY) === "1";
+      } catch (error) {
+        console.warn("Unable to read onboarding consume flag:", error);
+      }
+      if (shouldConsume) {
+        setOnboardingContinuation(null);
+        return;
+      }
+
       const session = getOnboardingCourseSession();
       if (!session?.jobId) {
         setOnboardingContinuation(null);
@@ -137,8 +149,16 @@ export default function DashboardPage() {
       }
     };
 
+    const handleOnboardingEvent = () => {
+      loadOnboardingContinuation();
+    };
+
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener("onboarding:continuation", handleOnboardingEvent);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("onboarding:continuation", handleOnboardingEvent);
+    };
   }, []);
 
   // Handle send feedback

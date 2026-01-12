@@ -38,6 +38,7 @@ const acceptedAttachmentExtensions = new Set(
     .map((ext) => ext.trim().toLowerCase())
     .filter(Boolean)
 );
+const ONBOARDING_CONTINUATION_CONSUMED_KEY = "kogno_onboarding_course_consumed";
 
 /**
  * @typedef {Object} Subtopic
@@ -1551,12 +1552,31 @@ function CreateCoursePageContent() {
         // Pass rag_session_id if available from topics generation for RAG context continuity
         ...(ragSessionId && { rag_session_id: ragSessionId }),
       };
+      let onboardingContext = null;
 
       if (Object.keys(topicFamiliarityMap).length === 0) {
         delete payload.topicFamiliarity;
       }
 
       payload.exam_details = examDetailsPayload;
+
+      try {
+        const session = localStorage.getItem("kogno_onboarding_session");
+        if (session) {
+          onboardingContext = JSON.parse(session);
+        }
+      } catch (e) {
+        console.error("Failed to read onboarding session", e);
+      }
+
+      if (onboardingContext) {
+        try {
+          sessionStorage.setItem(ONBOARDING_CONTINUATION_CONSUMED_KEY, "1");
+          window.dispatchEvent(new Event("onboarding:continuation"));
+        } catch (error) {
+          console.warn("Unable to mark onboarding continuation as consumed:", error);
+        }
+      }
 
       redirectToDashboard();
 
@@ -1590,18 +1610,8 @@ function CreateCoursePageContent() {
       const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
       payload.content_version = resolvedContentVersion;
 
-      // Include onboarding context if available
-      try {
-        const session = localStorage.getItem('kogno_onboarding_session');
-        if (session) {
-          const onboardingData = JSON.parse(session);
-          if (onboardingData) {
-            payload.onboarding_context = onboardingData;
-            // Clear session after using it? Maybe not yet, wait for success.
-          }
-        }
-      } catch (e) {
-        console.error("Failed to read onboarding session", e);
+      if (onboardingContext) {
+        payload.onboarding_context = onboardingContext;
       }
 
       console.log("[CreateCourse] About to fetch /api/courses");
@@ -1622,6 +1632,12 @@ function CreateCoursePageContent() {
 
       if (payload.onboarding_context) {
         localStorage.removeItem('kogno_onboarding_session');
+        try {
+          sessionStorage.removeItem(ONBOARDING_CONTINUATION_CONSUMED_KEY);
+          window.dispatchEvent(new Event("onboarding:continuation"));
+        } catch (error) {
+          console.warn("Unable to clear onboarding continuation flag:", error);
+        }
       }
 
       const jobId = resolveJobId(body);
@@ -1651,6 +1667,14 @@ function CreateCoursePageContent() {
       setTimeout(dispatchRefreshEvent, 3000);
       setTimeout(dispatchRefreshEvent, 4000);
     } catch (error) {
+      if (onboardingContext) {
+        try {
+          sessionStorage.removeItem(ONBOARDING_CONTINUATION_CONSUMED_KEY);
+          window.dispatchEvent(new Event("onboarding:continuation"));
+        } catch (clearError) {
+          console.warn("Unable to restore onboarding continuation flag:", clearError);
+        }
+      }
       console.log("[CreateCourse] ERROR:", error);
       if (!navigationTriggered) {
         setCourseGenerationError(error.message || "Unexpected error creating course.");
