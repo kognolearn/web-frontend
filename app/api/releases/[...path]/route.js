@@ -40,6 +40,7 @@ async function proxyRequest(request, method) {
       const res = await fetch(backendUrl.toString(), {
         ...fetchOptions,
         signal: controller.signal,
+        redirect: "manual", // Don't follow redirects automatically
       });
 
       // For download routes, handle redirects
