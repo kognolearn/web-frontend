@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { cleanupAnonUser } from "@/lib/onboarding";
+import { getRedirectDestination } from "@/lib/platform";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -104,7 +105,7 @@ export default function SignUpForm() {
         }
 
         // Redirect to download page to get the desktop app
-        router.push(redirectTo || "/download");
+        router.push(getRedirectDestination(redirectTo || "/dashboard"));
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

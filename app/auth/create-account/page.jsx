@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import { getDownloadRedirectPath } from "@/lib/featureFlags";
 
 export const metadata = {
   title: "Create Account | Kogno",
@@ -35,7 +36,7 @@ export default async function CreateAccountPage({ searchParams }) {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect("/download");
+    redirect(getDownloadRedirectPath(redirectTo || "/dashboard"));
   }
 
   return (

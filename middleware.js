@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
+import { isDownloadRedirectEnabled } from './lib/featureFlags'
 
 // Routes that are allowed on the web (not blocked for authenticated users)
 const WEB_ALLOWED_PATHS = [
@@ -46,6 +47,7 @@ function isWebAllowedPath(pathname) {
 }
 
 export async function middleware(request) {
+  const forceDownloadRedirect = isDownloadRedirectEnabled()
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -163,7 +165,7 @@ export async function middleware(request) {
 
   // Redirect authenticated web users away from product routes to /download
   // This ensures the product is only accessible from the desktop app
-  if (user && !isWebAllowedPath(request.nextUrl.pathname)) {
+  if (forceDownloadRedirect && user && !isWebAllowedPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/download'
     return NextResponse.redirect(url)

@@ -17,6 +17,7 @@ import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
+import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
@@ -166,7 +167,7 @@ export default function CoursePage() {
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
 
-  const previewParam = searchParams?.get('preview');
+const previewParam = searchParams?.get('preview');
   const isPreviewRoute = previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
   const isPreviewMode = isPreviewRoute || isOnboardingPreview;
   
@@ -175,16 +176,17 @@ export default function CoursePage() {
   const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
   const deepSyncRef = useRef(false);
   const isDeepStudyCourse = courseMode === "deep";
+  const forceDownloadRedirect = isDownloadRedirectEnabled();
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
   useEffect(() => {
-    if (!isDesktopApp()) {
+    if (forceDownloadRedirect && !isDesktopApp()) {
       router.replace('/download');
     }
-  }, [router]);
+  }, [forceDownloadRedirect, router]);
 
   useEffect(() => {
     if (isDeepStudyCourse) {

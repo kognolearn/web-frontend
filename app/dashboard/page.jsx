@@ -20,6 +20,7 @@ import {
 import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { isDesktopApp } from "@/lib/platform";
+import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -82,6 +83,7 @@ export default function DashboardPage() {
   const coursesRef = useRef([]);
   const [pendingJobs, setPendingJobs] = useState([]);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const forceDownloadRedirect = isDownloadRedirectEnabled();
 
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -90,10 +92,10 @@ export default function DashboardPage() {
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
   useEffect(() => {
-    if (!isDesktopApp()) {
+    if (forceDownloadRedirect && !isDesktopApp()) {
       router.replace('/download');
     }
-  }, [router]);
+  }, [forceDownloadRedirect, router]);
 
   // Close profile menu when clicking outside
   useEffect(() => {

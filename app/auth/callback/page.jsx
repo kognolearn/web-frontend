@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { getRedirectDestination } from "@/lib/platform";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [status, setStatus] = useState("verifying");
   const [error, setError] = useState(null);
+  const redirectDestination = getRedirectDestination("/dashboard");
+  const isDownloadRedirect = redirectDestination === "/download";
+  const redirectLabel = isDownloadRedirect ? "download the app" : "your dashboard";
 
   useEffect(() => {
     const handleEmailConfirmation = async () => {
@@ -37,7 +41,7 @@ export default function AuthCallbackPage() {
               setStatus("success");
               // Wait a moment to show success message, then redirect
               setTimeout(() => {
-                router.push("/download");
+                router.push(redirectDestination);
               }, 2000);
             }
           } else {
@@ -49,7 +53,7 @@ export default function AuthCallbackPage() {
           const { data: { user } } = await supabase.auth.getUser();
           
           if (user) {
-            router.push("/download");
+            router.push(redirectDestination);
           } else {
             setStatus("error");
             setError("Invalid confirmation link");
@@ -63,7 +67,7 @@ export default function AuthCallbackPage() {
     };
 
     handleEmailConfirmation();
-  }, [router]);
+  }, [redirectDestination, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
@@ -125,7 +129,7 @@ export default function AuthCallbackPage() {
                 Your account has been successfully verified.
               </p>
               <p className="text-sm text-[var(--muted-foreground)] mt-2">
-                Redirecting you to download the app...
+                Redirecting you to {redirectLabel}...
               </p>
             </div>
           )}

@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
 import CourseLimitModal from "@/components/courses/CourseLimitModal";
-import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
+import { getRedirectDestination } from "@/lib/platform";
 
 export default function JoinCoursePage() {
   const router = useRouter();
@@ -99,12 +99,7 @@ export default function JoinCoursePage() {
         throw new Error(data.error || "Failed to join course");
       }
 
-      // Desktop app users go to the course, web users go to download
-      if (isDesktopApp()) {
-        router.push(`/courses/${data.courseId}`);
-      } else {
-        router.push("/download");
-      }
+      router.push(getRedirectDestination(`/courses/${data.courseId}`));
     } catch (err) {
       console.error("Error joining course:", err);
       setError(err.message);

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { isDesktopApp } from "@/lib/platform";
+import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -47,13 +48,14 @@ export default function SettingsPage() {
 
   // Course creation UI preference
   const [courseCreateUiMode, setCourseCreateUiMode] = useState("chat");
+  const forceDownloadRedirect = isDownloadRedirectEnabled();
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
   useEffect(() => {
-    if (!isDesktopApp()) {
+    if (forceDownloadRedirect && !isDesktopApp()) {
       router.replace('/download');
     }
-  }, [router]);
+  }, [forceDownloadRedirect, router]);
 
   useEffect(() => {
     async function loadUser() {

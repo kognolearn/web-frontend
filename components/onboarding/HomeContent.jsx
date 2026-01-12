@@ -15,8 +15,11 @@ const TASK_STEPS = {
   NONE: 'NONE',
   ASK_COLLEGE: 'ASK_COLLEGE',
   ASK_COURSE: 'ASK_COURSE',
+  WAIT_TOPICS: 'WAIT_TOPICS',
+  TOPICS_READY: 'TOPICS_READY',
   SHOW_TOPICS: 'SHOW_TOPICS',
   WAIT_JOB: 'WAIT_JOB',
+  JOB_DONE: 'JOB_DONE',
   FINAL_MESSAGE: 'FINAL_MESSAGE',
   DONE: 'DONE',
 };
@@ -24,7 +27,11 @@ const TASK_STEPS = {
 const TASK_ORDER = {
   [TASK_STEPS.ASK_COLLEGE]: 1,
   [TASK_STEPS.ASK_COURSE]: 2,
+  [TASK_STEPS.WAIT_TOPICS]: 2.5,
+  [TASK_STEPS.TOPICS_READY]: 2.8,
   [TASK_STEPS.SHOW_TOPICS]: 3,
+  [TASK_STEPS.WAIT_JOB]: 3.5,
+  [TASK_STEPS.JOB_DONE]: 3.8,
   [TASK_STEPS.FINAL_MESSAGE]: 4,
 };
 
@@ -186,32 +193,22 @@ export default function HomeContent() {
     return next;
   };
 
+  const appendMessage = (message) => {
+    const next = [...messagesRef.current, message];
+    messagesRef.current = next;
+    setMessages(next);
+  };
+
   const addBotMessage = (text, type = 'chat', meta = {}) => {
     const message = { type: 'bot', text, id: Date.now() + Math.random() };
-    setMessages((prev) => syncMessages([...prev, message]));
+    appendMessage(message);
+    
     lastBotTypeRef.current = type;
     if (meta?.step === TASK_STEPS.SHOW_TOPICS) {
       setShowTopics(true);
     } else if (meta?.step && meta.step !== TASK_STEPS.SHOW_TOPICS) {
       setShowTopics(false);
     }
-
-    // Check if this is a college confirmation message (e.g., "At MIT, right?")
-    if (meta?.step === TASK_STEPS.ASK_COLLEGE && text) {
-      const confirmMatch = text.match(/^(?:At|at)\s+(.+?)(?:,\s*|\s+)right\?$/i);
-      if (confirmMatch && confirmMatch[1]) {
-        setCollegeConfirmation(confirmMatch[1].trim());
-        setShowCollegeInput(false);
-      } else {
-        setCollegeConfirmation(null);
-        setShowCollegeInput(false);
-      }
-    } else if (meta?.step && meta.step !== TASK_STEPS.ASK_COLLEGE) {
-      // Clear college confirmation when moving to other steps
-      setCollegeConfirmation(null);
-      setShowCollegeInput(false);
-    }
-
     if (type === 'task' && awaitingTaskRef.current) {
       awaitingTaskRef.current = false;
       if (deferredChatRef.current) {
@@ -232,7 +229,7 @@ export default function HomeContent() {
 
   const addUserMessage = (text) => {
     const message = { type: 'user', text, id: Date.now() + Math.random() };
-    setMessages((prev) => syncMessages([...prev, message]));
+    appendMessage(message);
   };
 
   const setTaskStepSafe = (next) => {
@@ -351,6 +348,9 @@ export default function HomeContent() {
       const response = await api.getChatStep({
         mode: 'chat',
         messages: buildLlmMessages(),
+        task: {
+          step: taskStepRef.current,
+        }
       });
 
       if (turnId !== latestChatTurnRef.current) return;
@@ -419,8 +419,7 @@ export default function HomeContent() {
       }
 
       setTopicsSafe(nextTopics);
-      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-      await requestTaskMessage(TASK_STEPS.SHOW_TOPICS);
+      setTaskStepSafe(TASK_STEPS.TOPICS_READY);
     } catch (error) {
       enqueueMessage({ type: 'task', text: FALLBACKS.topics });
       setTaskStepSafe(TASK_STEPS.ASK_COURSE);
@@ -448,20 +447,21 @@ export default function HomeContent() {
     }
   };
 
-  const processTaskResponse = (text) => {
+  const processTaskResponse = (text, turnId) => {
     const step = taskStepRef.current;
 
     if (step === TASK_STEPS.ASK_COLLEGE) {
       updateData({ collegeName: text });
       setTaskStepSafe(TASK_STEPS.ASK_COURSE);
       requestTaskMessage(TASK_STEPS.ASK_COURSE);
-      return;
+      return true;
     }
 
     if (step === TASK_STEPS.ASK_COURSE) {
       updateData({ courseName: text });
+      setTaskStepSafe(TASK_STEPS.WAIT_TOPICS);
       fetchTopicsAndAsk();
-      return;
+      return false;
     }
 
     if (step === TASK_STEPS.SHOW_TOPICS) {
@@ -469,7 +469,9 @@ export default function HomeContent() {
       setShowTopics(false);
       setTaskStepSafe(TASK_STEPS.WAIT_JOB);
       startLessonGeneration(text);
+      return false;
     }
+    return false;
   };
 
   const handleUserSend = async (value) => {
@@ -496,11 +498,24 @@ export default function HomeContent() {
 
     // Determine if we should process this as a task response or chat
     const currentStep = taskStepRef.current;
+
+    if (currentStep === TASK_STEPS.TOPICS_READY) {
+      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
+      requestTaskMessage(TASK_STEPS.SHOW_TOPICS);
+      return;
+    }
+
+    if (currentStep === TASK_STEPS.JOB_DONE) {
+      setTaskStepSafe(TASK_STEPS.FINAL_MESSAGE);
+      requestTaskMessage(TASK_STEPS.FINAL_MESSAGE, { final: true, redirectUrl: redirectUrlRef.current });
+      return;
+    }
+
     const isTaskInputStep = [TASK_STEPS.ASK_COLLEGE, TASK_STEPS.ASK_COURSE, TASK_STEPS.SHOW_TOPICS].includes(currentStep);
 
     if (isTaskInputStep) {
-      processTaskResponse(trimmed);
-      return;
+      const sentMessage = processTaskResponse(trimmed, turnId);
+      if (sentMessage) return;
     }
 
     requestChatResponse(turnId);
@@ -518,8 +533,7 @@ export default function HomeContent() {
           clearInterval(pollInterval);
           setIsJobRunning(false);
           redirectUrlRef.current = status.resultUrl || status.redirectUrl || (status.courseId ? `/courses/${status.courseId}?preview=1&jobId=${jobId}` : '/dashboard');
-          setTaskStepSafe(TASK_STEPS.FINAL_MESSAGE);
-          requestTaskMessage(TASK_STEPS.FINAL_MESSAGE, { final: true, redirectUrl: redirectUrlRef.current });
+          setTaskStepSafe(TASK_STEPS.JOB_DONE);
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
           setIsJobRunning(false);

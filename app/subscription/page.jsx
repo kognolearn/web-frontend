@@ -6,6 +6,7 @@ import Link from "next/link";
 import { authFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase/client";
 import { isDesktopApp } from "@/lib/platform";
+import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 export default function SubscriptionPage() {
   const router = useRouter();
@@ -13,13 +14,14 @@ export default function SubscriptionPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [error, setError] = useState(null);
+  const forceDownloadRedirect = isDownloadRedirectEnabled();
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
   useEffect(() => {
-    if (!isDesktopApp()) {
+    if (forceDownloadRedirect && !isDesktopApp()) {
       router.replace('/download');
     }
-  }, [router]);
+  }, [forceDownloadRedirect, router]);
 
   useEffect(() => {
     async function checkAuth() {

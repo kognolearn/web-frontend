@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import { getRedirectDestination } from "@/lib/platform";
 
 function ConfirmEmailContent() {
   const searchParams = useSearchParams();
@@ -11,6 +12,9 @@ function ConfirmEmailContent() {
   const email = searchParams.get("email");
   const [checking, setChecking] = useState(false);
   const [checkCount, setCheckCount] = useState(0);
+  const redirectDestination = getRedirectDestination("/dashboard");
+  const isDownloadRedirect = redirectDestination === "/download";
+  const redirectLabel = isDownloadRedirect ? "download the app" : "your dashboard";
 
   useEffect(() => {
     // Poll for email confirmation every 3 seconds
@@ -21,9 +25,9 @@ function ConfirmEmailContent() {
         // Check if user exists and email is confirmed
         if (user && user.email_confirmed_at) {
           setChecking(true);
-          // Email is confirmed, redirect to download
+          // Email is confirmed, redirect after a brief confirmation
           setTimeout(() => {
-            router.push("/download");
+            router.push(redirectDestination);
           }, 1000);
         }
       } catch (error) {
@@ -47,7 +51,7 @@ function ConfirmEmailContent() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [router]);
+  }, [redirectDestination, router]);
 
   if (checking) {
     return (
@@ -74,7 +78,7 @@ function ConfirmEmailContent() {
                 Email Confirmed!
               </h1>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Redirecting you to download the app...
+                Redirecting you to {redirectLabel}...
               </p>
             </div>
           </div>
@@ -123,7 +127,7 @@ function ConfirmEmailContent() {
               Please check your email and click the confirmation link to activate your account.
             </p>
             <p>
-              After clicking the link, <strong className="text-[var(--foreground)]">return to this page</strong> and we'll automatically redirect you to complete your dashboard.
+              After clicking the link, <strong className="text-[var(--foreground)]">return to this page</strong> and we'll automatically redirect you to {redirectLabel}.
             </p>
             <p className="text-xs italic text-[var(--muted-foreground)]">
               ⏱️ Checking for confirmation automatically...

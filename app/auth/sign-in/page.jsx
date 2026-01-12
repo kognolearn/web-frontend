@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import { getDownloadRedirectPath } from "@/lib/featureFlags";
 
 export const metadata = {
   title: "Sign In | Kogno",
@@ -36,7 +37,7 @@ export default async function SignInPage({ searchParams }) {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect("/download");
+    redirect(getDownloadRedirectPath(redirectTo || "/dashboard"));
   }
 
   return (
