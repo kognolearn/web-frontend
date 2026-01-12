@@ -9,7 +9,7 @@ export default async function JoinPage({ searchParams }) {
   const params = await searchParams;
   const ref = params?.ref;
 
-  // Redirect to signup with referral code preserved
+  // Redirect to create account with referral code preserved
   if (ref) {
     redirect(`/auth/create-account?ref=${encodeURIComponent(ref)}`);
   } else {

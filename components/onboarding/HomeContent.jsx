@@ -15,6 +15,7 @@ const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
 const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
+const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
 
 const TASK_STEPS = {
@@ -472,6 +473,10 @@ export default function HomeContent() {
     const message = error?.message || LIMIT_REACHED_MESSAGE;
     limitReachedRef.current = true;
     setLimitReached(true);
+    if (typeof document !== 'undefined') {
+      const maxAge = 15 * 60;
+      document.cookie = `${CREATE_ACCOUNT_ACCESS_COOKIE}=limit; path=/; max-age=${maxAge}; samesite=lax`;
+    }
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     setIsJobRunning(false);
@@ -966,10 +971,10 @@ export default function HomeContent() {
         <div className="flex items-center gap-3">
           {limitReached && (
             <Link
-              href="/sign-up"
+              href="/auth/create-account"
               className="px-5 py-2 text-sm font-medium rounded-xl border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
             >
-              Sign up
+              Create account
             </Link>
           )}
           <Link

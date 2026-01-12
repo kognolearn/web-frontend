@@ -88,7 +88,7 @@ export default async function SignInPage({ searchParams }) {
                 href={`/auth/create-account${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
                 className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors"
               >
-                Sign up
+                Create account
               </Link>
             </p>
           </div>

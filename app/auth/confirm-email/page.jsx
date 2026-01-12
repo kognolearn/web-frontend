@@ -150,7 +150,7 @@ function ConfirmEmailContent() {
                 href="/auth/create-account"
                 className="text-sm font-medium text-[var(--foreground)] transition-colors hover:text-primary"
               >
-                ← Back to Sign Up
+                ← Back to Create Account
               </Link>
             </div>
           </div>

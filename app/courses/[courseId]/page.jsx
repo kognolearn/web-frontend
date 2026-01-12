@@ -24,6 +24,7 @@ const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
 const ANON_USER_ID_KEY = 'kogno_anon_user_id';
 const getCourseTabsStorageKey = (userId, courseId) => `${COURSE_TABS_STORAGE_PREFIX}_${userId}_${courseId}`;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CREATE_ACCOUNT_ACCESS_COOKIE = 'kogno_onboarding_create_account';
 
 const isValidUuid = (value) => typeof value === 'string' && UUID_REGEX.test(value);
 
@@ -36,6 +37,12 @@ const readAnonUserId = () => {
     console.warn('Failed to read anon user id:', error);
     return null;
   }
+};
+
+const setCreateAccountAccess = (value) => {
+  if (typeof document === 'undefined') return;
+  const maxAge = 15 * 60;
+  document.cookie = `${CREATE_ACCOUNT_ACCESS_COOKIE}=${value}; path=/; max-age=${maxAge}; samesite=lax`;
 };
 
 const buildPreviewPlanUrl = (courseId, anonUserId) => {
@@ -708,6 +715,7 @@ const previewParam = searchParams?.get('preview');
 
     if (allCompleted) {
       previewCompletionShownRef.current = true;
+      setCreateAccountAccess('onboarding');
       setShowPreviewCompletionModal(true);
     }
   }, [isOnboardingPreview, studyPlan, showPreviewCompletionModal]);
@@ -1082,7 +1090,7 @@ const previewParam = searchParams?.get('preview');
               Preview
             </span>
             <span className="text-sm text-[var(--foreground)]">
-              You're viewing a preview lesson. Sign up to generate your full course!
+              You're viewing a preview lesson. Create an account to generate your full course!
             </span>
           </div>
           <button
@@ -1580,16 +1588,21 @@ const previewParam = searchParams?.get('preview');
                   Ready to ace your class?
                 </h2>
                 <p className="text-[var(--muted-foreground)] mb-6">
-                  Sign up to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
+                  Create an account to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
                 </p>
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
-                      router.push('/auth/sign-up');
+                      if (!previewCompletionShownRef.current) {
+                        setShowPreviewCompletionModal(false);
+                        return;
+                      }
+                      setCreateAccountAccess('onboarding');
+                      router.push('/auth/create-account');
                     }}
                     className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
                   >
-                    Sign up for free
+                    Create account for free
                   </button>
                   <button
                     onClick={() => {

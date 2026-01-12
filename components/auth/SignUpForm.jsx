@@ -76,7 +76,7 @@ export default function SignUpForm() {
         return;
       }
 
-      // If sign up is successful, attribute referral and redirect
+      // If account creation is successful, attribute referral and redirect
       if (data.user) {
         await cleanupAnonUser();
 
@@ -100,7 +100,7 @@ export default function SignUpForm() {
             }
           }
         } catch (refErr) {
-          // Don't block signup for referral errors
+          // Don't block account creation for referral errors
           console.error("Failed to attribute referral:", refErr);
         }
 

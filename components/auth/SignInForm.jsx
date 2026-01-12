@@ -21,7 +21,7 @@ export default function SignInForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Capture referral code from URL and store in localStorage (for if user goes to sign-up)
+  // Capture referral code from URL and store in localStorage (for if user creates an account)
   useEffect(() => {
     if (refCode) {
       try {
