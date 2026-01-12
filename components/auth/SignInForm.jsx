@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
-import { cleanupAnonUser } from "@/lib/onboarding";
+import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
 import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
@@ -61,7 +61,12 @@ export default function SignInForm() {
       }
 
       if (data?.user) {
-        await cleanupAnonUser();
+        const onboardingSession = getOnboardingCourseSession();
+        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
+        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
+        if (!hasOnboardingContinuation) {
+          await cleanupAnonUser();
+        }
         // Desktop app users go to dashboard, web users go to download
         router.push(getRedirectDestination(redirectTo || "/dashboard"));
       }

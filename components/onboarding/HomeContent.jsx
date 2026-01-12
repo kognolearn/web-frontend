@@ -251,6 +251,24 @@ export default function HomeContent() {
     }
   };
 
+  const persistCourseContinuation = (status) => {
+    if (!status || typeof status !== 'object') return;
+    const lessonNode = Array.isArray(status.nodes) ? status.nodes[0] : null;
+    const courseContext = status.courseContext || {};
+    api.setOnboardingCourseSession({
+      jobId,
+      anonUserId: api.getAnonUserId(),
+      previewCourseId: status.courseId || null,
+      previewLessonId: status.lessonId || lessonNode?.id || null,
+      previewLessonTitle: lessonNode?.title || dataRef.current.topic || null,
+      courseName: courseContext.title || dataRef.current.courseName || null,
+      collegeName: courseContext.college || dataRef.current.collegeName || null,
+      topic: dataRef.current.topic || null,
+      updatedAt: Date.now(),
+      source: 'onboarding',
+    });
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, topics, isThinking, isJobRunning]);
@@ -862,6 +880,7 @@ export default function HomeContent() {
         if (status.status === 'completed') {
           clearInterval(pollInterval);
           setIsJobRunning(false);
+          persistCourseContinuation(status);
           redirectUrlRef.current = status.resultUrl || status.redirectUrl || (status.courseId ? `/courses/${status.courseId}?preview=1&jobId=${jobId}` : '/dashboard');
           setTaskStepSafe(TASK_STEPS.JOB_DONE);
         } else if (status.status === 'failed') {

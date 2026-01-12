@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
+import OnboardingFinishCard from "@/components/courses/OnboardingFinishCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -21,6 +22,11 @@ import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
+import {
+  cleanupAnonUser,
+  clearOnboardingCourseSession,
+  getOnboardingCourseSession,
+} from "@/lib/onboarding";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -84,6 +90,7 @@ export default function DashboardPage() {
   const [pendingJobs, setPendingJobs] = useState([]);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const forceDownloadRedirect = isDownloadRedirectEnabled();
+  const [onboardingContinuation, setOnboardingContinuation] = useState(null);
 
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -112,10 +119,50 @@ export default function DashboardPage() {
     };
   }, [isProfileMenuOpen]);
 
+  useEffect(() => {
+    const loadOnboardingContinuation = () => {
+      const session = getOnboardingCourseSession();
+      if (!session?.jobId) {
+        setOnboardingContinuation(null);
+        return;
+      }
+      setOnboardingContinuation(session);
+    };
+
+    loadOnboardingContinuation();
+
+    const handleStorage = (event) => {
+      if (!event || event.key === "kogno_onboarding_session") {
+        loadOnboardingContinuation();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   // Handle send feedback
   const handleSendFeedback = () => {
     setIsProfileMenuOpen(false);
     window.dispatchEvent(new CustomEvent('open-feedback-widget'));
+  };
+
+  const handleContinueOnboardingCourse = () => {
+    router.push("/courses/create?from_onboarding=true");
+  };
+
+  const handleDismissOnboardingCourse = async () => {
+    const anonId = onboardingContinuation?.anonUserId || onboardingContinuation?.anon_user_id;
+    try {
+      if (anonId) {
+        await cleanupAnonUser(anonId);
+      }
+    } catch (error) {
+      console.warn("Failed to cleanup onboarding preview:", error);
+    } finally {
+      clearOnboardingCourseSession();
+      setOnboardingContinuation(null);
+    }
   };
 
   useEffect(() => {
@@ -442,6 +489,8 @@ export default function DashboardPage() {
   })();
   
   const hasCourses = courses.length > 0;
+  const hasOnboardingContinuation = Boolean(onboardingContinuation?.jobId);
+  const hasActiveCourseCards = hasCourses || hasOnboardingContinuation;
   const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
@@ -669,7 +718,7 @@ export default function DashboardPage() {
                 Welcome back, {displayName}
               </h1>
               <p className="text-sm sm:text-base text-[var(--muted-foreground)]">
-                {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
+                {hasActiveCourseCards ? "Continue your learning journey." : "Create your first course to get started."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -687,7 +736,7 @@ export default function DashboardPage() {
         </div>
         {/* Courses section */}
         <main className="space-y-6">
-          {!hasCourses ? (
+          {!hasActiveCourseCards ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -726,6 +775,14 @@ export default function DashboardPage() {
                   <span className="relative text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">Create Course</span>
                 </Link>
               </OnboardingTooltip>
+
+              {hasOnboardingContinuation && (
+                <OnboardingFinishCard
+                  courseName={onboardingContinuation?.courseName || onboardingContinuation?.course_name}
+                  onContinue={handleContinueOnboardingCourse}
+                  onDelete={handleDismissOnboardingCourse}
+                />
+              )}
 
               {courses.map((course) => {
                 const courseTitle = getCourseTitle(course);

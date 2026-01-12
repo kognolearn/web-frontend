@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { cleanupAnonUser } from "@/lib/onboarding";
+import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
 import { getRedirectDestination } from "@/lib/platform";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
@@ -78,7 +78,12 @@ export default function SignUpForm() {
 
       // If account creation is successful, attribute referral and redirect
       if (data.user) {
-        await cleanupAnonUser();
+        const onboardingSession = getOnboardingCourseSession();
+        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
+        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
+        if (!hasOnboardingContinuation) {
+          await cleanupAnonUser();
+        }
 
         // Attribute referral if there's a stored code
         try {
