@@ -887,6 +887,41 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
 
       // Submit to backend API
+      if (isPreview && courseId && lessonId && userId && questionIndex !== undefined) {
+        try {
+          const response = await fetch(`/api/onboarding/preview/nodes/${lessonId}/inline-questions`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseId,
+              anonUserId: userId,
+              updates: [{
+                questionIndex,
+                selectedAnswer: originalOptionIndex,
+              }]
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to save inline question answer: ${response.status} ${errorText}`);
+          }
+
+          const data = await response.json();
+          if (onAnswered) {
+            onAnswered({
+              questionIndex,
+              selectedAnswer: originalOptionIndex,
+              readingCompleted: data?.readingCompleted,
+              results: data?.results,
+            });
+          }
+          return;
+        } catch (error) {
+          console.error('Failed to save preview inline question answer:', error);
+        }
+      }
+
       if (isPreview && onAnswered) {
         onAnswered({
           questionIndex,
@@ -1168,7 +1203,7 @@ export default function ReadingRenderer({
   }, [lessonKey, inlineQuestionSelections, initialReadingCompleted]);
 
   useEffect(() => {
-    if (isPreview || !courseId || !lessonId || !userId) {
+    if (!courseId || !lessonId || !userId) {
       setInlineStatusLoaded(true);
       return;
     }
@@ -1178,10 +1213,16 @@ export default function ReadingRenderer({
 
     (async () => {
       try {
-        const response = await authFetch(
-          `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`,
-          { signal: ac.signal }
-        );
+        const previewParams = new URLSearchParams({
+          courseId: String(courseId),
+          anonUserId: String(userId),
+        });
+        const url = isPreview
+          ? `/api/onboarding/preview/nodes/${lessonId}/inline-questions?${previewParams.toString()}`
+          : `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`;
+        const response = isPreview
+          ? await fetch(url, { signal: ac.signal })
+          : await authFetch(url, { signal: ac.signal });
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`Failed to load inline question status: ${response.status} ${errorText}`);

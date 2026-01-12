@@ -755,7 +755,15 @@ function NotSupported({ type }) {
   );
 }
 
-export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isPreview = false, onTaskComplete }) {
+export default function TaskRenderer({
+  taskData,
+  onSubmit,
+  courseId,
+  nodeId,
+  userId,
+  isPreview = false,
+  onTaskComplete,
+}) {
   const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
   const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -855,12 +863,33 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
   }, []);
 
   const submitAnswers = useCallback(async (answersToSubmit, signal) => {
-    if (isPreview) {
-      throw new Error("Task grading is disabled in preview mode.");
-    }
-
     if (onSubmit) {
       return onSubmit(answersToSubmit, { signal });
+    }
+
+    if (isPreview) {
+      if (!courseId || !nodeId || !userId) {
+        throw new Error("Missing preview identifiers for grading.");
+      }
+      const response = await fetch(
+        `/api/onboarding/preview/nodes/${nodeId}/grade`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            courseId,
+            anonUserId: userId,
+            answers: answersToSubmit,
+            sync: true,
+          }),
+          signal,
+        },
+      );
+
+      return resolveAsyncJobResponse(response, {
+        signal,
+        errorLabel: "grade task",
+      });
     }
 
     if (!courseId || !nodeId) {
@@ -884,7 +913,7 @@ export default function TaskRenderer({ taskData, onSubmit, courseId, nodeId, isP
       signal,
       errorLabel: "grade task",
     });
-  }, [courseId, nodeId, onSubmit, isPreview]);
+  }, [courseId, nodeId, userId, onSubmit, isPreview]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;

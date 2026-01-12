@@ -155,6 +155,7 @@ export default function CoursePage() {
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const [isOnboardingPreview, setIsOnboardingPreview] = useState(false);
   const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
+  const previewCompletionShownRef = useRef(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
     const initialChat = createBlankChat();
     return {
@@ -689,6 +690,27 @@ const previewParam = searchParams?.get('preview');
       console.error('Failed to refetch study plan:', e);
     }
   }, [userId, courseId, courseMode, isPreviewMode]);
+
+  useEffect(() => {
+    if (!isOnboardingPreview || !studyPlan?.modules) return;
+    if (previewCompletionShownRef.current || showPreviewCompletionModal) return;
+
+    const lessons = studyPlan.modules
+      .filter((module) => !module.is_practice_exam_module)
+      .flatMap((module) => module.lessons || []);
+
+    if (lessons.length === 0) return;
+
+    const allCompleted = lessons.every((lesson) => {
+      const status = lesson.status || lesson.mastery_status;
+      return status && status !== 'pending';
+    });
+
+    if (allCompleted) {
+      previewCompletionShownRef.current = true;
+      setShowPreviewCompletionModal(true);
+    }
+  }, [isOnboardingPreview, studyPlan, showPreviewCompletionModal]);
 
   const handleTimerUpdate = useCallback(async (newSeconds) => {
     if (isOnboardingPreview) return;

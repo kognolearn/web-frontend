@@ -71,9 +71,40 @@ export default function VideoBlock({
       if (normalized.type === "none") return;
       if (hasMarkedCompleted.current) return;
       hasMarkedCompleted.current = true;
+      let didNotify = false;
+      const notifyViewed = () => {
+        if (didNotify) return;
+        didNotify = true;
+        if (onVideoViewed) {
+          onVideoViewed();
+        }
+      };
+
+      if (courseId && lessonId && userId) {
+        (async () => {
+          try {
+            const response = await fetch(`/api/onboarding/preview/nodes/${lessonId}/video`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseId,
+                anonUserId: userId,
+                completed: true
+              }),
+            });
+
+            if (response.ok) {
+              notifyViewed();
+            }
+          } catch (error) {
+            console.error('Failed to mark preview video as completed:', error);
+          }
+        })();
+      }
+
       if (onVideoViewed) {
         refreshTimeoutRef.current = setTimeout(() => {
-          onVideoViewed();
+          notifyViewed();
         }, 1000);
       }
       return () => {

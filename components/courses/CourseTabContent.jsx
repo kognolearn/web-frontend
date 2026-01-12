@@ -401,6 +401,7 @@ function ItemContent({
             taskData={taskData}
             courseId={courseId}
             nodeId={id}
+            userId={userId}
             isPreview={isPreview}
             onTaskComplete={onTaskComplete}
           />
@@ -1326,9 +1327,11 @@ export default function CourseTabContent({
   }, []);
 
   const handleQuizCompleted = useCallback(async () => {
-    if (isOnboardingPreview) return;
+    if (selectedLesson?.id && courseId) {
+      fetchLessonContent(selectedLesson.id, { force: true });
+    }
     await refetchStudyPlan();
-  }, [refetchStudyPlan, isOnboardingPreview]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan]);
 
   // Content completion handlers (always refetch backend status)
   const handleReadingCompleted = useCallback(() => {
@@ -1352,12 +1355,10 @@ export default function CourseTabContent({
   const handleQuizContentCompleted = useCallback(async (result) => {
     if (selectedLesson?.id && courseId) {
       fetchLessonContent(selectedLesson.id, { force: true });
-      if (!isOnboardingPreview) {
-        // Also update the study plan
-        await refetchStudyPlan();
-      }
+      // Also update the study plan
+      await refetchStudyPlan();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, isOnboardingPreview]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan]);
 
   const handleTaskCompleted = useCallback(() => {
     if (selectedLesson?.id && courseId) {
@@ -1659,7 +1660,6 @@ export default function CourseTabContent({
   const lessonCompletionUpdatedRef = useRef(new Set());
   
   useEffect(() => {
-    if (isOnboardingPreview) return;
     if (!selectedLesson?.id || !courseId || !userId) return;
     
     const lessonId = selectedLesson.id;
@@ -1693,14 +1693,32 @@ export default function CourseTabContent({
       // Update lesson status via API
       (async () => {
         try {
-          const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mastery_status: masteryStatus,
-              familiarity_score: familiarityScore,
-            }),
-          });
+          const url = isOnboardingPreview
+            ? `/api/onboarding/preview/nodes/${lessonId}/progress`
+            : `/api/courses/${courseId}/nodes/${lessonId}/progress`;
+          const payload = isOnboardingPreview
+            ? {
+                courseId,
+                anonUserId: userId,
+                mastery_status: masteryStatus,
+                familiarity_score: familiarityScore,
+              }
+            : {
+                mastery_status: masteryStatus,
+                familiarity_score: familiarityScore,
+              };
+
+          const response = isOnboardingPreview
+            ? await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              })
+            : await authFetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
           
           if (response.ok) {
             // Refresh the study plan to get updated lesson status

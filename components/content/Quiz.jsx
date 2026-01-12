@@ -827,32 +827,61 @@ export default function Quiz({
     const familiarityScore = totalCount > 0 ? correctCount / totalCount : 0;
 
     // Update progress if tracking info is available
-    if (!isPreview && userId && courseId && lessonId) {
+    if (userId && courseId && lessonId) {
       try {
         const allCorrect = totalCount > 0 && correctCount === totalCount;
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
 
-        // Send both progress update and question status updates in parallel
-        const progressPromise = authFetch(`/api/courses/${courseId}/nodes/${lessonId}/progress`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            mastery_status: masteryStatus,
-            familiarity_score: familiarityScore,
-          }),
-        });
+        const previewPayload = {
+          courseId,
+          anonUserId: userId,
+          mastery_status: masteryStatus,
+          familiarity_score: familiarityScore,
+        };
+        const progressUrl = isPreview
+          ? `/api/onboarding/preview/nodes/${lessonId}/progress`
+          : `/api/courses/${courseId}/nodes/${lessonId}/progress`;
+        const questionsUrl = isPreview
+          ? `/api/onboarding/preview/questions`
+          : `/api/courses/${courseId}/questions`;
 
-        // Send question status updates
-        const questionStatusPromise = questionStatusUpdates.length > 0 
-          ? authFetch(`/api/courses/${courseId}/questions`, {
+        // Send both progress update and question status updates in parallel
+        const progressPromise = isPreview
+          ? fetch(progressUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(previewPayload),
+            })
+          : authFetch(progressUrl, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 userId,
-                updates: questionStatusUpdates
+                mastery_status: masteryStatus,
+                familiarity_score: familiarityScore,
               }),
-            })
+            });
+
+        // Send question status updates
+        const questionStatusPromise = questionStatusUpdates.length > 0 
+          ? (isPreview
+              ? fetch(questionsUrl, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    courseId,
+                    anonUserId: userId,
+                    updates: questionStatusUpdates
+                  }),
+                })
+              : authFetch(questionsUrl, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    userId,
+                    updates: questionStatusUpdates
+                  }),
+                }))
           : Promise.resolve({ ok: true });
 
         const [progressResponse, questionStatusResponse] = await Promise.all([
@@ -919,7 +948,7 @@ export default function Quiz({
 
   const handleFlagQuestion = useCallback(
     async (questionId) => {
-      if (isPreview || !isSubmitted || !userId || !courseId) return;
+      if (!isSubmitted || !userId || !courseId) return;
       
       // Only allow flagging for correct questions
       const question = normalizedQuestions.find(q => q.id === questionId);
@@ -945,18 +974,35 @@ export default function Quiz({
       
       // Send PATCH request to update the status
       try {
-        const response = await authFetch(`/api/courses/${courseId}/questions`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            updates: [{
-              id: questionId,
-              status: newFlaggedState ? 'correct/flag' : 'correct',
-              selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
-            }]
-          }),
-        });
+        const url = isPreview
+          ? '/api/onboarding/preview/questions'
+          : `/api/courses/${courseId}/questions`;
+        const response = isPreview
+          ? await fetch(url, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseId,
+                anonUserId: userId,
+                updates: [{
+                  id: questionId,
+                  status: newFlaggedState ? 'correct/flag' : 'correct',
+                  selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
+                }]
+              }),
+            })
+          : await authFetch(url, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId,
+                updates: [{
+                  id: questionId,
+                  status: newFlaggedState ? 'correct/flag' : 'correct',
+                  selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
+                }]
+              }),
+            });
         
         if (!response.ok) {
           console.error('Failed to update flagged question status:', response.status);

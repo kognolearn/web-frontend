@@ -9,6 +9,10 @@ export async function POST(request, { params }) {
   return proxyRequest(request, params, "POST");
 }
 
+export async function PATCH(request, { params }) {
+  return proxyRequest(request, params, "PATCH");
+}
+
 async function proxyRequest(request, params, method) {
   try {
     const resolvedParams = await params;
@@ -29,7 +33,10 @@ async function proxyRequest(request, params, method) {
       headers["Authorization"] = authHeader;
     }
 
-    const body = method === "POST" ? await request.text() : undefined;
+    const body =
+      method === "POST" || method === "PATCH" || method === "PUT"
+        ? await request.text()
+        : undefined;
 
     const resp = await fetch(targetUrl.toString(), {
       method,
