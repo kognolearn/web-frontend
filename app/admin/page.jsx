@@ -346,6 +346,7 @@ export default function AdminPage() {
     const [eventsData, setEventsData] = useState([]);
     const [usageByUserData, setUsageByUserData] = useState([]);
     const [usageByCourseData, setUsageByCourseData] = useState([]);
+    const [studySessionStats, setStudySessionStats] = useState(null);
     
     // Date range state
     const [activePreset, setActivePreset] = useState(30); // Default to last 30 days
@@ -416,6 +417,9 @@ export default function AdminPage() {
                     bugCount: 0,
                     featureCount: 0,
                     otherCount: 0,
+                    distractionResolutionRate: null,
+                    distractionsDetected: 0,
+                    distractionsResolved: 0,
                 },
             };
         }
@@ -659,6 +663,9 @@ export default function AdminPage() {
             bugCount,
             featureCount,
             otherCount,
+            distractionResolutionRate: studySessionStats?.resolutionRate ?? null,
+            distractionsDetected: studySessionStats?.totals?.distractionsDetected ?? 0,
+            distractionsResolved: studySessionStats?.totals?.distractionsResolved ?? 0,
         };
 
         return {
@@ -672,7 +679,7 @@ export default function AdminPage() {
             eventsByType: eventsByTypeData,
             stats,
         };
-    }, [rawUsageData, feedbackData, eventsData, startDate, endDate]);
+    }, [rawUsageData, feedbackData, eventsData, studySessionStats, startDate, endDate]);
 
     // Separate loading state for date-range data
     const [dateRangeLoading, setDateRangeLoading] = useState(false);
@@ -715,18 +722,21 @@ export default function AdminPage() {
             // Also fetch date-range dependent data on refresh
             if (isRefresh && startDate && endDate) {
                 const dateParams = `startDate=${startDate}&endDate=${endDate}`;
-                const [usageByUserRes, usageByCourseRes] = await Promise.all([
+                const [usageByUserRes, usageByCourseRes, studySessionRes] = await Promise.all([
                     fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/study-sessions?${dateParams}`, { headers }),
                 ]);
 
-                const [usageByUserResult, usageByCourseResult] = await Promise.all([
+                const [usageByUserResult, usageByCourseResult, studySessionResult] = await Promise.all([
                     usageByUserRes.json(),
                     usageByCourseRes.json(),
+                    studySessionRes.json(),
                 ]);
 
                 setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
                 setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
+                setStudySessionStats(studySessionResult.success ? studySessionResult : null);
             }
         } catch (err) {
             console.error("Error fetching admin data:", err);
@@ -758,18 +768,21 @@ export default function AdminPage() {
                     : {};
 
                 const dateParams = `startDate=${startDate}&endDate=${endDate}`;
-                const [usageByUserRes, usageByCourseRes] = await Promise.all([
+                const [usageByUserRes, usageByCourseRes, studySessionRes] = await Promise.all([
                     fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/study-sessions?${dateParams}`, { headers }),
                 ]);
 
-                const [usageByUserResult, usageByCourseResult] = await Promise.all([
+                const [usageByUserResult, usageByCourseResult, studySessionResult] = await Promise.all([
                     usageByUserRes.json(),
                     usageByCourseRes.json(),
+                    studySessionRes.json(),
                 ]);
 
                 setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
                 setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
+                setStudySessionStats(studySessionResult.success ? studySessionResult : null);
             } catch (err) {
                 console.error("Error fetching date-range data:", err);
             } finally {
@@ -992,7 +1005,7 @@ export default function AdminPage() {
                     </div>
 
                     {/* Quick Stats Row */}
-                    <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+                    <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
                         <div className="card p-4 text-center">
                             <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">DAU Today</p>
                             <p className="text-xl font-bold mt-1 text-[var(--primary)]">{data.stats.currentDAU ?? 0}</p>
@@ -1008,6 +1021,17 @@ export default function AdminPage() {
                         <div className="card p-4 text-center">
                             <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Avg Tokens/Call</p>
                             <p className="text-xl font-bold mt-1">{Math.round(data.stats.avgTokensPerCall ?? 0).toLocaleString()}</p>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Distraction Recovery</p>
+                            <p className="text-xl font-bold mt-1">
+                                {data.stats.distractionResolutionRate !== null && data.stats.distractionResolutionRate !== undefined
+                                    ? `${data.stats.distractionResolutionRate.toFixed(1)}%`
+                                    : "N/A"}
+                            </p>
+                            <p className="text-[10px] text-[var(--muted-foreground)]/70 mt-1">
+                                {data.stats.distractionsResolved ?? 0}/{data.stats.distractionsDetected ?? 0} resolved
+                            </p>
                         </div>
                     </div>
 
