@@ -27,6 +27,7 @@ import {
   clearOnboardingCourseSession,
   getOnboardingCourseSession,
 } from "@/lib/onboarding";
+import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -243,16 +244,17 @@ export default function DashboardPage() {
     
     if (!hasPendingCourses) return;
 
-    // Poll every 5 seconds for pending courses
+    // Reduced polling frequency - realtime handles most updates now
+    // This is a fallback in case realtime misses something
     pollingRef.current = setInterval(async () => {
       const updatedCourses = await loadCourses(userId, true);
       const stillPending = updatedCourses.some(c => c.status === 'pending');
-      
+
       if (!stillPending && pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
-    }, 5000);
+    }, 30000); // Reduced from 5s to 30s - realtime handles most updates
   }, [loadCourses]);
 
   const loadPendingJobs = useCallback((userId) => {
@@ -342,11 +344,75 @@ export default function DashboardPage() {
     const jobs = loadPendingJobs(userId);
     if (!jobs.length) return;
 
+    // Initial check immediately
     pollCourseJobs(userId);
+    // Reduced polling frequency - realtime handles most updates now
+    // This is a fallback in case realtime misses something
     jobPollingRef.current = setInterval(() => {
       pollCourseJobs(userId);
-    }, 5000);
+    }, 30000); // Reduced from 5s to 30s - realtime handles most updates
   }, [loadPendingJobs, pollCourseJobs]);
+
+  // Handle realtime job updates - called when backend broadcasts job status changes
+  const handleRealtimeJobUpdate = useCallback((payload) => {
+    if (!user?.id) return;
+
+    const { jobId, status, courseId } = payload;
+    const normalizedStatus = status?.toLowerCase() || '';
+
+    // Update local job tracking
+    if (courseId || status) {
+      upsertCourseCreateJob(user.id, { jobId, courseId, status });
+    }
+
+    const isFinished = terminalJobStatuses.has(normalizedStatus);
+
+    if (isFinished) {
+      // Remove from local storage and state
+      removeCourseCreateJob(user.id, jobId);
+      setPendingJobs(prev => prev.filter(j => j.jobId !== jobId));
+
+      // Refresh courses list to show the new/updated course
+      loadCourses(user.id, true).then(courseList => {
+        startPollingForPendingCourses(user.id, courseList);
+      });
+    } else {
+      // Update pending jobs state
+      setPendingJobs(prev => {
+        const existing = prev.find(j => j.jobId === jobId);
+        if (existing) {
+          return prev.map(j => j.jobId === jobId ? { ...j, status, courseId: courseId || j.courseId } : j);
+        }
+        return prev;
+      });
+    }
+  }, [user?.id, loadCourses, startPollingForPendingCourses]);
+
+  // Handle realtime course updates - called when course status changes in DB
+  const handleRealtimeCourseUpdate = useCallback((payload) => {
+    const { courseId, status, title } = payload;
+
+    setCourses(prev => {
+      const existingIndex = prev.findIndex(c => c.id === courseId);
+      if (existingIndex >= 0) {
+        // Update existing course
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], status, ...(title && { title }) };
+        return updated;
+      }
+      // Course not in list yet - might be newly created, trigger refresh
+      if (user?.id) {
+        loadCourses(user.id, true);
+      }
+      return prev;
+    });
+  }, [user?.id, loadCourses]);
+
+  // Subscribe to realtime updates
+  useRealtimeUpdates(user?.id, {
+    onJobUpdate: handleRealtimeJobUpdate,
+    onCourseUpdate: handleRealtimeCourseUpdate,
+  });
 
   // Cleanup polling on unmount
   useEffect(() => {
