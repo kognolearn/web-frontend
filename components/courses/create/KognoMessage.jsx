@@ -269,8 +269,8 @@ export default function KognoMessage({
               </div>
             )}
 
-            {/* Loading indicator */}
-            {isLoading && !showReasoning && <LoadingSpinner />}
+            {/* Loading indicator (hide when showing reasoning loader) */}
+            {isLoading && !showReasoning && !reasoningCompleted && <LoadingSpinner />}
 
             {/* Reasoning loader for topic generation */}
             {(showReasoning || reasoningCompleted) && (

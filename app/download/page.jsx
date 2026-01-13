@@ -70,15 +70,30 @@ export default function DownloadPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setDetectedOS(detectOS());
-    setMacArch(detectMacArch());
-  }, []);
+    const os = detectOS();
+    const arch = detectMacArch();
 
-  useEffect(() => {
+    setDetectedOS(os);
+    setMacArch(arch);
+
     async function fetchLatestRelease() {
       try {
         setLoading(true);
-        const response = await fetch("/api/releases/latest?platform=darwin");
+
+        const platformMap = {
+          windows: "win32",
+          mac: "darwin",
+          linux: "linux",
+        };
+
+        const platform = platformMap[os] || "win32";
+        const params = new URLSearchParams({ platform });
+
+        if (platform === "darwin") {
+          params.set("arch", arch);
+        }
+
+        const response = await fetch(`/api/releases/latest?${params.toString()}`);
         if (response.ok) {
           const data = await response.json();
           setReleaseInfo(data);
@@ -93,6 +108,7 @@ export default function DownloadPage() {
         setLoading(false);
       }
     }
+
     fetchLatestRelease();
   }, []);
 

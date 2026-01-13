@@ -295,7 +295,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             break;
           case "syllabusChoice":
           case "examChoice":
-            // These are stored in previousResponses
+            // These need to be persisted in previousResponses for condition checks
+            setPreviousResponses((prev) => ({
+              ...prev,
+              [currentStep.field]: value,
+            }));
             stateOverrides[currentStep.field] = value;
             break;
           case "syllabusFiles":

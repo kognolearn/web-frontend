@@ -207,16 +207,6 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             }}
             accept={accept}
           />
-          {/* Skip button */}
-          {skippable && (
-            <button
-              type="button"
-              onClick={conversation.handleSkip}
-              className="w-full mt-2 py-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-            >
-              {skipLabel || "Skip"}
-            </button>
-          )}
         </div>
       );
     }
@@ -330,6 +320,9 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             const reasoningCompleted =
               message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
 
+            // Don't show skip button in message for content_with_attachments (it has its own Done button)
+            const showSkipInMessage = message.skippable && message.inputType !== "content_with_attachments";
+
             return (
               <KognoMessage
                 key={message.id}
@@ -341,7 +334,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                 options={message.options}
                 onOptionSelect={conversation.handleOptionSelect}
                 selectedOption={conversation.previousResponses[message.stepId]}
-                skippable={message.skippable}
+                skippable={showSkipInMessage}
                 skipLabel={message.skipLabel}
                 onSkip={conversation.handleSkip}
                 confirmLabel={message.confirmLabel}

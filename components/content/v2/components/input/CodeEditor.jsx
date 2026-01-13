@@ -1,10 +1,58 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
 import { Copy, Check, RotateCcw, ExternalLink } from "lucide-react";
+import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-10 text-xs text-[var(--muted-foreground)]">
+      Loading editor...
+    </div>
+  ),
+});
+
+const languageMap = {
+  c: "c",
+  cpp: "cpp",
+  "c++": "cpp",
+  "c/c++": "cpp",
+  python: "python",
+  py: "python",
+  javascript: "javascript",
+  js: "javascript",
+  typescript: "typescript",
+  ts: "typescript",
+  java: "java",
+  csharp: "csharp",
+  "c#": "csharp",
+  go: "go",
+  rust: "rust",
+  ruby: "ruby",
+  php: "php",
+  swift: "swift",
+  kotlin: "kotlin",
+  sql: "sql",
+  html: "html",
+  css: "css",
+  json: "json",
+  xml: "xml",
+  yaml: "yaml",
+  markdown: "markdown",
+  shell: "shell",
+  bash: "shell",
+  html_css: "html",
+  latex: "plaintext",
+  tex: "plaintext",
+  text: "plaintext",
+  plaintext: "plaintext",
+};
 
 /**
- * CodeEditor - Code input with syntax highlighting (basic)
+ * CodeEditor - Code input with Monaco editor
  *
  * @param {Object} props
  * @param {string} props.id - Component ID
@@ -32,13 +80,31 @@ export default function CodeEditor({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
-  const textareaRef = useRef(null);
-  const lineNumbersRef = useRef(null);
+  const { theme: appTheme } = useTheme();
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const decorationsRef = useRef([]);
 
   const currentValue = value !== undefined ? value : localValue;
 
-  const handleChange = useCallback((e) => {
-    const newValue = e.target.value;
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
+
+  const editorTheme =
+    editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
+
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      readOnly: disabled || isGraded,
+      domReadOnly: disabled || isGraded,
+    };
+  }, [getMonacoOptions, disabled, isGraded]);
+
+  const handleChange = useCallback((nextValue) => {
+    const newValue = nextValue ?? "";
     setLocalValue(newValue);
     onChange?.(newValue);
   }, [onChange]);
@@ -58,38 +124,40 @@ export default function CodeEditor({
     }
   };
 
-  // Sync scroll between line numbers and textarea
-  const handleScroll = (e) => {
-    if (lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = e.target.scrollTop;
-    }
-  };
+  const applyReadonlyDecorations = useCallback(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
 
-  // Handle tab key for indentation
-  const handleKeyDown = (e) => {
-    if (disabled || isGraded) return;
+    const maxLine = model.getLineCount();
+    const decorationLines = (readonly_lines || [])
+      .map((line) => Number(line))
+      .filter((line) => Number.isInteger(line) && line > 0 && line <= maxLine);
 
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const start = e.target.selectionStart;
-      const end = e.target.selectionEnd;
+    const decorations = decorationLines.map((line) => ({
+      range: new monacoRef.current.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: "monaco-readonly-line",
+        linesDecorationsClassName: "monaco-readonly-line-margin",
+      },
+    }));
 
-      const newValue =
-        currentValue.substring(0, start) + "  " + currentValue.substring(end);
+    decorationsRef.current = editorRef.current.deltaDecorations(
+      decorationsRef.current,
+      decorations,
+    );
+  }, [readonly_lines]);
 
-      setLocalValue(newValue);
-      onChange?.(newValue);
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    applyReadonlyDecorations();
+  }, [applyReadonlyDecorations]);
 
-      // Set cursor position after tab
-      setTimeout(() => {
-        e.target.selectionStart = e.target.selectionEnd = start + 2;
-      }, 0);
-    }
-  };
-
-  // Calculate line numbers
-  const lines = currentValue.split("\n");
-  const lineCount = lines.length;
+  useEffect(() => {
+    applyReadonlyDecorations();
+  }, [applyReadonlyDecorations, currentValue]);
 
   // Determine border color based on grade
   let borderClass = "border-[var(--border)]";
@@ -103,7 +171,7 @@ export default function CodeEditor({
 
   // Check if this is a text/math-friendly language
   const isLatexFriendly = ["markdown", "latex", "tex", "text", "plaintext"].includes(
-    language?.toLowerCase()
+    rawLanguage
   );
 
   return (
@@ -112,7 +180,7 @@ export default function CodeEditor({
       <div className="flex items-center justify-between px-4 py-2 rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--surface-2)]">
         <div className="flex items-center gap-3">
           <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-            {language}
+            {rawLanguage}
           </span>
           {isLatexFriendly && (
             <a
@@ -160,48 +228,16 @@ export default function CodeEditor({
       </div>
 
       {/* Editor */}
-      <div className={`relative rounded-b-xl border ${borderClass} overflow-hidden`}>
-        <div className="flex">
-          {/* Line numbers */}
-          <div
-            ref={lineNumbersRef}
-            className="flex-shrink-0 p-3 bg-[var(--surface-2)] text-right select-none overflow-hidden"
-            style={{ width: "3rem" }}
-          >
-            {Array.from({ length: lineCount }, (_, i) => (
-              <div
-                key={i + 1}
-                className={`text-xs leading-6 font-mono ${
-                  readonly_lines.includes(i + 1)
-                    ? "text-amber-500"
-                    : "text-[var(--muted-foreground)]"
-                }`}
-              >
-                {i + 1}
-              </div>
-            ))}
-          </div>
-
-          {/* Code textarea */}
-          <textarea
-            ref={textareaRef}
-            value={currentValue}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onScroll={handleScroll}
-            disabled={disabled || isGraded}
-            spellCheck={false}
-            className={`
-              flex-1 p-3 font-mono text-sm leading-6
-              bg-[var(--surface-1)] text-[var(--foreground)]
-              focus:outline-none
-              disabled:opacity-50 disabled:cursor-not-allowed
-              resize-none min-h-[200px]
-              overflow-auto whitespace-pre
-            `}
-            style={{ tabSize: 2 }}
-          />
-        </div>
+      <div className={`relative rounded-b-xl border ${borderClass} overflow-hidden bg-[var(--surface-1)]`}>
+        <MonacoEditor
+          value={currentValue}
+          onChange={handleChange}
+          language={resolvedLanguage}
+          height={280}
+          theme={editorTheme}
+          options={monacoOptions}
+          onMount={handleEditorDidMount}
+        />
       </div>
 
       {/* Execution error display */}

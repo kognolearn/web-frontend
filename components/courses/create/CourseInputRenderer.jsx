@@ -199,13 +199,13 @@ function ContentWithAttachments({
   const fileInputRef = useRef(null);
   const [isDragActive, setIsDragActive] = useState(false);
 
-  // Calculate rows based on content (1-4 rows)
+  // Calculate rows based on content (2-12 rows)
   const calculateRows = useCallback((value) => {
-    if (!value) return 1;
+    if (!value) return 2;
     const lineCount = (value.match(/\n/g) || []).length + 1;
     // Estimate character-based rows (roughly 60 chars per line)
     const charRows = Math.ceil(value.length / 60);
-    return Math.min(4, Math.max(1, Math.max(lineCount, charRows)));
+    return Math.min(12, Math.max(2, Math.max(lineCount, charRows)));
   }, []);
 
   const [rows, setRows] = useState(() => calculateRows(text));
