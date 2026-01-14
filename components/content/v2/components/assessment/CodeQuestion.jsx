@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Copy, Check, RotateCcw, Play, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Copy, Check, RotateCcw, Play, CheckCircle2, XCircle, Circle, Maximize2, Minimize2 } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
 
@@ -52,9 +52,9 @@ const languageMap = {
 };
 
 /**
- * TestCaseIndicator - Hoverable test case result with tooltip
+ * TestCaseIndicator - Clickable test case result with expandable details
  */
-function TestCaseIndicator({ index, testCase, testResult, isGraded }) {
+function TestCaseIndicator({ index, testCase, testResult, isGraded, isExpanded, onToggle }) {
   const [isHovered, setIsHovered] = useState(false);
 
   const getStatus = () => {
@@ -72,23 +72,28 @@ function TestCaseIndicator({ index, testCase, testResult, isGraded }) {
 
   const StatusIcon = status === "passed" ? CheckCircle2 : status === "failed" ? XCircle : Circle;
 
+  // Show tooltip on hover (for non-graded) or when expanded (for graded)
+  const showDetails = isExpanded || (!isGraded && isHovered);
+
   return (
     <div className="relative">
       <button
         type="button"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onClick={() => isGraded && onToggle?.()}
         className={`
           w-8 h-8 rounded-lg border flex items-center justify-center
-          transition-all cursor-default
+          transition-all ${isGraded ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}
           ${statusStyles[status]}
+          ${isExpanded ? 'ring-2 ring-offset-2 ring-[var(--primary)]' : ''}
         `}
       >
         <StatusIcon className="w-4 h-4" />
       </button>
 
-      {/* Tooltip */}
-      {isHovered && (
+      {/* Tooltip/Details */}
+      {showDetails && (
         <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[90vw]">
           <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-xl shadow-xl p-3 space-y-2">
             {/* Header */}
@@ -123,11 +128,15 @@ function TestCaseIndicator({ index, testCase, testResult, isGraded }) {
               </pre>
             </div>
 
-            {/* Actual (only if graded and failed) */}
-            {isGraded && testResult && !testResult.passed && (
+            {/* Actual output - show for both passed and failed when graded */}
+            {isGraded && testResult && (
               <div>
-                <span className="text-[10px] uppercase tracking-wide text-rose-500">Your Output</span>
-                <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                <span className={`text-[10px] uppercase tracking-wide ${
+                  testResult.passed ? "text-emerald-500" : "text-rose-500"
+                }`}>Your Output</span>
+                <pre className={`mt-1 p-2 rounded-lg font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto ${
+                  testResult.passed ? "bg-emerald-500/10" : "bg-rose-500/10"
+                }`}>
                   {testResult.actual_output || "(no output)"}
                 </pre>
               </div>
@@ -180,6 +189,8 @@ export default function CodeQuestion({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [expandedTestIndex, setExpandedTestIndex] = useState(null);
   const { theme: appTheme } = useTheme();
   const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
 
@@ -271,6 +282,24 @@ export default function CodeQuestion({
                 </>
               )}
             </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg
+                hover:bg-[var(--surface-1)] transition-colors"
+              title={isExpanded ? "Collapse editor" : "Expand editor"}
+            >
+              {isExpanded ? (
+                <>
+                  <Minimize2 className="w-3 h-3" />
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3 h-3" />
+                  Expand
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -280,7 +309,7 @@ export default function CodeQuestion({
             value={currentValue}
             onChange={handleChange}
             language={resolvedLanguage}
-            height={280}
+            height={isExpanded ? 560 : 280}
             theme={editorTheme}
             options={monacoOptions}
           />
@@ -334,6 +363,8 @@ export default function CodeQuestion({
                   testCase={testCase}
                   testResult={testResult}
                   isGraded={isGraded}
+                  isExpanded={expandedTestIndex === index}
+                  onToggle={() => setExpandedTestIndex(expandedTestIndex === index ? null : index)}
                 />
               );
             })}
@@ -346,10 +377,10 @@ export default function CodeQuestion({
             </p>
           )}
 
-          {/* Hover hint */}
-          {!isGraded && visibleTestCases.length > 0 && (
+          {/* Interaction hint */}
+          {visibleTestCases.length > 0 && (
             <p className="text-xs text-[var(--muted-foreground)] italic">
-              Hover over each test to see details
+              {isGraded ? "Click on a test to see details" : "Hover over each test to see details"}
             </p>
           )}
         </div>
