@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useCourseCreationFlow } from "@/hooks/useCourseCreationFlow";
 import { useCourseConversation } from "@/hooks/useCourseConversation";
+import { useQueueStatus } from "@/hooks/useQueueStatus";
 import KognoMessage from "./KognoMessage";
 import UserResponseBubble from "./UserResponseBubble";
 import CourseInputRenderer from "./CourseInputRenderer";
 import TopicEditorChat from "./TopicEditorChat";
 import ConfidenceEditorChat from "./ConfidenceEditorChat";
+import HighUsageWarning from "./HighUsageWarning";
 import { calculateProgress } from "./conversationFlow";
 
 /**
@@ -61,6 +63,19 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
   const flowState = useCourseCreationFlow({ onComplete });
   const conversation = useCourseConversation(flowState);
   const chatContainerRef = useRef(null);
+  const [warningDismissed, setWarningDismissed] = useState(false);
+
+  // Poll queue status for high usage warnings
+  const { isHighUsage, creditUtilization, estimatedWaitMinutes } = useQueueStatus({
+    enabled: true,
+    pollInterval: 30000,
+  });
+
+  // Show warning during generation phases
+  const showHighUsageWarning =
+    isHighUsage &&
+    !warningDismissed &&
+    (flowState.courseGenerating || flowState.isTopicsLoading);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -289,6 +304,16 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     <div className="flex flex-col h-screen bg-[var(--background)]">
       {/* Header */}
       <ChatHeader progress={conversation.progress} onBack={handleBack} />
+
+      {/* High usage warning */}
+      <div className="px-4 pt-4">
+        <HighUsageWarning
+          isVisible={showHighUsageWarning}
+          creditUtilization={creditUtilization}
+          estimatedWaitMinutes={estimatedWaitMinutes}
+          onDismiss={() => setWarningDismissed(true)}
+        />
+      </div>
 
       {/* Switch to wizard option */}
       {onSwitchToWizard && (

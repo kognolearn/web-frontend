@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Copy, Check, RotateCcw, ExternalLink } from "lucide-react";
+import { Copy, Check, RotateCcw, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
 
@@ -80,6 +80,7 @@ export default function CodeEditor({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const { theme: appTheme } = useTheme();
   const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
   const editorRef = useRef(null);
@@ -224,6 +225,24 @@ export default function CodeEditor({
               </>
             )}
           </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg
+              hover:bg-[var(--surface-1)] transition-colors"
+            title={isExpanded ? "Collapse editor" : "Expand editor"}
+          >
+            {isExpanded ? (
+              <>
+                <Minimize2 className="w-3 h-3" />
+                Collapse
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3 h-3" />
+                Expand
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -233,7 +252,7 @@ export default function CodeEditor({
           value={currentValue}
           onChange={handleChange}
           language={resolvedLanguage}
-          height={280}
+          height={isExpanded ? 560 : 280}
           theme={editorTheme}
           options={monacoOptions}
           onMount={handleEditorDidMount}

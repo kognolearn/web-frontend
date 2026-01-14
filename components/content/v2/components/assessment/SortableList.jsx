@@ -1,10 +1,112 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { GripVertical, ArrowUp, ArrowDown, Check, X } from "lucide-react";
+import { GripVertical, Check, X } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 /**
- * SortableList - Drag-and-drop or button-based ordering
+ * Individual sortable item component
+ */
+function SortableItem({ id, item, index, status, disabled, isGraded }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: disabled || isGraded });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`
+        flex items-center gap-3 p-3 rounded-xl border
+        ${
+          status === "correct"
+            ? "border-emerald-500 bg-emerald-500/10"
+            : status === "incorrect"
+            ? "border-rose-500 bg-rose-500/10"
+            : "border-[var(--border)] bg-[var(--surface-2)]"
+        }
+        ${isDragging ? "shadow-lg z-10" : ""}
+      `}
+    >
+      {/* Drag handle / position indicator */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`
+          flex-shrink-0 w-8 h-8 rounded-lg bg-[var(--surface-1)] flex items-center justify-center
+          ${disabled || isGraded ? "" : "cursor-grab active:cursor-grabbing"}
+        `}
+      >
+        {disabled || isGraded ? (
+          <span className="text-sm font-medium text-[var(--muted-foreground)]">
+            {index + 1}
+          </span>
+        ) : (
+          <GripVertical className="w-4 h-4 text-[var(--muted-foreground)]" />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 text-sm text-[var(--foreground)]">
+        {item.content}
+      </div>
+
+      {/* Status icon */}
+      {status === "correct" && (
+        <Check className="w-5 h-5 text-emerald-500" />
+      )}
+      {status === "incorrect" && (
+        <X className="w-5 h-5 text-rose-500" />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Drag overlay item (shown while dragging)
+ */
+function DragOverlayItem({ item }) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--primary)] bg-[var(--surface-2)] shadow-xl">
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[var(--surface-1)] flex items-center justify-center cursor-grabbing">
+        <GripVertical className="w-4 h-4 text-[var(--muted-foreground)]" />
+      </div>
+      <div className="flex-1 text-sm text-[var(--foreground)]">
+        {item.content}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SortableList - Drag-and-drop ordering
  *
  * @param {Object} props
  * @param {string} props.id - Component ID
@@ -27,7 +129,6 @@ export default function SortableList({
   items = [],
 }) {
   // Normalize items to always be objects with {id, content}
-  // Supports both string arrays and object arrays
   const normalizedItems = items.map((item, index) =>
     typeof item === "string"
       ? { id: item, content: item }
@@ -38,22 +139,38 @@ export default function SortableList({
   const [order, setOrder] = useState(
     value || normalizedItems.map((item) => item.id)
   );
+  const [activeId, setActiveId] = useState(null);
 
   const currentOrder = value !== undefined ? value : order;
 
-  const moveItem = useCallback((index, direction) => {
-    if (disabled || isGraded) return;
+  // Configure sensors for mouse/touch and keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum drag distance before activation
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-    const newOrder = [...currentOrder];
-    const newIndex = index + direction;
+  const handleDragStart = useCallback((event) => {
+    setActiveId(event.active.id);
+  }, []);
 
-    if (newIndex < 0 || newIndex >= newOrder.length) return;
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    setActiveId(null);
 
-    [newOrder[index], newOrder[newIndex]] = [newOrder[newIndex], newOrder[index]];
-
-    setOrder(newOrder);
-    onChange?.(newOrder);
-  }, [disabled, isGraded, currentOrder, onChange]);
+    if (active.id !== over?.id) {
+      const oldIndex = currentOrder.indexOf(active.id);
+      const newIndex = currentOrder.indexOf(over.id);
+      const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+      setOrder(newOrder);
+      onChange?.(newOrder);
+    }
+  }, [currentOrder, onChange]);
 
   // Get position status for grading
   const getPositionStatus = (itemId, index) => {
@@ -64,75 +181,49 @@ export default function SortableList({
 
   // Get item by ID
   const getItem = (itemId) => normalizedItems.find((item) => item.id === itemId);
+  const activeItem = activeId ? getItem(activeId) : null;
 
   return (
     <div id={id} className="v2-sortable-list space-y-2">
-      {currentOrder.map((itemId, index) => {
-        const item = getItem(itemId);
-        if (!item) return null;
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={currentOrder}
+          strategy={verticalListSortingStrategy}
+        >
+          {currentOrder.map((itemId, index) => {
+            const item = getItem(itemId);
+            if (!item) return null;
 
-        const status = getPositionStatus(itemId, index);
+            return (
+              <SortableItem
+                key={itemId}
+                id={itemId}
+                item={item}
+                index={index}
+                status={getPositionStatus(itemId, index)}
+                disabled={disabled}
+                isGraded={isGraded}
+              />
+            );
+          })}
+        </SortableContext>
 
-        return (
-          <div
-            key={itemId}
-            className={`
-              flex items-center gap-3 p-3 rounded-xl border
-              ${
-                status === "correct"
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : status === "incorrect"
-                  ? "border-rose-500 bg-rose-500/10"
-                  : "border-[var(--border)] bg-[var(--surface-2)]"
-              }
-            `}
-          >
-            {/* Drag handle / position indicator */}
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[var(--surface-1)] flex items-center justify-center">
-              {disabled || isGraded ? (
-                <span className="text-sm font-medium text-[var(--muted-foreground)]">
-                  {index + 1}
-                </span>
-              ) : (
-                <GripVertical className="w-4 h-4 text-[var(--muted-foreground)]" />
-              )}
-            </div>
+        <DragOverlay>
+          {activeItem ? <DragOverlayItem item={activeItem} /> : null}
+        </DragOverlay>
+      </DndContext>
 
-            {/* Content */}
-            <div className="flex-1 text-sm text-[var(--foreground)]">
-              {item.content}
-            </div>
-
-            {/* Status icon */}
-            {status === "correct" && (
-              <Check className="w-5 h-5 text-emerald-500" />
-            )}
-            {status === "incorrect" && (
-              <X className="w-5 h-5 text-rose-500" />
-            )}
-
-            {/* Move buttons */}
-            {!disabled && !isGraded && (
-              <div className="flex gap-1">
-                <button
-                  onClick={() => moveItem(index, -1)}
-                  disabled={index === 0}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-1)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ArrowUp className="w-4 h-4 text-[var(--muted-foreground)]" />
-                </button>
-                <button
-                  onClick={() => moveItem(index, 1)}
-                  disabled={index === currentOrder.length - 1}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-1)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ArrowDown className="w-4 h-4 text-[var(--muted-foreground)]" />
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Instructions */}
+      {!isGraded && !disabled && (
+        <p className="text-xs text-[var(--muted-foreground)] mt-2">
+          Drag items to reorder them
+        </p>
+      )}
 
       {/* Show correct order if wrong */}
       {isGraded && !grade?.passed && grade?.expected && (
