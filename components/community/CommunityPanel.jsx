@@ -22,6 +22,9 @@ export default function CommunityPanel({
   const [loading, setLoading] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
+  // Check if running in desktop app (Electron) - will be false on web
+  const isDesktop = typeof window !== 'undefined' && Boolean(window.electronAPI);
+
   const fetchStudyGroup = useCallback(async () => {
     if (!courseId) return;
     setLoading(true);
@@ -114,8 +117,8 @@ export default function CommunityPanel({
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="fixed right-0 top-0 h-full w-full sm:w-[480px] md:w-[560px] bg-[var(--surface-1)] border-l border-[var(--border)] z-50 flex flex-col shadow-2xl"
             >
-              {/* Header */}
-              <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+              {/* Header - with extra padding on desktop for window controls */}
+              <div className={`p-4 border-b border-[var(--border)] flex items-center justify-between ${isDesktop ? 'pt-14' : ''}`}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/10 flex items-center justify-center">
                     <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

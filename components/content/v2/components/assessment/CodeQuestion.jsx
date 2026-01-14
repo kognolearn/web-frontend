@@ -1,7 +1,55 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Copy, Check, RotateCcw, Play, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-10 text-xs text-[var(--muted-foreground)]">
+      Loading editor...
+    </div>
+  ),
+});
+
+const languageMap = {
+  c: "c",
+  cpp: "cpp",
+  "c++": "cpp",
+  "c/c++": "cpp",
+  python: "python",
+  py: "python",
+  javascript: "javascript",
+  js: "javascript",
+  typescript: "typescript",
+  ts: "typescript",
+  java: "java",
+  csharp: "csharp",
+  "c#": "csharp",
+  go: "go",
+  rust: "rust",
+  ruby: "ruby",
+  php: "php",
+  swift: "swift",
+  kotlin: "kotlin",
+  sql: "sql",
+  html: "html",
+  css: "css",
+  json: "json",
+  xml: "xml",
+  yaml: "yaml",
+  markdown: "markdown",
+  shell: "shell",
+  bash: "shell",
+  html_css: "html",
+  latex: "plaintext",
+  tex: "plaintext",
+  text: "plaintext",
+  plaintext: "plaintext",
+};
 
 /**
  * TestCaseIndicator - Hoverable test case result with tooltip
@@ -132,12 +180,27 @@ export default function CodeQuestion({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
+  const { theme: appTheme } = useTheme();
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
 
   const currentValue = value !== undefined ? value : localValue;
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
+  const editorTheme =
+    editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
 
-  const handleChange = useCallback((e) => {
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      readOnly: disabled || isGraded,
+      domReadOnly: disabled || isGraded,
+    };
+  }, [getMonacoOptions, disabled, isGraded]);
+
+  const handleChange = useCallback((nextValue) => {
     if (disabled || isGraded) return;
-    const newValue = e.target.value;
+    const newValue = nextValue ?? "";
     setLocalValue(newValue);
     onChange?.(newValue);
   }, [disabled, isGraded, onChange]);
@@ -155,24 +218,6 @@ export default function CodeQuestion({
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
-    }
-  };
-
-  // Handle tab key
-  const handleKeyDown = (e) => {
-    if (disabled || isGraded) return;
-
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const start = e.target.selectionStart;
-      const end = e.target.selectionEnd;
-      const newValue =
-        currentValue.substring(0, start) + "  " + currentValue.substring(end);
-      setLocalValue(newValue);
-      onChange?.(newValue);
-      setTimeout(() => {
-        e.target.selectionStart = e.target.selectionEnd = start + 2;
-      }, 0);
     }
   };
 
@@ -196,7 +241,7 @@ export default function CodeQuestion({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--surface-2)]">
           <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-            {language}
+            {rawLanguage}
           </span>
           <div className="flex items-center gap-2">
             {initial_code && !isGraded && (
@@ -230,35 +275,15 @@ export default function CodeQuestion({
         </div>
 
         {/* Editor */}
-        <div className={`rounded-b-xl border ${borderClass} overflow-hidden`}>
-          <div className="flex">
-            {/* Line numbers */}
-            <div className="flex-shrink-0 p-3 bg-[var(--surface-2)] text-right select-none min-w-[3rem]">
-              {currentValue.split("\n").map((_, i) => (
-                <div
-                  key={i}
-                  className="text-xs leading-6 font-mono text-[var(--muted-foreground)]"
-                >
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-
-            {/* Code textarea */}
-            <textarea
-              value={currentValue}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              disabled={disabled || isGraded}
-              spellCheck={false}
-              className="flex-1 p-3 font-mono text-sm leading-6
-                bg-[var(--surface-1)] text-[var(--foreground)]
-                focus:outline-none
-                disabled:opacity-50 disabled:cursor-not-allowed
-                resize-none min-h-[200px] overflow-auto whitespace-pre"
-              style={{ tabSize: 2 }}
-            />
-          </div>
+        <div className={`rounded-b-xl border ${borderClass} overflow-hidden bg-[var(--surface-1)]`}>
+          <MonacoEditor
+            value={currentValue}
+            onChange={handleChange}
+            language={resolvedLanguage}
+            height={280}
+            theme={editorTheme}
+            options={monacoOptions}
+          />
         </div>
       </div>
 

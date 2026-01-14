@@ -563,3 +563,12 @@ select:focus {
 
 .border-danger\/50 { border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
 .border-success\/50 { border-color: color-mix(in srgb, var(--success) 50%, transparent); }
+
+/* Monaco read-only line styling */
+.monaco-editor .monaco-readonly-line {
+  background-color: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.monaco-editor .monaco-readonly-line-margin {
+  background-color: color-mix(in srgb, var(--warning) 28%, transparent);
+}
