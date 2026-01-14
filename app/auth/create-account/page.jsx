@@ -5,9 +5,6 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import { getDownloadRedirectPath } from "@/lib/featureFlags";
 
-const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
-const CREATE_ACCOUNT_ALLOWED_VALUES = new Set(["onboarding", "limit"]);
-
 export const metadata = {
   title: "Create Account | Kogno",
   description: "Create your workspace and start organizing every study goal",
@@ -40,12 +37,6 @@ export default async function CreateAccountPage({ searchParams }) {
 
   if (session) {
     redirect(getDownloadRedirectPath(redirectTo || "/dashboard"));
-  }
-
-  const accessCookie = cookieStore.get(CREATE_ACCOUNT_ACCESS_COOKIE)?.value || "";
-  const hasAccess = CREATE_ACCOUNT_ALLOWED_VALUES.has(accessCookie);
-  if (!hasAccess) {
-    redirect("/");
   }
 
   return (
