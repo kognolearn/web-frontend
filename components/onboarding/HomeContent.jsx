@@ -46,7 +46,7 @@ const STEP_ORDER = {
 
 const FALLBACKS = {
   negotiation: "Alright. What's your number?",
-  task: 'Okay. What college are you at?',
+  task: 'Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. What college are you at?',
   topics: "I couldn't find topics for that. What's the course name again?",
   generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
   status: "I couldn't check the lesson status. Want to pick a topic again?",
@@ -125,6 +125,7 @@ export default function HomeContent() {
   const flowCompleteRef = useRef(false);
   const awaitingTaskRef = useRef(false);
   const deferredChatRef = useRef(null);
+  const previewWindowRef = useRef(null);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -679,16 +680,20 @@ export default function HomeContent() {
     const suggestedPrice = payload.suggestedPrice;
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerProveValue = Boolean(payload.offerProveValue);
-    const isNegotiationFlow = [
-      NEGOTIATION_STEPS.NEGOTIATING,
-      NEGOTIATION_STEPS.AWAITING_CONFIRMATION,
-      NEGOTIATION_STEPS.NONE,
-    ].includes(negotiationStepRef.current);
-
-    if (!isNegotiationFlow) {
-      enqueueMessage({ type: 'chat', text: reply });
-      return true;
-    }
+    const currentStep = negotiationStepRef.current;
+    const inTaskInput = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+    ].includes(currentStep);
+    const inPreviewFlow = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.WAIT_TOPICS,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+      NEGOTIATION_STEPS.GENERATING_PREVIEW,
+      NEGOTIATION_STEPS.PREVIEW_READY,
+    ].includes(currentStep);
 
     if (suggestedPrice !== null) {
       setCurrentPrice(suggestedPrice);
@@ -697,16 +702,18 @@ export default function HomeContent() {
     if (offerProveValue && previewCourseId) {
       openPreviewInNewTab(previewCourseId);
       setHasGeneratedPreview(true);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
-    } else if (offerProveValue && !hasGeneratedPreview) {
+      if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(currentStep)) {
+        setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
+      }
+    } else if (offerProveValue && !hasGeneratedPreview && !inPreviewFlow) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COLLEGE);
       requestTaskMessage(NEGOTIATION_STEPS.ASK_COLLEGE);
       return true;
-    } else if (askConfirmation) {
+    } else if (askConfirmation && !inTaskInput) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
-    } else if (negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-    } else if (negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
+    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
@@ -786,12 +793,51 @@ export default function HomeContent() {
           courseName: dataRef.current.courseName,
           topic: dataRef.current.topic,
           topics: topicsRef.current,
+          latestUserMessage: meta?.latestUserMessage || null,
         },
       });
 
       if (requestId !== taskRequestIdRef.current) return;
       const reply = response?.reply || '';
-      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: metaWithStep });
+      const fieldUpdates = response?.fieldUpdates || {};
+      const resolvedUpdates = {
+        collegeName: fieldUpdates?.collegeName || null,
+        courseName: fieldUpdates?.courseName || null,
+        topic: fieldUpdates?.topic || null,
+      };
+      if (resolvedUpdates.collegeName) {
+        updateData({ collegeName: resolvedUpdates.collegeName });
+      }
+      if (resolvedUpdates.courseName) {
+        updateData({ courseName: resolvedUpdates.courseName });
+      }
+      if (resolvedUpdates.topic) {
+        updateData({ topic: resolvedUpdates.topic });
+      }
+
+      const nextStep = response?.nextStep;
+      const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
+      const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
+      if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
+        setNegotiationStepSafe(resolvedStep);
+      }
+
+      if (resolvedStep === NEGOTIATION_STEPS.WAIT_TOPICS) {
+        setShowTopics(false);
+        if (dataRef.current.courseName) {
+          fetchTopicsAndAsk();
+        }
+      }
+
+      if (resolvedStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
+        setShowTopics(false);
+        const selectedTopic = resolvedUpdates.topic || dataRef.current.topic;
+        if (selectedTopic) {
+          startLessonGeneration(selectedTopic);
+        }
+      }
+
+      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: { ...metaWithStep, step: resolvedStep } });
     } catch (error) {
       if (handleLimitReached(error)) return;
       enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
@@ -819,7 +865,8 @@ export default function HomeContent() {
       }
 
       setTopicsSafe(nextTopics);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.TOPICS_READY);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
+      requestTaskMessage(NEGOTIATION_STEPS.SHOW_TOPICS);
     } catch (error) {
       enqueueMessage({ type: 'task', text: FALLBACKS.topics });
       setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
@@ -830,14 +877,44 @@ export default function HomeContent() {
     }
   };
 
+  const ensurePreviewWindow = () => {
+    if (typeof window === 'undefined') return null;
+    const existing = previewWindowRef.current;
+    if (existing && !existing.closed) return existing;
+    const popup = window.open('about:blank', '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch (error) {}
+    }
+    previewWindowRef.current = popup;
+    return popup;
+  };
+
   const openPreviewInNewTab = (courseId, lessonId) => {
-    if (!courseId || typeof window === 'undefined') return;
+    if (!courseId || typeof window === 'undefined') return false;
     const params = new URLSearchParams({ preview: '1', negotiation: '1' });
     if (lessonId) {
       params.set('lesson', lessonId);
     }
     const url = `/courses/${courseId}?${params.toString()}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const existing = previewWindowRef.current;
+    if (existing && !existing.closed) {
+      try {
+        existing.location.href = url;
+        existing.focus();
+        return true;
+      } catch (error) {}
+    }
+    const popup = window.open(url, '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch (error) {}
+      previewWindowRef.current = popup;
+      return true;
+    }
+    return false;
   };
 
   const startLessonGeneration = async (selectedTopic) => {
@@ -850,6 +927,7 @@ export default function HomeContent() {
       return;
     }
 
+    ensurePreviewWindow();
     setIsJobRunning(true);
     try {
       const jobRes = await api.generateLesson({
@@ -869,33 +947,6 @@ export default function HomeContent() {
       setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
       setShowTopics(true);
     }
-  };
-
-  const processTaskResponse = (text) => {
-    const step = negotiationStepRef.current;
-
-    if (step === NEGOTIATION_STEPS.ASK_COLLEGE) {
-      updateData({ collegeName: text });
-      setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
-      requestTaskMessage(NEGOTIATION_STEPS.ASK_COURSE);
-      return true;
-    }
-
-    if (step === NEGOTIATION_STEPS.ASK_COURSE) {
-      updateData({ courseName: text });
-      setNegotiationStepSafe(NEGOTIATION_STEPS.WAIT_TOPICS);
-      fetchTopicsAndAsk();
-      return true;
-    }
-
-    if (step === NEGOTIATION_STEPS.SHOW_TOPICS) {
-      updateData({ topic: text });
-      setShowTopics(false);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.GENERATING_PREVIEW);
-      startLessonGeneration(text);
-      return true;
-    }
-    return false;
   };
 
   const handleConfirmPrice = async (price) => {
@@ -958,12 +1009,6 @@ export default function HomeContent() {
       return;
     }
 
-    if (currentStep === NEGOTIATION_STEPS.TOPICS_READY) {
-      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
-      requestTaskMessage(NEGOTIATION_STEPS.SHOW_TOPICS);
-      return;
-    }
-
     const isTaskInputStep = [
       NEGOTIATION_STEPS.ASK_COLLEGE,
       NEGOTIATION_STEPS.ASK_COURSE,
@@ -971,8 +1016,8 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (isTaskInputStep) {
-      const sentMessage = processTaskResponse(trimmed);
-      if (sentMessage) return;
+      requestTaskMessage(currentStep, { latestUserMessage: trimmed });
+      return;
     }
 
     if (currentStep === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
@@ -994,7 +1039,7 @@ export default function HomeContent() {
   };
 
   useEffect(() => {
-    if (negotiationStep !== NEGOTIATION_STEPS.GENERATING_PREVIEW || !jobId) return;
+    if (!jobId || !isJobRunning) return;
     if (!sessionOwnerRef.current) return;
 
     let pollInterval;
@@ -1008,9 +1053,16 @@ export default function HomeContent() {
           persistCourseContinuation(status);
           setHasGeneratedPreview(true);
           setPreviewCourseId(status.courseId || null);
-          openPreviewInNewTab(status.courseId, status.lessonId);
-          setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
-          addBotMessage('Preview opened in a new tab. Come back when you are ready to keep negotiating.', 'chat');
+          const didOpen = openPreviewInNewTab(status.courseId, status.lessonId);
+          if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(negotiationStepRef.current)) {
+            setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
+          }
+          addBotMessage(
+            didOpen
+              ? 'Preview opened in a new tab. Come back when you are ready to keep negotiating.'
+              : 'Preview is ready. Use the button below to open it, then come back to keep negotiating.',
+            'chat'
+          );
           pendingBotRef.current = false;
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
@@ -1033,7 +1085,7 @@ export default function HomeContent() {
     return () => {
       clearInterval(pollInterval);
     };
-  }, [negotiationStep, jobId]);
+  }, [jobId, isJobRunning]);
 
   const isInputDisabled = isRedirecting || chatEnded || limitReached;
 
@@ -1152,6 +1204,22 @@ export default function HomeContent() {
                 className="px-6 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
               >
                 Keep negotiating
+              </button>
+            </motion.div>
+          )}
+
+          {hasGeneratedPreview && previewCourseId && !chatEnded && !limitReached && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4"
+            >
+              <button
+                type="button"
+                onClick={() => openPreviewInNewTab(previewCourseId)}
+                className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white hover:opacity-90 transition-opacity"
+              >
+                Open preview lesson
               </button>
             </motion.div>
           )}
