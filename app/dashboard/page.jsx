@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
@@ -78,7 +78,7 @@ function getCourseTitle(course) {
   );
 }
 
-export default function DashboardPage() {
+function DashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const paymentSuccess = searchParams?.get("payment") === "success";
@@ -957,5 +957,13 @@ export default function DashboardPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <DashboardClient />
+    </Suspense>
   );
 }
