@@ -174,9 +174,19 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
+  const closeNegotiationPreview = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.close();
+    if (window.opener) {
+      try {
+        window.opener.focus();
+      } catch (error) {}
+    }
+  }, []);
 
-const previewParam = searchParams?.get('preview');
+  const previewParam = searchParams?.get('preview');
   const isPreviewRoute = previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
+  const isNegotiationPreview = searchParams?.get('negotiation') === '1';
   const isPreviewMode = isPreviewRoute || isOnboardingPreview;
   
   // Focus timer state - lifted from CourseTabContent
@@ -1090,14 +1100,18 @@ const previewParam = searchParams?.get('preview');
               Preview
             </span>
             <span className="text-sm text-[var(--foreground)]">
-              You're viewing a preview lesson. Create an account to generate your full course!
+              {isNegotiationPreview
+                ? "You're viewing a preview lesson. Jump back to the negotiation tab when you're done."
+                : "You're viewing a preview lesson. Create an account to generate your full course!"}
             </span>
           </div>
           <button
-            onClick={() => setShowPreviewCompletionModal(true)}
+            onClick={() =>
+              isNegotiationPreview ? closeNegotiationPreview() : setShowPreviewCompletionModal(true)
+            }
             className="px-4 py-1.5 text-sm font-medium bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
           >
-            Generate Full Course
+            {isNegotiationPreview ? "Continue Negotiating" : "Generate Full Course"}
           </button>
         </div>
       )}
@@ -1584,37 +1598,64 @@ const previewParam = searchParams?.get('preview');
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
-                  Ready to ace your class?
-                </h2>
-                <p className="text-[var(--muted-foreground)] mb-6">
-                  Create an account to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      setCreateAccountAccess('onboarding');
-                      router.push('/auth/create-account');
-                    }}
-                    className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
-                  >
-                    Create account for free
-                  </button>
-                  <button
-                    onClick={() => {
-                      router.push('/auth/sign-in');
-                    }}
-                    className="w-full px-4 py-3 text-sm font-medium bg-[var(--surface-2)] text-[var(--foreground)] rounded-xl hover:bg-[var(--surface-muted)] transition-colors"
-                  >
-                    Already have an account? Sign in
-                  </button>
-                  <button
-                    onClick={() => setShowPreviewCompletionModal(false)}
-                    className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
-                  >
-                    Continue exploring
-                  </button>
-                </div>
+                {isNegotiationPreview ? (
+                  <>
+                    <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
+                      Continue negotiating?
+                    </h2>
+                    <p className="text-[var(--muted-foreground)] mb-6">
+                      Jump back to the negotiation tab to finish locking in your price.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={closeNegotiationPreview}
+                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
+                      >
+                        Continue negotiating
+                      </button>
+                      <button
+                        onClick={() => setShowPreviewCompletionModal(false)}
+                        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
+                      >
+                        Keep exploring
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
+                      Ready to ace your class?
+                    </h2>
+                    <p className="text-[var(--muted-foreground)] mb-6">
+                      Create an account to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={() => {
+                          setCreateAccountAccess('onboarding');
+                          router.push('/auth/create-account');
+                        }}
+                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
+                      >
+                        Create account for free
+                      </button>
+                      <button
+                        onClick={() => {
+                          router.push('/auth/sign-in');
+                        }}
+                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--surface-2)] text-[var(--foreground)] rounded-xl hover:bg-[var(--surface-muted)] transition-colors"
+                      >
+                        Already have an account? Sign in
+                      </button>
+                      <button
+                        onClick={() => setShowPreviewCompletionModal(false)}
+                        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
+                      >
+                        Continue exploring
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>
