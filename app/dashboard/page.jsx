@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import OnboardingFinishCard from "@/components/courses/OnboardingFinishCard";
+import EmptyStateCard from "@/components/courses/EmptyStateCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -26,6 +27,7 @@ import {
   cleanupAnonUser,
   clearOnboardingCourseSession,
   getOnboardingCourseSession,
+  checkOnboardingPreview,
 } from "@/lib/onboarding";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 
@@ -76,8 +78,10 @@ function getCourseTitle(course) {
   );
 }
 
-export default function DashboardPage() {
+function DashboardClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paymentSuccess = searchParams?.get("payment") === "success";
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +97,7 @@ export default function DashboardPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const forceDownloadRedirect = isDownloadRedirectEnabled();
   const [onboardingContinuation, setOnboardingContinuation] = useState(null);
+  const [paymentPreview, setPaymentPreview] = useState(null);
 
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -162,6 +167,26 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!paymentSuccess) return;
+    let mounted = true;
+
+    const loadPaymentPreview = async () => {
+      try {
+        const preview = await checkOnboardingPreview();
+        if (!mounted) return;
+        setPaymentPreview(preview || null);
+      } catch (error) {
+        console.warn("Failed to check onboarding preview:", error);
+      }
+    };
+
+    loadPaymentPreview();
+    return () => {
+      mounted = false;
+    };
+  }, [paymentSuccess]);
+
   // Handle send feedback
   const handleSendFeedback = () => {
     setIsProfileMenuOpen(false);
@@ -183,6 +208,7 @@ export default function DashboardPage() {
     } finally {
       clearOnboardingCourseSession();
       setOnboardingContinuation(null);
+      setPaymentPreview(null);
     }
   };
 
@@ -575,8 +601,16 @@ export default function DashboardPage() {
   })();
   
   const hasCourses = courses.length > 0;
-  const hasOnboardingContinuation = Boolean(onboardingContinuation?.jobId);
-  const hasActiveCourseCards = hasCourses || hasOnboardingContinuation;
+  const hasPreviewContinuation = Boolean(
+    onboardingContinuation?.jobId || paymentPreview?.previewCourseId
+  );
+  const previewCourseTitle =
+    onboardingContinuation?.courseName ||
+    onboardingContinuation?.course_name ||
+    paymentPreview?.previewCourseTitle ||
+    null;
+  const hasActiveCourseCards = hasCourses || hasPreviewContinuation;
+  const shouldShowPaymentEmptyState = paymentSuccess && !hasCourses && !hasPreviewContinuation;
   const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
@@ -824,12 +858,22 @@ export default function DashboardPage() {
         <main className="space-y-6">
           {!hasActiveCourseCards ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create your first course
-              </Link>
+              {shouldShowPaymentEmptyState ? (
+                <EmptyStateCard
+                  title="Create your first course"
+                  description="Get started by creating a personalized study plan."
+                  ctaText="Create Course"
+                  ctaHref="/courses/create"
+                  onCtaClick={handleCreateCourseClick}
+                />
+              ) : (
+                <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create your first course
+                </Link>
+              )}
             </div>
           ) : (
             <div
@@ -862,9 +906,9 @@ export default function DashboardPage() {
                 </Link>
               </OnboardingTooltip>
 
-              {hasOnboardingContinuation && (
+              {hasPreviewContinuation && (
                 <OnboardingFinishCard
-                  courseName={onboardingContinuation?.courseName || onboardingContinuation?.course_name}
+                  courseName={previewCourseTitle}
                   onContinue={handleContinueOnboardingCourse}
                   onDelete={handleDismissOnboardingCourse}
                 />
@@ -913,5 +957,13 @@ export default function DashboardPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <DashboardClient />
+    </Suspense>
   );
 }

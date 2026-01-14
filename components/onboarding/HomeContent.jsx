@@ -10,42 +10,43 @@ import * as api from '@/lib/onboarding';
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const ONBOARDING_SESSION_KEY = "kogno_onboarding_session_v1";
-const ONBOARDING_SESSION_VERSION = 1;
+const ONBOARDING_SESSION_VERSION = 2;
 const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
 const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
-const INITIAL_MESSAGE = 'Kogno is made for people who actually can learn on their own and have agency, can you really do that?';
+const INITIAL_MESSAGE = "Alright, list price is $100/month. Talk me down.";
 
-const TASK_STEPS = {
+const NEGOTIATION_STEPS = {
   NONE: 'NONE',
+  NEGOTIATING: 'NEGOTIATING',
+  AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
+  PRICE_CONFIRMED: 'PRICE_CONFIRMED',
   ASK_COLLEGE: 'ASK_COLLEGE',
   ASK_COURSE: 'ASK_COURSE',
   WAIT_TOPICS: 'WAIT_TOPICS',
   TOPICS_READY: 'TOPICS_READY',
   SHOW_TOPICS: 'SHOW_TOPICS',
-  WAIT_JOB: 'WAIT_JOB',
-  JOB_DONE: 'JOB_DONE',
-  FINAL_MESSAGE: 'FINAL_MESSAGE',
+  GENERATING_PREVIEW: 'GENERATING_PREVIEW',
+  PREVIEW_READY: 'PREVIEW_READY',
+  PAYMENT_COMPLETE: 'PAYMENT_COMPLETE',
   DONE: 'DONE',
 };
 
-const TASK_ORDER = {
-  [TASK_STEPS.ASK_COLLEGE]: 1,
-  [TASK_STEPS.ASK_COURSE]: 2,
-  [TASK_STEPS.WAIT_TOPICS]: 2.5,
-  [TASK_STEPS.TOPICS_READY]: 2.8,
-  [TASK_STEPS.SHOW_TOPICS]: 3,
-  [TASK_STEPS.WAIT_JOB]: 3.5,
-  [TASK_STEPS.JOB_DONE]: 3.8,
-  [TASK_STEPS.FINAL_MESSAGE]: 4,
+const STEP_ORDER = {
+  [NEGOTIATION_STEPS.ASK_COLLEGE]: 1,
+  [NEGOTIATION_STEPS.ASK_COURSE]: 2,
+  [NEGOTIATION_STEPS.WAIT_TOPICS]: 2.5,
+  [NEGOTIATION_STEPS.TOPICS_READY]: 2.8,
+  [NEGOTIATION_STEPS.SHOW_TOPICS]: 3,
+  [NEGOTIATION_STEPS.GENERATING_PREVIEW]: 3.5,
+  [NEGOTIATION_STEPS.PREVIEW_READY]: 3.8,
 };
 
 const FALLBACKS = {
-  gate: 'Tell me how you learn on your own and how you follow through.',
-  chat: 'Got it. Tell me more.',
-  task: 'Okay. What college are you at?',
+  negotiation: "Alright. What's your number?",
+  task: 'Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. What college are you at?',
   topics: "I couldn't find topics for that. What's the course name again?",
   generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
   status: "I couldn't check the lesson status. Want to pick a topic again?",
@@ -76,48 +77,6 @@ const UserMessage = ({ children }) => (
   </motion.div>
 );
 
-const CollegeInputForm = ({ onSubmit }) => {
-  const [value, setValue] = useState('');
-
-  const handleSubmit = () => {
-    if (value.trim()) {
-      onSubmit(value.trim());
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-end gap-2 mb-4"
-    >
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Enter your college name..."
-        autoFocus
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSubmit();
-          }
-        }}
-        className="flex-1 px-4 py-3 bg-[var(--surface-1)] border border-white/10 rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-      />
-      <button
-        onClick={handleSubmit}
-        disabled={!value.trim()}
-        className="p-3 bg-[var(--primary)] text-white rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-        </svg>
-      </button>
-    </motion.div>
-  );
-};
-
 export default function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -127,15 +86,18 @@ export default function HomeContent() {
   const [topics, setTopics] = useState([]);
   const [hasStarted, setHasStarted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [taskStep, setTaskStep] = useState(TASK_STEPS.NONE);
+  const [negotiationStep, setNegotiationStep] = useState(NEGOTIATION_STEPS.NONE);
   const [isJobRunning, setIsJobRunning] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [chatEnded, setChatEnded] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
-  const [collegeConfirmation, setCollegeConfirmation] = useState(null); // college name to confirm
-  const [showCollegeInput, setShowCollegeInput] = useState(false); // show input after clicking "No"
+  const [currentPrice, setCurrentPrice] = useState(10000);
+  const [confirmedPrice, setConfirmedPrice] = useState(null);
+  const [paymentLink, setPaymentLink] = useState(null);
+  const [hasGeneratedPreview, setHasGeneratedPreview] = useState(false);
+  const [previewCourseId, setPreviewCourseId] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -149,26 +111,32 @@ export default function HomeContent() {
   const messagesRef = useRef([]);
   const queueRef = useRef([]);
   const pendingBotRef = useRef(false);
+  const pendingNegotiationResponsesRef = useRef(new Map());
+  const negotiationTurnCounterRef = useRef(0);
+  const nextNegotiationTurnRef = useRef(1);
   const lastBotTypeRef = useRef(null);
   const limitReachedRef = useRef(false);
-  const gateConvincedRef = useRef(false);
-  const taskStepRef = useRef(TASK_STEPS.NONE);
+  const negotiationStepRef = useRef(NEGOTIATION_STEPS.NONE);
   const dataRef = useRef({ collegeName: '', courseName: '', topic: '' });
   const topicsRef = useRef([]);
   const pendingRequestsRef = useRef(0);
-  const latestChatTurnRef = useRef(0);
-  const latestGateTurnRef = useRef(0);
   const taskRequestIdRef = useRef(0);
   const redirectUrlRef = useRef(null);
   const flowCompleteRef = useRef(false);
-  const turnCounterRef = useRef(0);
   const awaitingTaskRef = useRef(false);
   const deferredChatRef = useRef(null);
+  const previewWindowRef = useRef(null);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
+  };
+
+  const formatPrice = (cents) => {
+    if (typeof cents !== 'number' || Number.isNaN(cents)) return '';
+    const dollars = cents / 100;
+    return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
   };
 
   const generateSessionId = () => {
@@ -235,15 +203,19 @@ export default function HomeContent() {
         updatedAt: Date.now(),
         anonUserId: api.getAnonUserId(),
         messages: messagesRef.current,
-        taskStep: taskStepRef.current,
+        negotiationStep: negotiationStepRef.current,
         data: dataRef.current,
         topics: topicsRef.current,
         showTopics: typeof overrides.showTopics === 'boolean' ? overrides.showTopics : showTopics,
         jobId: overrides.jobId ?? jobId,
         isJobRunning: overrides.isJobRunning ?? isJobRunning,
         redirectUrl: overrides.redirectUrl ?? redirectUrlRef.current,
-        gateConvinced: gateConvincedRef.current,
         hasStarted: overrides.hasStarted ?? hasStarted,
+        currentPrice: overrides.currentPrice ?? currentPrice,
+        confirmedPrice: overrides.confirmedPrice ?? confirmedPrice,
+        paymentLink: overrides.paymentLink ?? paymentLink,
+        hasGeneratedPreview: overrides.hasGeneratedPreview ?? hasGeneratedPreview,
+        previewCourseId: overrides.previewCourseId ?? previewCourseId,
       };
       window.localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(payload));
     } catch (error) {
@@ -334,29 +306,101 @@ export default function HomeContent() {
       redirectUrlRef.current = stored.redirectUrl;
     }
 
-    if (stored.taskStep) {
-      setTaskStepSafe(stored.taskStep);
+    if (stored.negotiationStep) {
+      setNegotiationStepSafe(stored.negotiationStep);
     }
 
-    if (stored.isJobRunning || stored.taskStep === TASK_STEPS.WAIT_JOB) {
+    if (typeof stored.currentPrice === 'number') {
+      setCurrentPrice(stored.currentPrice);
+    }
+
+    if (stored.confirmedPrice !== undefined) {
+      setConfirmedPrice(stored.confirmedPrice);
+    }
+
+    if (stored.paymentLink) {
+      setPaymentLink(stored.paymentLink);
+    }
+
+    if (typeof stored.hasGeneratedPreview === 'boolean') {
+      setHasGeneratedPreview(stored.hasGeneratedPreview);
+    }
+
+    if (stored.previewCourseId) {
+      setPreviewCourseId(stored.previewCourseId);
+    }
+
+    if (stored.isJobRunning || stored.negotiationStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
       setIsJobRunning(true);
     }
 
-    if (stored.gateConvinced || (stored.taskStep && stored.taskStep !== TASK_STEPS.NONE)) {
-      gateConvincedRef.current = true;
-    }
-
-    if (sessionOwnerRef.current && stored.taskStep === TASK_STEPS.WAIT_TOPICS &&
+    if (sessionOwnerRef.current && stored.negotiationStep === NEGOTIATION_STEPS.WAIT_TOPICS &&
         (!Array.isArray(stored.topics) || stored.topics.length === 0)) {
       fetchTopicsAndAsk();
     }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadNegotiationStatus = async () => {
+      try {
+        const status = await api.getNegotiationStatus();
+        if (!mounted || !status) return;
+
+        if (typeof status.confirmedPrice === 'number') {
+          setConfirmedPrice(status.confirmedPrice);
+          setCurrentPrice(status.confirmedPrice);
+        }
+
+        if (status.paymentLink) {
+          setPaymentLink(status.paymentLink);
+        }
+
+        if (typeof status.previewGenerated === 'boolean') {
+          setHasGeneratedPreview(status.previewGenerated);
+        }
+
+        if (status.previewCourseId) {
+          setPreviewCourseId(status.previewCourseId);
+        }
+
+        if (status.confirmedPrice || status.paymentLink || status.previewGenerated) {
+          onboardingSessionStartedRef.current = true;
+          setHasStarted(true);
+        }
+
+        if (status.paymentStatus === 'paid') {
+          setNegotiationStepSafe(NEGOTIATION_STEPS.PAYMENT_COMPLETE);
+          return;
+        }
+
+        if (status.confirmedPrice && status.paymentLink) {
+          const canOverride = [
+            NEGOTIATION_STEPS.NONE,
+            NEGOTIATION_STEPS.NEGOTIATING,
+            NEGOTIATION_STEPS.AWAITING_CONFIRMATION,
+          ].includes(negotiationStepRef.current);
+          if (canOverride) {
+            setNegotiationStepSafe(NEGOTIATION_STEPS.PRICE_CONFIRMED);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load negotiation status:', error);
+      }
+    };
+
+    loadNegotiationStatus();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Initial greeting
   useEffect(() => {
     if (restoredSessionRef.current) return;
     const timer = setTimeout(() => {
-      addBotMessage(INITIAL_MESSAGE, 'task');
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+      addBotMessage(INITIAL_MESSAGE, 'chat');
     }, 400);
     return () => clearTimeout(timer);
   }, []);
@@ -371,7 +415,7 @@ export default function HomeContent() {
   useEffect(() => {
     if (!sessionActiveRef.current) return;
     persistSession();
-  }, [messages, taskStep, topics, showTopics, jobId, isJobRunning, hasStarted]);
+  }, [messages, negotiationStep, topics, showTopics, jobId, isJobRunning, hasStarted, currentPrice, confirmedPrice, paymentLink, hasGeneratedPreview, previewCourseId]);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -389,9 +433,9 @@ export default function HomeContent() {
     appendMessage(message);
     
     lastBotTypeRef.current = type;
-    if (meta?.step === TASK_STEPS.SHOW_TOPICS) {
+    if (meta?.step === NEGOTIATION_STEPS.SHOW_TOPICS) {
       setShowTopics(true);
-    } else if (meta?.step && meta.step !== TASK_STEPS.SHOW_TOPICS) {
+    } else if (meta?.step && meta.step !== NEGOTIATION_STEPS.SHOW_TOPICS) {
       setShowTopics(false);
     }
     if (type === 'task' && awaitingTaskRef.current) {
@@ -427,7 +471,7 @@ export default function HomeContent() {
     deferredChatRef.current = null;
     pendingBotRef.current = false;
     queueRef.current = [];
-    setTaskStepSafe(TASK_STEPS.DONE);
+    setNegotiationStepSafe(NEGOTIATION_STEPS.DONE);
     addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
   };
 
@@ -464,9 +508,9 @@ export default function HomeContent() {
     appendMessage(message);
   };
 
-  const setTaskStepSafe = (next) => {
-    taskStepRef.current = next;
-    setTaskStep(next);
+  const setNegotiationStepSafe = (next) => {
+    negotiationStepRef.current = next;
+    setNegotiationStep(next);
   };
 
   const updateData = (updates) => {
@@ -500,8 +544,6 @@ export default function HomeContent() {
     setIsJobRunning(false);
     setIsRedirecting(false);
     setShowTopics(false);
-    setCollegeConfirmation(null);
-    setShowCollegeInput(false);
     awaitingTaskRef.current = false;
     deferredChatRef.current = null;
     pendingBotRef.current = false;
@@ -515,29 +557,31 @@ export default function HomeContent() {
     messagesRef.current = [];
     setMessages([]);
     setInput('');
-    setCollegeConfirmation(null);
-    setShowCollegeInput(false);
     setShowTopics(false);
     setTopicsSafe([]);
     setJobId(null);
     setIsJobRunning(false);
     setIsRedirecting(false);
     setHasStarted(false);
-    setTaskStepSafe(TASK_STEPS.NONE);
+    setNegotiationStepSafe(NEGOTIATION_STEPS.NONE);
+    setCurrentPrice(10000);
+    setConfirmedPrice(null);
+    setPaymentLink(null);
+    setHasGeneratedPreview(false);
+    setPreviewCourseId(null);
     pendingRequestsRef.current = 0;
     setIsThinking(false);
-    gateConvincedRef.current = false;
     awaitingTaskRef.current = false;
     deferredChatRef.current = null;
     pendingBotRef.current = false;
     lastBotTypeRef.current = null;
     queueRef.current = [];
-    latestChatTurnRef.current = 0;
-    latestGateTurnRef.current = 0;
     taskRequestIdRef.current = 0;
     redirectUrlRef.current = null;
     flowCompleteRef.current = false;
-    turnCounterRef.current = 0;
+    pendingNegotiationResponsesRef.current = new Map();
+    negotiationTurnCounterRef.current = 0;
+    nextNegotiationTurnRef.current = 1;
     dataRef.current = { collegeName: '', courseName: '', topic: '' };
     sessionActiveRef.current = false;
     sessionOwnerRef.current = false;
@@ -560,7 +604,8 @@ export default function HomeContent() {
     setHasStarted(true);
     clearStoredSession();
     void api.startNewOnboardingSession();
-    addBotMessage(INITIAL_MESSAGE, 'task');
+    setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+    addBotMessage(INITIAL_MESSAGE, 'chat');
     persistSession({ status: 'active', hasStarted: true, jobId: null, isJobRunning: false, showTopics: false });
   };
 
@@ -581,47 +626,32 @@ export default function HomeContent() {
   const enqueueMessage = (entry) => {
     if (!entry) return;
     const queue = queueRef.current;
-    const existingIndex = queue.findIndex((item) => item.type === entry.type);
-
-    if (existingIndex !== -1) {
-      if (entry.type === 'chat') {
-        queue[existingIndex] = entry;
-      } else if (entry.type === 'task') {
+    if (entry.type === 'task') {
+      const existingIndex = queue.findIndex((item) => item.type === 'task');
+      if (existingIndex !== -1) {
         const existing = queue[existingIndex];
-        const existingOrder = TASK_ORDER[existing?.meta?.step] || 0;
-        const nextOrder = TASK_ORDER[entry?.meta?.step] || 0;
+        const existingOrder = STEP_ORDER[existing?.meta?.step] || 0;
+        const nextOrder = STEP_ORDER[entry?.meta?.step] || 0;
         if (entry?.meta?.final || nextOrder >= existingOrder) {
           queue[existingIndex] = entry;
-        } else {
-          return;
         }
       } else {
-        return;
+        queue.push(entry);
       }
     } else {
       queue.push(entry);
-    }
-
-    if (queue.length > 2) {
-      const taskEntry = queue.find((item) => item.type === 'task');
-      const chatEntry = queue.find((item) => item.type === 'chat');
-      queueRef.current = [taskEntry, chatEntry].filter(Boolean);
     }
 
     flushQueue();
   };
 
   const flushQueue = () => {
-    if (!pendingBotRef.current) return;
     const queue = queueRef.current;
     if (!queue.length) return;
-    const next = queue.shift();
-    addBotMessage(next.text, next.type, next.meta);
-    pendingBotRef.current = false;
-  };
-
-  const dropQueuedChat = () => {
-    queueRef.current = queueRef.current.filter((item) => item.type !== 'chat');
+    while (queue.length) {
+      const next = queue.shift();
+      addBotMessage(next.text, next.type, next.meta);
+    }
   };
 
   const ensureOnboardingSession = async () => {
@@ -644,64 +674,105 @@ export default function HomeContent() {
     persistSession({ status: 'active', hasStarted: true });
   };
 
-  const requestGatekeeper = async (turnId) => {
-    latestGateTurnRef.current = turnId;
-    setThinkingDelta(1);
-    try {
-      const response = await api.getChatStep({
-        mode: 'gatekeeper',
-        messages: buildLlmMessages(),
-      });
+  const processNegotiationPayload = (payload) => {
+    if (!payload) return true;
+    const reply = payload.reply || FALLBACKS.negotiation;
+    const suggestedPrice = payload.suggestedPrice;
+    const askConfirmation = Boolean(payload.askConfirmation);
+    const offerProveValue = Boolean(payload.offerProveValue);
+    const currentStep = negotiationStepRef.current;
+    const inTaskInput = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+    ].includes(currentStep);
+    const inPreviewFlow = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.WAIT_TOPICS,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+      NEGOTIATION_STEPS.GENERATING_PREVIEW,
+      NEGOTIATION_STEPS.PREVIEW_READY,
+    ].includes(currentStep);
 
-      if (turnId !== latestGateTurnRef.current) return;
-      const convinced = Boolean(response?.convinced);
-      const reply = response?.reply || '';
-
-      if (!convinced) {
-        enqueueMessage({ type: 'task', text: reply || FALLBACKS.gate });
-        return;
-      }
-
-      gateConvincedRef.current = true;
-      setTaskStepSafe(TASK_STEPS.ASK_COLLEGE);
-      awaitingTaskRef.current = true;
-      requestTaskMessage(TASK_STEPS.ASK_COLLEGE);
-    } catch (error) {
-      if (handleLimitReached(error)) return;
-      enqueueMessage({ type: 'task', text: FALLBACKS.gate });
-    } finally {
-      setThinkingDelta(-1);
+    if (suggestedPrice !== null) {
+      setCurrentPrice(suggestedPrice);
     }
+
+    if (offerProveValue && previewCourseId) {
+      openPreviewInNewTab(previewCourseId);
+      setHasGeneratedPreview(true);
+      if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(currentStep)) {
+        setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
+      }
+    } else if (offerProveValue && !hasGeneratedPreview && !inPreviewFlow) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COLLEGE);
+      requestTaskMessage(NEGOTIATION_STEPS.ASK_COLLEGE);
+      return true;
+    } else if (askConfirmation && !inTaskInput) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
+    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+    }
+
+    enqueueMessage({ type: 'chat', text: reply });
+    return true;
   };
 
-  const requestChatResponse = async (turnId) => {
-    latestChatTurnRef.current = turnId;
+  const flushNegotiationResponses = () => {
+    const buffer = pendingNegotiationResponsesRef.current;
+    let nextTurn = nextNegotiationTurnRef.current;
+    if (!nextTurn) nextTurn = 1;
+    while (buffer.has(nextTurn)) {
+      const payload = buffer.get(nextTurn);
+      buffer.delete(nextTurn);
+      processNegotiationPayload(payload);
+      nextTurn += 1;
+    }
+    nextNegotiationTurnRef.current = nextTurn;
+  };
+
+  const queueNegotiationResponse = (turnId, payload) => {
+    if (turnId < nextNegotiationTurnRef.current) return;
+    pendingNegotiationResponsesRef.current.set(turnId, payload);
+    flushNegotiationResponses();
+  };
+
+  const requestNegotiationResponse = async (turnId) => {
     setThinkingDelta(1);
     try {
       const response = await api.getChatStep({
-        mode: 'chat',
+        mode: 'negotiation',
         messages: buildLlmMessages(),
-        task: {
-          step: taskStepRef.current,
-        }
       });
 
-      if (turnId !== latestChatTurnRef.current) return;
       const reply = response?.reply || '';
-      const entry = { type: 'chat', text: reply || FALLBACKS.chat };
-      if (awaitingTaskRef.current) {
-        deferredChatRef.current = entry;
-        return;
+      const suggestedPriceRaw = response?.suggestedPrice;
+      let suggestedPrice = Number.isFinite(Number(suggestedPriceRaw))
+        ? Math.round(Number(suggestedPriceRaw))
+        : null;
+      if (suggestedPrice !== null && suggestedPrice < 100) {
+        suggestedPrice = Math.round(suggestedPrice * 100);
       }
-      enqueueMessage(entry);
+      const askConfirmation = Boolean(response?.askConfirmation);
+      const offerProveValue = Boolean(response?.offerProveValue);
+
+      queueNegotiationResponse(turnId, {
+        reply: reply || FALLBACKS.negotiation,
+        suggestedPrice,
+        askConfirmation,
+        offerProveValue,
+      });
     } catch (error) {
       if (handleLimitReached(error)) return;
-      const entry = { type: 'chat', text: FALLBACKS.chat };
-      if (awaitingTaskRef.current) {
-        deferredChatRef.current = entry;
-        return;
-      }
-      enqueueMessage(entry);
+      queueNegotiationResponse(turnId, {
+        reply: FALLBACKS.negotiation,
+        suggestedPrice: null,
+        askConfirmation: false,
+        offerProveValue: false,
+      });
     } finally {
       setThinkingDelta(-1);
     }
@@ -722,12 +793,51 @@ export default function HomeContent() {
           courseName: dataRef.current.courseName,
           topic: dataRef.current.topic,
           topics: topicsRef.current,
+          latestUserMessage: meta?.latestUserMessage || null,
         },
       });
 
       if (requestId !== taskRequestIdRef.current) return;
       const reply = response?.reply || '';
-      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: metaWithStep });
+      const fieldUpdates = response?.fieldUpdates || {};
+      const resolvedUpdates = {
+        collegeName: fieldUpdates?.collegeName || null,
+        courseName: fieldUpdates?.courseName || null,
+        topic: fieldUpdates?.topic || null,
+      };
+      if (resolvedUpdates.collegeName) {
+        updateData({ collegeName: resolvedUpdates.collegeName });
+      }
+      if (resolvedUpdates.courseName) {
+        updateData({ courseName: resolvedUpdates.courseName });
+      }
+      if (resolvedUpdates.topic) {
+        updateData({ topic: resolvedUpdates.topic });
+      }
+
+      const nextStep = response?.nextStep;
+      const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
+      const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
+      if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
+        setNegotiationStepSafe(resolvedStep);
+      }
+
+      if (resolvedStep === NEGOTIATION_STEPS.WAIT_TOPICS) {
+        setShowTopics(false);
+        if (dataRef.current.courseName) {
+          fetchTopicsAndAsk();
+        }
+      }
+
+      if (resolvedStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
+        setShowTopics(false);
+        const selectedTopic = resolvedUpdates.topic || dataRef.current.topic;
+        if (selectedTopic) {
+          startLessonGeneration(selectedTopic);
+        }
+      }
+
+      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: { ...metaWithStep, step: resolvedStep } });
     } catch (error) {
       if (handleLimitReached(error)) return;
       enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
@@ -748,17 +858,18 @@ export default function HomeContent() {
       const nextTopics = Array.isArray(topicRes?.topics) ? topicRes.topics : [];
       if (nextTopics.length === 0) {
         enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-        setTaskStepSafe(TASK_STEPS.ASK_COURSE);
+        setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
         setShowTopics(false);
         setTopicsSafe([]);
         return;
       }
 
       setTopicsSafe(nextTopics);
-      setTaskStepSafe(TASK_STEPS.TOPICS_READY);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
+      requestTaskMessage(NEGOTIATION_STEPS.SHOW_TOPICS);
     } catch (error) {
       enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-      setTaskStepSafe(TASK_STEPS.ASK_COURSE);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
       setShowTopics(false);
       setTopicsSafe([]);
     } finally {
@@ -766,9 +877,57 @@ export default function HomeContent() {
     }
   };
 
+  const ensurePreviewWindow = () => {
+    if (typeof window === 'undefined') return null;
+    const existing = previewWindowRef.current;
+    if (existing && !existing.closed) return existing;
+    const popup = window.open('about:blank', '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch (error) {}
+    }
+    previewWindowRef.current = popup;
+    return popup;
+  };
+
+  const openPreviewInNewTab = (courseId, lessonId) => {
+    if (!courseId || typeof window === 'undefined') return false;
+    const params = new URLSearchParams({ preview: '1', negotiation: '1' });
+    if (lessonId) {
+      params.set('lesson', lessonId);
+    }
+    const url = `/courses/${courseId}?${params.toString()}`;
+    const existing = previewWindowRef.current;
+    if (existing && !existing.closed) {
+      try {
+        existing.location.href = url;
+        existing.focus();
+        return true;
+      } catch (error) {}
+    }
+    const popup = window.open(url, '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch (error) {}
+      previewWindowRef.current = popup;
+      return true;
+    }
+    return false;
+  };
+
   const startLessonGeneration = async (selectedTopic) => {
     if (!sessionOwnerRef.current) return;
     if (limitReachedRef.current) return;
+
+    if (previewCourseId && hasGeneratedPreview) {
+      openPreviewInNewTab(previewCourseId);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
+      return;
+    }
+
+    ensurePreviewWindow();
     setIsJobRunning(true);
     try {
       const jobRes = await api.generateLesson({
@@ -785,36 +944,33 @@ export default function HomeContent() {
       }
       setIsJobRunning(false);
       enqueueMessage({ type: 'task', text: FALLBACKS.generation });
-      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
       setShowTopics(true);
     }
   };
 
-  const processTaskResponse = (text, turnId) => {
-    const step = taskStepRef.current;
-
-    if (step === TASK_STEPS.ASK_COLLEGE) {
-      updateData({ collegeName: text });
-      setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-      requestTaskMessage(TASK_STEPS.ASK_COURSE);
-      return true;
+  const handleConfirmPrice = async (price) => {
+    if (!price || limitReachedRef.current) return;
+    setThinkingDelta(1);
+    try {
+      const response = await api.confirmNegotiationPrice(price);
+      const link = response?.paymentLink || response?.payment_link || null;
+      const resolvedPrice = typeof response?.confirmedPrice === 'number' ? response.confirmedPrice : price;
+      setPaymentLink(link);
+      setConfirmedPrice(resolvedPrice);
+      setCurrentPrice(resolvedPrice);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.PRICE_CONFIRMED);
+      addBotMessage(
+        link ? 'Locked in. Use the payment link when you are ready.' : 'Locked in. You can complete payment any time.',
+        'chat'
+      );
+      pendingBotRef.current = false;
+    } catch (error) {
+      addBotMessage('I could not lock that price. Try again.', 'chat');
+      pendingBotRef.current = false;
+    } finally {
+      setThinkingDelta(-1);
     }
-
-    if (step === TASK_STEPS.ASK_COURSE) {
-      updateData({ courseName: text });
-      setTaskStepSafe(TASK_STEPS.WAIT_TOPICS);
-      fetchTopicsAndAsk();
-      return false;
-    }
-
-    if (step === TASK_STEPS.SHOW_TOPICS) {
-      updateData({ topic: text });
-      setShowTopics(false);
-      setTaskStepSafe(TASK_STEPS.WAIT_JOB);
-      startLessonGeneration(text);
-      return false;
-    }
-    return false;
   };
 
   const handleUserSend = async (value) => {
@@ -833,43 +989,57 @@ export default function HomeContent() {
     }
 
     pendingBotRef.current = true;
-    dropQueuedChat();
     flushQueue();
 
-    const turnId = ++turnCounterRef.current;
+    const currentStep = negotiationStepRef.current;
 
-    if (!gateConvincedRef.current) {
-      requestGatekeeper(turnId);
+    if (currentStep === NEGOTIATION_STEPS.PRICE_CONFIRMED) {
+      enqueueMessage({
+        type: 'chat',
+        text: 'Price is locked. Use the payment link above when you are ready.',
+      });
       return;
     }
 
-    // Determine if we should process this as a task response or chat
-    const currentStep = taskStepRef.current;
-
-    if (currentStep === TASK_STEPS.TOPICS_READY) {
-      setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
-      requestTaskMessage(TASK_STEPS.SHOW_TOPICS);
+    if (currentStep === NEGOTIATION_STEPS.PAYMENT_COMPLETE) {
+      enqueueMessage({
+        type: 'chat',
+        text: 'You are already set. Head to your dashboard when you are ready.',
+      });
       return;
     }
 
-    if (currentStep === TASK_STEPS.JOB_DONE) {
-      setTaskStepSafe(TASK_STEPS.FINAL_MESSAGE);
-      requestTaskMessage(TASK_STEPS.FINAL_MESSAGE, { final: true, redirectUrl: redirectUrlRef.current });
-      return;
-    }
-
-    const isTaskInputStep = [TASK_STEPS.ASK_COLLEGE, TASK_STEPS.ASK_COURSE, TASK_STEPS.SHOW_TOPICS].includes(currentStep);
+    const isTaskInputStep = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+    ].includes(currentStep);
 
     if (isTaskInputStep) {
-      const sentMessage = processTaskResponse(trimmed, turnId);
-      if (sentMessage) return;
+      requestTaskMessage(currentStep, { latestUserMessage: trimmed });
+      return;
     }
 
-    requestChatResponse(turnId);
+    if (currentStep === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+      const normalized = trimmed.toLowerCase();
+      const isConfirm = ['yes', 'y', 'confirm', 'sure', 'ok', 'okay', 'deal'].includes(normalized);
+      if (isConfirm) {
+        await handleConfirmPrice(currentPrice);
+        return;
+      }
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+    }
+
+    if (currentStep === NEGOTIATION_STEPS.PREVIEW_READY) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+    }
+
+    const negotiationTurnId = ++negotiationTurnCounterRef.current;
+    requestNegotiationResponse(negotiationTurnId);
   };
 
   useEffect(() => {
-    if (taskStep !== TASK_STEPS.WAIT_JOB || !jobId) return;
+    if (!jobId || !isJobRunning) return;
     if (!sessionOwnerRef.current) return;
 
     let pollInterval;
@@ -881,20 +1051,33 @@ export default function HomeContent() {
           clearInterval(pollInterval);
           setIsJobRunning(false);
           persistCourseContinuation(status);
-          redirectUrlRef.current = status.resultUrl || status.redirectUrl || (status.courseId ? `/courses/${status.courseId}?preview=1&jobId=${jobId}` : '/dashboard');
-          setTaskStepSafe(TASK_STEPS.JOB_DONE);
+          setHasGeneratedPreview(true);
+          setPreviewCourseId(status.courseId || null);
+          const didOpen = openPreviewInNewTab(status.courseId, status.lessonId);
+          if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(negotiationStepRef.current)) {
+            setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
+          }
+          addBotMessage(
+            didOpen
+              ? 'Preview opened in a new tab. Come back when you are ready to keep negotiating.'
+              : 'Preview is ready. Use the button below to open it, then come back to keep negotiating.',
+            'chat'
+          );
+          pendingBotRef.current = false;
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
           setIsJobRunning(false);
-          enqueueMessage({ type: 'task', text: FALLBACKS.status });
-          setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
+          addBotMessage(FALLBACKS.status, 'task');
+          pendingBotRef.current = false;
+          setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
           setShowTopics(true);
         }
       } catch (error) {
         clearInterval(pollInterval);
         setIsJobRunning(false);
-        enqueueMessage({ type: 'task', text: FALLBACKS.status });
-        setTaskStepSafe(TASK_STEPS.SHOW_TOPICS);
+        addBotMessage(FALLBACKS.status, 'task');
+        pendingBotRef.current = false;
+        setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
         setShowTopics(true);
       }
     }, 1500);
@@ -902,63 +1085,9 @@ export default function HomeContent() {
     return () => {
       clearInterval(pollInterval);
     };
-  }, [taskStep, jobId]);
+  }, [jobId, isJobRunning]);
 
   const isInputDisabled = isRedirecting || chatEnded || limitReached;
-
-  // Handler for confirming college (user clicked "Yes")
-  const handleCollegeConfirm = () => {
-    if (!collegeConfirmation || chatEndedRef.current || limitReachedRef.current) return;
-
-    addUserMessage('Yes');
-    setCollegeConfirmation(null);
-    setShowCollegeInput(false);
-
-    if (!hasStarted) {
-      void ensureOnboardingSession();
-    }
-
-    pendingBotRef.current = true;
-    dropQueuedChat();
-    flushQueue();
-
-    const turnId = ++turnCounterRef.current;
-
-    // Process as if user confirmed the college
-    updateData({ collegeName: collegeConfirmation });
-    setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-    requestTaskMessage(TASK_STEPS.ASK_COURSE);
-    requestChatResponse(turnId);
-  };
-
-  // Handler for declining college confirmation (user clicked "No")
-  const handleCollegeDecline = () => {
-    if (chatEndedRef.current || limitReachedRef.current) return;
-    setShowCollegeInput(true);
-  };
-
-  // Handler for submitting a different college name
-  const handleCollegeSubmit = (collegeName) => {
-    if (chatEndedRef.current || limitReachedRef.current) return;
-    addUserMessage(collegeName);
-    setCollegeConfirmation(null);
-    setShowCollegeInput(false);
-
-    if (!hasStarted) {
-      void ensureOnboardingSession();
-    }
-
-    pendingBotRef.current = true;
-    dropQueuedChat();
-    flushQueue();
-
-    const turnId = ++turnCounterRef.current;
-
-    updateData({ collegeName });
-    setTaskStepSafe(TASK_STEPS.ASK_COURSE);
-    requestTaskMessage(TASK_STEPS.ASK_COURSE);
-    requestChatResponse(turnId);
-  };
 
   return (
     <div className="relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden">
@@ -988,19 +1117,11 @@ export default function HomeContent() {
           Kogno
         </Link>
         <div className="flex items-center gap-3">
-          {limitReached && (
-            <Link
-              href="/auth/create-account"
-              className="px-5 py-2 text-sm font-medium rounded-xl border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
-            >
-              Create account
-            </Link>
-          )}
           <Link
-            href="/auth/sign-in"
-            className="px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white border border-transparent hover:bg-transparent hover:text-[var(--foreground)] hover:border-[var(--border)] transition-all"
+            href="/dashboard"
+            className="px-5 py-2 text-sm font-medium rounded-xl border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
           >
-            Sign in
+            Dashboard
           </Link>
         </div>
       </header>
@@ -1066,31 +1187,78 @@ export default function HomeContent() {
             </div>
           )}
 
-          {/* College confirmation buttons */}
-          {collegeConfirmation && !showCollegeInput && !isThinking && !chatEnded && !limitReached && (
+          {negotiationStep === NEGOTIATION_STEPS.AWAITING_CONFIRMATION && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-3 mb-4"
+              className="flex flex-wrap items-center gap-3 mb-4"
             >
               <button
-                onClick={handleCollegeConfirm}
+                onClick={() => handleConfirmPrice(currentPrice)}
                 className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
               >
-                Yes
+                Confirm {formatPrice(currentPrice)}/mo
               </button>
               <button
-                onClick={handleCollegeDecline}
+                onClick={() => setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING)}
                 className="px-6 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
               >
-                No
+                Keep negotiating
               </button>
             </motion.div>
           )}
 
-          {/* College input when user clicked "No" */}
-          {showCollegeInput && !isThinking && !chatEnded && !limitReached && (
-            <CollegeInputForm onSubmit={handleCollegeSubmit} />
+          {hasGeneratedPreview && previewCourseId && !chatEnded && !limitReached && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4"
+            >
+              <button
+                type="button"
+                onClick={() => openPreviewInNewTab(previewCourseId)}
+                className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white hover:opacity-90 transition-opacity"
+              >
+                Open preview lesson
+              </button>
+            </motion.div>
+          )}
+
+          {negotiationStep === NEGOTIATION_STEPS.PRICE_CONFIRMED && paymentLink && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-[var(--foreground)]">
+                    Price locked at {formatPrice(confirmedPrice ?? currentPrice)}/mo
+                  </div>
+                  <div className="text-xs text-[var(--muted-foreground)]">
+                    Complete payment to unlock your subscription.
+                  </div>
+                </div>
+                <a
+                  href={paymentLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white hover:opacity-90 transition-opacity"
+                >
+                  Pay now
+                </a>
+              </div>
+            </motion.div>
+          )}
+
+          {negotiationStep === NEGOTIATION_STEPS.PAYMENT_COMPLETE && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4 text-sm text-[var(--foreground)]"
+            >
+              Payment confirmed. Head to your dashboard to finish setup.
+            </motion.div>
           )}
 
           {/* Topic chips when available */}

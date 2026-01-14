@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import HomeContent from "@/components/onboarding/HomeContent";
-import { getDownloadRedirectPath } from "@/lib/featureFlags";
 
 export default async function Home() {
   const cookieStore = await cookies();
@@ -22,8 +21,8 @@ export default async function Home() {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (session) {
-    redirect(getDownloadRedirectPath("/dashboard"));
+  if (!session) {
+    redirect("/auth/create-account?from=onboarding&redirectTo=/");
   }
 
   return <HomeContent />;
