@@ -98,6 +98,7 @@ export default function HomeContent() {
   const [paymentLink, setPaymentLink] = useState(null);
   const [hasGeneratedPreview, setHasGeneratedPreview] = useState(false);
   const [previewCourseId, setPreviewCourseId] = useState(null);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -117,6 +118,7 @@ export default function HomeContent() {
   const lastBotTypeRef = useRef(null);
   const limitReachedRef = useRef(false);
   const negotiationStepRef = useRef(NEGOTIATION_STEPS.NONE);
+  const awaitingConfirmationRef = useRef(false);
   const dataRef = useRef({ collegeName: '', courseName: '', topic: '' });
   const topicsRef = useRef([]);
   const pendingRequestsRef = useRef(0);
@@ -216,6 +218,7 @@ export default function HomeContent() {
         paymentLink: overrides.paymentLink ?? paymentLink,
         hasGeneratedPreview: overrides.hasGeneratedPreview ?? hasGeneratedPreview,
         previewCourseId: overrides.previewCourseId ?? previewCourseId,
+        awaitingConfirmation: overrides.awaitingConfirmation ?? awaitingConfirmationRef.current,
       };
       window.localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(payload));
     } catch (error) {
@@ -330,6 +333,10 @@ export default function HomeContent() {
       setPreviewCourseId(stored.previewCourseId);
     }
 
+    if (typeof stored.awaitingConfirmation === 'boolean') {
+      setAwaitingConfirmationSafe(stored.awaitingConfirmation);
+    }
+
     if (stored.isJobRunning || stored.negotiationStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
       setIsJobRunning(true);
     }
@@ -371,6 +378,7 @@ export default function HomeContent() {
 
         if (status.paymentStatus === 'paid') {
           setNegotiationStepSafe(NEGOTIATION_STEPS.PAYMENT_COMPLETE);
+          setAwaitingConfirmationSafe(false);
           return;
         }
 
@@ -383,6 +391,7 @@ export default function HomeContent() {
           if (canOverride) {
             setNegotiationStepSafe(NEGOTIATION_STEPS.PRICE_CONFIRMED);
           }
+          setAwaitingConfirmationSafe(false);
         }
       } catch (error) {
         console.warn('Failed to load negotiation status:', error);
@@ -415,7 +424,7 @@ export default function HomeContent() {
   useEffect(() => {
     if (!sessionActiveRef.current) return;
     persistSession();
-  }, [messages, negotiationStep, topics, showTopics, jobId, isJobRunning, hasStarted, currentPrice, confirmedPrice, paymentLink, hasGeneratedPreview, previewCourseId]);
+  }, [messages, negotiationStep, topics, showTopics, jobId, isJobRunning, hasStarted, currentPrice, confirmedPrice, paymentLink, hasGeneratedPreview, previewCourseId, awaitingConfirmation]);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -471,6 +480,7 @@ export default function HomeContent() {
     deferredChatRef.current = null;
     pendingBotRef.current = false;
     queueRef.current = [];
+    setAwaitingConfirmationSafe(false);
     setNegotiationStepSafe(NEGOTIATION_STEPS.DONE);
     addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
   };
@@ -513,6 +523,11 @@ export default function HomeContent() {
     setNegotiationStep(next);
   };
 
+  const setAwaitingConfirmationSafe = (next) => {
+    awaitingConfirmationRef.current = next;
+    setAwaitingConfirmation(next);
+  };
+
   const updateData = (updates) => {
     dataRef.current = { ...dataRef.current, ...updates };
   };
@@ -549,6 +564,7 @@ export default function HomeContent() {
     pendingBotRef.current = false;
     lastBotTypeRef.current = null;
     queueRef.current = [];
+    setAwaitingConfirmationSafe(false);
     addBotMessage(message, 'chat');
     return true;
   };
@@ -569,6 +585,7 @@ export default function HomeContent() {
     setPaymentLink(null);
     setHasGeneratedPreview(false);
     setPreviewCourseId(null);
+    setAwaitingConfirmationSafe(false);
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     awaitingTaskRef.current = false;
@@ -710,8 +727,12 @@ export default function HomeContent() {
       requestTaskMessage(NEGOTIATION_STEPS.ASK_COLLEGE);
       return true;
     } else if (askConfirmation && !inTaskInput) {
-      setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
-    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+      setAwaitingConfirmationSafe(true);
+      if (!inPreviewFlow) {
+        setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
+      }
+    } else if (!inTaskInput && !inPreviewFlow && negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+      setAwaitingConfirmationSafe(false);
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
@@ -960,6 +981,7 @@ export default function HomeContent() {
       setConfirmedPrice(resolvedPrice);
       setCurrentPrice(resolvedPrice);
       setNegotiationStepSafe(NEGOTIATION_STEPS.PRICE_CONFIRMED);
+      setAwaitingConfirmationSafe(false);
       addBotMessage(
         link ? 'Locked in. Use the payment link when you are ready.' : 'Locked in. You can complete payment any time.',
         'chat'
@@ -1014,19 +1036,31 @@ export default function HomeContent() {
       NEGOTIATION_STEPS.ASK_COURSE,
       NEGOTIATION_STEPS.SHOW_TOPICS,
     ].includes(currentStep);
+    const inPreviewFlow = [
+      NEGOTIATION_STEPS.ASK_COLLEGE,
+      NEGOTIATION_STEPS.ASK_COURSE,
+      NEGOTIATION_STEPS.WAIT_TOPICS,
+      NEGOTIATION_STEPS.SHOW_TOPICS,
+      NEGOTIATION_STEPS.GENERATING_PREVIEW,
+      NEGOTIATION_STEPS.PREVIEW_READY,
+    ].includes(currentStep);
 
     if (isTaskInputStep) {
+      if (currentStep === NEGOTIATION_STEPS.SHOW_TOPICS) {
+        ensurePreviewWindow();
+      }
       requestTaskMessage(currentStep, { latestUserMessage: trimmed });
       return;
     }
 
-    if (currentStep === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
-      const normalized = trimmed.toLowerCase();
-      const isConfirm = ['yes', 'y', 'confirm', 'sure', 'ok', 'okay', 'deal'].includes(normalized);
+    const normalized = trimmed.toLowerCase();
+    const isConfirm = ['yes', 'y', 'confirm', 'sure', 'ok', 'okay', 'deal'].includes(normalized);
+    if (awaitingConfirmationRef.current && !isTaskInputStep && !inPreviewFlow) {
       if (isConfirm) {
         await handleConfirmPrice(currentPrice);
         return;
       }
+      setAwaitingConfirmationSafe(false);
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
@@ -1187,7 +1221,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          {negotiationStep === NEGOTIATION_STEPS.AWAITING_CONFIRMATION && !isThinking && !chatEnded && !limitReached && (
+          {awaitingConfirmation && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1200,7 +1234,10 @@ export default function HomeContent() {
                 Confirm {formatPrice(currentPrice)}/mo
               </button>
               <button
-                onClick={() => setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING)}
+                onClick={() => {
+                  setAwaitingConfirmationSafe(false);
+                  setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+                }}
                 className="px-6 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
               >
                 Keep negotiating
