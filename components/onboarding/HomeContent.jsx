@@ -10,12 +10,17 @@ import * as api from '@/lib/onboarding';
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const ONBOARDING_SESSION_KEY = "kogno_onboarding_session_v1";
-const ONBOARDING_SESSION_VERSION = 3;
+const ONBOARDING_SESSION_VERSION = 4;
 const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
 const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
+const PREVIEW_ENABLED = process.env.NEXT_PUBLIC_ONBOARDING_PREVIEW_ENABLED === "true";
+const MAX_NEGOTIATION_OFFERS = 6;
+const MIN_NEGOTIATION_PRICE_CENTS = 849;
+const TRIAL_OFFER_MESSAGE =
+  "Ok, how about this. I'll let you try it for a week - no credit card. You're already set up, so I'll walk you through how this works, and we can pick this back up next week.";
 const INTRO_FALLBACKS = {
   reason: "I'm Kogno. What brought you here today?",
   askUseful: "Got it. What are you hoping to get out of this?",
@@ -23,7 +28,7 @@ const INTRO_FALLBACKS = {
     "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
   price: "List price is $100/month. If that's too much, say so.",
   demo:
-    "Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. Which college do you attend?",
+    TRIAL_OFFER_MESSAGE,
 };
 
 const NEGOTIATION_STEPS = {
@@ -56,10 +61,10 @@ const STEP_ORDER = {
 
 const FALLBACKS = {
   negotiation: "List price is $100/month. If that's too much, say so.",
-  task: 'Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. What college are you at?',
-  topics: "I couldn't find topics for that. What's the course name again?",
-  generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
-  status: "I couldn't check the lesson status. Want to pick a topic again?",
+  task: "Let's stick with pricing for now.",
+  topics: "Let's stick with pricing for now.",
+  generation: "Let's stick with pricing for now.",
+  status: "Let's stick with pricing for now.",
 };
 
 
@@ -109,6 +114,10 @@ export default function HomeContent() {
   const [hasGeneratedPreview, setHasGeneratedPreview] = useState(false);
   const [previewCourseId, setPreviewCourseId] = useState(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [offerHistory, setOfferHistory] = useState([]);
+  const [trialStatus, setTrialStatus] = useState('none');
+  const [trialOfferCents, setTrialOfferCents] = useState(null);
+  const [trialEndsAt, setTrialEndsAt] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -144,6 +153,13 @@ export default function HomeContent() {
   const topicsRequestInFlightRef = useRef(false);
   const introInFlightRef = useRef(false);
   const introQueueRef = useRef([]);
+  const offerHistoryRef = useRef([]);
+  const trialStatusRef = useRef('none');
+  const trialOfferCentsRef = useRef(null);
+  const trialEndsAtRef = useRef(null);
+  const negotiationSyncTimerRef = useRef(null);
+  const negotiationSyncInFlightRef = useRef(false);
+  const negotiationSyncQueuedRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -235,6 +251,10 @@ export default function HomeContent() {
         hasGeneratedPreview: overrides.hasGeneratedPreview ?? hasGeneratedPreview,
         previewCourseId: overrides.previewCourseId ?? previewCourseId,
         awaitingConfirmation: overrides.awaitingConfirmation ?? awaitingConfirmationRef.current,
+        offerHistory: overrides.offerHistory ?? offerHistoryRef.current,
+        trialStatus: overrides.trialStatus ?? trialStatusRef.current,
+        trialOfferCents: overrides.trialOfferCents ?? trialOfferCentsRef.current,
+        trialEndsAt: overrides.trialEndsAt ?? trialEndsAtRef.current,
       };
       window.localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(payload));
     } catch (error) {
@@ -353,11 +373,47 @@ export default function HomeContent() {
       setAwaitingConfirmationSafe(stored.awaitingConfirmation);
     }
 
+    if (Array.isArray(stored.offerHistory)) {
+      setOfferHistorySafe(stored.offerHistory);
+    }
+
+    if (stored.trialStatus) {
+      setTrialStatusSafe(stored.trialStatus);
+    }
+
+    if (typeof stored.trialOfferCents === 'number') {
+      setTrialOfferCentsSafe(stored.trialOfferCents);
+    }
+
+    if (stored.trialEndsAt) {
+      setTrialEndsAtSafe(stored.trialEndsAt);
+    }
+
     if (stored.isJobRunning || stored.negotiationStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
       setIsJobRunning(true);
     }
 
-    if (sessionOwnerRef.current && stored.negotiationStep === NEGOTIATION_STEPS.WAIT_TOPICS &&
+    if (!PREVIEW_ENABLED) {
+      const previewSteps = new Set([
+        NEGOTIATION_STEPS.ASK_COLLEGE,
+        NEGOTIATION_STEPS.ASK_COURSE,
+        NEGOTIATION_STEPS.WAIT_TOPICS,
+        NEGOTIATION_STEPS.SHOW_TOPICS,
+        NEGOTIATION_STEPS.GENERATING_PREVIEW,
+        NEGOTIATION_STEPS.PREVIEW_READY,
+      ]);
+      if (previewSteps.has(stored.negotiationStep)) {
+        setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+        setShowTopics(false);
+        setTopicsSafe([]);
+        setIsJobRunning(false);
+      }
+      if (stored.isJobRunning) {
+        setIsJobRunning(false);
+      }
+    }
+
+    if (PREVIEW_ENABLED && sessionOwnerRef.current && stored.negotiationStep === NEGOTIATION_STEPS.WAIT_TOPICS &&
         (!Array.isArray(stored.topics) || stored.topics.length === 0)) {
       fetchTopicsAndAsk();
     }
@@ -370,24 +426,77 @@ export default function HomeContent() {
         const status = await api.getNegotiationStatus();
         if (!mounted || !status) return;
 
+        if (Array.isArray(status.negotiationHistory) && status.negotiationHistory.length > 0) {
+          const restored = status.negotiationHistory.map((msg, index) => ({
+            type: msg.role === 'user' ? 'user' : 'bot',
+            text: msg.content,
+            id: Date.now() + index + Math.random(),
+          }));
+          const synced = syncMessages(restored);
+          setMessages(synced);
+          setHasStarted(true);
+          onboardingSessionStartedRef.current = true;
+          restoredSessionRef.current = true;
+          sessionActiveRef.current = true;
+          sessionOwnerRef.current = true;
+          if (!sessionIdRef.current) {
+            sessionIdRef.current = generateSessionId();
+          }
+        }
+
         if (typeof status.confirmedPrice === 'number') {
           setConfirmedPrice(status.confirmedPrice);
-          setCurrentPrice(status.confirmedPrice);
+          setCurrentPrice(Math.max(status.confirmedPrice, MIN_NEGOTIATION_PRICE_CENTS));
         }
 
         if (status.paymentLink) {
           setPaymentLink(status.paymentLink);
         }
 
-        if (typeof status.previewGenerated === 'boolean') {
-          setHasGeneratedPreview(status.previewGenerated);
+        if (PREVIEW_ENABLED) {
+          if (typeof status.previewGenerated === 'boolean') {
+            setHasGeneratedPreview(status.previewGenerated);
+          }
+
+          if (status.previewCourseId) {
+            setPreviewCourseId(status.previewCourseId);
+          }
         }
 
-        if (status.previewCourseId) {
-          setPreviewCourseId(status.previewCourseId);
+        if (Array.isArray(status.offerHistory)) {
+          setOfferHistorySafe(status.offerHistory);
+          if (!status.lastOfferCents && status.offerHistory.length > 0) {
+            const lastOffer = status.offerHistory[status.offerHistory.length - 1];
+            if (typeof lastOffer === 'number') {
+              setCurrentPrice(Math.max(lastOffer, MIN_NEGOTIATION_PRICE_CENTS));
+            }
+          }
         }
 
-        if (status.confirmedPrice || status.paymentLink || status.previewGenerated) {
+        if (status.lastOfferCents && typeof status.lastOfferCents === 'number') {
+          setCurrentPrice(Math.max(status.lastOfferCents, MIN_NEGOTIATION_PRICE_CENTS));
+        }
+
+        if (typeof status.trialOfferCents === 'number') {
+          const clampedTrial = Math.max(status.trialOfferCents, MIN_NEGOTIATION_PRICE_CENTS);
+          setTrialOfferCentsSafe(clampedTrial);
+          if (!status.lastOfferCents) {
+            setCurrentPrice(clampedTrial);
+          }
+        }
+
+        if (status.trialStatus) {
+          setTrialStatusSafe(status.trialStatus);
+          if (status.trialStatus === 'expired') {
+            setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+          }
+        }
+
+        if (status.trialEndsAt) {
+          setTrialEndsAtSafe(status.trialEndsAt);
+        }
+
+        if (status.confirmedPrice || status.paymentLink || status.trialStatus) {
           onboardingSessionStartedRef.current = true;
           setHasStarted(true);
         }
@@ -442,7 +551,25 @@ export default function HomeContent() {
   useEffect(() => {
     if (!sessionActiveRef.current) return;
     persistSession();
-  }, [messages, negotiationStep, topics, showTopics, jobId, isJobRunning, hasStarted, currentPrice, confirmedPrice, paymentLink, hasGeneratedPreview, previewCourseId, awaitingConfirmation]);
+  }, [
+    messages,
+    negotiationStep,
+    topics,
+    showTopics,
+    jobId,
+    isJobRunning,
+    hasStarted,
+    currentPrice,
+    confirmedPrice,
+    paymentLink,
+    hasGeneratedPreview,
+    previewCourseId,
+    awaitingConfirmation,
+    offerHistory,
+    trialStatus,
+    trialOfferCents,
+    trialEndsAt,
+  ]);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -458,6 +585,7 @@ export default function HomeContent() {
   const addBotMessage = (text, type = 'chat', meta = {}) => {
     const message = { type: 'bot', text, id: Date.now() + Math.random() };
     appendMessage(message);
+    scheduleNegotiationSync();
     
     lastBotTypeRef.current = type;
     if (meta?.step === NEGOTIATION_STEPS.SHOW_TOPICS) {
@@ -504,6 +632,9 @@ export default function HomeContent() {
     introInFlightRef.current = false;
     introQueueRef.current = [];
     setAwaitingConfirmationSafe(false);
+    setTrialStatusSafe('none');
+    setTrialOfferCentsSafe(null);
+    setTrialEndsAtSafe(null);
     setNegotiationStepSafe(NEGOTIATION_STEPS.DONE);
     addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
   };
@@ -539,6 +670,7 @@ export default function HomeContent() {
   const addUserMessage = (text) => {
     const message = { type: 'user', text, id: Date.now() + Math.random() };
     appendMessage(message);
+    scheduleNegotiationSync();
   };
 
   const setNegotiationStepSafe = (next) => {
@@ -549,6 +681,26 @@ export default function HomeContent() {
   const setAwaitingConfirmationSafe = (next) => {
     awaitingConfirmationRef.current = next;
     setAwaitingConfirmation(next);
+  };
+
+  const setOfferHistorySafe = (next) => {
+    offerHistoryRef.current = Array.isArray(next) ? next : [];
+    setOfferHistory(offerHistoryRef.current);
+  };
+
+  const setTrialStatusSafe = (next) => {
+    trialStatusRef.current = next || 'none';
+    setTrialStatus(trialStatusRef.current);
+  };
+
+  const setTrialOfferCentsSafe = (next) => {
+    trialOfferCentsRef.current = typeof next === 'number' ? next : null;
+    setTrialOfferCents(trialOfferCentsRef.current);
+  };
+
+  const setTrialEndsAtSafe = (next) => {
+    trialEndsAtRef.current = next || null;
+    setTrialEndsAt(trialEndsAtRef.current);
   };
 
   const updateData = (updates) => {
@@ -609,6 +761,10 @@ export default function HomeContent() {
     setHasGeneratedPreview(false);
     setPreviewCourseId(null);
     setAwaitingConfirmationSafe(false);
+    setOfferHistorySafe([]);
+    setTrialStatusSafe('none');
+    setTrialOfferCentsSafe(null);
+    setTrialEndsAtSafe(null);
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     awaitingTaskRef.current = false;
@@ -628,6 +784,14 @@ export default function HomeContent() {
     negotiationTurnCounterRef.current = 0;
     nextNegotiationTurnRef.current = 1;
     dataRef.current = { collegeName: '', courseName: '', topic: '' };
+    offerHistoryRef.current = [];
+    trialStatusRef.current = 'none';
+    trialOfferCentsRef.current = null;
+    trialEndsAtRef.current = null;
+    if (negotiationSyncTimerRef.current) {
+      clearTimeout(negotiationSyncTimerRef.current);
+      negotiationSyncTimerRef.current = null;
+    }
     sessionActiveRef.current = false;
     sessionOwnerRef.current = false;
     sessionIdRef.current = null;
@@ -667,6 +831,49 @@ export default function HomeContent() {
       role: msg.type === 'user' ? 'user' : 'assistant',
       content: msg.text,
     }));
+
+  const buildNegotiationSyncPayload = () => {
+    const history = buildLlmMessages();
+    const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    const lastOffer = offers.length > 0 ? offers[offers.length - 1] : currentPrice;
+    const clampedLastOffer = Number.isFinite(lastOffer)
+      ? Math.max(lastOffer, MIN_NEGOTIATION_PRICE_CENTS)
+      : null;
+    return {
+      messages: history,
+      offerHistory: offers,
+      offerCount: offers.length,
+      lastOfferCents: clampedLastOffer,
+      trialStatus: trialStatusRef.current,
+      trialOfferCents: trialOfferCentsRef.current,
+    };
+  };
+
+  const runNegotiationSync = async () => {
+    if (!sessionActiveRef.current || !sessionOwnerRef.current) return;
+    if (negotiationSyncInFlightRef.current) {
+      negotiationSyncQueuedRef.current = true;
+      return;
+    }
+    negotiationSyncInFlightRef.current = true;
+    const payload = buildNegotiationSyncPayload();
+    try {
+      await api.syncNegotiationState(payload);
+    } catch (error) {}
+    negotiationSyncInFlightRef.current = false;
+    if (negotiationSyncQueuedRef.current) {
+      negotiationSyncQueuedRef.current = false;
+      runNegotiationSync();
+    }
+  };
+
+  const scheduleNegotiationSync = () => {
+    if (!sessionActiveRef.current || !sessionOwnerRef.current) return;
+    if (negotiationSyncTimerRef.current) {
+      clearTimeout(negotiationSyncTimerRef.current);
+    }
+    negotiationSyncTimerRef.current = setTimeout(runNegotiationSync, 600);
+  };
 
   const extractReplyParts = (response, fallback) => {
     if (Array.isArray(response?.reply)) {
@@ -744,6 +951,7 @@ export default function HomeContent() {
       await api.startNewOnboardingSession();
     } catch (error) {}
     persistSession({ status: 'active', hasStarted: true });
+    scheduleNegotiationSync();
   };
 
   const requestIntroMessage = async (step, latestUserMessage = null) => {
@@ -770,9 +978,15 @@ export default function HomeContent() {
           ? INTRO_FALLBACKS.askUseful
           : INTRO_FALLBACKS.reason;
       const replyParts = extractReplyParts(response, fallback);
+      const offerTrial = Boolean(response?.offerTrial);
       const nextStep = response?.nextStep;
       const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
       const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
+
+      if (offerTrial) {
+        enterTrialOffer(currentPrice);
+        return;
+      }
 
       enqueueReplyParts('chat', replyParts, {});
 
@@ -790,8 +1004,8 @@ export default function HomeContent() {
       let fallback = INTRO_FALLBACKS.reason;
       let fallbackStep = step;
       if (wantsDemo) {
-        fallback = INTRO_FALLBACKS.demo;
-        fallbackStep = NEGOTIATION_STEPS.ASK_COLLEGE;
+        enterTrialOffer(currentPrice);
+        return;
       } else if (asksWhat) {
         fallback = INTRO_FALLBACKS.explain;
         fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
@@ -823,14 +1037,43 @@ export default function HomeContent() {
     }
   };
 
+  const enterTrialOffer = (offerCents) => {
+    if (trialStatusRef.current === 'active' || trialStatusRef.current === 'offered') return;
+    const resolvedOffer = Number.isFinite(offerCents)
+      ? Math.max(offerCents, MIN_NEGOTIATION_PRICE_CENTS)
+      : Math.max(currentPrice, MIN_NEGOTIATION_PRICE_CENTS);
+    setTrialOfferCentsSafe(resolvedOffer);
+    setTrialStatusSafe('offered');
+    setAwaitingConfirmationSafe(false);
+    enqueueReplyParts('chat', [TRIAL_OFFER_MESSAGE], {});
+    scheduleNegotiationSync();
+  };
+
+  const trackOfferHistory = (priceCents) => {
+    if (!Number.isFinite(priceCents)) return;
+    const clamped = Math.max(priceCents, MIN_NEGOTIATION_PRICE_CENTS);
+    setCurrentPrice(clamped);
+    const existing = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    if (existing.includes(clamped)) return;
+    const next = [...existing, clamped];
+    setOfferHistorySafe(next);
+    if (next.length >= MAX_NEGOTIATION_OFFERS && trialStatusRef.current === 'none') {
+      enterTrialOffer(clamped);
+    }
+  };
+
   const processNegotiationPayload = (payload) => {
     if (!payload) return true;
+    if (trialStatusRef.current === 'offered' || trialStatusRef.current === 'active') {
+      return true;
+    }
     const replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
       ? payload.replyParts
       : [FALLBACKS.negotiation];
     const suggestedPrice = payload.suggestedPrice;
     const askConfirmation = Boolean(payload.askConfirmation);
-    const offerProveValue = Boolean(payload.offerProveValue);
+    const offerProveValue = Boolean(payload.offerProveValue) && PREVIEW_ENABLED;
+    const offerTrial = Boolean(payload.offerTrial);
     const currentStep = negotiationStepRef.current;
     const inTaskInput = [
       NEGOTIATION_STEPS.ASK_COLLEGE,
@@ -847,7 +1090,12 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (suggestedPrice !== null) {
-      setCurrentPrice(suggestedPrice);
+      trackOfferHistory(suggestedPrice);
+    }
+
+    if (offerTrial) {
+      enterTrialOffer(suggestedPrice ?? currentPrice);
+      return true;
     }
 
     if (offerProveValue && previewCourseId) {
@@ -911,14 +1159,19 @@ export default function HomeContent() {
       if (suggestedPrice !== null && suggestedPrice < 100) {
         suggestedPrice = Math.round(suggestedPrice * 100);
       }
+      if (suggestedPrice !== null && suggestedPrice < MIN_NEGOTIATION_PRICE_CENTS) {
+        suggestedPrice = MIN_NEGOTIATION_PRICE_CENTS;
+      }
       const askConfirmation = Boolean(response?.askConfirmation);
       const offerProveValue = Boolean(response?.offerProveValue);
+      const offerTrial = Boolean(response?.offerTrial);
 
       queueNegotiationResponse(turnId, {
         replyParts,
         suggestedPrice,
         askConfirmation,
         offerProveValue,
+        offerTrial,
       });
     } catch (error) {
       if (handleLimitReached(error)) return;
@@ -927,6 +1180,7 @@ export default function HomeContent() {
         suggestedPrice: null,
         askConfirmation: false,
         offerProveValue: false,
+        offerTrial: false,
       });
     } finally {
       setThinkingDelta(-1);
@@ -934,6 +1188,11 @@ export default function HomeContent() {
   };
 
   const requestTaskMessage = async (step, meta = {}) => {
+    if (!PREVIEW_ENABLED) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+      enqueueReplyParts('chat', ["Let's stick with pricing for now."], {});
+      return;
+    }
     if (taskInFlightRef.current) {
       taskQueueRef.current.push({ step, meta });
       return;
@@ -1021,6 +1280,7 @@ export default function HomeContent() {
   };
 
   const fetchTopicsAndAsk = async () => {
+    if (!PREVIEW_ENABLED) return;
     if (!sessionOwnerRef.current) return;
     if (topicsRequestInFlightRef.current) return;
     topicsRequestInFlightRef.current = true;
@@ -1104,6 +1364,10 @@ export default function HomeContent() {
 
   const handleConfirmPrice = async (price) => {
     if (!price || limitReachedRef.current) return;
+    if (price < MIN_NEGOTIATION_PRICE_CENTS) {
+      addBotMessage(`Minimum is ${formatPrice(MIN_NEGOTIATION_PRICE_CENTS)}/mo.`, 'chat');
+      return;
+    }
     setThinkingDelta(1);
     try {
       const response = await api.confirmNegotiationPrice(price);
@@ -1127,8 +1391,55 @@ export default function HomeContent() {
     }
   };
 
+  const startTrial = async () => {
+    if (trialStatusRef.current !== 'offered' || limitReachedRef.current) return;
+    setThinkingDelta(1);
+    try {
+      const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+      const lastOffer = offers.length > 0 ? offers[offers.length - 1] : currentPrice;
+      const resolvedTrialOffer = Math.max(
+        trialOfferCentsRef.current ?? lastOffer ?? MIN_NEGOTIATION_PRICE_CENTS,
+        MIN_NEGOTIATION_PRICE_CENTS
+      );
+      const response = await api.startNegotiationTrial({
+        trialOfferCents: resolvedTrialOffer,
+        messages: buildLlmMessages(),
+        offerHistory: offers,
+        offerCount: offers.length,
+        lastOfferCents: lastOffer,
+      });
+      setTrialStatusSafe(response?.trialStatus || 'active');
+      setTrialOfferCentsSafe(
+        typeof response?.trialOfferCents === 'number' ? response.trialOfferCents : trialOfferCentsRef.current
+      );
+      setTrialEndsAtSafe(response?.trialEndsAt || null);
+      setAwaitingConfirmationSafe(false);
+      router.push('/dashboard');
+    } catch (error) {
+      addBotMessage('Could not start the trial. Try again.', 'chat');
+    } finally {
+      setThinkingDelta(-1);
+    }
+  };
+
   const respondToUserMessage = async (trimmed) => {
     const currentStep = negotiationStepRef.current;
+
+    if (trialStatusRef.current === 'offered') {
+      enqueueMessage({
+        type: 'chat',
+        text: "Use the 1-week trial button below and we'll pick this back up next week.",
+      });
+      return;
+    }
+
+    if (trialStatusRef.current === 'active') {
+      enqueueMessage({
+        type: 'chat',
+        text: "Your trial is active. Come back when the week is up and we'll settle on price.",
+      });
+      return;
+    }
 
     if (currentStep === NEGOTIATION_STEPS.NONE) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
@@ -1172,6 +1483,11 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (isTaskInputStep) {
+      if (!PREVIEW_ENABLED) {
+        enqueueMessage({ type: 'chat', text: "Let's stick with pricing for now." });
+        setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
+        return;
+      }
       requestTaskMessage(currentStep, { latestUserMessage: trimmed });
       return;
     }
@@ -1229,6 +1545,7 @@ export default function HomeContent() {
   };
 
   useEffect(() => {
+    if (!PREVIEW_ENABLED) return;
     if (!jobId || !isJobRunning) return;
     if (!sessionOwnerRef.current) return;
 
@@ -1306,14 +1623,6 @@ export default function HomeContent() {
           <Image src="/images/kogno_logo.png" alt="Kogno" width={32} height={32} />
           Kogno
         </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="px-5 py-2 text-sm font-medium rounded-xl border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-all"
-          >
-            Dashboard
-          </Link>
-        </div>
       </header>
 
       {/* Chat area - takes up remaining space */}
@@ -1377,7 +1686,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          {awaitingConfirmation && !isThinking && !chatEnded && !limitReached && (
+          {awaitingConfirmation && trialStatus === 'none' && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1401,7 +1710,22 @@ export default function HomeContent() {
             </motion.div>
           )}
 
-          {hasGeneratedPreview && previewCourseId && !chatEnded && !limitReached && (
+          {trialStatus === 'offered' && !isThinking && !chatEnded && !limitReached && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-wrap items-center gap-3 mb-4"
+            >
+              <button
+                onClick={startTrial}
+                className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+              >
+                Start 1-week trial
+              </button>
+            </motion.div>
+          )}
+
+          {PREVIEW_ENABLED && hasGeneratedPreview && previewCourseId && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

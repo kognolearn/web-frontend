@@ -8,6 +8,7 @@ import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
+import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
 
 
 const nunito = Nunito({
@@ -65,6 +66,7 @@ export default function RootLayout({ children }) {
             <CodeEditorSettingsProvider>
               <OnboardingProvider>
                 <SupabaseSessionProvider />
+                <TrialNegotiationGate />
                 {children}
                 <FeedbackWidget />
               </OnboardingProvider>
