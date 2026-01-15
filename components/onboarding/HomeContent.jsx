@@ -954,6 +954,22 @@ export default function HomeContent() {
     scheduleNegotiationSync();
   };
 
+  const getOfferCount = () => {
+    const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    return offers.length;
+  };
+
+  const canOfferTrial = () => getOfferCount() >= MAX_NEGOTIATION_OFFERS;
+
+  const getNegotiationMeta = () => {
+    const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    return {
+      offerCount: offers.length,
+      lastOfferCents: offers.length > 0 ? offers[offers.length - 1] : null,
+      trialStatus: trialStatusRef.current,
+    };
+  };
+
   const requestIntroMessage = async (step, latestUserMessage = null) => {
     if (introInFlightRef.current) {
       if (latestUserMessage) {
@@ -971,6 +987,7 @@ export default function HomeContent() {
           step,
           latestUserMessage,
         },
+        negotiation: getNegotiationMeta(),
       });
 
       const fallback =
@@ -983,7 +1000,7 @@ export default function HomeContent() {
       const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
       const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
 
-      if (offerTrial) {
+      if (offerTrial && canOfferTrial()) {
         enterTrialOffer(currentPrice);
         return;
       }
@@ -1004,8 +1021,9 @@ export default function HomeContent() {
       let fallback = INTRO_FALLBACKS.reason;
       let fallbackStep = step;
       if (wantsDemo) {
-        enterTrialOffer(currentPrice);
-        return;
+        fallback =
+          "I can show you a trial after we get through pricing. For now, what's bringing you here?";
+        fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
       } else if (asksWhat) {
         fallback = INTRO_FALLBACKS.explain;
         fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
@@ -1093,7 +1111,7 @@ export default function HomeContent() {
       trackOfferHistory(suggestedPrice);
     }
 
-    if (offerTrial) {
+    if (offerTrial && canOfferTrial()) {
       enterTrialOffer(suggestedPrice ?? currentPrice);
       return true;
     }
@@ -1149,6 +1167,7 @@ export default function HomeContent() {
       const response = await api.getChatStep({
         mode: 'negotiation',
         messages: buildLlmMessages(),
+        negotiation: getNegotiationMeta(),
       });
 
       const replyParts = extractReplyParts(response, FALLBACKS.negotiation);
