@@ -25,8 +25,8 @@ const INTRO_FALLBACKS = {
   reason: "I'm Kogno. What brought you here today?",
   askUseful: "Got it. What are you hoping to get out of this?",
   explain:
-    "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
-  price: "List price is $100/month. If that's too much, say so.",
+    "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. How does that sound?",
+  price: "List price is $100/month. How does that sound?",
   demo:
     TRIAL_OFFER_MESSAGE,
 };
@@ -60,7 +60,7 @@ const STEP_ORDER = {
 };
 
 const FALLBACKS = {
-  negotiation: "List price is $100/month. If that's too much, say so.",
+  negotiation: "List price is $100/month. How does that sound?",
   task: "Let's stick with pricing for now.",
   topics: "Let's stick with pricing for now.",
   generation: "Let's stick with pricing for now.",
