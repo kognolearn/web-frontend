@@ -10,17 +10,20 @@ import * as api from '@/lib/onboarding';
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const ONBOARDING_SESSION_KEY = "kogno_onboarding_session_v1";
-const ONBOARDING_SESSION_VERSION = 2;
+const ONBOARDING_SESSION_VERSION = 3;
 const ONBOARDING_TAB_KEY = "kogno_onboarding_tab_id";
 const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const INTRO_FALLBACKS = {
-  reason: "I'm Kogno — your no-fluff study copilot. Why are you talking to me today?",
-  askUseful: "Want the quick why-Kogno-is-useful pitch? Ask me why it's useful.",
+  reason: "I'm Kogno. What pulled you in today?",
+  askUseful: "Got it. What are you hoping to get out of this?",
   explain:
-    "Kogno turns your class into a focused study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
+    "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
+  price: "List price is $100/month. If that's too much, say so.",
+  demo:
+    "Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. Which college do you attend?",
 };
 
 const NEGOTIATION_STEPS = {
@@ -52,7 +55,7 @@ const STEP_ORDER = {
 };
 
 const FALLBACKS = {
-  negotiation: "List price is $100/month. Confirm or make your case.",
+  negotiation: "List price is $100/month. If that's too much, say so.",
   task: 'Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. What college are you at?',
   topics: "I couldn't find topics for that. What's the course name again?",
   generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
@@ -140,6 +143,7 @@ export default function HomeContent() {
   const lastTaskTimestampRef = useRef(0);
   const topicsRequestInFlightRef = useRef(false);
   const introInFlightRef = useRef(false);
+  const introQueueRef = useRef([]);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -497,6 +501,8 @@ export default function HomeContent() {
     taskInFlightRef.current = false;
     taskQueueRef.current = [];
     topicsRequestInFlightRef.current = false;
+    introInFlightRef.current = false;
+    introQueueRef.current = [];
     setAwaitingConfirmationSafe(false);
     setNegotiationStepSafe(NEGOTIATION_STEPS.DONE);
     addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
@@ -610,6 +616,8 @@ export default function HomeContent() {
     taskInFlightRef.current = false;
     taskQueueRef.current = [];
     topicsRequestInFlightRef.current = false;
+    introInFlightRef.current = false;
+    introQueueRef.current = [];
     pendingBotRef.current = false;
     lastBotTypeRef.current = null;
     queueRef.current = [];
@@ -659,6 +667,33 @@ export default function HomeContent() {
       role: msg.type === 'user' ? 'user' : 'assistant',
       content: msg.text,
     }));
+
+  const extractReplyParts = (response, fallback) => {
+    if (Array.isArray(response?.reply)) {
+      return response.reply.map((part) => String(part || '').trim()).filter(Boolean);
+    }
+    if (Array.isArray(response?.replyParts)) {
+      return response.replyParts.map((part) => String(part || '').trim()).filter(Boolean);
+    }
+    if (typeof response?.reply === 'string') {
+      const trimmed = response.reply.trim();
+      return trimmed ? [trimmed] : [fallback];
+    }
+    return [fallback];
+  };
+
+  const enqueueReplyParts = (type, parts, meta = {}) => {
+    if (!Array.isArray(parts) || parts.length === 0) return;
+    parts.forEach((text, index) => {
+      if (!text) return;
+      const entry = {
+        type,
+        text,
+        meta: index === parts.length - 1 ? meta : {},
+      };
+      enqueueMessage(entry);
+    });
+  };
 
   const enqueueMessage = (entry) => {
     if (!entry) return;
@@ -712,7 +747,12 @@ export default function HomeContent() {
   };
 
   const requestIntroMessage = async (step, latestUserMessage = null) => {
-    if (introInFlightRef.current) return;
+    if (introInFlightRef.current) {
+      if (latestUserMessage) {
+        introQueueRef.current.push(latestUserMessage);
+      }
+      return;
+    }
     introInFlightRef.current = true;
     setThinkingDelta(1);
     try {
@@ -725,19 +765,16 @@ export default function HomeContent() {
         },
       });
 
-      const reply = response?.reply || '';
+      const fallback =
+        step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL
+          ? INTRO_FALLBACKS.askUseful
+          : INTRO_FALLBACKS.reason;
+      const replyParts = extractReplyParts(response, fallback);
       const nextStep = response?.nextStep;
       const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
       const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
 
-      const fallback =
-        step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL
-          ? (latestUserMessage && /why|useful|what do you do|what is/i.test(latestUserMessage)
-              ? INTRO_FALLBACKS.explain
-              : INTRO_FALLBACKS.askUseful)
-          : INTRO_FALLBACKS.reason;
-
-      enqueueMessage({ type: 'chat', text: reply || fallback });
+      enqueueReplyParts('chat', replyParts, {});
 
       if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
         setNegotiationStepSafe(resolvedStep);
@@ -746,22 +783,51 @@ export default function HomeContent() {
         setAwaitingConfirmationSafe(false);
       }
     } catch (error) {
-      const fallback =
-        step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL
-          ? (latestUserMessage && /why|useful|what do you do|what is/i.test(latestUserMessage)
-              ? INTRO_FALLBACKS.explain
-              : INTRO_FALLBACKS.askUseful)
-          : INTRO_FALLBACKS.reason;
-      enqueueMessage({ type: 'chat', text: fallback });
+      const normalized = latestUserMessage ? latestUserMessage.toLowerCase() : '';
+      const wantsDemo = /demo|preview|lesson|show me|prove/.test(normalized);
+      const asksPrice = /price|cost|how much|\$|per month|monthly/.test(normalized);
+      const asksWhat = /what is|what do you do|useful|why should|tell me about|explain/.test(normalized);
+      let fallback = INTRO_FALLBACKS.reason;
+      let fallbackStep = step;
+      if (wantsDemo) {
+        fallback = INTRO_FALLBACKS.demo;
+        fallbackStep = NEGOTIATION_STEPS.ASK_COLLEGE;
+      } else if (asksWhat) {
+        fallback = INTRO_FALLBACKS.explain;
+        fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
+      } else if (asksPrice) {
+        fallback = INTRO_FALLBACKS.price;
+        fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
+      } else if (step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL) {
+        fallback = INTRO_FALLBACKS.askUseful;
+      }
+      enqueueReplyParts('chat', [fallback], {});
+      if (fallbackStep && fallbackStep !== negotiationStepRef.current) {
+        setNegotiationStepSafe(fallbackStep);
+      }
+      if (fallbackStep === NEGOTIATION_STEPS.NEGOTIATING) {
+        setAwaitingConfirmationSafe(false);
+      }
     } finally {
       introInFlightRef.current = false;
       setThinkingDelta(-1);
+      const drainQueue = async () => {
+        while (introQueueRef.current.length > 0) {
+          const nextQueued = introQueueRef.current.shift();
+          if (!nextQueued) continue;
+          await respondToUserMessage(nextQueued);
+          if (introInFlightRef.current) return;
+        }
+      };
+      void drainQueue();
     }
   };
 
   const processNegotiationPayload = (payload) => {
     if (!payload) return true;
-    const reply = payload.reply || FALLBACKS.negotiation;
+    const replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
+      ? payload.replyParts
+      : [FALLBACKS.negotiation];
     const suggestedPrice = payload.suggestedPrice;
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerProveValue = Boolean(payload.offerProveValue);
@@ -806,7 +872,7 @@ export default function HomeContent() {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
-    enqueueMessage({ type: 'chat', text: reply });
+    enqueueReplyParts('chat', replyParts, {});
     return true;
   };
 
@@ -837,7 +903,7 @@ export default function HomeContent() {
         messages: buildLlmMessages(),
       });
 
-      const reply = response?.reply || '';
+      const replyParts = extractReplyParts(response, FALLBACKS.negotiation);
       const suggestedPriceRaw = response?.suggestedPrice;
       let suggestedPrice = Number.isFinite(Number(suggestedPriceRaw))
         ? Math.round(Number(suggestedPriceRaw))
@@ -849,7 +915,7 @@ export default function HomeContent() {
       const offerProveValue = Boolean(response?.offerProveValue);
 
       queueNegotiationResponse(turnId, {
-        reply: reply || FALLBACKS.negotiation,
+        replyParts,
         suggestedPrice,
         askConfirmation,
         offerProveValue,
@@ -857,7 +923,7 @@ export default function HomeContent() {
     } catch (error) {
       if (handleLimitReached(error)) return;
       queueNegotiationResponse(turnId, {
-        reply: FALLBACKS.negotiation,
+        replyParts: [FALLBACKS.negotiation],
         suggestedPrice: null,
         askConfirmation: false,
         offerProveValue: false,
@@ -899,7 +965,7 @@ export default function HomeContent() {
       });
 
       if (requestId !== taskRequestIdRef.current) return;
-      const reply = response?.reply || '';
+      const replyParts = extractReplyParts(response, FALLBACKS.task);
       const fieldUpdates = response?.fieldUpdates || {};
       const resolvedUpdates = {
         collegeName: fieldUpdates?.collegeName || null,
@@ -938,10 +1004,10 @@ export default function HomeContent() {
         }
       }
 
-      enqueueMessage({ type: 'task', text: reply || FALLBACKS.task, meta: { ...metaWithStep, step: resolvedStep } });
+      enqueueReplyParts('task', replyParts, { ...metaWithStep, step: resolvedStep });
     } catch (error) {
       if (handleLimitReached(error)) return;
-      enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
+      enqueueReplyParts('task', [FALLBACKS.task], { ...meta, step });
     } finally {
       taskInFlightRef.current = false;
       const next = taskQueueRef.current.shift();
@@ -1061,25 +1127,14 @@ export default function HomeContent() {
     }
   };
 
-  const handleUserSend = async (value) => {
-    const trimmed = value.trim();
-    if (!trimmed || isRedirecting || chatEndedRef.current || limitReachedRef.current) return;
-
-    if (shouldStartFreshSession()) {
-      await startFreshSession();
-    }
-
-    setInput('');
-    addUserMessage(trimmed);
-
-    if (!hasStarted) {
-      void ensureOnboardingSession();
-    }
-
-    pendingBotRef.current = true;
-    flushQueue();
-
+  const respondToUserMessage = async (trimmed) => {
     const currentStep = negotiationStepRef.current;
+
+    if (currentStep === NEGOTIATION_STEPS.NONE) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
+      requestIntroMessage(NEGOTIATION_STEPS.INTRO_REASON, trimmed);
+      return;
+    }
 
     if ([NEGOTIATION_STEPS.INTRO_REASON, NEGOTIATION_STEPS.INTRO_ASK_USEFUL].includes(currentStep)) {
       requestIntroMessage(currentStep, trimmed);
@@ -1122,8 +1177,19 @@ export default function HomeContent() {
     }
 
     const normalized = trimmed.toLowerCase();
-    const isConfirm = ['yes', 'y', 'confirm', 'sure', 'ok', 'okay', 'deal'].includes(normalized);
-    if (!isTaskInputStep && !inPreviewFlow && isConfirm) {
+    const isExplicitAccept = /\b(confirm|deal|i'?m in|im in|i accept|i'll take it|ill take it)\b/.test(normalized);
+    const isSoftYes = /\b(yes|yep|yup|sure)\b/.test(normalized);
+    const isOk = /\b(ok|okay)\b/.test(normalized);
+    const hasNegation =
+      /\b(no|nah|not|don't|do not|cant|can't|wont|won't|too much|too expensive|cannot)\b/.test(normalized);
+    const currentDollars = Number.isFinite(currentPrice) ? Math.round(currentPrice / 100) : null;
+    const mentionsCurrentPrice =
+      currentDollars !== null && new RegExp(`\\b\\$?${currentDollars}\\b`).test(normalized);
+    const shouldConfirm =
+      !hasNegation &&
+      (isExplicitAccept || ((isSoftYes || isOk) && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
+
+    if (!isTaskInputStep && !inPreviewFlow && shouldConfirm) {
       await handleConfirmPrice(currentPrice);
       return;
     }
@@ -1139,6 +1205,27 @@ export default function HomeContent() {
 
     const negotiationTurnId = ++negotiationTurnCounterRef.current;
     requestNegotiationResponse(negotiationTurnId);
+  };
+
+  const handleUserSend = async (value) => {
+    const trimmed = value.trim();
+    if (!trimmed || isRedirecting || chatEndedRef.current || limitReachedRef.current) return;
+
+    if (shouldStartFreshSession()) {
+      await startFreshSession();
+    }
+
+    setInput('');
+    addUserMessage(trimmed);
+
+    if (!hasStarted) {
+      void ensureOnboardingSession();
+    }
+
+    pendingBotRef.current = true;
+    flushQueue();
+
+    await respondToUserMessage(trimmed);
   };
 
   useEffect(() => {
@@ -1162,8 +1249,8 @@ export default function HomeContent() {
           }
           addBotMessage(
             didOpen
-              ? 'Preview opened in a new tab. Come back when you are ready to keep negotiating.'
-              : 'Preview is ready. Use the button below to open it, then come back to keep negotiating.',
+              ? 'Your preview lesson is here. I opened it in a new tab—come back when you are ready to keep negotiating.'
+              : 'Your preview lesson is here. Use the button below to open it, then come back to keep negotiating.',
             'chat'
           );
           pendingBotRef.current = false;
