@@ -127,7 +127,11 @@ export default function HomeContent() {
   const flowCompleteRef = useRef(false);
   const awaitingTaskRef = useRef(false);
   const deferredChatRef = useRef(null);
-  const previewWindowRef = useRef(null);
+  const taskInFlightRef = useRef(false);
+  const taskQueueRef = useRef([]);
+  const lastTaskKeyRef = useRef('');
+  const lastTaskTimestampRef = useRef(0);
+  const topicsRequestInFlightRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -480,6 +484,9 @@ export default function HomeContent() {
     deferredChatRef.current = null;
     pendingBotRef.current = false;
     queueRef.current = [];
+    taskInFlightRef.current = false;
+    taskQueueRef.current = [];
+    topicsRequestInFlightRef.current = false;
     setAwaitingConfirmationSafe(false);
     setNegotiationStepSafe(NEGOTIATION_STEPS.DONE);
     addBotMessage(CHAT_ENDED_MESSAGE, 'chat');
@@ -590,6 +597,9 @@ export default function HomeContent() {
     setIsThinking(false);
     awaitingTaskRef.current = false;
     deferredChatRef.current = null;
+    taskInFlightRef.current = false;
+    taskQueueRef.current = [];
+    topicsRequestInFlightRef.current = false;
     pendingBotRef.current = false;
     lastBotTypeRef.current = null;
     queueRef.current = [];
@@ -800,6 +810,18 @@ export default function HomeContent() {
   };
 
   const requestTaskMessage = async (step, meta = {}) => {
+    if (taskInFlightRef.current) {
+      taskQueueRef.current.push({ step, meta });
+      return;
+    }
+    const key = `${step}::${meta?.latestUserMessage || ''}`;
+    const now = Date.now();
+    if (!meta?.latestUserMessage && key === lastTaskKeyRef.current && now - lastTaskTimestampRef.current < 1500) {
+      return;
+    }
+    lastTaskKeyRef.current = key;
+    lastTaskTimestampRef.current = now;
+    taskInFlightRef.current = true;
     const requestId = taskRequestIdRef.current + 1;
     taskRequestIdRef.current = requestId;
     setThinkingDelta(1);
@@ -863,12 +885,21 @@ export default function HomeContent() {
       if (handleLimitReached(error)) return;
       enqueueMessage({ type: 'task', text: FALLBACKS.task, meta: { ...meta, step } });
     } finally {
+      taskInFlightRef.current = false;
+      const next = taskQueueRef.current.shift();
+      if (next) {
+        setTimeout(() => {
+          requestTaskMessage(next.step, next.meta);
+        }, 0);
+      }
       setThinkingDelta(-1);
     }
   };
 
   const fetchTopicsAndAsk = async () => {
     if (!sessionOwnerRef.current) return;
+    if (topicsRequestInFlightRef.current) return;
+    topicsRequestInFlightRef.current = true;
     setThinkingDelta(1);
     try {
       const topicRes = await api.getHardTopics({
@@ -894,22 +925,9 @@ export default function HomeContent() {
       setShowTopics(false);
       setTopicsSafe([]);
     } finally {
+      topicsRequestInFlightRef.current = false;
       setThinkingDelta(-1);
     }
-  };
-
-  const ensurePreviewWindow = () => {
-    if (typeof window === 'undefined') return null;
-    const existing = previewWindowRef.current;
-    if (existing && !existing.closed) return existing;
-    const popup = window.open('about:blank', '_blank');
-    if (popup) {
-      try {
-        popup.opener = null;
-      } catch (error) {}
-    }
-    previewWindowRef.current = popup;
-    return popup;
   };
 
   const openPreviewInNewTab = (courseId, lessonId) => {
@@ -919,20 +937,11 @@ export default function HomeContent() {
       params.set('lesson', lessonId);
     }
     const url = `/courses/${courseId}?${params.toString()}`;
-    const existing = previewWindowRef.current;
-    if (existing && !existing.closed) {
-      try {
-        existing.location.href = url;
-        existing.focus();
-        return true;
-      } catch (error) {}
-    }
     const popup = window.open(url, '_blank');
     if (popup) {
       try {
         popup.opener = null;
       } catch (error) {}
-      previewWindowRef.current = popup;
       return true;
     }
     return false;
@@ -948,7 +957,6 @@ export default function HomeContent() {
       return;
     }
 
-    ensurePreviewWindow();
     setIsJobRunning(true);
     try {
       const jobRes = await api.generateLesson({
@@ -1046,9 +1054,6 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (isTaskInputStep) {
-      if (currentStep === NEGOTIATION_STEPS.SHOW_TOPICS) {
-        ensurePreviewWindow();
-      }
       requestTaskMessage(currentStep, { latestUserMessage: trimmed });
       return;
     }
