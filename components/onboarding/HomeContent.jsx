@@ -17,7 +17,7 @@ const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const INTRO_FALLBACKS = {
-  reason: "I'm Kogno. What pulled you in today?",
+  reason: "I'm Kogno. What brought you here today?",
   askUseful: "Got it. What are you hoping to get out of this?",
   explain:
     "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
