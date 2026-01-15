@@ -20,7 +20,7 @@ const PREVIEW_ENABLED = process.env.NEXT_PUBLIC_ONBOARDING_PREVIEW_ENABLED === "
 const MAX_NEGOTIATION_OFFERS = 6;
 const MIN_NEGOTIATION_PRICE_CENTS = 849;
 const TRIAL_OFFER_MESSAGE =
-  "Ok, how about this. I'll let you try it for a week - no credit card. You're already set up, so I'll walk you through how this works, and we can pick this back up next week.";
+  "Ok, how about this. I'll let you try it for a week - no credit card. We can set pricing aside while you try it, or keep talking price if you want. Come back next week and we can finish this.";
 const INTRO_FALLBACKS = {
   reason: "I'm Kogno. What brought you here today?",
   askUseful: "Got it. What are you hoping to get out of this?",
@@ -118,6 +118,7 @@ export default function HomeContent() {
   const [trialStatus, setTrialStatus] = useState('none');
   const [trialOfferCents, setTrialOfferCents] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
+  const [trialDeclined, setTrialDeclined] = useState(false);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -157,6 +158,7 @@ export default function HomeContent() {
   const trialStatusRef = useRef('none');
   const trialOfferCentsRef = useRef(null);
   const trialEndsAtRef = useRef(null);
+  const trialDeclinedRef = useRef(false);
   const negotiationSyncTimerRef = useRef(null);
   const negotiationSyncInFlightRef = useRef(false);
   const negotiationSyncQueuedRef = useRef(false);
@@ -255,6 +257,7 @@ export default function HomeContent() {
         trialStatus: overrides.trialStatus ?? trialStatusRef.current,
         trialOfferCents: overrides.trialOfferCents ?? trialOfferCentsRef.current,
         trialEndsAt: overrides.trialEndsAt ?? trialEndsAtRef.current,
+        trialDeclined: overrides.trialDeclined ?? trialDeclinedRef.current,
       };
       window.localStorage.setItem(ONBOARDING_SESSION_KEY, JSON.stringify(payload));
     } catch (error) {
@@ -387,6 +390,9 @@ export default function HomeContent() {
 
     if (stored.trialEndsAt) {
       setTrialEndsAtSafe(stored.trialEndsAt);
+    }
+    if (typeof stored.trialDeclined === 'boolean') {
+      setTrialDeclinedSafe(stored.trialDeclined);
     }
 
     if (stored.isJobRunning || stored.negotiationStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
@@ -569,6 +575,7 @@ export default function HomeContent() {
     trialStatus,
     trialOfferCents,
     trialEndsAt,
+    trialDeclined,
   ]);
 
   const syncMessages = (next) => {
@@ -701,6 +708,11 @@ export default function HomeContent() {
   const setTrialEndsAtSafe = (next) => {
     trialEndsAtRef.current = next || null;
     setTrialEndsAt(trialEndsAtRef.current);
+  };
+
+  const setTrialDeclinedSafe = (next) => {
+    trialDeclinedRef.current = Boolean(next);
+    setTrialDeclined(trialDeclinedRef.current);
   };
 
   const updateData = (updates) => {
@@ -959,7 +971,7 @@ export default function HomeContent() {
     return offers.length;
   };
 
-  const canOfferTrial = () => getOfferCount() >= MAX_NEGOTIATION_OFFERS;
+  const canOfferTrial = () => getOfferCount() >= MAX_NEGOTIATION_OFFERS && !trialDeclinedRef.current;
 
   const getNegotiationMeta = () => {
     const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
@@ -967,6 +979,7 @@ export default function HomeContent() {
       offerCount: offers.length,
       lastOfferCents: offers.length > 0 ? offers[offers.length - 1] : null,
       trialStatus: trialStatusRef.current,
+      trialDeclined: trialDeclinedRef.current,
     };
   };
 
@@ -1063,8 +1076,10 @@ export default function HomeContent() {
     setTrialOfferCentsSafe(resolvedOffer);
     setTrialStatusSafe('offered');
     setAwaitingConfirmationSafe(false);
+    setTrialDeclinedSafe(false);
     enqueueReplyParts('chat', [TRIAL_OFFER_MESSAGE], {});
     scheduleNegotiationSync();
+    return true;
   };
 
   const trackOfferHistory = (priceCents) => {
@@ -1075,9 +1090,10 @@ export default function HomeContent() {
     if (existing.includes(clamped)) return;
     const next = [...existing, clamped];
     setOfferHistorySafe(next);
-    if (next.length >= MAX_NEGOTIATION_OFFERS && trialStatusRef.current === 'none') {
-      enterTrialOffer(clamped);
+    if (next.length >= MAX_NEGOTIATION_OFFERS && trialStatusRef.current === 'none' && canOfferTrial()) {
+      return enterTrialOffer(clamped);
     }
+    return false;
   };
 
   const processNegotiationPayload = (payload) => {
@@ -1085,7 +1101,7 @@ export default function HomeContent() {
     if (trialStatusRef.current === 'offered' || trialStatusRef.current === 'active') {
       return true;
     }
-    const replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
+    let replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
       ? payload.replyParts
       : [FALLBACKS.negotiation];
     const suggestedPrice = payload.suggestedPrice;
@@ -1108,11 +1124,21 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (suggestedPrice !== null) {
-      trackOfferHistory(suggestedPrice);
+      const didAutoOffer = trackOfferHistory(suggestedPrice);
+      if (didAutoOffer) {
+        return true;
+      }
+    }
+
+    if (offerTrial && !canOfferTrial()) {
+      replyParts = [FALLBACKS.negotiation];
     }
 
     if (offerTrial && canOfferTrial()) {
-      enterTrialOffer(suggestedPrice ?? currentPrice);
+      const didOffer = enterTrialOffer(suggestedPrice ?? currentPrice);
+      if (didOffer) {
+        return true;
+      }
       return true;
     }
 
@@ -1443,13 +1469,24 @@ export default function HomeContent() {
 
   const respondToUserMessage = async (trimmed) => {
     const currentStep = negotiationStepRef.current;
+    const normalized = trimmed.toLowerCase();
 
     if (trialStatusRef.current === 'offered') {
-      enqueueMessage({
-        type: 'chat',
-        text: "Use the 1-week trial button below and we'll pick this back up next week.",
-      });
-      return;
+      const declineTrial =
+        /\b(no|nah|not now|pass|skip|keep negotiating|continue|keep talking|keep discussing|talk price|price|negotiate)\b/.test(
+          normalized
+        );
+      if (!declineTrial) {
+        enqueueMessage({
+          type: 'chat',
+          text: "Use the 1-week trial button below if you want to try it. If you'd rather keep pricing, say so.",
+        });
+        return;
+      }
+      setTrialStatusSafe('none');
+      setTrialDeclinedSafe(true);
+      setAwaitingConfirmationSafe(false);
+      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
     if (trialStatusRef.current === 'active') {
@@ -1458,6 +1495,14 @@ export default function HomeContent() {
         text: "Your trial is active. Come back when the week is up and we'll settle on price.",
       });
       return;
+    }
+
+    if (trialDeclinedRef.current) {
+      const wantsTrial = /\b(trial|try it|try it out|free week|week)\b/.test(normalized);
+      if (wantsTrial) {
+        enterTrialOffer(currentPrice);
+        return;
+      }
     }
 
     if (currentStep === NEGOTIATION_STEPS.NONE) {
@@ -1511,7 +1556,6 @@ export default function HomeContent() {
       return;
     }
 
-    const normalized = trimmed.toLowerCase();
     const isExplicitAccept = /\b(confirm|deal|i'?m in|im in|i accept|i'll take it|ill take it)\b/.test(normalized);
     const isSoftYes = /\b(yes|yep|yup|sure)\b/.test(normalized);
     const isOk = /\b(ok|okay)\b/.test(normalized);
