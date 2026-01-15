@@ -16,10 +16,17 @@ const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
-const INITIAL_MESSAGE = "Alright, list price is $100/month. Talk me down.";
+const INTRO_FALLBACKS = {
+  reason: "I'm Kogno — your no-fluff study copilot. Why are you talking to me today?",
+  askUseful: "Want the quick why-Kogno-is-useful pitch? Ask me why it's useful.",
+  explain:
+    "Kogno turns your class into a focused study plan with lessons, practice, and exams in one place. List price is $100/month. If that's too much, say so.",
+};
 
 const NEGOTIATION_STEPS = {
   NONE: 'NONE',
+  INTRO_REASON: 'INTRO_REASON',
+  INTRO_ASK_USEFUL: 'INTRO_ASK_USEFUL',
   NEGOTIATING: 'NEGOTIATING',
   AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
   PRICE_CONFIRMED: 'PRICE_CONFIRMED',
@@ -45,7 +52,7 @@ const STEP_ORDER = {
 };
 
 const FALLBACKS = {
-  negotiation: "Alright. What's your number?",
+  negotiation: "List price is $100/month. Confirm or make your case.",
   task: 'Here, let me prove to you why Kogno is worth it. I can generate a mini-course and teach you one lesson about any of your classes. What college are you at?',
   topics: "I couldn't find topics for that. What's the course name again?",
   generation: 'I hit a snag starting the lesson. Want to pick a topic again?',
@@ -132,6 +139,7 @@ export default function HomeContent() {
   const lastTaskKeyRef = useRef('');
   const lastTaskTimestampRef = useRef(0);
   const topicsRequestInFlightRef = useRef(false);
+  const introInFlightRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -389,6 +397,8 @@ export default function HomeContent() {
         if (status.confirmedPrice && status.paymentLink) {
           const canOverride = [
             NEGOTIATION_STEPS.NONE,
+            NEGOTIATION_STEPS.INTRO_REASON,
+            NEGOTIATION_STEPS.INTRO_ASK_USEFUL,
             NEGOTIATION_STEPS.NEGOTIATING,
             NEGOTIATION_STEPS.AWAITING_CONFIRMATION,
           ].includes(negotiationStepRef.current);
@@ -412,8 +422,8 @@ export default function HomeContent() {
   useEffect(() => {
     if (restoredSessionRef.current) return;
     const timer = setTimeout(() => {
-      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-      addBotMessage(INITIAL_MESSAGE, 'chat');
+      setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
+      requestIntroMessage(NEGOTIATION_STEPS.INTRO_REASON);
     }, 400);
     return () => clearTimeout(timer);
   }, []);
@@ -631,8 +641,8 @@ export default function HomeContent() {
     setHasStarted(true);
     clearStoredSession();
     void api.startNewOnboardingSession();
-    setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-    addBotMessage(INITIAL_MESSAGE, 'chat');
+    setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
+    requestIntroMessage(NEGOTIATION_STEPS.INTRO_REASON);
     persistSession({ status: 'active', hasStarted: true, jobId: null, isJobRunning: false, showTopics: false });
   };
 
@@ -699,6 +709,54 @@ export default function HomeContent() {
       await api.startNewOnboardingSession();
     } catch (error) {}
     persistSession({ status: 'active', hasStarted: true });
+  };
+
+  const requestIntroMessage = async (step, latestUserMessage = null) => {
+    if (introInFlightRef.current) return;
+    introInFlightRef.current = true;
+    setThinkingDelta(1);
+    try {
+      const response = await api.getChatStep({
+        mode: 'intro',
+        messages: buildLlmMessages(),
+        task: {
+          step,
+          latestUserMessage,
+        },
+      });
+
+      const reply = response?.reply || '';
+      const nextStep = response?.nextStep;
+      const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
+      const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
+
+      const fallback =
+        step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL
+          ? (latestUserMessage && /why|useful|what do you do|what is/i.test(latestUserMessage)
+              ? INTRO_FALLBACKS.explain
+              : INTRO_FALLBACKS.askUseful)
+          : INTRO_FALLBACKS.reason;
+
+      enqueueMessage({ type: 'chat', text: reply || fallback });
+
+      if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
+        setNegotiationStepSafe(resolvedStep);
+      }
+      if (resolvedStep === NEGOTIATION_STEPS.NEGOTIATING) {
+        setAwaitingConfirmationSafe(false);
+      }
+    } catch (error) {
+      const fallback =
+        step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL
+          ? (latestUserMessage && /why|useful|what do you do|what is/i.test(latestUserMessage)
+              ? INTRO_FALLBACKS.explain
+              : INTRO_FALLBACKS.askUseful)
+          : INTRO_FALLBACKS.reason;
+      enqueueMessage({ type: 'chat', text: fallback });
+    } finally {
+      introInFlightRef.current = false;
+      setThinkingDelta(-1);
+    }
   };
 
   const processNegotiationPayload = (payload) => {
@@ -1023,6 +1081,11 @@ export default function HomeContent() {
 
     const currentStep = negotiationStepRef.current;
 
+    if ([NEGOTIATION_STEPS.INTRO_REASON, NEGOTIATION_STEPS.INTRO_ASK_USEFUL].includes(currentStep)) {
+      requestIntroMessage(currentStep, trimmed);
+      return;
+    }
+
     if (currentStep === NEGOTIATION_STEPS.PRICE_CONFIRMED) {
       enqueueMessage({
         type: 'chat',
@@ -1060,11 +1123,12 @@ export default function HomeContent() {
 
     const normalized = trimmed.toLowerCase();
     const isConfirm = ['yes', 'y', 'confirm', 'sure', 'ok', 'okay', 'deal'].includes(normalized);
+    if (!isTaskInputStep && !inPreviewFlow && isConfirm) {
+      await handleConfirmPrice(currentPrice);
+      return;
+    }
+
     if (awaitingConfirmationRef.current && !isTaskInputStep && !inPreviewFlow) {
-      if (isConfirm) {
-        await handleConfirmPrice(currentPrice);
-        return;
-      }
       setAwaitingConfirmationSafe(false);
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
