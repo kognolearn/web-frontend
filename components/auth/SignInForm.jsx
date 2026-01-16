@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
-import { isDesktopApp, getRedirectDestination } from "@/lib/platform";
+import { getRedirectDestination } from "@/lib/platform";
+import { authFetch } from "@/lib/api";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 
@@ -67,8 +68,23 @@ export default function SignInForm() {
         if (!hasOnboardingContinuation) {
           await cleanupAnonUser();
         }
-        // Desktop app users go to dashboard, web users go to download
-        router.push(getRedirectDestination(redirectTo || "/dashboard"));
+        if (redirectTo) {
+          router.push(getRedirectDestination(redirectTo));
+          return;
+        }
+
+        let hasSubscription = false;
+        try {
+          const res = await authFetch("/api/stripe?endpoint=subscription-status", {
+            method: "GET",
+          });
+          if (res.ok) {
+            const status = await res.json().catch(() => ({}));
+            hasSubscription = Boolean(status?.hasSubscription);
+          }
+        } catch (fetchError) {}
+
+        router.push(hasSubscription ? "/dashboard" : "/");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

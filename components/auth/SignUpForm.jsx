@@ -13,7 +13,6 @@ export default function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
-  const fromOnboarding = searchParams.get("from") === "onboarding";
   const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     name: "",
@@ -111,8 +110,11 @@ export default function SignUpForm() {
         }
 
         // Redirect to download page to get the desktop app
-        const nextDestination = redirectTo || (fromOnboarding ? "/" : "/dashboard");
-        router.push(getRedirectDestination(nextDestination));
+        if (redirectTo) {
+          router.push(getRedirectDestination(redirectTo));
+        } else {
+          router.push("/");
+        }
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

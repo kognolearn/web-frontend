@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import * as api from '@/lib/onboarding';
+import { supabase } from '@/lib/supabase/client';
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -1516,6 +1517,11 @@ export default function HomeContent() {
     }
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/auth/create-account');
+  };
+
   const respondToUserMessage = async (trimmed) => {
     const currentStep = negotiationStepRef.current;
     const normalized = trimmed.toLowerCase();
@@ -1744,6 +1750,13 @@ export default function HomeContent() {
           <Image src="/images/kogno_logo.png" alt="Kogno" width={32} height={32} />
           Kogno
         </Link>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="px-4 py-2 rounded-xl bg-[var(--surface-1)] border border-white/10 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+        >
+          Sign out
+        </button>
       </header>
 
       {/* Chat area - takes up remaining space */}
@@ -1819,15 +1832,6 @@ export default function HomeContent() {
               >
                 Confirm {formatPrice(currentPrice)}/mo
               </button>
-              <button
-                onClick={() => {
-                  setAwaitingConfirmationSafe(false);
-                  setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-                }}
-                className="px-6 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
-              >
-                Keep negotiating
-              </button>
             </motion.div>
           )}
 
@@ -1841,7 +1845,7 @@ export default function HomeContent() {
                 onClick={startTrial}
                 className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
               >
-                Start 1-week trial
+                Accept free trial
               </button>
             </motion.div>
           )}

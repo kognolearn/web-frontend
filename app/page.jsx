@@ -23,7 +23,7 @@ export default async function Home() {
   } = await supabase.auth.getSession();
 
   if (!session) {
-    redirect("/auth/create-account?from=onboarding&redirectTo=/");
+    redirect("/auth/create-account");
   }
 
   const host = headerStore.get("host");

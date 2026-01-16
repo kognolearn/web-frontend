@@ -79,15 +79,15 @@ export default async function CreateAccountPage({ searchParams }) {
           <SignUpForm />
 
           <div className="mt-8 pt-6 border-t border-white/10 dark:border-white/5 text-center">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Already have an account?{" "}
-              <Link
-                href={`/auth/sign-in${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
-                className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors"
-              >
-                Sign in
-              </Link>
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+              Already have an account?
             </p>
+            <Link
+              href={`/auth/sign-in${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+            >
+              Sign in
+            </Link>
           </div>
         </div>
       </div>
