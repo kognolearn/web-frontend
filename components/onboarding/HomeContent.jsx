@@ -18,7 +18,7 @@ const LIMIT_REACHED_MESSAGE =
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const PREVIEW_ENABLED = process.env.NEXT_PUBLIC_ONBOARDING_PREVIEW_ENABLED === "true";
 const MAX_NEGOTIATION_OFFERS = 6;
-const MIN_NEGOTIATION_PRICE_CENTS = 849;
+const MIN_NEGOTIATION_PRICE_CENTS = 100;
 const TRIAL_OFFER_MESSAGE =
   "Ok, how about this. I'll let you try it for a week - no credit card. We can set pricing aside while you try it, or keep talking price if you want. Come back next week and we can finish this.";
 const INTRO_FALLBACKS = {
@@ -777,6 +777,7 @@ export default function HomeContent() {
     setTrialStatusSafe('none');
     setTrialOfferCentsSafe(null);
     setTrialEndsAtSafe(null);
+    setTrialDeclinedSafe(false);
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     awaitingTaskRef.current = false;
@@ -800,6 +801,7 @@ export default function HomeContent() {
     trialStatusRef.current = 'none';
     trialOfferCentsRef.current = null;
     trialEndsAtRef.current = null;
+    trialDeclinedRef.current = false;
     if (negotiationSyncTimerRef.current) {
       clearTimeout(negotiationSyncTimerRef.current);
       negotiationSyncTimerRef.current = null;
@@ -983,6 +985,16 @@ export default function HomeContent() {
     };
   };
 
+  const extractPriceFromReply = (parts) => {
+    const text = Array.isArray(parts) ? parts.join(' ') : String(parts || '');
+    if (!text) return null;
+    const match = text.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)\s*(?:\/\s*mo(?:nth)?|per\s*month|monthly|\/\s*month|mo\b)/i);
+    if (!match) return null;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) return null;
+    return Math.round(value * 100);
+  };
+
   const requestIntroMessage = async (step, latestUserMessage = null) => {
     if (introInFlightRef.current) {
       if (latestUserMessage) {
@@ -1042,8 +1054,8 @@ export default function HomeContent() {
         fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
       } else if (wantsHelp) {
         fallback =
-          "Yeah, I can help with that. Kogno makes it easy to build a focused plan for your class—one of our backend folks used it for physics last quarter and pulled a 98 after a few hours a week. What brought you here?";
-        fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
+          "Yeah, I can help with that. Kogno builds a focused plan from your syllabus—one of our backend folks used it for physics last quarter and pulled a 98 after a few hours a week. List price is $100/month. How does that sound?";
+        fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
       } else if (asksWhat) {
         fallback = INTRO_FALLBACKS.explain;
         fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
@@ -1111,10 +1123,23 @@ export default function HomeContent() {
     let replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
       ? payload.replyParts
       : [FALLBACKS.negotiation];
-    const suggestedPrice = payload.suggestedPrice;
+    let suggestedPrice = payload.suggestedPrice;
+    if (suggestedPrice === null || suggestedPrice === undefined) {
+      const inferred = extractPriceFromReply(replyParts);
+      if (Number.isFinite(inferred)) {
+        suggestedPrice = inferred;
+      }
+    }
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerProveValue = Boolean(payload.offerProveValue) && PREVIEW_ENABLED;
     const offerTrial = Boolean(payload.offerTrial);
+    const trialBlocked = !canOfferTrial();
+    if (trialBlocked) {
+      const filtered = replyParts.filter((part) => !/trial|no credit card|free week/i.test(part));
+      if (filtered.length !== replyParts.length) {
+        replyParts = filtered.length > 0 ? filtered : [FALLBACKS.negotiation];
+      }
+    }
     const currentStep = negotiationStepRef.current;
     const inTaskInput = [
       NEGOTIATION_STEPS.ASK_COLLEGE,
@@ -1137,7 +1162,7 @@ export default function HomeContent() {
       }
     }
 
-    if (offerTrial && !canOfferTrial()) {
+    if (offerTrial && trialBlocked) {
       replyParts = [FALLBACKS.negotiation];
     }
 
@@ -1563,17 +1588,26 @@ export default function HomeContent() {
       return;
     }
 
+    const words = normalized.split(/\s+/).filter(Boolean);
     const isExplicitAccept = /\b(confirm|deal|i'?m in|im in|i accept|i'll take it|ill take it)\b/.test(normalized);
-    const isSoftYes = /\b(yes|yep|yup|sure)\b/.test(normalized);
-    const isOk = /\b(ok|okay)\b/.test(normalized);
+    const hasAffirmation = /\b(yes|yep|yup|ok|okay|sure|confirm|deal|in)\b/.test(normalized);
     const hasNegation =
       /\b(no|nah|not|don't|do not|cant|can't|wont|won't|too much|too expensive|cannot)\b/.test(normalized);
+    const hasCounterCue =
+      /\b(how about|what if|if|unless|but|instead|can you|could you|lower|cheaper|discount|reduce|drop|offer)\b/.test(
+        normalized
+      );
     const currentDollars = Number.isFinite(currentPrice) ? Math.round(currentPrice / 100) : null;
     const mentionsCurrentPrice =
       currentDollars !== null && new RegExp(`\\b\\$?${currentDollars}\\b`).test(normalized);
+    const mentionsAnyPrice = /\$?\d+(\.\d+)?/.test(normalized);
+    const wantsDifferentPrice = mentionsAnyPrice && !mentionsCurrentPrice;
+    const shortAffirmation = hasAffirmation && words.length <= 4;
     const shouldConfirm =
       !hasNegation &&
-      (isExplicitAccept || ((isSoftYes || isOk) && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
+      !hasCounterCue &&
+      !wantsDifferentPrice &&
+      (isExplicitAccept || (shortAffirmation && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
 
     if (!isTaskInputStep && !inPreviewFlow && shouldConfirm) {
       await handleConfirmPrice(currentPrice);
