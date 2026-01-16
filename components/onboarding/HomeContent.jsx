@@ -175,6 +175,14 @@ export default function HomeContent() {
     return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
   };
 
+  const getNegotiationFallback = () => {
+    const resolved =
+      Number.isFinite(currentPrice) && currentPrice > 0
+        ? Math.max(currentPrice, MIN_NEGOTIATION_PRICE_CENTS)
+        : 10000;
+    return `Price is ${formatPrice(resolved)}/mo. How does that sound?`;
+  };
+
   const generateSessionId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
@@ -1122,7 +1130,7 @@ export default function HomeContent() {
     }
     let replyParts = Array.isArray(payload.replyParts) && payload.replyParts.length > 0
       ? payload.replyParts
-      : [FALLBACKS.negotiation];
+      : [getNegotiationFallback()];
     let suggestedPrice = payload.suggestedPrice;
     if (suggestedPrice === null || suggestedPrice === undefined) {
       const inferred = extractPriceFromReply(replyParts);
@@ -1137,7 +1145,7 @@ export default function HomeContent() {
     if (trialBlocked) {
       const filtered = replyParts.filter((part) => !/trial|no credit card|free week/i.test(part));
       if (filtered.length !== replyParts.length) {
-        replyParts = filtered.length > 0 ? filtered : [FALLBACKS.negotiation];
+        replyParts = filtered.length > 0 ? filtered : [getNegotiationFallback()];
       }
     }
     const currentStep = negotiationStepRef.current;
@@ -1156,14 +1164,23 @@ export default function HomeContent() {
     ].includes(currentStep);
 
     if (suggestedPrice !== null) {
+      const currentOffer = Number.isFinite(currentPrice) ? currentPrice : null;
+      if (
+        currentOffer !== null &&
+        Array.isArray(offerHistoryRef.current) &&
+        offerHistoryRef.current.length > 0 &&
+        suggestedPrice > currentOffer
+      ) {
+        suggestedPrice = currentOffer;
+      }
       const didAutoOffer = trackOfferHistory(suggestedPrice);
       if (didAutoOffer) {
         return true;
       }
     }
 
-    if (offerTrial && trialBlocked) {
-      replyParts = [FALLBACKS.negotiation];
+    if (offerTrial && trialBlocked && replyParts.length === 0) {
+      replyParts = [getNegotiationFallback()];
     }
 
     if (offerTrial && canOfferTrial()) {
@@ -1228,7 +1245,7 @@ export default function HomeContent() {
         negotiation: getNegotiationMeta(),
       });
 
-      const replyParts = extractReplyParts(response, FALLBACKS.negotiation);
+      const replyParts = extractReplyParts(response, getNegotiationFallback());
       const suggestedPriceRaw = response?.suggestedPrice;
       let suggestedPrice = Number.isFinite(Number(suggestedPriceRaw))
         ? Math.round(Number(suggestedPriceRaw))
@@ -1253,7 +1270,7 @@ export default function HomeContent() {
     } catch (error) {
       if (handleLimitReached(error)) return;
       queueNegotiationResponse(turnId, {
-        replyParts: [FALLBACKS.negotiation],
+        replyParts: [getNegotiationFallback()],
         suggestedPrice: null,
         askConfirmation: false,
         offerProveValue: false,
