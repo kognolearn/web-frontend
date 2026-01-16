@@ -1031,11 +1031,18 @@ export default function HomeContent() {
       const wantsDemo = /demo|preview|lesson|show me|prove/.test(normalized);
       const asksPrice = /price|cost|how much|\$|per month|monthly/.test(normalized);
       const asksWhat = /what is|what do you do|useful|why should|tell me about|explain/.test(normalized);
+      const wantsHelp = /(help|tutor|homework|study|physics|chemistry|biology|math|calculus|algebra|organic|economics|history|english|programming|cs|computer science|coding)/.test(
+        normalized
+      );
       let fallback = INTRO_FALLBACKS.reason;
       let fallbackStep = step;
       if (wantsDemo) {
         fallback =
           "I can show you a trial after we get through pricing. For now, what's bringing you here?";
+        fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
+      } else if (wantsHelp) {
+        fallback =
+          "Yeah, I can help with that. Kogno makes it easy to build a focused plan for your class—one of our backend folks used it for physics last quarter and pulled a 98 after a few hours a week. What brought you here?";
         fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
       } else if (asksWhat) {
         fallback = INTRO_FALLBACKS.explain;
