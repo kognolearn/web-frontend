@@ -74,6 +74,17 @@ export default function TrialNegotiationGate() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleDismiss = () => {
+      setShowGate(false);
+    };
+    window.addEventListener("kogno:trial-gate-dismiss", handleDismiss);
+    return () => {
+      window.removeEventListener("kogno:trial-gate-dismiss", handleDismiss);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.style.overflow = showGate ? "hidden" : "";
   }, [showGate]);

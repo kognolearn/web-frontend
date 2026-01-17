@@ -122,6 +122,7 @@ export default function HomeContent({ variant = 'page' }) {
   const [trialOfferCents, setTrialOfferCents] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [trialDeclined, setTrialDeclined] = useState(false);
+  const [isContinuingFree, setIsContinuingFree] = useState(false);
   const [negotiationStatusLoaded, setNegotiationStatusLoaded] = useState(false);
 
   const scrollContainerRef = useRef(null);
@@ -1531,6 +1532,30 @@ export default function HomeContent({ variant = 'page' }) {
     }
   };
 
+  const continueWithFreePlan = async () => {
+    if (isContinuingFree || limitReachedRef.current) return;
+    setIsContinuingFree(true);
+    try {
+      const response = await api.continueWithFreePlan();
+      setTrialStatusSafe(response?.trialStatus || 'expired_free');
+      setAwaitingConfirmationSafe(false);
+      addBotMessage(
+        'All set. You can keep using Kogno on the free plan with limits.',
+        'chat'
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kogno:trial-gate-dismiss'));
+      }
+      if (!isOverlay) {
+        router.push('/dashboard');
+      }
+    } catch (error) {
+      addBotMessage('Could not switch to the free plan. Try again.', 'chat');
+    } finally {
+      setIsContinuingFree(false);
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/auth/create-account');
@@ -1866,6 +1891,36 @@ export default function HomeContent({ variant = 'page' }) {
               >
                 Accept free trial
               </button>
+            </motion.div>
+          )}
+
+          {trialStatus === 'expired' && !isThinking && !chatEnded && !limitReached && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4"
+            >
+              <div className="text-sm font-medium text-[var(--foreground)]">
+                Your trial ended
+              </div>
+              <div className="text-xs text-[var(--muted-foreground)] mt-1">
+                Continue on the free plan with limited courses, exams, and cheatsheets.
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={continueWithFreePlan}
+                  disabled={isContinuingFree}
+                  className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+                >
+                  {isContinuingFree ? 'Switching...' : 'Continue free (limited)'}
+                </button>
+                <Link
+                  href="/pricing"
+                  className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+                >
+                  See plans
+                </Link>
+              </div>
             </motion.div>
           )}
 

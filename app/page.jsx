@@ -121,6 +121,7 @@ export default async function Home() {
   }
 
   let trialActive = false;
+  let trialFree = false;
   try {
     const res = await fetch(`${baseUrl}/api/onboarding/negotiation-status`, {
       method: "GET",
@@ -132,10 +133,11 @@ export default async function Home() {
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
       trialActive = data?.trialStatus === "active";
+      trialFree = data?.trialStatus === "expired_free";
     }
   } catch (error) {}
 
-  if (trialActive) {
+  if (trialActive || trialFree) {
     const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }
