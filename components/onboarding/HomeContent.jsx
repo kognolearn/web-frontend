@@ -93,7 +93,8 @@ const UserMessage = ({ children }) => (
   </motion.div>
 );
 
-export default function HomeContent() {
+export default function HomeContent({ variant = 'page' }) {
+  const isOverlay = variant === 'overlay';
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams.get('ref');
@@ -1723,26 +1724,31 @@ export default function HomeContent() {
 
   const isInputDisabled = isRedirecting || chatEnded || limitReached;
 
+  const containerClassName = isOverlay
+    ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
+    : "relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden";
+
   return (
-    <div className="relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden">
-      {/* Background effects */}
-      <div className="pointer-events-none absolute inset-0">
-        <div
-          className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full blur-3xl"
-          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, transparent 100%)` }}
-        />
-        <div
-          className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
-          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
-            backgroundSize: '60px 60px'
-          }}
-        />
-      </div>
+    <div className={containerClassName}>
+      {!isOverlay && (
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full blur-3xl"
+            style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, transparent 100%)` }}
+          />
+          <div
+            className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
+            style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+              backgroundSize: '60px 60px'
+            }}
+          />
+        </div>
+      )}
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/5">
