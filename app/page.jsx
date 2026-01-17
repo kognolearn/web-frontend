@@ -61,7 +61,7 @@ export const metadata = {
   },
 };
 
-export default async function Home() {
+export default async function Home({ searchParams }) {
   const cookieStore = await cookies();
   const headerStore = await headers();
   const supabase = createServerClient(
@@ -115,13 +115,12 @@ export default async function Home() {
     }
   } catch (error) {}
 
-  if (hasSubscription) {
-    const { redirect } = await import("next/navigation");
-    redirect("/dashboard");
-  }
+  const continueNegotiation =
+    searchParams?.continueNegotiation === "1" || searchParams?.continueNegotiation === "true";
 
   let trialActive = false;
   let trialFree = false;
+  let confirmedPrice = null;
   try {
     const res = await fetch(`${baseUrl}/api/onboarding/negotiation-status`, {
       method: "GET",
@@ -134,10 +133,18 @@ export default async function Home() {
       const data = await res.json().catch(() => ({}));
       trialActive = data?.trialStatus === "active";
       trialFree = data?.trialStatus === "expired_free";
+      confirmedPrice = typeof data?.confirmedPrice === "number" ? data.confirmedPrice : null;
     }
   } catch (error) {}
 
-  if (trialActive || trialFree) {
+  const canContinueNegotiation = continueNegotiation && confirmedPrice === null;
+
+  if ((trialActive || trialFree) && !canContinueNegotiation) {
+    const { redirect } = await import("next/navigation");
+    redirect("/dashboard");
+  }
+
+  if (hasSubscription && !canContinueNegotiation) {
     const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }

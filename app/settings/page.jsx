@@ -39,6 +39,7 @@ export default function SettingsPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
+  const [negotiationStatus, setNegotiationStatus] = useState(null);
 
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -77,6 +78,16 @@ export default function SettingsPage() {
         }
       } catch (err) {
         console.error("Failed to fetch subscription status:", err);
+      }
+
+      try {
+        const res = await authFetch("/api/onboarding/negotiation-status");
+        if (res.ok) {
+          const data = await res.json();
+          setNegotiationStatus(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch negotiation status:", err);
       }
 
       setLoading(false);
@@ -214,6 +225,10 @@ export default function SettingsPage() {
     }
   };
 
+  const handleContinuePriceSelection = () => {
+    router.push("/?continueNegotiation=1");
+  };
+
   const getPasswordStrength = () => {
     if (!newPassword) return { strength: 0, label: "", color: "" };
 
@@ -292,6 +307,8 @@ export default function SettingsPage() {
   }
 
   const { hasSubscription, subscription } = subscriptionStatus || {};
+  const hasConfirmedPrice = typeof negotiationStatus?.confirmedPrice === "number";
+  const canContinuePriceSelection = Boolean(negotiationStatus) && !hasConfirmedPrice;
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "DELETE") return;
@@ -804,11 +821,11 @@ export default function SettingsPage() {
 
                 {subscription?.productType !== "2week_deal" && (
                   <button
-                    onClick={handleManageSubscription}
-                    disabled={portalLoading}
+                    onClick={canContinuePriceSelection ? handleContinuePriceSelection : handleManageSubscription}
+                    disabled={portalLoading && !canContinuePriceSelection}
                     className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {portalLoading ? (
+                    {portalLoading && !canContinuePriceSelection ? (
                       <>
                         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -821,7 +838,7 @@ export default function SettingsPage() {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
-                        Manage Billing in Stripe
+                        {canContinuePriceSelection ? "Continue price selection" : "Manage Billing in Stripe"}
                       </>
                     )}
                   </button>
@@ -843,15 +860,27 @@ export default function SettingsPage() {
                     Free plan includes: 1 course, 2 midterms, 2 finals, and 1 cheatsheet per course.
                   </p>
                 </div>
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Upgrade to Pro
-                </Link>
+                {canContinuePriceSelection ? (
+                  <button
+                    onClick={handleContinuePriceSelection}
+                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Continue price selection
+                  </button>
+                ) : (
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Upgrade to Pro
+                  </Link>
+                )}
               </div>
             )}
           </div>

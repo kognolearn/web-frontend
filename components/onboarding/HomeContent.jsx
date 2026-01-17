@@ -122,6 +122,7 @@ export default function HomeContent({ variant = 'page' }) {
   const [trialOfferCents, setTrialOfferCents] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [trialDeclined, setTrialDeclined] = useState(false);
+  const [trialExpiredAcknowledged, setTrialExpiredAcknowledged] = useState(false);
   const [isContinuingFree, setIsContinuingFree] = useState(false);
   const [negotiationStatusLoaded, setNegotiationStatusLoaded] = useState(false);
 
@@ -601,6 +602,10 @@ export default function HomeContent({ variant = 'page' }) {
     trialEndsAt,
     trialDeclined,
   ]);
+
+  useEffect(() => {
+    setTrialExpiredAcknowledged(false);
+  }, [trialStatus]);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -1556,6 +1561,12 @@ export default function HomeContent({ variant = 'page' }) {
     }
   };
 
+  const continueExpiredChat = () => {
+    if (trialExpiredAcknowledged) return;
+    setTrialExpiredAcknowledged(true);
+    addBotMessage("Alright, let's keep talking price.", "chat");
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/auth/create-account');
@@ -1760,7 +1771,11 @@ export default function HomeContent({ variant = 'page' }) {
     };
   }, [jobId, isJobRunning]);
 
-  const isInputDisabled = isRedirecting || chatEnded || limitReached;
+  const showExpiredOfferActions =
+    (trialStatus === 'expired' && trialExpiredAcknowledged) || trialStatus === 'expired_free';
+  const showExpiredGateActions = trialStatus === 'expired' && !trialExpiredAcknowledged;
+  const isInputDisabled =
+    isRedirecting || chatEnded || limitReached || (trialStatus === 'expired' && !trialExpiredAcknowledged);
 
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
@@ -1864,7 +1879,7 @@ export default function HomeContent({ variant = 'page' }) {
             </div>
           )}
 
-          {awaitingConfirmation && trialStatus === 'none' && !isThinking && !chatEnded && !limitReached && (
+          {awaitingConfirmation && (trialStatus === 'none' || showExpiredOfferActions) && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1876,6 +1891,15 @@ export default function HomeContent({ variant = 'page' }) {
               >
                 Confirm {formatPrice(currentPrice)}/mo
               </button>
+              {showExpiredOfferActions && (
+                <button
+                  onClick={continueWithFreePlan}
+                  disabled={isContinuingFree}
+                  className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors disabled:opacity-60"
+                >
+                  {isContinuingFree ? 'Switching...' : 'Continue free (limited)'}
+                </button>
+              )}
             </motion.div>
           )}
 
@@ -1894,7 +1918,7 @@ export default function HomeContent({ variant = 'page' }) {
             </motion.div>
           )}
 
-          {trialStatus === 'expired' && !isThinking && !chatEnded && !limitReached && (
+          {showExpiredGateActions && !isThinking && !chatEnded && !limitReached && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1914,12 +1938,12 @@ export default function HomeContent({ variant = 'page' }) {
                 >
                   {isContinuingFree ? 'Switching...' : 'Continue free (limited)'}
                 </button>
-                <Link
-                  href="/pricing"
+                <button
+                  onClick={continueExpiredChat}
                   className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
                 >
-                  See plans
-                </Link>
+                  Continue Chat
+                </button>
               </div>
             </motion.div>
           )}
