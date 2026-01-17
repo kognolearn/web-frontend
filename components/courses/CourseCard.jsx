@@ -56,8 +56,6 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const openCourse = (e) => {
-    // Don't navigate if course is still building
-    if (status === 'pending') return;
     // Prevent clicks from nested interactive elements if any
     if (e) {
       e.stopPropagation();
@@ -89,9 +87,16 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     return (
       <div
         role="button"
-        tabIndex={-1}
-        aria-label={`Course ${courseCode} is being built`}
-        className="building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80"
+        tabIndex={0}
+        onClick={openCourse}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openCourse(e);
+          }
+        }}
+        aria-label={`Course ${courseCode} is being built. Open to view progress.`}
+        className="building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80 cursor-pointer"
       >
         {/* Subtle animated border */}
         <div className="absolute inset-0 rounded-2xl border border-[var(--primary)]/30" />
@@ -116,7 +121,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
 
           {/* Subtle status text */}
           <p className="text-xs text-[var(--muted-foreground)]/60 tracking-wide">
-            Building your course...
+            Building your course... Click to view progress.
           </p>
         </div>
 
