@@ -2029,6 +2029,7 @@ export default function CourseTabContent({
             <a
               href={`/courses/${courseId}/cheatsheet`}
               className="flex items-center justify-center w-9 h-9 rounded-lg border border-transparent text-[var(--muted-foreground)] transition-all hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] hover:border-[var(--primary)]/20"
+              data-tour="cheatsheet-tab"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2341,6 +2342,7 @@ export default function CourseTabContent({
                           ? "bg-[var(--primary)]/15 border-[var(--primary)]/30 shadow-lg shadow-[var(--primary)]/10"
                           : "bg-[var(--primary)]/5 border-[var(--primary)]/20 hover:bg-[var(--primary)]/10 hover:border-[var(--primary)]/30"
                       }`}
+                      data-tour="practice-exam"
                     >
                       <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] flex-shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

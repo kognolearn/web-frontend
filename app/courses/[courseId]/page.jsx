@@ -15,6 +15,8 @@ import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
+import CourseGeneratingView from "@/components/courses/CourseGeneratingView";
+import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
@@ -161,6 +163,13 @@ export default function CoursePage() {
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const [isOnboardingPreview, setIsOnboardingPreview] = useState(false);
+  // Course generation state - for showing incremental module progress
+  const [courseStatus, setCourseStatus] = useState(null);
+  const [generationProgress, setGenerationProgress] = useState({
+    totalModules: 0,
+    modulesComplete: 0,
+    readyModules: [],
+  });
   const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
   const previewCompletionShownRef = useRef(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
@@ -198,6 +207,47 @@ export default function CoursePage() {
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
+
+  // Subscribe to real-time module completion updates during generation
+  const handleModuleComplete = useCallback((payload) => {
+    if (payload.courseId !== courseId) return;
+
+    setGenerationProgress((prev) => {
+      // Avoid duplicates
+      const alreadyExists = prev.readyModules.some(
+        (m) => m.moduleRef === payload.moduleRef
+      );
+      if (alreadyExists) {
+        return {
+          ...prev,
+          modulesComplete: Math.max(prev.modulesComplete, payload.modulesComplete),
+          totalModules: payload.totalModules,
+        };
+      }
+
+      return {
+        totalModules: payload.totalModules,
+        modulesComplete: payload.modulesComplete,
+        readyModules: [
+          ...prev.readyModules,
+          {
+            moduleRef: payload.moduleRef,
+            moduleName: payload.moduleName,
+            lessonsReady: payload.lessonsReady,
+          },
+        ],
+      };
+    });
+
+    // When all modules complete, refresh the course data
+    if (payload.modulesComplete >= payload.totalModules) {
+      setCourseStatus('ready');
+    }
+  }, [courseId]);
+
+  useRealtimeUpdates(userId, {
+    onModuleComplete: handleModuleComplete,
+  });
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
   useEffect(() => {
@@ -1326,6 +1376,7 @@ export default function CoursePage() {
                   onClick={() => addTab('chat')}
                   className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                   title="New Chat Tab"
+                  data-tour="chat-fab"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -1337,6 +1388,7 @@ export default function CoursePage() {
                 onClick={() => addTab('discussion')}
                 className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                 title="Discussion"
+                data-tour="community-tab"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
@@ -1346,6 +1398,7 @@ export default function CoursePage() {
                 onClick={() => addTab('messages')}
                 className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                 title="Messages"
+                data-tour="messages-tab"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />

@@ -6,7 +6,33 @@
  */
 
 export const CONVERSATION_FLOW = [
-  // Step 1: Greeting & Course Name
+  // Step 1: Chat-based Course & College Input (Onboarding Tour)
+  // Uses LLM to parse free-form user input to extract course name and college
+  {
+    id: 'course_chat',
+    // Dynamic greeting based on saved college
+    kognoMessage: (state) => {
+      if (state.savedCollege && state.savedCollege.trim()) {
+        return `Hey! What course at ${state.savedCollege} do you wanna study?`;
+      }
+      return "Hey! What course do you wanna study and which college is it at?";
+    },
+    inputType: 'course_chat',
+    field: 'courseChatInput',
+    placeholder: "e.g., Physics 101 at Stanford",
+    validation: (v, state) => {
+      // Validation happens via LLM parsing
+      return state.courseTitle && state.courseTitle.trim().length > 0;
+    },
+    validationMessage: 'Please tell me the course name and college',
+    skippable: false,
+    // Custom handler for this step - uses LLM to parse input
+    parseHandler: 'courseChatParser',
+    tourTarget: 'chat-input', // data-tour attribute for tour highlighting
+  },
+
+  // Step 1 (Legacy): Greeting & Course Name
+  // Only shown if not using chat flow (fallback)
   {
     id: 'greeting',
     kognoMessage: "Hey! I'm Kogno, and I'll help you set up your course. What's the name of your course?",
@@ -16,9 +42,11 @@ export const CONVERSATION_FLOW = [
     validation: (v) => v && v.trim().length > 0,
     validationMessage: 'Please enter a course name',
     skippable: false,
+    condition: (state) => state.useLegacyFlow === true,
   },
 
-  // Step 2: University/Institution
+  // Step 2 (Legacy): University/Institution
+  // Only shown if not using chat flow (fallback)
   {
     id: 'university',
     // Dynamic message based on whether user has a saved school
@@ -37,6 +65,7 @@ export const CONVERSATION_FLOW = [
     skippable: false,
     // Use collegeName from state as default value
     getDefaultValue: (state) => state.collegeName || '',
+    condition: (state) => state.useLegacyFlow === true,
   },
 
   // Step 3: Study Mode
@@ -83,6 +112,7 @@ export const CONVERSATION_FLOW = [
       { id: 'skip', label: 'Skip', icon: 'skip', description: "I'll add materials later" },
     ],
     skippable: true,
+    tourTarget: 'syllabus-upload', // data-tour attribute for tour highlighting
   },
 
   // Step 5a: Syllabus Content (combined text + files)
@@ -111,6 +141,7 @@ export const CONVERSATION_FLOW = [
       { id: 'skip', label: 'Skip', icon: 'skip', description: "I don't have any exam materials" },
     ],
     skippable: true,
+    tourTarget: 'exam-input', // data-tour attribute for tour highlighting
   },
 
   // Step 6a: Exam Content (combined text + files)
@@ -177,6 +208,7 @@ export const CONVERSATION_FLOW = [
     confirmLabel: 'Create My Course',
     action: 'createCourse',
     skippable: false,
+    tourTarget: 'create-button', // data-tour attribute for tour highlighting
   },
 
   // Step 13: Creating (loading state)

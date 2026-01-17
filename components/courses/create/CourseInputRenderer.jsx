@@ -656,6 +656,37 @@ export default function CourseInputRenderer({
     );
   }
 
+  // Chat-based course/college input (onboarding tour step)
+  // Uses free-form text that gets parsed by LLM
+  if (inputType === "course_chat") {
+    return (
+      <div className="flex items-end gap-2" data-tour="chat-input">
+        <div className="flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="w-full px-4 py-3 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={disabled || !localValue.trim()}
+          className="flex-shrink-0 p-3 rounded-xl bg-[var(--primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
   // Options are rendered in KognoMessage
   // Confirm is rendered in KognoMessage
   // Topics and Confidence have their own components

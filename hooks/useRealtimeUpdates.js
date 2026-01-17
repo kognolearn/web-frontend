@@ -12,15 +12,16 @@ import { supabase } from '@/lib/supabase/client';
  * @param {Function} callbacks.onJobUpdate - Called when job status changes
  * @param {Function} callbacks.onJobProgress - Called when job progress updates
  * @param {Function} callbacks.onCourseUpdate - Called when course status changes
+ * @param {Function} callbacks.onModuleComplete - Called when a module finishes generating
  */
-export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCourseUpdate } = {}) {
+export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete } = {}) {
   const channelsRef = useRef([]);
-  const callbacksRef = useRef({ onJobUpdate, onJobProgress, onCourseUpdate });
+  const callbacksRef = useRef({ onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete });
 
   // Keep callbacks ref updated to avoid stale closures
   useEffect(() => {
-    callbacksRef.current = { onJobUpdate, onJobProgress, onCourseUpdate };
-  }, [onJobUpdate, onJobProgress, onCourseUpdate]);
+    callbacksRef.current = { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete };
+  }, [onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete]);
 
   useEffect(() => {
     if (!userId) {
@@ -52,6 +53,10 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
       .on('broadcast', { event: 'course_update' }, ({ payload }) => {
         console.log('[realtime] Course update:', payload);
         callbacksRef.current.onCourseUpdate?.(payload);
+      })
+      .on('broadcast', { event: 'module_complete' }, ({ payload }) => {
+        console.log('[realtime] Module complete:', payload);
+        callbacksRef.current.onModuleComplete?.(payload);
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {

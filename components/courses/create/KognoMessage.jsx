@@ -189,6 +189,7 @@ export default function KognoMessage({
   topicEditor,
   confidenceEditor,
   superseded = false,
+  tourTarget,
   children,
 }) {
   const messageVariants = {
@@ -234,7 +235,7 @@ export default function KognoMessage({
 
             {/* Options */}
             {options.length > 0 && (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 space-y-2" data-tour={tourTarget || undefined}>
                 {options.map((option) => (
                   <OptionCard
                     key={option.id}
@@ -279,11 +280,12 @@ export default function KognoMessage({
 
             {/* Action buttons */}
             {(confirmLabel || skippable) && !isLoading && (
-              <div className="mt-4 flex items-center gap-2">
+              <div className="mt-4 flex items-center gap-2" data-tour={tourTarget || undefined}>
                 {confirmLabel && (
                   <button
                     type="button"
                     onClick={onConfirm}
+                    data-tour={tourTarget || undefined}
                     className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
                   >
                     {confirmLabel}

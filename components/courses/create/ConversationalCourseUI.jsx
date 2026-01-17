@@ -370,6 +370,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                 topicEditor={message.showTopicEditor ? renderTopicEditor() : null}
                 confidenceEditor={message.showConfidenceEditor ? renderConfidenceEditor() : null}
                 superseded={message.superseded}
+                tourTarget={message.tourTarget}
               />
             );
           }
