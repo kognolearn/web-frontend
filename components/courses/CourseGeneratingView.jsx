@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
 
 /**
  * Module status badge component
@@ -55,7 +54,7 @@ function ModuleStatusBadge({ status }) {
 /**
  * Module card component
  */
-function ModuleCard({ module, index, onStartStudying }) {
+function ModuleCard({ module, index }) {
   const isReady = module.status === "ready";
 
   return (
@@ -91,17 +90,6 @@ function ModuleCard({ module, index, onStartStudying }) {
           <ModuleStatusBadge status={module.status} />
         </div>
 
-        {isReady && onStartStudying && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-            onClick={() => onStartStudying(module)}
-            className="mt-3 w-full px-4 py-2 text-sm font-medium bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
-          >
-            Start Studying
-          </motion.button>
-        )}
       </div>
     </motion.div>
   );
@@ -111,25 +99,31 @@ function ModuleCard({ module, index, onStartStudying }) {
  * Overall progress indicator component
  */
 function ProgressIndicator({ modulesComplete, totalModules }) {
-  const percentage = totalModules > 0 ? Math.round((modulesComplete / totalModules) * 100) : 0;
+  const hasTotal = totalModules > 0;
+  const percentage = hasTotal ? Math.round((modulesComplete / totalModules) * 100) : 0;
+  const label = hasTotal
+    ? (modulesComplete < totalModules
+      ? `Module ${modulesComplete + 1} of ${totalModules} generating...`
+      : "Wrapping things up...")
+    : "Preparing your modules...";
 
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-[var(--foreground)]">
-          {modulesComplete < totalModules
-            ? `Module ${modulesComplete + 1} of ${totalModules} generating...`
-            : "All modules ready!"}
+          {label}
         </span>
-        <span className="text-sm text-[var(--muted-foreground)]">
-          {percentage}%
-        </span>
+        {hasTotal && (
+          <span className="text-sm text-[var(--muted-foreground)]">
+            {percentage}%
+          </span>
+        )}
       </div>
       <div className="h-2 bg-[var(--surface-muted)] rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-[var(--primary)]"
           initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
+          animate={{ width: hasTotal ? `${percentage}%` : "18%" }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         />
       </div>
@@ -141,24 +135,18 @@ function ProgressIndicator({ modulesComplete, totalModules }) {
  * CourseGeneratingView - Displays module generation progress with real-time updates
  *
  * @param {Object} props
- * @param {string} props.courseId - The course ID
  * @param {string} props.courseName - The course name/title
  * @param {Object} props.generationProgress - Generation state { totalModules, modulesComplete, readyModules }
- * @param {Function} props.onStartStudying - Callback when "Start Studying" is clicked
  */
 export default function CourseGeneratingView({
-  courseId,
   courseName,
   generationProgress,
-  onStartStudying,
 }) {
-  const router = useRouter();
   const { totalModules, modulesComplete, readyModules } = generationProgress;
 
   // Compute module statuses
   const modules = useMemo(() => {
     const moduleList = [];
-    const readySet = new Set((readyModules || []).map(m => m.moduleRef || m.moduleName));
 
     // Add ready modules first
     for (const mod of readyModules || []) {
@@ -193,14 +181,6 @@ export default function CourseGeneratingView({
   }, [totalModules, modulesComplete, readyModules]);
 
   const hasReadyModules = readyModules && readyModules.length > 0;
-  const firstReadyModule = readyModules?.[0];
-
-  // Handle start studying - navigate to first lesson of first ready module
-  const handleStartStudying = (module) => {
-    if (onStartStudying) {
-      onStartStudying(module);
-    }
-  };
 
   return (
     <div className="flex flex-col h-full">
@@ -231,81 +211,22 @@ export default function CourseGeneratingView({
           totalModules={totalModules}
         />
 
-        {/* Start Studying CTA - shows when first module is ready */}
-        <AnimatePresence>
-          {hasReadyModules && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-6 p-4 bg-[var(--primary)]/10 rounded-xl border border-[var(--primary)]/30"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[var(--primary)] flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-[var(--foreground)]">
-                      First module is ready!
-                    </h3>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      Start studying while the rest generates
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleStartStudying(firstReadyModule)}
-                  className="px-5 py-2.5 text-sm font-semibold bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors shadow-md hover:shadow-lg"
-                >
-                  Start Studying
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Module List */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
-            Modules
-          </h2>
-          <AnimatePresence mode="popLayout">
-            {modules.map((module, index) => (
-              <ModuleCard
-                key={module.moduleRef}
-                module={module}
-                index={index}
-                onStartStudying={module.status === "ready" ? () => handleStartStudying(module) : null}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {/* Helpful tip */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="mt-6 p-4 bg-[var(--surface-muted)] rounded-xl"
-        >
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-[var(--primary)] flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <h4 className="text-sm font-medium text-[var(--foreground)]">
-                Pro tip
-              </h4>
-              <p className="text-sm text-[var(--muted-foreground)] mt-1">
-                You can start studying as soon as the first module is ready. The remaining modules will continue generating in the background.
-              </p>
-            </div>
+        {hasReadyModules && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
+              Modules
+            </h2>
+            <AnimatePresence mode="popLayout">
+              {modules.map((module, index) => (
+                <ModuleCard
+                  key={module.moduleRef}
+                  module={module}
+                  index={index}
+                />
+              ))}
+            </AnimatePresence>
           </div>
-        </motion.div>
+        )}
       </div>
     </div>
   );

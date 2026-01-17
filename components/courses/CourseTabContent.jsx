@@ -524,13 +524,25 @@ export default function CourseTabContent({
   focusTimerRef,
   focusTimerState,
   isDeepStudyCourse = false,
-  isOnboardingPreview = false
+  isOnboardingPreview = false,
+  readyModuleRefs = null
 }) {
   const router = useRouter();
   const chatBotRef = useRef(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [userInitials, setUserInitials] = useState("");
   const [userName, setUserName] = useState("");
+
+  const visibleModules = useMemo(() => {
+    if (!studyPlan?.modules) return [];
+    if (!Array.isArray(readyModuleRefs)) return studyPlan.modules;
+    const readySet = new Set(readyModuleRefs);
+    return studyPlan.modules.filter((module) => {
+      if (module.is_practice_exam_module) return false;
+      const title = module.title || module.module_ref;
+      return readySet.has(title);
+    });
+  }, [studyPlan, readyModuleRefs]);
 
   // Fetch user info on mount
   useEffect(() => {
@@ -1494,21 +1506,21 @@ export default function CourseTabContent({
 
   // Helper to get lesson data from studyPlan by ID
   const getLessonFromStudyPlan = useCallback((lessonId) => {
-    if (!studyPlan?.modules) return null;
-    for (const module of studyPlan.modules) {
+    if (!visibleModules.length) return null;
+    for (const module of visibleModules) {
       const lesson = module.lessons?.find(l => l.id === lessonId);
       if (lesson) return lesson;
     }
     return null;
-  }, [studyPlan]);
+  }, [visibleModules]);
 
   // Get all lessons in a flat array (for navigation)
   const allLessonsFlat = useMemo(() => {
-    if (!studyPlan?.modules) return [];
-    return studyPlan.modules
+    if (!visibleModules.length) return [];
+    return visibleModules
       .filter(m => !m.is_practice_exam_module)
       .flatMap(m => m.lessons || []);
-  }, [studyPlan]);
+  }, [visibleModules]);
 
   // Get previous and next lessons relative to the current lesson
   const { prevLesson, nextLesson } = useMemo(() => {
@@ -1554,7 +1566,7 @@ export default function CourseTabContent({
       }
     }
 
-    const modules = studyPlan.modules || [];
+    const modules = visibleModules;
     const firstModule =
       modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
       modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
@@ -1563,6 +1575,18 @@ export default function CourseTabContent({
       navigateToLesson(firstModule.lessons[0]);
     }
   }, [studyPlan, selectedLesson, navigateToLesson, initialLessonId, initialContentType, getLessonFromStudyPlan]);
+
+  useEffect(() => {
+    if (!Array.isArray(readyModuleRefs)) return;
+    if (!selectedLesson) return;
+    const stillVisible = visibleModules.some((module) =>
+      module.lessons?.some((lesson) => lesson.id === selectedLesson.id)
+    );
+    if (!stillVisible) {
+      setSelectedLesson(null);
+      setSelectedContentType(null);
+    }
+  }, [readyModuleRefs, visibleModules, selectedLesson]);
 
   // If initialLessonId changes from parent (e.g., tab restore), sync to it.
   // Use a ref to track the last synced initialLessonId to avoid infinite loops.
@@ -2203,7 +2227,7 @@ export default function CourseTabContent({
                   <div 
                     onClick={() => {
                       if (!studyPlan) return;
-                      const modules = studyPlan.modules || [];
+                      const modules = visibleModules;
                       const firstModule =
                         modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
                         modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
@@ -2314,150 +2338,166 @@ export default function CourseTabContent({
                 </div>
               )}
               
-              {studyPlan.modules?.map((module, moduleIdx) => {
-                const isCollapsed = collapsedModules.has(moduleIdx);
-                const isPracticeExamModule = module.is_practice_exam_module;
-                
-                // Skip review modules that are shown in the dedicated Review Modules section
-                const isReviewModule = module.title?.toLowerCase().includes('review') && 
-                  module.lessons?.some(l => reviewModules.some(rm => rm.title === l.title));
-                if (isReviewModule) return null;
-                
-                if (isPracticeExamModule && module.exam) {
-                  const exam = module.exam;
-                  const isSelected = selectedLesson?.id === exam.id;
-                  return (
-                    <button
-                      key={moduleIdx}
-                      type="button"
-                      onClick={() => {
-                        setSelectedLesson({ ...exam, type: 'practice_exam' });
-                        setSelectedContentType({ lessonId: exam.id, type: 'practice_exam' });
-                        setSelectedReviewModule(null);
-                        setViewMode("topic");
-                        setCurrentViewingItem(null);
-                      }}
-                      className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
-                        isSelected
-                          ? "bg-[var(--primary)]/15 border-[var(--primary)]/30 shadow-lg shadow-[var(--primary)]/10"
-                          : "bg-[var(--primary)]/5 border-[var(--primary)]/20 hover:bg-[var(--primary)]/10 hover:border-[var(--primary)]/30"
-                      }`}
-                      data-tour="practice-exam"
-                    >
-                      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] flex-shrink-0">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 text-left min-w-0">
-                        <h3 className="text-sm font-semibold text-[var(--primary)] truncate">
-                          {exam.title}
-                        </h3>
-                        <p className="text-xs text-[var(--primary)]/70">
-                          {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
-                        </p>
-                      </div>
-                      {exam.status === 'completed' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 font-medium">
-                          Done
-                        </span>
-                      )}
-                    </button>
-                  );
-                }
-                
-                return (
-                  <div key={moduleIdx} className="backdrop-blur-sm rounded-xl bg-[var(--surface-2)]/50 border border-[var(--border)]">
-                    {(() => {
-                      const moduleCompleted = isModuleCompleted(module);
-                      return (
+              <AnimatePresence initial={false}>
+                {visibleModules.map((module, moduleIdx) => {
+                  const isCollapsed = collapsedModules.has(moduleIdx);
+                  const isPracticeExamModule = module.is_practice_exam_module;
+                  const moduleKey = module.title || module.module_ref || `module-${moduleIdx}`;
+                  
+                  // Skip review modules that are shown in the dedicated Review Modules section
+                  const isReviewModule = module.title?.toLowerCase().includes('review') && 
+                    module.lessons?.some(l => reviewModules.some(rm => rm.title === l.title));
+                  if (isReviewModule) return null;
+                  
+                  if (isPracticeExamModule && module.exam) {
+                    const exam = module.exam;
+                    const isSelected = selectedLesson?.id === exam.id;
+                    return (
+                      <motion.div
+                        key={moduleKey}
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.25 }}
+                      >
                         <button
                           type="button"
                           onClick={() => {
-                            const newCollapsed = new Set(collapsedModules);
-                            if (isCollapsed) {
-                              newCollapsed.delete(moduleIdx);
-                            } else {
-                              newCollapsed.add(moduleIdx);
-                            }
-                            setCollapsedModules(newCollapsed);
+                            setSelectedLesson({ ...exam, type: 'practice_exam' });
+                            setSelectedContentType({ lessonId: exam.id, type: 'practice_exam' });
+                            setSelectedReviewModule(null);
+                            setViewMode("topic");
+                            setCurrentViewingItem(null);
                           }}
-                          className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
+                          className={`w-full backdrop-blur-sm rounded-xl border transition-all duration-200 p-3 flex items-center gap-3 ${
+                            isSelected
+                              ? "bg-[var(--primary)]/15 border-[var(--primary)]/30 shadow-lg shadow-[var(--primary)]/10"
+                              : "bg-[var(--primary)]/5 border-[var(--primary)]/20 hover:bg-[var(--primary)]/10 hover:border-[var(--primary)]/30"
+                          }`}
+                          data-tour="practice-exam"
                         >
-                          <div className="flex items-center gap-2.5">
-                            {/* Module number badge - shows checkmark if all lessons completed */}
-                            <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25">
-                              {moduleCompleted ? (
-                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              ) : (
-                                moduleIdx + 1
-                              )}
-                            </div>
-                            <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-left text-[var(--primary)]">
-                              {module.title}
-                            </h3>
+                          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] flex-shrink-0">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                           </div>
-                          <svg 
-                            className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                            fill="none" 
-                            stroke="currentColor" 
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
+                          <div className="flex-1 text-left min-w-0">
+                            <h3 className="text-sm font-semibold text-[var(--primary)] truncate">
+                              {exam.title}
+                            </h3>
+                            <p className="text-xs text-[var(--primary)]/70">
+                              {exam.duration}m • {exam.preceding_lessons?.length || 0} lessons
+                            </p>
+                          </div>
+                          {exam.status === 'completed' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 font-medium">
+                              Done
+                            </span>
+                          )}
                         </button>
-                      );
-                    })()}
-                    
-                    {!isCollapsed && (
-                      <div className="px-3 pb-3 space-y-1">
-                        {module.lessons?.map((lesson, lessonIdx) => {
-                          const lessonCompleted = isLessonFullyCompleted(lesson.id);
-                          // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
-                          const lessonStatus = lesson.status || lesson.mastery_status || getLessonMasteryStatus(lesson.id);
-                          // Show completion UI if status is anything other than 'pending'
-                          const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
-                          
-                          return (
-                            <button
-                              key={lesson.id || lessonIdx}
-                              type="button"
-                              onClick={() => {
-                                setSelectedLesson(lesson);
-                                setSelectedReviewModule(null);
-                                const availableTypes = getAvailableContentTypes(lesson.id);
-                                // For "Module Quiz" lessons, always open quiz content directly
-                                if (lesson.title === 'Module Quiz') {
-                                  setSelectedContentType({ lessonId: lesson.id, type: 'mini_quiz' });
-                                  setModuleQuizTab('quiz'); // Reset to quiz tab when opening Module Quiz
-                                  fetchLessonContent(lesson.id);
-                                } else if (availableTypes.length > 0) {
-                                  setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
-                                  fetchLessonContent(lesson.id);
-                                } else {
-                                  fetchLessonContent(lesson.id);
-                                }
-                                setViewMode("topic");
-                                setCurrentViewingItem(null);
-                              }}
-                              className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
-                                selectedLesson?.id === lesson.id
-                                  ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                  : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
-                              }`}
+                      </motion.div>
+                    );
+                  }
+                  
+                  return (
+                    <motion.div
+                      key={moduleKey}
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.25 }}
+                      className="backdrop-blur-sm rounded-xl bg-[var(--surface-2)]/50 border border-[var(--border)]"
+                    >
+                      {(() => {
+                        const moduleCompleted = isModuleCompleted(module);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCollapsed = new Set(collapsedModules);
+                              if (isCollapsed) {
+                                newCollapsed.delete(moduleIdx);
+                              } else {
+                                newCollapsed.add(moduleIdx);
+                              }
+                              setCollapsedModules(newCollapsed);
+                            }}
+                            className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              {/* Module number badge - shows checkmark if all lessons completed */}
+                              <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25">
+                                {moduleCompleted ? (
+                                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  moduleIdx + 1
+                                )}
+                              </div>
+                              <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-left text-[var(--primary)]">
+                                {module.title}
+                              </h3>
+                            </div>
+                            <svg 
+                              className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
                             >
-                              {/* Lesson number badge - shows checkmark if completed */}
-                              <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
-                                showCompleted
-                                  ? "bg-[var(--primary)] text-white"
-                                  : selectedLesson?.id === lesson.id
-                                    ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                                    : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
-                              }`}>
-                                {showCompleted ? (
-                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        );
+                      })()}
+                      
+                      {!isCollapsed && (
+                        <div className="px-3 pb-3 space-y-1">
+                          {module.lessons?.map((lesson, lessonIdx) => {
+                            const lessonCompleted = isLessonFullyCompleted(lesson.id);
+                            // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
+                            const lessonStatus = lesson.status || lesson.mastery_status || getLessonMasteryStatus(lesson.id);
+                            // Show completion UI if status is anything other than 'pending'
+                            const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
+                            
+                            return (
+                              <button
+                                key={lesson.id || lessonIdx}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedLesson(lesson);
+                                  setSelectedReviewModule(null);
+                                  const availableTypes = getAvailableContentTypes(lesson.id);
+                                  // For "Module Quiz" lessons, always open quiz content directly
+                                  if (lesson.title === 'Module Quiz') {
+                                    setSelectedContentType({ lessonId: lesson.id, type: 'mini_quiz' });
+                                    setModuleQuizTab('quiz'); // Reset to quiz tab when opening Module Quiz
+                                    fetchLessonContent(lesson.id);
+                                  } else if (availableTypes.length > 0) {
+                                    setSelectedContentType({ lessonId: lesson.id, type: availableTypes[0].value });
+                                    fetchLessonContent(lesson.id);
+                                  } else {
+                                    fetchLessonContent(lesson.id);
+                                  }
+                                  setViewMode("topic");
+                                  setCurrentViewingItem(null);
+                                }}
+                                className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
+                                  selectedLesson?.id === lesson.id
+                                    ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
+                                    : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
+                                }`}
+                              >
+                                {/* Lesson number badge - shows checkmark if completed */}
+                                <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
+                                  showCompleted
+                                    ? "bg-[var(--primary)] text-white"
+                                    : selectedLesson?.id === lesson.id
+                                      ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                                      : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
+                                }`}>
+                                  {showCompleted ? (
+                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                   </svg>
                                 ) : (
@@ -2472,9 +2512,10 @@ export default function CourseTabContent({
                         })}
                       </div>
                     )}
-                  </div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
 
               {/* Review & Cheatsheet Section - Bottom of Sidebar */}
               <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-between">

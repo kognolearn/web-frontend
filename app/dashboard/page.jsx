@@ -434,10 +434,21 @@ function DashboardClient() {
     });
   }, [user?.id, loadCourses]);
 
+  const handleRealtimeModuleComplete = useCallback((payload) => {
+    const courseId = payload?.courseId;
+    if (!courseId) return;
+    setCourses(prev => prev.map(course => (
+      course.id === courseId
+        ? { ...course, has_ready_modules: true }
+        : course
+    )));
+  }, []);
+
   // Subscribe to realtime updates
   useRealtimeUpdates(user?.id, {
     onJobUpdate: handleRealtimeJobUpdate,
     onCourseUpdate: handleRealtimeCourseUpdate,
+    onModuleComplete: handleRealtimeModuleComplete,
   });
 
   // Cleanup polling on unmount
@@ -929,6 +940,7 @@ function DashboardClient() {
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
                     status={effectiveStatus}
                     topicsProgress={progress}
+                    canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
                   />
                 );

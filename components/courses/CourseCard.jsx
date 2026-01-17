@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
 import { authFetch } from "@/lib/api";
 
-export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress }) {
+export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress, canOpen = true }) {
   const router = useRouter();
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -81,22 +81,24 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   const topicProgressPercent = topicProgressValue !== null ? Math.round(topicProgressValue * 100) : null;
   const timeLabel = isCompleted ? "Done" : shouldShowTimeRemaining ? formatTimeRemaining(secondsToComplete) : null;
   const isPending = status === 'pending' || status === 'generating';
+  const canOpenCourse = !isPending || canOpen;
 
   // Pending/Building state - show a premium loading card
   if (isPending) {
     return (
       <div
         role="button"
-        tabIndex={0}
-        onClick={openCourse}
-        onKeyDown={(e) => {
+        tabIndex={canOpenCourse ? 0 : -1}
+        onClick={canOpenCourse ? openCourse : undefined}
+        onKeyDown={canOpenCourse ? (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             openCourse(e);
           }
-        }}
-        aria-label={`Course ${courseCode} is being built. Open to view progress.`}
-        className="building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80 cursor-pointer"
+        } : undefined}
+        aria-label={canOpenCourse ? `Open course ${courseCode}` : `Course ${courseCode} is being built.`}
+        aria-disabled={canOpenCourse ? undefined : true}
+        className={`building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80 ${canOpenCourse ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
       >
         {/* Subtle animated border */}
         <div className="absolute inset-0 rounded-2xl border border-[var(--primary)]/30" />
@@ -121,7 +123,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
 
           {/* Subtle status text */}
           <p className="text-xs text-[var(--muted-foreground)]/60 tracking-wide">
-            Building your course... Click to view progress.
+            {canOpenCourse ? "First module ready — click to start." : "Building your course..."}
           </p>
         </div>
 

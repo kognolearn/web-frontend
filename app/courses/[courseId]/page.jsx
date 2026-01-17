@@ -15,7 +15,6 @@ import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import PersonalTimer from "@/components/courses/PersonalTimer";
-import CourseGeneratingView from "@/components/courses/CourseGeneratingView";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
@@ -163,16 +162,11 @@ export default function CoursePage() {
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
   const [isOnboardingPreview, setIsOnboardingPreview] = useState(false);
-  // Course generation state - for showing incremental module progress
+  // Course generation state - track ready modules for incremental sidebar reveal
   const [courseStatus, setCourseStatus] = useState(null);
-  const [generationProgress, setGenerationProgress] = useState({
-    totalModules: 0,
-    modulesComplete: 0,
-    readyModules: [],
-  });
+  const [readyModuleRefs, setReadyModuleRefs] = useState([]);
   const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
   const previewCompletionShownRef = useRef(false);
-  const [hasStartedStudying, setHasStartedStudying] = useState(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
     const initialChat = createBlankChat();
     return {
@@ -214,32 +208,12 @@ export default function CoursePage() {
   const handleModuleComplete = useCallback((payload) => {
     if (payload.courseId !== courseId) return;
 
-    setGenerationProgress((prev) => {
-      // Avoid duplicates
-      const alreadyExists = prev.readyModules.some(
-        (m) => m.moduleRef === payload.moduleRef
-      );
-      if (alreadyExists) {
-        return {
-          ...prev,
-          modulesComplete: Math.max(prev.modulesComplete, payload.modulesComplete),
-          totalModules: payload.totalModules,
-        };
-      }
-
-      return {
-        totalModules: payload.totalModules,
-        modulesComplete: payload.modulesComplete,
-        readyModules: [
-          ...prev.readyModules,
-          {
-            moduleRef: payload.moduleRef,
-            moduleName: payload.moduleName,
-            lessonsReady: payload.lessonsReady,
-          },
-        ],
-      };
-    });
+    const moduleName = payload.moduleName || payload.moduleRef;
+    if (moduleName) {
+      setReadyModuleRefs((prev) => (
+        prev.includes(moduleName) ? prev : [...prev, moduleName]
+      ));
+    }
 
     // Refresh study plan so newly-ready lessons can be opened immediately
     refetchStudyPlanRef.current?.()?.catch?.(() => {});
@@ -493,6 +467,10 @@ export default function CoursePage() {
         }
 
         const unlocked = unlockStudyPlan(planPayload);
+        const readyModules = Array.isArray(planPayload?.ready_modules)
+          ? Array.from(new Set(planPayload.ready_modules))
+          : [];
+        setReadyModuleRefs(readyModules);
         const modules = Array.isArray(unlocked?.modules) ? unlocked.modules : [];
         const lessonList = modules
           .filter((module) => !module.is_practice_exam_module)
@@ -698,6 +676,9 @@ export default function CoursePage() {
       }
       const json = await res.json();
       const planPayload = isPreviewMode ? filterPreviewPlan(json) : json;
+      if (Array.isArray(planPayload?.ready_modules)) {
+        setReadyModuleRefs(Array.from(new Set(planPayload.ready_modules)));
+      }
 
       const planMode = normalizeCourseMode(
         planPayload?.mode || planPayload?.course_mode || planPayload?.study_mode || planPayload?.studyMode
@@ -782,40 +763,8 @@ export default function CoursePage() {
     refetchStudyPlanRef.current = refetchStudyPlan;
   }, [refetchStudyPlan]);
 
-  const findFirstLessonInModule = useCallback((plan, moduleTitle) => {
-    if (!plan?.modules?.length) return null;
-    const targetModule = plan.modules.find((mod) => mod.title === moduleTitle);
-    if (!targetModule?.lessons?.length) return null;
-    return targetModule.lessons.find((lesson) => !lesson.is_locked) || targetModule.lessons[0] || null;
-  }, []);
-
-  const handleStartStudying = useCallback(async (module) => {
-    const moduleTitle = module?.moduleName || module?.moduleRef;
-    if (!moduleTitle) return;
-
-    let plan = studyPlan;
-    if (!plan) {
-      plan = await refetchStudyPlan();
-    }
-
-    const lesson = findFirstLessonInModule(plan, moduleTitle);
-    if (!lesson) return;
-
-    setHasStartedStudying(true);
-
-    setTabs((prev) => prev.map((tab) => {
-      if (tab.type !== 'course') return tab;
-      return { ...tab, selectedLessonId: lesson.id, selectedContentType: 'reading' };
-    }));
-
-    const activeCourseTab = tabs.find((tab) => tab.id === activeTabId && tab.type === 'course');
-    const fallbackCourseTab = tabs.find((tab) => tab.type === 'course');
-    const targetTabId = activeCourseTab?.id || fallbackCourseTab?.id || activeTabId;
-    setActiveTabId(targetTabId);
-  }, [studyPlan, refetchStudyPlan, findFirstLessonInModule, tabs, activeTabId]);
-
   const isGeneratingCourse = courseStatus === 'pending' || courseStatus === 'generating';
-  const shouldShowGeneratingView = isGeneratingCourse && !hasStartedStudying && !isOnboardingPreview;
+  const visibleModuleRefs = isGeneratingCourse ? readyModuleRefs : null;
 
   useEffect(() => {
     if (!isOnboardingPreview || !studyPlan?.modules) return;
@@ -1226,7 +1175,7 @@ export default function CoursePage() {
       )}
 
       {/* Tab Bar */}
-      {!isMobileView && !isOnboardingPreview && !shouldShowGeneratingView && (
+      {!isMobileView && !isOnboardingPreview && (
         <div 
           className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
             isExternalChatHovering 
@@ -1524,15 +1473,7 @@ export default function CoursePage() {
           </AnimatePresence>
         )}
 
-        {shouldShowGeneratingView ? (
-          <CourseGeneratingView
-            courseId={courseId}
-            courseName={courseName}
-            generationProgress={generationProgress}
-            onStartStudying={handleStartStudying}
-          />
-        ) : (
-          renderedTabs.map(tab => {
+        {renderedTabs.map(tab => {
             const isTabActive = tab.id === effectiveActiveTabId;
             const renderTabContent = () => {
               switch (tab.type) {
@@ -1578,6 +1519,7 @@ export default function CoursePage() {
                       focusTimerState={focusTimerState}
                       isDeepStudyCourse={isDeepStudyCourse}
                       isOnboardingPreview={isOnboardingPreview}
+                      readyModuleRefs={visibleModuleRefs}
                     />
                   );
                 case 'chat':
@@ -1632,8 +1574,7 @@ export default function CoursePage() {
               {renderTabContent()}
             </div>
           );
-          })
-        )}
+          })}
       </div>
 
       {/* Global Modals */}
