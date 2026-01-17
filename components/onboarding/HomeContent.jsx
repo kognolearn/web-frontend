@@ -120,6 +120,7 @@ export default function HomeContent({ variant = 'page' }) {
   const trialOfferCentsRef = useRef(null);
   const trialEndsAtRef = useRef(null);
   const trialDeclinedRef = useRef(false);
+  const latestOfferCentsRef = useRef(null);
   const negotiationSyncTimerRef = useRef(null);
   const negotiationSyncInFlightRef = useRef(false);
   const negotiationSyncQueuedRef = useRef(false);
@@ -134,6 +135,19 @@ export default function HomeContent({ variant = 'page' }) {
     if (typeof cents !== 'number' || Number.isNaN(cents)) return '';
     const dollars = cents / 100;
     return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
+  };
+
+  const resolveOfferCents = (value) => {
+    if (!Number.isFinite(value)) return null;
+    const rounded = Math.round(value);
+    return Math.max(rounded, MIN_NEGOTIATION_PRICE_CENTS);
+  };
+
+  const rememberLatestOffer = (value) => {
+    const resolved = resolveOfferCents(value);
+    if (resolved === null) return null;
+    latestOfferCentsRef.current = resolved;
+    return resolved;
   };
 
   const getNegotiationFallback = () => {
@@ -481,7 +495,7 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   const addBotMessage = (text, type = 'chat', meta = {}) => {
-    const message = { type: 'bot', text, id: Date.now() + Math.random() };
+    const message = { type: 'bot', text, id: Date.now() + Math.random(), meta };
     appendMessage(message);
     scheduleNegotiationSync();
 
@@ -641,6 +655,7 @@ export default function HomeContent({ variant = 'page' }) {
     trialOfferCentsRef.current = null;
     trialEndsAtRef.current = null;
     trialDeclinedRef.current = false;
+    latestOfferCentsRef.current = null;
     if (negotiationSyncTimerRef.current) {
       clearTimeout(negotiationSyncTimerRef.current);
       negotiationSyncTimerRef.current = null;
@@ -673,6 +688,7 @@ export default function HomeContent({ variant = 'page' }) {
 
   const shouldStartFreshSession = () => {
     initTabId();
+    if (messagesRef.current.length > 0) return false;
     const stored = readStoredSession();
     if (!stored || stored.status !== 'active') return false;
     if (!stored.ownerTabId) return true;
@@ -819,6 +835,20 @@ export default function HomeContent({ variant = 'page' }) {
     return Math.round(value * 100);
   };
 
+  const getOfferCentsFromMessage = (message) => {
+    if (!message || message.type !== 'bot') return null;
+    if (Number.isFinite(message.meta?.offerCents)) return message.meta.offerCents;
+    const inferred = extractPriceFromReply([message.text]);
+    return resolveOfferCents(inferred);
+  };
+
+  const isTrialOfferMessage = (message) => {
+    if (!message || message.type !== 'bot') return false;
+    if (message.meta?.offerType === 'trial') return true;
+    if (typeof message.text !== 'string') return false;
+    return message.text === TRIAL_OFFER_MESSAGE || message.text.includes('try it for a week');
+  };
+
   const requestIntroMessage = async (step, latestUserMessage = null) => {
     if (introInFlightRef.current) {
       if (latestUserMessage) {
@@ -844,17 +874,18 @@ export default function HomeContent({ variant = 'page' }) {
           ? INTRO_FALLBACKS.askUseful
           : INTRO_FALLBACKS.reason;
       const replyParts = extractReplyParts(response, fallback);
+      const offerCents = rememberLatestOffer(extractPriceFromReply(replyParts));
       const offerTrial = Boolean(response?.offerTrial);
       const nextStep = response?.nextStep;
       const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
       const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
 
       if (offerTrial && canOfferTrial()) {
-        enterTrialOffer(currentPrice);
+        enterTrialOffer(offerCents ?? currentPrice);
         return;
       }
 
-      enqueueReplyParts('chat', replyParts, {});
+      enqueueReplyParts('chat', replyParts, offerCents ? { offerCents, offerType: 'price' } : {});
 
       if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
         setNegotiationStepSafe(resolvedStep);
@@ -888,7 +919,12 @@ export default function HomeContent({ variant = 'page' }) {
       } else if (step === NEGOTIATION_STEPS.INTRO_ASK_USEFUL) {
         fallback = INTRO_FALLBACKS.askUseful;
       }
-      enqueueReplyParts('chat', [fallback], {});
+      const fallbackOfferCents = rememberLatestOffer(extractPriceFromReply([fallback]));
+      enqueueReplyParts(
+        'chat',
+        [fallback],
+        fallbackOfferCents ? { offerCents: fallbackOfferCents, offerType: 'price' } : {}
+      );
       if (fallbackStep && fallbackStep !== negotiationStepRef.current) {
         setNegotiationStepSafe(fallbackStep);
       }
@@ -915,11 +951,16 @@ export default function HomeContent({ variant = 'page' }) {
     const resolvedOffer = Number.isFinite(offerCents)
       ? Math.max(offerCents, MIN_NEGOTIATION_PRICE_CENTS)
       : Math.max(currentPrice, MIN_NEGOTIATION_PRICE_CENTS);
+    const latestOfferCents = rememberLatestOffer(resolvedOffer);
     setTrialOfferCentsSafe(resolvedOffer);
     setTrialStatusSafe('offered');
     setAwaitingConfirmationSafe(false);
     setTrialDeclinedSafe(false);
-    enqueueReplyParts('chat', [TRIAL_OFFER_MESSAGE], {});
+    enqueueReplyParts(
+      'chat',
+      [TRIAL_OFFER_MESSAGE],
+      latestOfferCents ? { offerCents: latestOfferCents, offerType: 'trial' } : { offerType: 'trial' }
+    );
     scheduleNegotiationSync();
     return true;
   };
@@ -947,11 +988,12 @@ export default function HomeContent({ variant = 'page' }) {
       ? payload.replyParts
       : [getNegotiationFallback()];
     let suggestedPrice = payload.suggestedPrice;
-    if (suggestedPrice === null || suggestedPrice === undefined) {
-      const inferred = extractPriceFromReply(replyParts);
-      if (Number.isFinite(inferred)) {
-        suggestedPrice = inferred;
-      }
+    const inferredOffer = (suggestedPrice === null || suggestedPrice === undefined)
+      ? extractPriceFromReply(replyParts)
+      : null;
+    const latestOfferCents = rememberLatestOffer(suggestedPrice ?? inferredOffer);
+    if ((suggestedPrice === null || suggestedPrice === undefined) && Number.isFinite(inferredOffer)) {
+      suggestedPrice = inferredOffer;
     }
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerTrial = Boolean(payload.offerTrial);
@@ -963,7 +1005,7 @@ export default function HomeContent({ variant = 'page' }) {
       }
     }
 
-    if (suggestedPrice !== null) {
+    if (Number.isFinite(suggestedPrice)) {
       const currentOffer = Number.isFinite(currentPrice) ? currentPrice : null;
       if (
         currentOffer !== null &&
@@ -984,7 +1026,7 @@ export default function HomeContent({ variant = 'page' }) {
     }
 
     if (offerTrial && canOfferTrial()) {
-      enterTrialOffer(suggestedPrice ?? currentPrice);
+      enterTrialOffer(latestOfferCents ?? suggestedPrice ?? currentPrice);
       return true;
     }
 
@@ -998,7 +1040,7 @@ export default function HomeContent({ variant = 'page' }) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
-    enqueueReplyParts('chat', replyParts, {});
+    enqueueReplyParts('chat', replyParts, latestOfferCents ? { offerCents: latestOfferCents, offerType: 'price' } : {});
     return true;
   };
 
@@ -1283,6 +1325,39 @@ export default function HomeContent({ variant = 'page' }) {
   const showExpiredGateActions = trialStatus === 'expired' && !trialExpiredAcknowledged;
   const isInputDisabled =
     isRedirecting || chatEnded || limitReached || (trialStatus === 'expired' && !trialExpiredAcknowledged);
+  const latestPriceOfferMessage = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message || message.type !== 'bot') continue;
+      const offerCents = getOfferCentsFromMessage(message);
+      if (Number.isFinite(offerCents) && message.meta?.offerType !== 'trial' && !isTrialOfferMessage(message)) {
+        return { index: i, offerCents };
+      }
+    }
+    return null;
+  })();
+  const latestTrialOfferMessage = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message || message.type !== 'bot') continue;
+      if (isTrialOfferMessage(message)) {
+        const offerCents = getOfferCentsFromMessage(message);
+        return { index: i, offerCents };
+      }
+    }
+    return null;
+  })();
+  const allowOfferActions =
+    !showExpiredGateActions &&
+    !isThinking &&
+    !isRedirecting &&
+    !chatEnded &&
+    !limitReached &&
+    negotiationStep !== NEGOTIATION_STEPS.PRICE_CONFIRMED &&
+    negotiationStep !== NEGOTIATION_STEPS.PAYMENT_COMPLETE &&
+    trialStatus !== 'active';
+  const showFreeTrialAction = trialStatus === 'offered';
+  const showFreeLimitedAction = showExpiredOfferActions;
 
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
@@ -1333,9 +1408,54 @@ export default function HomeContent({ variant = 'page' }) {
         <div className="max-w-2xl mx-auto py-8">
           {/* Chat messages */}
           <AnimatePresence initial={false}>
-            {messages.map((m) => (
-              m.type === 'bot' ? <BotMessage key={m.id}>{m.text}</BotMessage> : <UserMessage key={m.id}>{m.text}</UserMessage>
-            ))}
+            {messages.map((m, index) => {
+              if (m.type === 'bot') {
+                const isLatestPriceOffer =
+                  allowOfferActions && trialStatus !== 'offered' && latestPriceOfferMessage?.index === index;
+                const isLatestTrialOffer =
+                  allowOfferActions && trialStatus === 'offered' && latestTrialOfferMessage?.index === index;
+                const offerCents = isLatestPriceOffer ? latestPriceOfferMessage?.offerCents : null;
+                return (
+                  <div key={m.id}>
+                    <BotMessage>{m.text}</BotMessage>
+                    {isLatestPriceOffer && Number.isFinite(offerCents) && (
+                      <div className="flex justify-start -mt-2 mb-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={() => handleConfirmPrice(offerCents)}
+                            className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+                          >
+                            Accept {formatPrice(offerCents)}/month
+                          </button>
+                          {showFreeLimitedAction && (
+                            <button
+                              onClick={continueWithFreePlan}
+                              disabled={isContinuingFree}
+                              className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors disabled:opacity-60"
+                            >
+                              {isContinuingFree ? 'Switching...' : 'Continue free (limited)'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {isLatestTrialOffer && showFreeTrialAction && (
+                      <div className="flex justify-start -mt-2 mb-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={startTrial}
+                            className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+                          >
+                            Accept free trial
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return <UserMessage key={m.id}>{m.text}</UserMessage>;
+            })}
           </AnimatePresence>
 
           {/* Loading indicator */}
@@ -1349,45 +1469,6 @@ export default function HomeContent({ variant = 'page' }) {
                 </div>
               </div>
             </div>
-          )}
-
-          {awaitingConfirmation && (trialStatus === 'none' || showExpiredOfferActions) && !isThinking && !chatEnded && !limitReached && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-wrap items-center gap-3 mb-4"
-            >
-              <button
-                onClick={() => handleConfirmPrice(currentPrice)}
-                className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
-              >
-                Confirm {formatPrice(currentPrice)}/mo
-              </button>
-              {showExpiredOfferActions && (
-                <button
-                  onClick={continueWithFreePlan}
-                  disabled={isContinuingFree}
-                  className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors disabled:opacity-60"
-                >
-                  {isContinuingFree ? 'Switching...' : 'Continue free (limited)'}
-                </button>
-              )}
-            </motion.div>
-          )}
-
-          {trialStatus === 'offered' && !isThinking && !chatEnded && !limitReached && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-wrap items-center gap-3 mb-4"
-            >
-              <button
-                onClick={startTrial}
-                className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
-              >
-                Accept free trial
-              </button>
-            </motion.div>
           )}
 
           {showExpiredGateActions && !isThinking && !chatEnded && !limitReached && (
