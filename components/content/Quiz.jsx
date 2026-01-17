@@ -546,7 +546,6 @@ export default function Quiz({
   courseId,
   lessonId,
   onQuizCompleted,
-  isPreview = false,
 }) {
   const pathname = usePathname();
   const normalizedQuestions = useMemo(() => {
@@ -856,56 +855,30 @@ export default function Quiz({
         const allCorrect = totalCount > 0 && correctCount === totalCount;
         const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
 
-        const previewPayload = {
-          courseId,
-          anonUserId: userId,
-          mastery_status: masteryStatus,
-          familiarity_score: familiarityScore,
-        };
-        const progressUrl = isPreview
-          ? `/api/onboarding/preview/nodes/${lessonId}/progress`
-          : `/api/courses/${courseId}/nodes/${lessonId}/progress`;
-        const questionsUrl = isPreview
-          ? `/api/onboarding/preview/questions`
-          : `/api/courses/${courseId}/questions`;
+        const progressUrl = `/api/courses/${courseId}/nodes/${lessonId}/progress`;
+        const questionsUrl = `/api/courses/${courseId}/questions`;
 
         // Send both progress update and question status updates in parallel
-        const progressPromise = isPreview
-          ? fetch(progressUrl, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(previewPayload),
-            })
-          : authFetch(progressUrl, {
+        const progressPromise = authFetch(progressUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            mastery_status: masteryStatus,
+            familiarity_score: familiarityScore,
+          }),
+        });
+
+        // Send question status updates
+        const questionStatusPromise = questionStatusUpdates.length > 0 
+          ? authFetch(questionsUrl, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 userId,
-                mastery_status: masteryStatus,
-                familiarity_score: familiarityScore,
+                updates: questionStatusUpdates
               }),
-            });
-
-        // Send question status updates
-        const questionStatusPromise = questionStatusUpdates.length > 0 
-          ? (isPreview
-              ? fetch(questionsUrl, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    courseId,
-                    anonUserId: userId,
-                    updates: questionStatusUpdates
-                  }),
-                })
-              : authFetch(questionsUrl, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    userId,
-                    updates: questionStatusUpdates
-                  }),
-                }))
+            })
           : Promise.resolve({ ok: true });
 
         const [progressResponse, questionStatusResponse] = await Promise.all([
@@ -948,7 +921,7 @@ export default function Quiz({
     });
     setCurrentIndex(0);
     setIsSubmitting(false);
-  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted, isPreview]);
+  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted]);
 
   const handleNavigate = useCallback(
     (direction) => {
@@ -998,35 +971,19 @@ export default function Quiz({
       
       // Send PATCH request to update the status
       try {
-        const url = isPreview
-          ? '/api/onboarding/preview/questions'
-          : `/api/courses/${courseId}/questions`;
-        const response = isPreview
-          ? await fetch(url, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                courseId,
-                anonUserId: userId,
-                updates: [{
-                  id: questionId,
-                  status: newFlaggedState ? 'correct/flag' : 'correct',
-                  selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
-                }]
-              }),
-            })
-          : await authFetch(url, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userId,
-                updates: [{
-                  id: questionId,
-                  status: newFlaggedState ? 'correct/flag' : 'correct',
-                  selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
-                }]
-              }),
-            });
+        const url = `/api/courses/${courseId}/questions`;
+        const response = await authFetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            updates: [{
+              id: questionId,
+              status: newFlaggedState ? 'correct/flag' : 'correct',
+              selectedAnswer: selectedOptionIndex >= 0 ? selectedOptionIndex : null
+            }]
+          }),
+        });
         
         if (!response.ok) {
           console.error('Failed to update flagged question status:', response.status);
@@ -1035,7 +992,7 @@ export default function Quiz({
         console.error('Error flagging question:', error);
       }
     },
-    [isSubmitted, userId, courseId, flaggedQuestions, normalizedQuestions, responses, isPreview]
+    [isSubmitted, userId, courseId, flaggedQuestions, normalizedQuestions, responses]
   );
 
   const questionLabelId = currentQuestion ? `quiz-question-${currentQuestion.id}` : undefined;

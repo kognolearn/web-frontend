@@ -100,7 +100,9 @@ export default function AdHocExamGradingPage() {
     };
   }, []);
 
-  const isFreeTier = subscriptionStatus?.planLevel === "free" || !subscriptionStatus?.hasSubscription;
+  const hasPremiumAccess =
+    subscriptionStatus?.planLevel === "paid" || subscriptionStatus?.trialActive;
+  const isFreeTier = !hasPremiumAccess;
   const hasCourses = courses.length > 0;
   const isAdHocGrading = adHocStatus === "grading";
   const isAdHocCombined = adHocMode === "combined";

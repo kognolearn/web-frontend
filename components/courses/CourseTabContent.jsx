@@ -76,16 +76,8 @@ const getLessonCacheKey = (lessonId, userId, courseId) => {
   return `lesson:${lessonId}:${userId}:${courseId}`;
 };
 
-const buildContentUrl = ({ lessonId, courseId, userId, isPreview }) => {
+const buildContentUrl = ({ lessonId, courseId, userId }) => {
   if (!lessonId || !courseId || !userId) return null;
-  if (isPreview) {
-    const params = new URLSearchParams({
-      courseId: String(courseId),
-      lessonId: String(lessonId),
-      anonUserId: String(userId),
-    });
-    return `/api/onboarding/preview/lesson?${params.toString()}`;
-  }
   const params = new URLSearchParams({
     id: String(lessonId),
     courseId: String(courseId),
@@ -119,8 +111,7 @@ function ItemContent({
   onVideoViewed,
   onTaskComplete,
   moduleQuizTab,
-  isAdmin,
-  isPreview
+  isAdmin
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = getLessonCacheKey(id, userId, courseId);
@@ -140,13 +131,11 @@ function ItemContent({
 
     (async () => {
       try {
-        const url = buildContentUrl({ lessonId: id, courseId, userId, isPreview });
+        const url = buildContentUrl({ lessonId: id, courseId, userId });
         if (!url) {
           throw new Error("Missing content URL parameters.");
         }
-        const res = isPreview
-          ? await fetch(url, { signal: ac.signal })
-          : await authFetch(url, { signal: ac.signal });
+        const res = await authFetch(url, { signal: ac.signal });
         let data;
         try {
           data = await res.json();
@@ -168,7 +157,7 @@ function ItemContent({
       fetchInitiatedRef.current.delete(key);
       ac.abort();
     };
-  }, [key, id, userId, courseId, isPreview]);
+  }, [key, id, userId, courseId]);
 
   const cachedEnvelope = cached?.data || {};
   const cachedPayload = cachedEnvelope.data;
@@ -278,7 +267,6 @@ function ItemContent({
                 userId={userId}
                 videoCompleted={data?.videoCompleted || false}
                 onVideoViewed={onVideoViewed}
-                isPreview={isPreview}
               />
             );
           })}
@@ -319,7 +307,6 @@ function ItemContent({
             inlineQuestionSelections={data?.inlineQuestionSelections || {}}
             readingCompleted={data?.readingCompleted || false}
             onReadingCompleted={onReadingCompleted}
-            isPreview={isPreview}
           />
         </div>
       );
@@ -353,7 +340,6 @@ function ItemContent({
           userId={userId}
           courseId={courseId}
           lessonId={id}
-          isPreview={isPreview}
         />
       );
     }
@@ -402,7 +388,6 @@ function ItemContent({
             courseId={courseId}
             nodeId={id}
             userId={userId}
-            isPreview={isPreview}
             onTaskComplete={onTaskComplete}
           />
         </div>
@@ -524,7 +509,6 @@ export default function CourseTabContent({
   focusTimerRef,
   focusTimerState,
   isDeepStudyCourse = false,
-  isOnboardingPreview = false,
   readyModuleRefs = null
 }) {
   const router = useRouter();
@@ -743,11 +727,6 @@ export default function CourseTabContent({
   useEffect(() => {
     let cancelled = false;
     if (!userId) return undefined;
-    if (isOnboardingPreview) {
-      setIsAdmin(false);
-      setHasCheckedAdmin(true);
-      return undefined;
-    }
 
     (async () => {
       try {
@@ -770,7 +749,7 @@ export default function CourseTabContent({
     return () => {
       cancelled = true;
     };
-  }, [userId, isOnboardingPreview]);
+  }, [userId]);
 
   // Cleanup on unmount
   // Cleanup on unmount
@@ -849,7 +828,6 @@ export default function CourseTabContent({
 
   // Fetch existing practice exams whenever the practice exam view is opened
   useEffect(() => {
-    if (isOnboardingPreview) return;
     if (!userId || !courseId) return;
     if (!selectedLesson || selectedLesson.type !== 'practice_exam') return;
 
@@ -908,7 +886,7 @@ export default function CourseTabContent({
         [examType]: { ...prev[examType], status: 'error', error: e.message }
       }));
     }
-  }, [userId, courseId, isOnboardingPreview]);
+  }, [userId, courseId]);
 
   // Grade exam (upload completed exam for grading)
   const gradeExam = useCallback(async (examType, examNumber, file) => {
@@ -1281,11 +1259,11 @@ export default function CourseTabContent({
 
     (async () => {
       try {
-        const url = buildContentUrl({ lessonId, courseId, userId, isPreview: isOnboardingPreview });
+        const url = buildContentUrl({ lessonId, courseId, userId });
         if (!url) {
           throw new Error("Missing content URL parameters.");
         }
-        const res = isOnboardingPreview ? await fetch(url) : await authFetch(url);
+        const res = await authFetch(url);
         let data;
         try {
           data = await res.json();
@@ -1301,7 +1279,7 @@ export default function CourseTabContent({
         setContentCache((prev) => ({ ...prev, [key]: { status: "error", error: String(e?.message || e) } }));
       }
     })();
-  }, [userId, courseId, isOnboardingPreview]);
+  }, [userId, courseId]);
 
   const handleContentTypeClick = (lesson, contentType) => {
     setSelectedLesson(lesson);
@@ -1717,32 +1695,17 @@ export default function CourseTabContent({
       // Update lesson status via API
       (async () => {
         try {
-          const url = isOnboardingPreview
-            ? `/api/onboarding/preview/nodes/${lessonId}/progress`
-            : `/api/courses/${courseId}/nodes/${lessonId}/progress`;
-          const payload = isOnboardingPreview
-            ? {
-                courseId,
-                anonUserId: userId,
-                mastery_status: masteryStatus,
-                familiarity_score: familiarityScore,
-              }
-            : {
-                mastery_status: masteryStatus,
-                familiarity_score: familiarityScore,
-              };
+          const url = `/api/courses/${courseId}/nodes/${lessonId}/progress`;
+          const payload = {
+            mastery_status: masteryStatus,
+            familiarity_score: familiarityScore,
+          };
 
-          const response = isOnboardingPreview
-            ? await fetch(url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              })
-            : await authFetch(url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
+          const response = await authFetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
           
           if (response.ok) {
             // Refresh the study plan to get updated lesson status
@@ -1753,7 +1716,7 @@ export default function CourseTabContent({
         }
       })();
     }
-  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan, isOnboardingPreview]);
+  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan]);
 
   const handleDragOver = (e) => {
     if (e.dataTransfer.types.includes('application/x-chat-tab-id')) {
@@ -1816,7 +1779,7 @@ export default function CourseTabContent({
     focusTimerState &&
     (focusTimerState.seconds > 0 || focusTimerState.isRunning || focusTimerState.isCompleted)
   );
-  const shouldShowTimerCard = !isOnboardingPreview && ((!isDeepStudyCourse && secondsRemaining !== null) || isFocusTimerVisible);
+  const shouldShowTimerCard = ((!isDeepStudyCourse && secondsRemaining !== null) || isFocusTimerVisible);
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
@@ -1828,7 +1791,7 @@ export default function CourseTabContent({
           style={{ right: `${chatBotWidth + 16}px` }}
         >
           {/* Pause/Play Button for Study Timer */}
-          {!isOnboardingPreview && !isDeepStudyCourse && secondsRemaining !== null && (
+          {!isDeepStudyCourse && secondsRemaining !== null && (
             <button
               type="button"
               onClick={onPauseToggle}
@@ -1940,7 +1903,7 @@ export default function CourseTabContent({
             </button>
           )}
 
-          {!isOnboardingPreview && !isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
+          {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
             <Tooltip content="Some content is hidden. Add more time to see all content." position="bottom">
               <button
                 type="button"
@@ -2711,7 +2674,7 @@ export default function CourseTabContent({
           {/* Right side - Timer and controls */}
           <div className="flex items-center gap-2">
             {/* Pause/Play Button for Study Timer */}
-            {!isOnboardingPreview && !isDeepStudyCourse && secondsRemaining !== null && (
+            {!isDeepStudyCourse && secondsRemaining !== null && (
               <button
                 type="button"
                 onClick={onPauseToggle}
@@ -2838,7 +2801,7 @@ export default function CourseTabContent({
                      )}
                      
                      {/* Hidden Content */}
-                     {!isOnboardingPreview && !isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
+                     {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
                         <button onClick={() => { onHiddenContentClick?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
                           <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                           <span className="text-sm font-medium">Hidden Content</span>
@@ -3293,7 +3256,6 @@ export default function CourseTabContent({
                     onTaskComplete={handleTaskCompleted}
                     moduleQuizTab={moduleQuizTab}
                     isAdmin={hasCheckedAdmin && isAdmin}
-                    isPreview={isOnboardingPreview}
                   />
                 )}
               </section>

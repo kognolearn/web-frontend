@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
-import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
 import { getRedirectDestination } from "@/lib/platform";
 import { authFetch } from "@/lib/api";
 
@@ -62,29 +61,23 @@ export default function SignInForm() {
       }
 
       if (data?.user) {
-        const onboardingSession = getOnboardingCourseSession();
-        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
-        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
-        if (!hasOnboardingContinuation) {
-          await cleanupAnonUser();
-        }
         if (redirectTo) {
           router.push(getRedirectDestination(redirectTo));
           return;
         }
 
-        let hasSubscription = false;
+        let hasPremiumAccess = false;
         try {
           const res = await authFetch("/api/stripe?endpoint=subscription-status", {
             method: "GET",
           });
           if (res.ok) {
             const status = await res.json().catch(() => ({}));
-            hasSubscription = Boolean(status?.hasSubscription);
+            hasPremiumAccess = status?.planLevel === "paid" || status?.trialActive;
           }
         } catch (fetchError) {}
 
-        router.push(hasSubscription ? "/dashboard" : "/");
+        router.push(hasPremiumAccess ? "/dashboard" : "/");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
@@ -22,46 +21,6 @@ import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
-const ANON_USER_ID_KEY = 'kogno_anon_user_id';
-const getCourseTabsStorageKey = (userId, courseId) => `${COURSE_TABS_STORAGE_PREFIX}_${userId}_${courseId}`;
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CREATE_ACCOUNT_ACCESS_COOKIE = 'kogno_onboarding_create_account';
-
-const isValidUuid = (value) => typeof value === 'string' && UUID_REGEX.test(value);
-
-const readAnonUserId = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const stored = window.localStorage.getItem(ANON_USER_ID_KEY);
-    return isValidUuid(stored) ? stored : null;
-  } catch (error) {
-    console.warn('Failed to read anon user id:', error);
-    return null;
-  }
-};
-
-const setCreateAccountAccess = (value) => {
-  if (typeof document === 'undefined') return;
-  const maxAge = 15 * 60;
-  document.cookie = `${CREATE_ACCOUNT_ACCESS_COOKIE}=${value}; path=/; max-age=${maxAge}; samesite=lax`;
-};
-
-const buildPreviewPlanUrl = (courseId, anonUserId) => {
-  const params = new URLSearchParams({
-    courseId: String(courseId),
-    anonUserId: String(anonUserId),
-  });
-  return `/api/onboarding/preview/plan?${params.toString()}`;
-};
-
-const filterPreviewPlan = (plan) => {
-  if (!plan) return plan;
-  const modules = Array.isArray(plan.modules)
-    ? plan.modules.filter((module) => !module.is_practice_exam_module)
-    : plan.modules;
-  return { ...plan, modules };
-};
-
 const normalizeCourseMode = (value) => {
   if (!value) return null;
   const normalized = String(value).trim().toLowerCase().replace(/\s+/g, "_");
@@ -145,7 +104,6 @@ export default function CoursePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState(null);
-  const [anonUserId, setAnonUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
@@ -161,12 +119,9 @@ export default function CoursePage() {
   const [isHiddenContentModalOpen, setIsHiddenContentModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
   const [chatOpenRequest, setChatOpenRequest] = useState(null);
-  const [isOnboardingPreview, setIsOnboardingPreview] = useState(false);
   // Course generation state - track ready modules for incremental sidebar reveal
   const [courseStatus, setCourseStatus] = useState(null);
   const [readyModuleRefs, setReadyModuleRefs] = useState([]);
-  const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
-  const previewCompletionShownRef = useRef(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
     const initialChat = createBlankChat();
     return {
@@ -178,21 +133,6 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
-  const closeNegotiationPreview = useCallback(() => {
-    if (typeof window === "undefined") return;
-    window.close();
-    if (window.opener) {
-      try {
-        window.opener.focus();
-      } catch (error) {}
-    }
-  }, []);
-
-  const previewParam = searchParams?.get('preview');
-  const isPreviewRoute = previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
-  const isNegotiationPreview = searchParams?.get('negotiation') === '1';
-  const isPreviewMode = isPreviewRoute || isOnboardingPreview;
-  
   // Focus timer state - lifted from CourseTabContent
   const focusTimerRef = useRef(null);
   const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
@@ -286,29 +226,8 @@ export default function CoursePage() {
         } = await supabase.auth.getUser();
         if (!mounted) return;
 
-        const storedAnonId = readAnonUserId();
-
-        if (isPreviewRoute) {
-          if (storedAnonId) {
-            setAnonUserId(storedAnonId);
-            setUserId(storedAnonId);
-            setIsOnboardingPreview(true);
-            return;
-          }
-          setError("Preview session expired.");
-          setLoading(false);
-          return;
-        }
-
         if (user) {
           setUserId(user.id);
-          return;
-        }
-
-        if (storedAnonId) {
-          setAnonUserId(storedAnonId);
-          setUserId(storedAnonId);
-          setIsOnboardingPreview(true);
           return;
         }
 
@@ -323,7 +242,7 @@ export default function CoursePage() {
     return () => {
       mounted = false;
     };
-  }, [isPreviewRoute]);
+  }, []);
 
   // Persist tabs for this course/user
   useEffect(() => {
@@ -389,7 +308,6 @@ export default function CoursePage() {
 
   // Send PATCH request on page unload and every 5 minutes
   useEffect(() => {
-    if (isOnboardingPreview) return;
     if (!userId || !courseId || initialSeconds === null) return;
 
     const saveProgress = async () => {
@@ -429,7 +347,7 @@ export default function CoursePage() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       handleBeforeUnload();
     };
-  }, [userId, courseId, initialSeconds, isOnboardingPreview]);
+  }, [userId, courseId, initialSeconds]);
 
   useEffect(() => {
     if (!userId || !courseId) return;
@@ -439,18 +357,15 @@ export default function CoursePage() {
     setHasHydratedTabs(false);
     (async () => {
       try {
-        const url = isPreviewMode
-          ? buildPreviewPlanUrl(courseId, userId)
-          : `/api/courses/${encodeURIComponent(courseId)}/plan`;
-        const res = isPreviewMode ? await fetch(url) : await authFetch(url);
+        const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
+        const res = await authFetch(url);
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed: ${res.status}`);
         }
         const json = await res.json();
         if (aborted) return;
-        const previewCourse = isPreviewMode ? json?.course : null;
-        const planPayload = isPreviewMode ? filterPreviewPlan(json) : json;
+        const planPayload = json;
 
         const planMode = normalizeCourseMode(
           planPayload?.mode || planPayload?.course_mode || planPayload?.study_mode || planPayload?.studyMode
@@ -575,81 +490,41 @@ export default function CoursePage() {
         setActiveTabId(resolvedActiveId);
         setHasHydratedTabs(true);
 
-        if (isPreviewMode && previewCourse) {
-          const title =
-            previewCourse.title ||
-            previewCourse.course_title ||
-            previewCourse.name ||
-            previewCourse.courseName;
-          if (title) setCourseName(title);
-          if (previewCourse.status) setCourseStatus(previewCourse.status);
+        void (async () => {
+          try {
+            const courseMetaUrl = `/api/courses`;
+            const courseMetaRes = await authFetch(courseMetaUrl);
+            if (!courseMetaRes.ok || aborted) return;
+            const body = await courseMetaRes.json();
+            const courses = Array.isArray(body?.courses) ? body.courses : [];
+            const courseMeta = courses.find((course) => course.id === courseId);
 
-          const metaMode = normalizeCourseMode(
-            previewCourse.metadata?.mode ||
-            previewCourse.mode ||
-            previewCourse.course_mode ||
-            previewCourse.study_mode ||
-            previewCourse.studyMode
-          );
-          if (metaMode && !planMode) {
-            setCourseMode(metaMode);
-          }
-          if (metaMode === "deep") {
-            setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
-            setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
-            if (!planMode) {
-              setHasHiddenContent(false);
-            }
-          } else if (typeof previewCourse.seconds_to_complete === "number") {
-            setSecondsRemaining(previewCourse.seconds_to_complete);
-            setInitialSeconds(previewCourse.seconds_to_complete);
-          }
+            if (courseMeta) {
+              const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
+              if (title) setCourseName(title);
+              if (courseMeta.status) setCourseStatus(courseMeta.status);
 
-          if (previewCourse.metadata?.is_onboarding_preview === true) {
-            setIsOnboardingPreview(true);
-          }
-        } else {
-          void (async () => {
-            try {
-              const courseMetaUrl = `/api/courses`;
-              const courseMetaRes = await authFetch(courseMetaUrl);
-              if (!courseMetaRes.ok || aborted) return;
-              const body = await courseMetaRes.json();
-              const courses = Array.isArray(body?.courses) ? body.courses : [];
-              const courseMeta = courses.find((course) => course.id === courseId);
-
-              if (courseMeta) {
-                const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
-                if (title) setCourseName(title);
-                if (courseMeta.status) setCourseStatus(courseMeta.status);
-
-                const metaMode = normalizeCourseMode(
-                  courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
-                );
-                if (metaMode && !planMode) {
-                  setCourseMode(metaMode);
-                }
-                if (metaMode === "deep") {
-                  setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
-                  setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
-                  if (!planMode) {
-                    setHasHiddenContent(false);
-                  }
-                } else if (typeof courseMeta.seconds_to_complete === "number") {
-                  setSecondsRemaining(courseMeta.seconds_to_complete);
-                  setInitialSeconds(courseMeta.seconds_to_complete);
-                }
-
-                // Check if this is an onboarding preview course
-                if (courseMeta.metadata?.is_onboarding_preview === true) {
-                  setIsOnboardingPreview(true);
-                }
+              const metaMode = normalizeCourseMode(
+                courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
+              );
+              if (metaMode && !planMode) {
+                setCourseMode(metaMode);
               }
-            } catch (e) {
-              console.error("Failed to load course metadata:", e);
+              if (metaMode === "deep") {
+                setSecondsRemaining(MAX_DEEP_STUDY_SECONDS);
+                setInitialSeconds(MAX_DEEP_STUDY_SECONDS);
+                if (!planMode) {
+                  setHasHiddenContent(false);
+                }
+              } else if (typeof courseMeta.seconds_to_complete === "number") {
+                setSecondsRemaining(courseMeta.seconds_to_complete);
+                setInitialSeconds(courseMeta.seconds_to_complete);
+              }
             }
-          })();
-        }
+          } catch (e) {
+            console.error("Failed to load course metadata:", e);
+          }
+        })();
       } catch (e) {
         if (aborted) return;
         setError(e?.message || "Failed to load study plan.");
@@ -662,20 +537,18 @@ export default function CoursePage() {
     return () => {
       aborted = true;
     };
-  }, [userId, courseId, isPreviewMode]);
+  }, [userId, courseId]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
     try {
-      const url = isPreviewMode
-        ? buildPreviewPlanUrl(courseId, userId)
-        : `/api/courses/${encodeURIComponent(courseId)}/plan`;
-      const res = isPreviewMode ? await fetch(url) : await authFetch(url);
+      const url = `/api/courses/${encodeURIComponent(courseId)}/plan`;
+      const res = await authFetch(url);
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
       }
       const json = await res.json();
-      const planPayload = isPreviewMode ? filterPreviewPlan(json) : json;
+      const planPayload = json;
       if (Array.isArray(planPayload?.ready_modules)) {
         setReadyModuleRefs(Array.from(new Set(planPayload.ready_modules)));
       }
@@ -757,7 +630,7 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
-  }, [userId, courseId, courseMode, isPreviewMode]);
+  }, [userId, courseId, courseMode]);
 
   useEffect(() => {
     refetchStudyPlanRef.current = refetchStudyPlan;
@@ -766,30 +639,9 @@ export default function CoursePage() {
   const isGeneratingCourse = courseStatus === 'pending' || courseStatus === 'generating';
   const visibleModuleRefs = isGeneratingCourse ? readyModuleRefs : null;
 
-  useEffect(() => {
-    if (!isOnboardingPreview || !studyPlan?.modules) return;
-    if (previewCompletionShownRef.current || showPreviewCompletionModal) return;
 
-    const lessons = studyPlan.modules
-      .filter((module) => !module.is_practice_exam_module)
-      .flatMap((module) => module.lessons || []);
-
-    if (lessons.length === 0) return;
-
-    const allCompleted = lessons.every((lesson) => {
-      const status = lesson.status || lesson.mastery_status;
-      return status && status !== 'pending';
-    });
-
-    if (allCompleted) {
-      previewCompletionShownRef.current = true;
-      setCreateAccountAccess('onboarding');
-      setShowPreviewCompletionModal(true);
-    }
-  }, [isOnboardingPreview, studyPlan, showPreviewCompletionModal]);
 
   const handleTimerUpdate = useCallback(async (newSeconds) => {
-    if (isOnboardingPreview) return;
     if (!userId || !courseId) return;
     const nextSeconds = isDeepStudyCourse ? MAX_DEEP_STUDY_SECONDS : newSeconds;
     setSecondsRemaining(nextSeconds);
@@ -807,7 +659,7 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to update timer:', e);
     }
-  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse, isOnboardingPreview]);
+  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse]);
 
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
@@ -1150,32 +1002,8 @@ export default function CoursePage() {
 
   return (
     <div className="flex flex-col h-screen bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
-      {/* Preview Mode Banner */}
-      {isOnboardingPreview && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[var(--primary)]/20 via-[var(--primary)]/10 to-[var(--primary)]/20 border-b border-[var(--primary)]/30">
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 text-xs font-semibold bg-[var(--primary)] text-white rounded-full">
-              Preview
-            </span>
-            <span className="text-sm text-[var(--foreground)]">
-              {isNegotiationPreview
-                ? "You're viewing a preview lesson. Jump back to the negotiation tab when you're done."
-                : "You're viewing a preview lesson. Create an account to generate your full course!"}
-            </span>
-          </div>
-          <button
-            onClick={() =>
-              isNegotiationPreview ? closeNegotiationPreview() : setShowPreviewCompletionModal(true)
-            }
-            className="px-4 py-1.5 text-sm font-medium bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
-          >
-            {isNegotiationPreview ? "Continue Negotiating" : "Generate Full Course"}
-          </button>
-        </div>
-      )}
-
       {/* Tab Bar */}
-      {!isMobileView && !isOnboardingPreview && (
+      {!isMobileView && (
         <div 
           className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
             isExternalChatHovering 
@@ -1518,7 +1346,6 @@ export default function CoursePage() {
                       focusTimerRef={focusTimerRef}
                       focusTimerState={focusTimerState}
                       isDeepStudyCourse={isDeepStudyCourse}
-                      isOnboardingPreview={isOnboardingPreview}
                       readyModuleRefs={visibleModuleRefs}
                     />
                   );
@@ -1635,94 +1462,6 @@ export default function CoursePage() {
         onAddTime={handleAddTimeFromModal}
         variant="hidden-content"
       />
-
-      {/* Preview Completion Modal */}
-      <AnimatePresence>
-        {showPreviewCompletionModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowPreviewCompletionModal(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[var(--surface-1)] rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-[var(--border)]"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                {isNegotiationPreview ? (
-                  <>
-                    <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
-                      Continue negotiating?
-                    </h2>
-                    <p className="text-[var(--muted-foreground)] mb-6">
-                      Jump back to the negotiation tab to finish locking in your price.
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      <button
-                        onClick={closeNegotiationPreview}
-                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
-                      >
-                        Continue negotiating
-                      </button>
-                      <button
-                        onClick={() => setShowPreviewCompletionModal(false)}
-                        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
-                      >
-                        Keep exploring
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">
-                      Ready to ace your class?
-                    </h2>
-                    <p className="text-[var(--muted-foreground)] mb-6">
-                      Create an account to generate a full course with all the lessons, quizzes, and flashcards you need to master this subject.
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      <button
-                        onClick={() => {
-                          setCreateAccountAccess('onboarding');
-                          router.push('/auth/create-account');
-                        }}
-                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary)]/90 transition-colors"
-                      >
-                        Create account for free
-                      </button>
-                      <button
-                        onClick={() => {
-                          router.push('/auth/sign-in');
-                        }}
-                        className="w-full px-4 py-3 text-sm font-medium bg-[var(--surface-2)] text-[var(--foreground)] rounded-xl hover:bg-[var(--surface-muted)] transition-colors"
-                      >
-                        Already have an account? Sign in
-                      </button>
-                      <button
-                        onClick={() => setShowPreviewCompletionModal(false)}
-                        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mt-2"
-                      >
-                        Continue exploring
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Hidden Drag Preview Source (for setDragImage) */}
       <div 

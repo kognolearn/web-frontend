@@ -761,7 +761,6 @@ export default function TaskRenderer({
   courseId,
   nodeId,
   userId,
-  isPreview = false,
   onTaskComplete,
 }) {
   const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
@@ -867,31 +866,6 @@ export default function TaskRenderer({
       return onSubmit(answersToSubmit, { signal });
     }
 
-    if (isPreview) {
-      if (!courseId || !nodeId || !userId) {
-        throw new Error("Missing preview identifiers for grading.");
-      }
-      const response = await fetch(
-        `/api/onboarding/preview/nodes/${nodeId}/grade`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            courseId,
-            anonUserId: userId,
-            answers: answersToSubmit,
-            sync: true,
-          }),
-          signal,
-        },
-      );
-
-      return resolveAsyncJobResponse(response, {
-        signal,
-        errorLabel: "grade task",
-      });
-    }
-
     if (!courseId || !nodeId) {
       throw new Error("Missing course or lesson ID for grading.");
     }
@@ -913,7 +887,7 @@ export default function TaskRenderer({
       signal,
       errorLabel: "grade task",
     });
-  }, [courseId, nodeId, userId, onSubmit, isPreview]);
+  }, [courseId, nodeId, onSubmit]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -99,14 +98,6 @@ export default function AuthCallbackClient() {
 
     const handlePostConfirmation = async (user) => {
       try {
-        // Cleanup anonymous user if no onboarding continuation
-        const onboardingSession = getOnboardingCourseSession();
-        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
-        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
-        if (!hasOnboardingContinuation) {
-          await cleanupAnonUser();
-        }
-
         // Attribute referral if there's a stored code
         const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
         if (storedRefRaw) {

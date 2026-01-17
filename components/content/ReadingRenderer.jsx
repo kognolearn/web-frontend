@@ -831,7 +831,7 @@ function InlineContent({ text }) {
 /**
  * Interactive question component with answer reveal
  */
-function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered, isPreview = false }) {
+function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
@@ -887,50 +887,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
 
       // Submit to backend API
-      if (isPreview && courseId && lessonId && userId && questionIndex !== undefined) {
-        try {
-          const response = await fetch(`/api/onboarding/preview/nodes/${lessonId}/inline-questions`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              courseId,
-              anonUserId: userId,
-              updates: [{
-                questionIndex,
-                selectedAnswer: originalOptionIndex,
-              }]
-            }),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Failed to save inline question answer: ${response.status} ${errorText}`);
-          }
-
-          const data = await response.json();
-          if (onAnswered) {
-            onAnswered({
-              questionIndex,
-              selectedAnswer: originalOptionIndex,
-              readingCompleted: data?.readingCompleted,
-              results: data?.results,
-            });
-          }
-          return;
-        } catch (error) {
-          console.error('Failed to save preview inline question answer:', error);
-        }
-      }
-
-      if (isPreview && onAnswered) {
-        onAnswered({
-          questionIndex,
-          selectedAnswer: originalOptionIndex,
-        });
-        return;
-      }
-
-      if (!isPreview && courseId && lessonId && userId && questionIndex !== undefined) {
+      if (courseId && lessonId && userId && questionIndex !== undefined) {
         try {
           const response = await authFetch(`/api/courses/${courseId}/nodes/${lessonId}/inline-questions`, {
             method: 'PATCH',
@@ -963,7 +920,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
         }
       }
     }
-  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered, isPreview]);
+  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
 
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
@@ -1182,7 +1139,6 @@ export default function ReadingRenderer({
   inlineQuestionSelections = {}, 
   readingCompleted: initialReadingCompleted = false,
   onReadingCompleted,
-  isPreview = false,
 }) {
   const blocks = useMemo(() => parseContent(content), [content]);
   const [inlineSelections, setInlineSelections] = useState(() =>
@@ -1213,16 +1169,8 @@ export default function ReadingRenderer({
 
     (async () => {
       try {
-        const previewParams = new URLSearchParams({
-          courseId: String(courseId),
-          anonUserId: String(userId),
-        });
-        const url = isPreview
-          ? `/api/onboarding/preview/nodes/${lessonId}/inline-questions?${previewParams.toString()}`
-          : `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`;
-        const response = isPreview
-          ? await fetch(url, { signal: ac.signal })
-          : await authFetch(url, { signal: ac.signal });
+        const url = `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`;
+        const response = await authFetch(url, { signal: ac.signal });
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`Failed to load inline question status: ${response.status} ${errorText}`);
@@ -1248,7 +1196,7 @@ export default function ReadingRenderer({
     return () => {
       ac.abort();
     };
-  }, [courseId, lessonId, userId, isPreview]);
+  }, [courseId, lessonId, userId]);
 
   useEffect(() => {
     if (!onReadingCompleted || !inlineStatusLoaded) return;
@@ -1465,7 +1413,6 @@ export default function ReadingRenderer({
                     userId={userId}
                     initialAnswer={inlineSelections?.[currentQuestionIndex]}
                     onAnswered={handleInlineQuestionUpdate}
-                    isPreview={isPreview}
                   />
                 );
                 

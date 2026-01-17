@@ -6,7 +6,6 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
-import OnboardingFinishCard from "@/components/courses/OnboardingFinishCard";
 import EmptyStateCard from "@/components/courses/EmptyStateCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
 import CourseLimitModal from "@/components/courses/CourseLimitModal";
@@ -23,12 +22,6 @@ import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
-import {
-  cleanupAnonUser,
-  clearOnboardingCourseSession,
-  getOnboardingCourseSession,
-  checkOnboardingPreview,
-} from "@/lib/onboarding";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 
 const terminalJobStatuses = new Set([
@@ -40,7 +33,6 @@ const terminalJobStatuses = new Set([
   "canceled",
   "cancelled",
 ]);
-const ONBOARDING_CONTINUATION_CONSUMED_KEY = "kogno_onboarding_course_consumed";
 
 function extractJobPayload(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -96,8 +88,6 @@ function DashboardClient() {
   const [pendingJobs, setPendingJobs] = useState([]);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const forceDownloadRedirect = isDownloadRedirectEnabled();
-  const [onboardingContinuation, setOnboardingContinuation] = useState(null);
-  const [paymentPreview, setPaymentPreview] = useState(null);
 
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -126,90 +116,14 @@ function DashboardClient() {
     };
   }, [isProfileMenuOpen]);
 
-  useEffect(() => {
-    const loadOnboardingContinuation = () => {
-      let shouldConsume = false;
-      try {
-        shouldConsume = sessionStorage.getItem(ONBOARDING_CONTINUATION_CONSUMED_KEY) === "1";
-      } catch (error) {
-        console.warn("Unable to read onboarding consume flag:", error);
-      }
-      if (shouldConsume) {
-        setOnboardingContinuation(null);
-        return;
-      }
 
-      const session = getOnboardingCourseSession();
-      if (!session?.jobId) {
-        setOnboardingContinuation(null);
-        return;
-      }
-      setOnboardingContinuation(session);
-    };
 
-    loadOnboardingContinuation();
 
-    const handleStorage = (event) => {
-      if (!event || event.key === "kogno_onboarding_session") {
-        loadOnboardingContinuation();
-      }
-    };
-
-    const handleOnboardingEvent = () => {
-      loadOnboardingContinuation();
-    };
-
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener("onboarding:continuation", handleOnboardingEvent);
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("onboarding:continuation", handleOnboardingEvent);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!paymentSuccess) return;
-    let mounted = true;
-
-    const loadPaymentPreview = async () => {
-      try {
-        const preview = await checkOnboardingPreview();
-        if (!mounted) return;
-        setPaymentPreview(preview || null);
-      } catch (error) {
-        console.warn("Failed to check onboarding preview:", error);
-      }
-    };
-
-    loadPaymentPreview();
-    return () => {
-      mounted = false;
-    };
-  }, [paymentSuccess]);
 
   // Handle send feedback
   const handleSendFeedback = () => {
     setIsProfileMenuOpen(false);
     window.dispatchEvent(new CustomEvent('open-feedback-widget'));
-  };
-
-  const handleContinueOnboardingCourse = () => {
-    router.push("/courses/create?from_onboarding=true");
-  };
-
-  const handleDismissOnboardingCourse = async () => {
-    const anonId = onboardingContinuation?.anonUserId || onboardingContinuation?.anon_user_id;
-    try {
-      if (anonId) {
-        await cleanupAnonUser(anonId);
-      }
-    } catch (error) {
-      console.warn("Failed to cleanup onboarding preview:", error);
-    } finally {
-      clearOnboardingCourseSession();
-      setOnboardingContinuation(null);
-      setPaymentPreview(null);
-    }
   };
 
   useEffect(() => {
@@ -555,7 +469,9 @@ function DashboardClient() {
     };
   }, [user]);
 
-  const isFreeTier = subscriptionStatus?.planLevel === 'free' || !subscriptionStatus?.hasSubscription;
+  const hasPremiumAccess =
+    subscriptionStatus?.planLevel === 'paid' || subscriptionStatus?.trialActive;
+  const isFreeTier = !hasPremiumAccess;
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -612,16 +528,8 @@ function DashboardClient() {
   })();
   
   const hasCourses = courses.length > 0;
-  const hasPreviewContinuation = Boolean(
-    onboardingContinuation?.jobId || paymentPreview?.previewCourseId
-  );
-  const previewCourseTitle =
-    onboardingContinuation?.courseName ||
-    onboardingContinuation?.course_name ||
-    paymentPreview?.previewCourseTitle ||
-    null;
-  const hasActiveCourseCards = hasCourses || hasPreviewContinuation;
-  const shouldShowPaymentEmptyState = paymentSuccess && !hasCourses && !hasPreviewContinuation;
+  const hasActiveCourseCards = hasCourses;
+  const shouldShowPaymentEmptyState = paymentSuccess && !hasCourses;
   const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
@@ -916,14 +824,6 @@ function DashboardClient() {
                   <span className="relative text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">Create Course</span>
                 </Link>
               </OnboardingTooltip>
-
-              {hasPreviewContinuation && (
-                <OnboardingFinishCard
-                  courseName={previewCourseTitle}
-                  onContinue={handleContinueOnboardingCourse}
-                  onDelete={handleDismissOnboardingCourse}
-                />
-              )}
 
               {courses.map((course) => {
                 const courseTitle = getCourseTitle(course);

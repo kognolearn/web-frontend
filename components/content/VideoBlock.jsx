@@ -54,12 +54,11 @@ export default function VideoBlock({
   title, 
   description, 
   className = "",
-  courseId,
-  lessonId,
-  userId,
-  videoCompleted: initialVideoCompleted = false,
-  onVideoViewed,
-  isPreview = false
+ courseId,
+ lessonId,
+ userId,
+ videoCompleted: initialVideoCompleted = false,
+  onVideoViewed
 }) {
   const normalized = normalizeUrl(url);
   const hasMarkedCompleted = useRef(false);
@@ -67,54 +66,6 @@ export default function VideoBlock({
 
   // Mark video as completed when component mounts (video page is viewed)
   useEffect(() => {
-    if (isPreview) {
-      if (normalized.type === "none") return;
-      if (hasMarkedCompleted.current) return;
-      hasMarkedCompleted.current = true;
-      let didNotify = false;
-      const notifyViewed = () => {
-        if (didNotify) return;
-        didNotify = true;
-        if (onVideoViewed) {
-          onVideoViewed();
-        }
-      };
-
-      if (courseId && lessonId && userId) {
-        (async () => {
-          try {
-            const response = await fetch(`/api/onboarding/preview/nodes/${lessonId}/video`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                courseId,
-                anonUserId: userId,
-                completed: true
-              }),
-            });
-
-            if (response.ok) {
-              notifyViewed();
-            }
-          } catch (error) {
-            console.error('Failed to mark preview video as completed:', error);
-          }
-        })();
-      }
-
-      if (onVideoViewed) {
-        refreshTimeoutRef.current = setTimeout(() => {
-          notifyViewed();
-        }, 1000);
-      }
-      return () => {
-        if (refreshTimeoutRef.current) {
-          clearTimeout(refreshTimeoutRef.current);
-          refreshTimeoutRef.current = null;
-        }
-      };
-    }
-
     // Skip if already marked completed or if already completed from backend
     if (hasMarkedCompleted.current || initialVideoCompleted) {
       if (initialVideoCompleted && onVideoViewed && !hasMarkedCompleted.current) {
@@ -163,7 +114,7 @@ export default function VideoBlock({
         refreshTimeoutRef.current = null;
       }
     };
-  }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed, isPreview]);
+  }, [courseId, lessonId, userId, normalized.type, initialVideoCompleted, onVideoViewed]);
 
   if (normalized.type === "none") {
     return (

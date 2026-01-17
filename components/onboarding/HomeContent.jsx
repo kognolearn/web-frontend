@@ -17,7 +17,6 @@ const CHAT_ENDED_MESSAGE = "This chat has ended.";
 const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
-const PREVIEW_ENABLED = process.env.NEXT_PUBLIC_ONBOARDING_PREVIEW_ENABLED === "true";
 const MAX_NEGOTIATION_OFFERS = 6;
 const MIN_NEGOTIATION_PRICE_CENTS = 100;
 const TRIAL_OFFER_MESSAGE =
@@ -29,8 +28,7 @@ const INTRO_FALLBACKS = {
   explain:
     "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. How does that sound?",
   price: "List price is $100/month. How does that sound?",
-  demo:
-    TRIAL_OFFER_MESSAGE,
+  demo: "We don't do demos. List price is $100/month. How does that sound?",
 };
 
 const NEGOTIATION_STEPS = {
@@ -40,33 +38,8 @@ const NEGOTIATION_STEPS = {
   NEGOTIATING: 'NEGOTIATING',
   AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
   PRICE_CONFIRMED: 'PRICE_CONFIRMED',
-  ASK_COLLEGE: 'ASK_COLLEGE',
-  ASK_COURSE: 'ASK_COURSE',
-  WAIT_TOPICS: 'WAIT_TOPICS',
-  TOPICS_READY: 'TOPICS_READY',
-  SHOW_TOPICS: 'SHOW_TOPICS',
-  GENERATING_PREVIEW: 'GENERATING_PREVIEW',
-  PREVIEW_READY: 'PREVIEW_READY',
   PAYMENT_COMPLETE: 'PAYMENT_COMPLETE',
   DONE: 'DONE',
-};
-
-const STEP_ORDER = {
-  [NEGOTIATION_STEPS.ASK_COLLEGE]: 1,
-  [NEGOTIATION_STEPS.ASK_COURSE]: 2,
-  [NEGOTIATION_STEPS.WAIT_TOPICS]: 2.5,
-  [NEGOTIATION_STEPS.TOPICS_READY]: 2.8,
-  [NEGOTIATION_STEPS.SHOW_TOPICS]: 3,
-  [NEGOTIATION_STEPS.GENERATING_PREVIEW]: 3.5,
-  [NEGOTIATION_STEPS.PREVIEW_READY]: 3.8,
-};
-
-const FALLBACKS = {
-  negotiation: "List price is $100/month. How does that sound?",
-  task: "Let's stick with pricing for now.",
-  topics: "Let's stick with pricing for now.",
-  generation: "Let's stick with pricing for now.",
-  status: "Let's stick with pricing for now.",
 };
 
 
@@ -101,21 +74,15 @@ export default function HomeContent({ variant = 'page' }) {
   const refCode = searchParams.get('ref');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [topics, setTopics] = useState([]);
   const [hasStarted, setHasStarted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [negotiationStep, setNegotiationStep] = useState(NEGOTIATION_STEPS.NONE);
-  const [isJobRunning, setIsJobRunning] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [chatEnded, setChatEnded] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
-  const [jobId, setJobId] = useState(null);
-  const [showTopics, setShowTopics] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(10000);
   const [confirmedPrice, setConfirmedPrice] = useState(null);
   const [paymentLink, setPaymentLink] = useState(null);
-  const [hasGeneratedPreview, setHasGeneratedPreview] = useState(false);
-  const [previewCourseId, setPreviewCourseId] = useState(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const [offerHistory, setOfferHistory] = useState([]);
   const [trialStatus, setTrialStatus] = useState('none');
@@ -137,27 +104,15 @@ export default function HomeContent({ variant = 'page' }) {
   const sessionOwnerRef = useRef(false);
   const messagesRef = useRef([]);
   const queueRef = useRef([]);
-  const pendingBotRef = useRef(false);
   const pendingNegotiationResponsesRef = useRef(new Map());
   const negotiationTurnCounterRef = useRef(0);
   const nextNegotiationTurnRef = useRef(1);
-  const lastBotTypeRef = useRef(null);
   const limitReachedRef = useRef(false);
   const negotiationStepRef = useRef(NEGOTIATION_STEPS.NONE);
   const awaitingConfirmationRef = useRef(false);
-  const dataRef = useRef({ collegeName: '', courseName: '', topic: '' });
-  const topicsRef = useRef([]);
   const pendingRequestsRef = useRef(0);
-  const taskRequestIdRef = useRef(0);
   const redirectUrlRef = useRef(null);
   const flowCompleteRef = useRef(false);
-  const awaitingTaskRef = useRef(false);
-  const deferredChatRef = useRef(null);
-  const taskInFlightRef = useRef(false);
-  const taskQueueRef = useRef([]);
-  const lastTaskKeyRef = useRef('');
-  const lastTaskTimestampRef = useRef(0);
-  const topicsRequestInFlightRef = useRef(false);
   const introInFlightRef = useRef(false);
   const introQueueRef = useRef([]);
   const offerHistoryRef = useRef([]);
@@ -254,18 +209,11 @@ export default function HomeContent({ variant = 'page' }) {
         anonUserId: api.getAnonUserId(),
         messages: messagesRef.current,
         negotiationStep: negotiationStepRef.current,
-        data: dataRef.current,
-        topics: topicsRef.current,
-        showTopics: typeof overrides.showTopics === 'boolean' ? overrides.showTopics : showTopics,
-        jobId: overrides.jobId ?? jobId,
-        isJobRunning: overrides.isJobRunning ?? isJobRunning,
         redirectUrl: overrides.redirectUrl ?? redirectUrlRef.current,
         hasStarted: overrides.hasStarted ?? hasStarted,
         currentPrice: overrides.currentPrice ?? currentPrice,
         confirmedPrice: overrides.confirmedPrice ?? confirmedPrice,
         paymentLink: overrides.paymentLink ?? paymentLink,
-        hasGeneratedPreview: overrides.hasGeneratedPreview ?? hasGeneratedPreview,
-        previewCourseId: overrides.previewCourseId ?? previewCourseId,
         awaitingConfirmation: overrides.awaitingConfirmation ?? awaitingConfirmationRef.current,
         offerHistory: overrides.offerHistory ?? offerHistoryRef.current,
         trialStatus: overrides.trialStatus ?? trialStatusRef.current,
@@ -279,27 +227,9 @@ export default function HomeContent({ variant = 'page' }) {
     }
   };
 
-  const persistCourseContinuation = (status) => {
-    if (!status || typeof status !== 'object') return;
-    const lessonNode = Array.isArray(status.nodes) ? status.nodes[0] : null;
-    const courseContext = status.courseContext || {};
-    api.setOnboardingCourseSession({
-      jobId,
-      anonUserId: api.getAnonUserId(),
-      previewCourseId: status.courseId || null,
-      previewLessonId: status.lessonId || lessonNode?.id || null,
-      previewLessonTitle: lessonNode?.title || dataRef.current.topic || null,
-      courseName: courseContext.title || dataRef.current.courseName || null,
-      collegeName: courseContext.college || dataRef.current.collegeName || null,
-      topic: dataRef.current.topic || null,
-      updatedAt: Date.now(),
-      source: 'onboarding',
-    });
-  };
-
   useEffect(() => {
     scrollToBottom();
-  }, [messages, topics, isThinking, isJobRunning]);
+  }, [messages, isThinking]);
 
   // Capture referral code from URL and store in localStorage
   useEffect(() => {
@@ -342,22 +272,6 @@ export default function HomeContent({ variant = 'page' }) {
       setMessages(restored);
     }
 
-    if (stored.data && typeof stored.data === 'object') {
-      updateData(stored.data);
-    }
-
-    if (Array.isArray(stored.topics)) {
-      setTopicsSafe(stored.topics);
-    }
-
-    if (typeof stored.showTopics === 'boolean') {
-      setShowTopics(stored.showTopics);
-    }
-
-    if (stored.jobId) {
-      setJobId(stored.jobId);
-    }
-
     if (stored.redirectUrl) {
       redirectUrlRef.current = stored.redirectUrl;
     }
@@ -376,14 +290,6 @@ export default function HomeContent({ variant = 'page' }) {
 
     if (stored.paymentLink) {
       setPaymentLink(stored.paymentLink);
-    }
-
-    if (typeof stored.hasGeneratedPreview === 'boolean') {
-      setHasGeneratedPreview(stored.hasGeneratedPreview);
-    }
-
-    if (stored.previewCourseId) {
-      setPreviewCourseId(stored.previewCourseId);
     }
 
     if (typeof stored.awaitingConfirmation === 'boolean') {
@@ -409,34 +315,6 @@ export default function HomeContent({ variant = 'page' }) {
       setTrialDeclinedSafe(stored.trialDeclined);
     }
 
-    if (stored.isJobRunning || stored.negotiationStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
-      setIsJobRunning(true);
-    }
-
-    if (!PREVIEW_ENABLED) {
-      const previewSteps = new Set([
-        NEGOTIATION_STEPS.ASK_COLLEGE,
-        NEGOTIATION_STEPS.ASK_COURSE,
-        NEGOTIATION_STEPS.WAIT_TOPICS,
-        NEGOTIATION_STEPS.SHOW_TOPICS,
-        NEGOTIATION_STEPS.GENERATING_PREVIEW,
-        NEGOTIATION_STEPS.PREVIEW_READY,
-      ]);
-      if (previewSteps.has(stored.negotiationStep)) {
-        setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-        setShowTopics(false);
-        setTopicsSafe([]);
-        setIsJobRunning(false);
-      }
-      if (stored.isJobRunning) {
-        setIsJobRunning(false);
-      }
-    }
-
-    if (PREVIEW_ENABLED && sessionOwnerRef.current && stored.negotiationStep === NEGOTIATION_STEPS.WAIT_TOPICS &&
-        (!Array.isArray(stored.topics) || stored.topics.length === 0)) {
-      fetchTopicsAndAsk();
-    }
   }, []);
 
   useEffect(() => {
@@ -471,16 +349,6 @@ export default function HomeContent({ variant = 'page' }) {
 
         if (status.paymentLink) {
           setPaymentLink(status.paymentLink);
-        }
-
-        if (PREVIEW_ENABLED) {
-          if (typeof status.previewGenerated === 'boolean') {
-            setHasGeneratedPreview(status.previewGenerated);
-          }
-
-          if (status.previewCourseId) {
-            setPreviewCourseId(status.previewCourseId);
-          }
         }
 
         if (Array.isArray(status.offerHistory)) {
@@ -585,16 +453,10 @@ export default function HomeContent({ variant = 'page' }) {
   }, [
     messages,
     negotiationStep,
-    topics,
-    showTopics,
-    jobId,
-    isJobRunning,
     hasStarted,
     currentPrice,
     confirmedPrice,
     paymentLink,
-    hasGeneratedPreview,
-    previewCourseId,
     awaitingConfirmation,
     offerHistory,
     trialStatus,
@@ -622,20 +484,6 @@ export default function HomeContent({ variant = 'page' }) {
     const message = { type: 'bot', text, id: Date.now() + Math.random() };
     appendMessage(message);
     scheduleNegotiationSync();
-    
-    lastBotTypeRef.current = type;
-    if (meta?.step === NEGOTIATION_STEPS.SHOW_TOPICS) {
-      setShowTopics(true);
-    } else if (meta?.step && meta.step !== NEGOTIATION_STEPS.SHOW_TOPICS) {
-      setShowTopics(false);
-    }
-    if (type === 'task' && awaitingTaskRef.current) {
-      awaitingTaskRef.current = false;
-      if (deferredChatRef.current) {
-        enqueueMessage(deferredChatRef.current);
-        deferredChatRef.current = null;
-      }
-    }
 
     if (meta?.final && !flowCompleteRef.current) {
       flowCompleteRef.current = true;
@@ -655,16 +503,8 @@ export default function HomeContent({ variant = 'page' }) {
     sessionOwnerRef.current = false;
     pendingRequestsRef.current = 0;
     setIsThinking(false);
-    setIsJobRunning(false);
     setIsRedirecting(false);
-    setShowTopics(false);
-    awaitingTaskRef.current = false;
-    deferredChatRef.current = null;
-    pendingBotRef.current = false;
     queueRef.current = [];
-    taskInFlightRef.current = false;
-    taskQueueRef.current = [];
-    topicsRequestInFlightRef.current = false;
     introInFlightRef.current = false;
     introQueueRef.current = [];
     setAwaitingConfirmationSafe(false);
@@ -744,15 +584,6 @@ export default function HomeContent({ variant = 'page' }) {
     setTrialDeclined(trialDeclinedRef.current);
   };
 
-  const updateData = (updates) => {
-    dataRef.current = { ...dataRef.current, ...updates };
-  };
-
-  const setTopicsSafe = (nextTopics) => {
-    topicsRef.current = Array.isArray(nextTopics) ? nextTopics : [];
-    setTopics(topicsRef.current);
-  };
-
   const setThinkingDelta = (delta) => {
     pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current + delta);
     setIsThinking(pendingRequestsRef.current > 0);
@@ -772,13 +603,7 @@ export default function HomeContent({ variant = 'page' }) {
     }
     pendingRequestsRef.current = 0;
     setIsThinking(false);
-    setIsJobRunning(false);
     setIsRedirecting(false);
-    setShowTopics(false);
-    awaitingTaskRef.current = false;
-    deferredChatRef.current = null;
-    pendingBotRef.current = false;
-    lastBotTypeRef.current = null;
     queueRef.current = [];
     setAwaitingConfirmationSafe(false);
     addBotMessage(message, 'chat');
@@ -789,18 +614,12 @@ export default function HomeContent({ variant = 'page' }) {
     messagesRef.current = [];
     setMessages([]);
     setInput('');
-    setShowTopics(false);
-    setTopicsSafe([]);
-    setJobId(null);
-    setIsJobRunning(false);
     setIsRedirecting(false);
     setHasStarted(false);
     setNegotiationStepSafe(NEGOTIATION_STEPS.NONE);
     setCurrentPrice(10000);
     setConfirmedPrice(null);
     setPaymentLink(null);
-    setHasGeneratedPreview(false);
-    setPreviewCourseId(null);
     setAwaitingConfirmationSafe(false);
     setOfferHistorySafe([]);
     setTrialStatusSafe('none');
@@ -809,23 +628,14 @@ export default function HomeContent({ variant = 'page' }) {
     setTrialDeclinedSafe(false);
     pendingRequestsRef.current = 0;
     setIsThinking(false);
-    awaitingTaskRef.current = false;
-    deferredChatRef.current = null;
-    taskInFlightRef.current = false;
-    taskQueueRef.current = [];
-    topicsRequestInFlightRef.current = false;
     introInFlightRef.current = false;
     introQueueRef.current = [];
-    pendingBotRef.current = false;
-    lastBotTypeRef.current = null;
     queueRef.current = [];
-    taskRequestIdRef.current = 0;
     redirectUrlRef.current = null;
     flowCompleteRef.current = false;
     pendingNegotiationResponsesRef.current = new Map();
     negotiationTurnCounterRef.current = 0;
     nextNegotiationTurnRef.current = 1;
-    dataRef.current = { collegeName: '', courseName: '', topic: '' };
     offerHistoryRef.current = [];
     trialStatusRef.current = 'none';
     trialOfferCentsRef.current = null;
@@ -858,7 +668,7 @@ export default function HomeContent({ variant = 'page' }) {
     void api.startNewOnboardingSession();
     setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
     requestIntroMessage(NEGOTIATION_STEPS.INTRO_REASON);
-    persistSession({ status: 'active', hasStarted: true, jobId: null, isJobRunning: false, showTopics: false });
+    persistSession({ status: 'active', hasStarted: true });
   };
 
   const shouldStartFreshSession = () => {
@@ -947,22 +757,7 @@ export default function HomeContent({ variant = 'page' }) {
 
   const enqueueMessage = (entry) => {
     if (!entry) return;
-    const queue = queueRef.current;
-    if (entry.type === 'task') {
-      const existingIndex = queue.findIndex((item) => item.type === 'task');
-      if (existingIndex !== -1) {
-        const existing = queue[existingIndex];
-        const existingOrder = STEP_ORDER[existing?.meta?.step] || 0;
-        const nextOrder = STEP_ORDER[entry?.meta?.step] || 0;
-        if (entry?.meta?.final || nextOrder >= existingOrder) {
-          queue[existingIndex] = entry;
-        }
-      } else {
-        queue.push(entry);
-      }
-    } else {
-      queue.push(entry);
-    }
+    queueRef.current.push(entry);
 
     flushQueue();
   };
@@ -1078,9 +873,8 @@ export default function HomeContent({ variant = 'page' }) {
       let fallback = INTRO_FALLBACKS.reason;
       let fallbackStep = step;
       if (wantsDemo) {
-        fallback =
-          "I can show you a trial after we get through pricing. For now, what's bringing you here?";
-        fallbackStep = NEGOTIATION_STEPS.INTRO_ASK_USEFUL;
+        fallback = INTRO_FALLBACKS.demo;
+        fallbackStep = NEGOTIATION_STEPS.NEGOTIATING;
       } else if (wantsHelp) {
         fallback =
           "Yeah, I can help with that. Kogno builds a focused plan from your syllabus—one of our backend folks used it for physics last quarter and pulled a 98 after a few hours a week. List price is $100/month. How does that sound?";
@@ -1160,7 +954,6 @@ export default function HomeContent({ variant = 'page' }) {
       }
     }
     const askConfirmation = Boolean(payload.askConfirmation);
-    const offerProveValue = Boolean(payload.offerProveValue) && PREVIEW_ENABLED;
     const offerTrial = Boolean(payload.offerTrial);
     const trialBlocked = !canOfferTrial();
     if (trialBlocked) {
@@ -1169,20 +962,6 @@ export default function HomeContent({ variant = 'page' }) {
         replyParts = filtered.length > 0 ? filtered : [getNegotiationFallback()];
       }
     }
-    const currentStep = negotiationStepRef.current;
-    const inTaskInput = [
-      NEGOTIATION_STEPS.ASK_COLLEGE,
-      NEGOTIATION_STEPS.ASK_COURSE,
-      NEGOTIATION_STEPS.SHOW_TOPICS,
-    ].includes(currentStep);
-    const inPreviewFlow = [
-      NEGOTIATION_STEPS.ASK_COLLEGE,
-      NEGOTIATION_STEPS.ASK_COURSE,
-      NEGOTIATION_STEPS.WAIT_TOPICS,
-      NEGOTIATION_STEPS.SHOW_TOPICS,
-      NEGOTIATION_STEPS.GENERATING_PREVIEW,
-      NEGOTIATION_STEPS.PREVIEW_READY,
-    ].includes(currentStep);
 
     if (suggestedPrice !== null) {
       const currentOffer = Number.isFinite(currentPrice) ? currentPrice : null;
@@ -1205,32 +984,17 @@ export default function HomeContent({ variant = 'page' }) {
     }
 
     if (offerTrial && canOfferTrial()) {
-      const didOffer = enterTrialOffer(suggestedPrice ?? currentPrice);
-      if (didOffer) {
-        return true;
-      }
+      enterTrialOffer(suggestedPrice ?? currentPrice);
       return true;
     }
 
-    if (offerProveValue && previewCourseId) {
-      openPreviewInNewTab(previewCourseId);
-      setHasGeneratedPreview(true);
-      if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(currentStep)) {
-        setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
-      }
-    } else if (offerProveValue && !hasGeneratedPreview && !inPreviewFlow) {
-      setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COLLEGE);
-      requestTaskMessage(NEGOTIATION_STEPS.ASK_COLLEGE);
-      return true;
-    } else if (askConfirmation && !inTaskInput) {
+    if (askConfirmation) {
       setAwaitingConfirmationSafe(true);
-      if (!inPreviewFlow) {
-        setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
-      }
-    } else if (!inTaskInput && !inPreviewFlow && negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
+      setNegotiationStepSafe(NEGOTIATION_STEPS.AWAITING_CONFIRMATION);
+    } else if (negotiationStepRef.current === NEGOTIATION_STEPS.AWAITING_CONFIRMATION) {
       setAwaitingConfirmationSafe(false);
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-    } else if (!inTaskInput && negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
+    } else if (negotiationStepRef.current === NEGOTIATION_STEPS.NONE) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
@@ -1278,14 +1042,12 @@ export default function HomeContent({ variant = 'page' }) {
         suggestedPrice = MIN_NEGOTIATION_PRICE_CENTS;
       }
       const askConfirmation = Boolean(response?.askConfirmation);
-      const offerProveValue = Boolean(response?.offerProveValue);
       const offerTrial = Boolean(response?.offerTrial);
 
       queueNegotiationResponse(turnId, {
         replyParts,
         suggestedPrice,
         askConfirmation,
-        offerProveValue,
         offerTrial,
       });
     } catch (error) {
@@ -1294,186 +1056,10 @@ export default function HomeContent({ variant = 'page' }) {
         replyParts: [getNegotiationFallback()],
         suggestedPrice: null,
         askConfirmation: false,
-        offerProveValue: false,
         offerTrial: false,
       });
     } finally {
       setThinkingDelta(-1);
-    }
-  };
-
-  const requestTaskMessage = async (step, meta = {}) => {
-    if (!PREVIEW_ENABLED) {
-      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-      enqueueReplyParts('chat', ["Let's stick with pricing for now."], {});
-      return;
-    }
-    if (taskInFlightRef.current) {
-      taskQueueRef.current.push({ step, meta });
-      return;
-    }
-    const key = `${step}::${meta?.latestUserMessage || ''}`;
-    const now = Date.now();
-    if (!meta?.latestUserMessage && key === lastTaskKeyRef.current && now - lastTaskTimestampRef.current < 1500) {
-      return;
-    }
-    lastTaskKeyRef.current = key;
-    lastTaskTimestampRef.current = now;
-    taskInFlightRef.current = true;
-    const requestId = taskRequestIdRef.current + 1;
-    taskRequestIdRef.current = requestId;
-    setThinkingDelta(1);
-    try {
-      const metaWithStep = { ...meta, step };
-      const response = await api.getChatStep({
-        mode: 'task',
-        messages: buildLlmMessages(),
-        task: {
-          step,
-          collegeName: dataRef.current.collegeName,
-          courseName: dataRef.current.courseName,
-          topic: dataRef.current.topic,
-          topics: topicsRef.current,
-          latestUserMessage: meta?.latestUserMessage || null,
-        },
-      });
-
-      if (requestId !== taskRequestIdRef.current) return;
-      const replyParts = extractReplyParts(response, FALLBACKS.task);
-      const fieldUpdates = response?.fieldUpdates || {};
-      const resolvedUpdates = {
-        collegeName: fieldUpdates?.collegeName || null,
-        courseName: fieldUpdates?.courseName || null,
-        topic: fieldUpdates?.topic || null,
-      };
-      if (resolvedUpdates.collegeName) {
-        updateData({ collegeName: resolvedUpdates.collegeName });
-      }
-      if (resolvedUpdates.courseName) {
-        updateData({ courseName: resolvedUpdates.courseName });
-      }
-      if (resolvedUpdates.topic) {
-        updateData({ topic: resolvedUpdates.topic });
-      }
-
-      const nextStep = response?.nextStep;
-      const validSteps = new Set(Object.values(NEGOTIATION_STEPS));
-      const resolvedStep = validSteps.has(nextStep) ? nextStep : step;
-      if (resolvedStep && resolvedStep !== negotiationStepRef.current) {
-        setNegotiationStepSafe(resolvedStep);
-      }
-
-      if (resolvedStep === NEGOTIATION_STEPS.WAIT_TOPICS) {
-        setShowTopics(false);
-        if (dataRef.current.courseName) {
-          fetchTopicsAndAsk();
-        }
-      }
-
-      if (resolvedStep === NEGOTIATION_STEPS.GENERATING_PREVIEW) {
-        setShowTopics(false);
-        const selectedTopic = resolvedUpdates.topic || dataRef.current.topic;
-        if (selectedTopic) {
-          startLessonGeneration(selectedTopic);
-        }
-      }
-
-      enqueueReplyParts('task', replyParts, { ...metaWithStep, step: resolvedStep });
-    } catch (error) {
-      if (handleLimitReached(error)) return;
-      enqueueReplyParts('task', [FALLBACKS.task], { ...meta, step });
-    } finally {
-      taskInFlightRef.current = false;
-      const next = taskQueueRef.current.shift();
-      if (next) {
-        setTimeout(() => {
-          requestTaskMessage(next.step, next.meta);
-        }, 0);
-      }
-      setThinkingDelta(-1);
-    }
-  };
-
-  const fetchTopicsAndAsk = async () => {
-    if (!PREVIEW_ENABLED) return;
-    if (!sessionOwnerRef.current) return;
-    if (topicsRequestInFlightRef.current) return;
-    topicsRequestInFlightRef.current = true;
-    setThinkingDelta(1);
-    try {
-      const topicRes = await api.getHardTopics({
-        collegeName: dataRef.current.collegeName,
-        courseName: dataRef.current.courseName,
-      });
-
-      const nextTopics = Array.isArray(topicRes?.topics) ? topicRes.topics : [];
-      if (nextTopics.length === 0) {
-        enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-        setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
-        setShowTopics(false);
-        setTopicsSafe([]);
-        return;
-      }
-
-      setTopicsSafe(nextTopics);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
-      requestTaskMessage(NEGOTIATION_STEPS.SHOW_TOPICS);
-    } catch (error) {
-      enqueueMessage({ type: 'task', text: FALLBACKS.topics });
-      setNegotiationStepSafe(NEGOTIATION_STEPS.ASK_COURSE);
-      setShowTopics(false);
-      setTopicsSafe([]);
-    } finally {
-      topicsRequestInFlightRef.current = false;
-      setThinkingDelta(-1);
-    }
-  };
-
-  const openPreviewInNewTab = (courseId, lessonId) => {
-    if (!courseId || typeof window === 'undefined') return false;
-    const params = new URLSearchParams({ preview: '1', negotiation: '1' });
-    if (lessonId) {
-      params.set('lesson', lessonId);
-    }
-    const url = `/courses/${courseId}?${params.toString()}`;
-    const popup = window.open(url, '_blank');
-    if (popup) {
-      try {
-        popup.opener = null;
-      } catch (error) {}
-      return true;
-    }
-    return false;
-  };
-
-  const startLessonGeneration = async (selectedTopic) => {
-    if (!sessionOwnerRef.current) return;
-    if (limitReachedRef.current) return;
-
-    if (previewCourseId && hasGeneratedPreview) {
-      openPreviewInNewTab(previewCourseId);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
-      return;
-    }
-
-    setIsJobRunning(true);
-    try {
-      const jobRes = await api.generateLesson({
-        collegeName: dataRef.current.collegeName,
-        courseName: dataRef.current.courseName,
-        topic: selectedTopic,
-      });
-      setJobId(jobRes.jobId);
-      persistSession({ jobId: jobRes.jobId, isJobRunning: true });
-    } catch (error) {
-      if (handleLimitReached(error)) {
-        setIsJobRunning(false);
-        return;
-      }
-      setIsJobRunning(false);
-      enqueueMessage({ type: 'task', text: FALLBACKS.generation });
-      setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
-      setShowTopics(true);
     }
   };
 
@@ -1497,10 +1083,8 @@ export default function HomeContent({ variant = 'page' }) {
         link ? 'Locked in. Use the payment link when you are ready.' : 'Locked in. You can complete payment any time.',
         'chat'
       );
-      pendingBotRef.current = false;
     } catch (error) {
       addBotMessage('I could not lock that price. Try again.', 'chat');
-      pendingBotRef.current = false;
     } finally {
       setThinkingDelta(-1);
     }
@@ -1637,30 +1221,6 @@ export default function HomeContent({ variant = 'page' }) {
       return;
     }
 
-    const isTaskInputStep = [
-      NEGOTIATION_STEPS.ASK_COLLEGE,
-      NEGOTIATION_STEPS.ASK_COURSE,
-      NEGOTIATION_STEPS.SHOW_TOPICS,
-    ].includes(currentStep);
-    const inPreviewFlow = [
-      NEGOTIATION_STEPS.ASK_COLLEGE,
-      NEGOTIATION_STEPS.ASK_COURSE,
-      NEGOTIATION_STEPS.WAIT_TOPICS,
-      NEGOTIATION_STEPS.SHOW_TOPICS,
-      NEGOTIATION_STEPS.GENERATING_PREVIEW,
-      NEGOTIATION_STEPS.PREVIEW_READY,
-    ].includes(currentStep);
-
-    if (isTaskInputStep) {
-      if (!PREVIEW_ENABLED) {
-        enqueueMessage({ type: 'chat', text: "Let's stick with pricing for now." });
-        setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-        return;
-      }
-      requestTaskMessage(currentStep, { latestUserMessage: trimmed });
-      return;
-    }
-
     const words = normalized.split(/\s+/).filter(Boolean);
     const isExplicitAccept = /\b(confirm|deal|i'?m in|im in|i accept|i'll take it|ill take it)\b/.test(normalized);
     const hasAffirmation = /\b(yes|yep|yup|ok|okay|sure|confirm|deal|in)\b/.test(normalized);
@@ -1682,17 +1242,13 @@ export default function HomeContent({ variant = 'page' }) {
       !wantsDifferentPrice &&
       (isExplicitAccept || (shortAffirmation && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
 
-    if (!isTaskInputStep && !inPreviewFlow && shouldConfirm) {
+    if (shouldConfirm) {
       await handleConfirmPrice(currentPrice);
       return;
     }
 
-    if (awaitingConfirmationRef.current && !isTaskInputStep && !inPreviewFlow) {
+    if (awaitingConfirmationRef.current) {
       setAwaitingConfirmationSafe(false);
-      setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
-    }
-
-    if (currentStep === NEGOTIATION_STEPS.PREVIEW_READY) {
       setNegotiationStepSafe(NEGOTIATION_STEPS.NEGOTIATING);
     }
 
@@ -1715,61 +1271,12 @@ export default function HomeContent({ variant = 'page' }) {
       void ensureOnboardingSession();
     }
 
-    pendingBotRef.current = true;
     flushQueue();
 
     await respondToUserMessage(trimmed);
   };
 
-  useEffect(() => {
-    if (!PREVIEW_ENABLED) return;
-    if (!jobId || !isJobRunning) return;
-    if (!sessionOwnerRef.current) return;
 
-    let pollInterval;
-
-    pollInterval = setInterval(async () => {
-      try {
-        const status = await api.getLessonStatus(jobId);
-        if (status.status === 'completed') {
-          clearInterval(pollInterval);
-          setIsJobRunning(false);
-          persistCourseContinuation(status);
-          setHasGeneratedPreview(true);
-          setPreviewCourseId(status.courseId || null);
-          const didOpen = openPreviewInNewTab(status.courseId, status.lessonId);
-          if (![NEGOTIATION_STEPS.PRICE_CONFIRMED, NEGOTIATION_STEPS.PAYMENT_COMPLETE].includes(negotiationStepRef.current)) {
-            setNegotiationStepSafe(NEGOTIATION_STEPS.PREVIEW_READY);
-          }
-          addBotMessage(
-            didOpen
-              ? 'Your preview lesson is here. I opened it in a new tab—come back when you are ready to keep negotiating.'
-              : 'Your preview lesson is here. Use the button below to open it, then come back to keep negotiating.',
-            'chat'
-          );
-          pendingBotRef.current = false;
-        } else if (status.status === 'failed') {
-          clearInterval(pollInterval);
-          setIsJobRunning(false);
-          addBotMessage(FALLBACKS.status, 'task');
-          pendingBotRef.current = false;
-          setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
-          setShowTopics(true);
-        }
-      } catch (error) {
-        clearInterval(pollInterval);
-        setIsJobRunning(false);
-        addBotMessage(FALLBACKS.status, 'task');
-        pendingBotRef.current = false;
-        setNegotiationStepSafe(NEGOTIATION_STEPS.SHOW_TOPICS);
-        setShowTopics(true);
-      }
-    }, 1500);
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [jobId, isJobRunning]);
 
   const showExpiredOfferActions =
     (trialStatus === 'expired' && trialExpiredAcknowledged) || trialStatus === 'expired_free';
@@ -1832,7 +1339,7 @@ export default function HomeContent({ variant = 'page' }) {
           </AnimatePresence>
 
           {/* Loading indicator */}
-          {(isThinking || isJobRunning) && (
+          {isThinking && (
             <div className="flex justify-start mb-4">
               <div className="bg-[var(--surface-1)] px-4 py-3 rounded-2xl rounded-tl-none border border-white/5">
                 <div className="flex space-x-1">
@@ -1913,22 +1420,6 @@ export default function HomeContent({ variant = 'page' }) {
             </motion.div>
           )}
 
-          {PREVIEW_ENABLED && hasGeneratedPreview && previewCourseId && !chatEnded && !limitReached && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-4"
-            >
-              <button
-                type="button"
-                onClick={() => openPreviewInNewTab(previewCourseId)}
-                className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium rounded-xl bg-[var(--primary)] text-white hover:opacity-90 transition-opacity"
-              >
-                Open preview lesson
-              </button>
-            </motion.div>
-          )}
-
           {negotiationStep === NEGOTIATION_STEPS.PRICE_CONFIRMED && paymentLink && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -1967,23 +1458,6 @@ export default function HomeContent({ variant = 'page' }) {
           )}
 
           {/* Topic chips when available */}
-          {showTopics && topics.length > 0 && !chatEnded && !limitReached && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-wrap gap-2 mb-4"
-            >
-              {topics.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => handleUserSend(t)}
-                  className="px-4 py-2 text-sm bg-[var(--surface-1)] hover:bg-[var(--primary)] hover:text-white border border-white/10 rounded-full transition-colors"
-                >
-                  {t}
-                </button>
-              ))}
-            </motion.div>
-          )}
         </div>
       </div>
 
