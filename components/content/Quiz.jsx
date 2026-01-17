@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock, normalizeLatex } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
@@ -8,6 +9,8 @@ import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
 
 const quizProgressCache = new Map();
+const quizProgressWriteTimers = new Map();
+const QUIZ_PROGRESS_WRITE_DEBOUNCE_MS = 500;
 
 function getQuizCacheKey(userId, courseId, lessonId) {
   if (!userId || !courseId || !lessonId) return null;
@@ -37,16 +40,30 @@ function writeQuizProgress(key, payload) {
   if (!key || !payload) return;
   quizProgressCache.set(key, payload);
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(payload));
-  } catch (error) {
-    console.error("Failed to write quiz progress cache:", error);
+  const existingTimer = quizProgressWriteTimers.get(key);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
   }
+  const timer = setTimeout(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(payload));
+    } catch (error) {
+      console.error("Failed to write quiz progress cache:", error);
+    } finally {
+      quizProgressWriteTimers.delete(key);
+    }
+  }, QUIZ_PROGRESS_WRITE_DEBOUNCE_MS);
+  quizProgressWriteTimers.set(key, timer);
 }
 
 function clearQuizProgress(key) {
   if (!key) return;
   quizProgressCache.delete(key);
+  const existingTimer = quizProgressWriteTimers.get(key);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    quizProgressWriteTimers.delete(key);
+  }
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(key);
@@ -519,7 +536,7 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
  * reveals whether it is correct (when the `correct` flag is provided) and
  * surfaces any rich feedback block supplied on the option.
  */
-export default function Quiz({ 
+export default function Quiz({
   questions, 
   question, 
   options = [], 
@@ -531,6 +548,7 @@ export default function Quiz({
   onQuizCompleted,
   isPreview = false,
 }) {
+  const pathname = usePathname();
   const normalizedQuestions = useMemo(() => {
     if (questions && typeof questions === "object" && !Array.isArray(questions)) {
       const sequenceLike = Object.entries(questions)
@@ -602,6 +620,12 @@ export default function Quiz({
   const [flaggedQuestions, setFlaggedQuestions] = useState({});
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    quizProgressCache.clear();
+    quizProgressWriteTimers.forEach((timer) => clearTimeout(timer));
+    quizProgressWriteTimers.clear();
+  }, [pathname]);
 
   // Track the last notification sent to parent to prevent duplicate calls
   const lastNotificationRef = useRef(null);

@@ -10,17 +10,20 @@ import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
 import { Analytics } from "@vercel/analytics/react";
+import { defaultMetadata } from "@/lib/seo/config";
+import { JsonLd, MultiJsonLd } from "@/components/seo/JsonLd";
+import { generateOrganizationSchema, generateSoftwareApplicationSchema } from "@/lib/seo/structured-data";
 
 
 const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
 });
 
 export const metadata = {
-  title: "Kogno",
-  description: "Learn Smarter, Not Harder",
+  ...defaultMetadata,
 };
 
 const mathJaxConfig = {
@@ -62,6 +65,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className="theme-light">
       <body className={`${nunito.variable} antialiased`}>
+        <MultiJsonLd
+          schemas={[
+            generateOrganizationSchema(),
+            generateSoftwareApplicationSchema(),
+          ]}
+        />
         <MathJaxContext config={mathJaxConfig}>
           <ThemeProvider>
             <CodeEditorSettingsProvider>

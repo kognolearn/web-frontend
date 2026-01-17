@@ -6,6 +6,7 @@ import {
   interpolateMessage,
   calculateProgress,
 } from "@/components/courses/create/conversationFlow";
+import { authFetch } from "@/lib/api";
 
 /**
  * Generate a unique ID for messages
@@ -30,6 +31,8 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [contentText, setContentText] = useState(""); // Text content for combined input
+  const [parseChatAttempts, setParseChatAttempts] = useState(0); // Track retry attempts for course chat parsing
+  const [isParsing, setIsParsing] = useState(false); // Track parsing state
   const messagesEndRef = useRef(null);
   const hasInitialized = useRef(false);
 
@@ -261,6 +264,115 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
 
       const { files = [] } = options;
 
+      // Handle follow-up college input after course was extracted
+      if (previousResponses.needsCollege && flowState.courseTitle && !flowState.collegeName) {
+        // Add user response message
+        addUserResponse(value, displayText, {
+          files,
+          stepId: currentStep.id,
+        });
+
+        // Set the college name and advance
+        flowState.setCollegeName(value);
+        const stateOverrides = {
+          courseTitle: flowState.courseTitle,
+          collegeName: value,
+        };
+
+        // Clear the needsCollege flag
+        setPreviousResponses(prev => {
+          const { needsCollege, ...rest } = prev;
+          return rest;
+        });
+
+        advanceToNextStep(stateOverrides);
+        return;
+      }
+
+      // Handle course_chat input type with LLM parsing
+      if (currentStep.inputType === 'course_chat' || currentStep.parseHandler === 'courseChatParser') {
+        // Add user response message
+        addUserResponse(value, displayText, {
+          files,
+          stepId: currentStep.id,
+        });
+
+        setIsParsing(true);
+
+        try {
+          // Call the parse API to extract course name and college name
+          const response = await authFetch('/api/courses/parse-chat-input', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: value,
+              savedCollege: state.savedCollege || null,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.success && result.courseName) {
+            // Successfully extracted course name (and optionally college)
+            flowState.setCourseTitle(result.courseName);
+            const stateOverrides = { courseTitle: result.courseName };
+
+            if (result.collegeName) {
+              flowState.setCollegeName(result.collegeName);
+              stateOverrides.collegeName = result.collegeName;
+            }
+
+            // Reset attempts on success
+            setParseChatAttempts(0);
+            setIsParsing(false);
+
+            // If we have both, advance to next step
+            if (result.courseName && result.collegeName) {
+              advanceToNextStep(stateOverrides);
+            } else if (result.courseName && !result.collegeName) {
+              // Got course but not college - ask for college specifically
+              await addKognoMessage(
+                `Got it, ${result.courseName}! Which college or university is this course at?`,
+                {
+                  id: 'ask_college',
+                  inputType: 'text',
+                  field: 'collegeName',
+                  placeholder: 'e.g., Stanford, MIT, UCLA',
+                }
+              );
+              // Update step to handle college input
+              setPreviousResponses(prev => ({
+                ...prev,
+                needsCollege: true,
+              }));
+            }
+          } else {
+            // Parsing failed - show retry message
+            const newAttempts = parseChatAttempts + 1;
+            setParseChatAttempts(newAttempts);
+            setIsParsing(false);
+
+            let retryMessage;
+            if (newAttempts === 1) {
+              retryMessage = "Hmm, I couldn't quite catch that! Could you tell me again - what's the course name (like 'Physics 101' or 'Intro to Biology') and which college/university is it at?";
+            } else {
+              retryMessage = "I'm still having trouble understanding. Please type the course name and college separately, like: 'Physics 101' and 'Stanford University'";
+            }
+
+            await addKognoMessage(retryMessage, currentStep);
+          }
+        } catch (error) {
+          console.error('[useCourseConversation] Parse chat input error:', error);
+          setIsParsing(false);
+          await addKognoMessage(
+            "Something went wrong on my end. Could you try again?",
+            currentStep
+          );
+        }
+
+        return; // Exit early - we've handled this case
+      }
+
       // Add user response message
       addUserResponse(value, displayText, {
         files,
@@ -336,7 +448,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         advanceToNextStep(stateOverrides);
       }
     },
-    [currentStep, flowState, addUserResponse, advanceToNextStep]
+    [currentStep, flowState, addUserResponse, advanceToNextStep, addKognoMessage, state, parseChatAttempts, previousResponses]
   );
 
   // Handle skip button
@@ -579,6 +691,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     currentStep,
     currentStepIndex,
     isKognoTyping,
+    isParsing,
     progress,
     pendingAction,
 

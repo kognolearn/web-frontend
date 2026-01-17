@@ -26,6 +26,7 @@ export function OnboardingProvider({ children }) {
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [tooltipQueue, setTooltipQueue] = useState([]);
   const lastTooltipTime = useRef(0);
+  const timeoutIdsRef = useRef(new Set());
   
   // Use refs to avoid stale closures
   const activeTooltipRef = useRef(null);
@@ -39,6 +40,28 @@ export function OnboardingProvider({ children }) {
   useEffect(() => {
     tooltipQueueRef.current = tooltipQueue;
   }, [tooltipQueue]);
+
+  const scheduleTimeout = useCallback((fn, delay) => {
+    const id = setTimeout(() => {
+      timeoutIdsRef.current.delete(id);
+      fn();
+    }, delay);
+    timeoutIdsRef.current.add(id);
+    return id;
+  }, []);
+
+  const clearScheduledTimeout = useCallback((id) => {
+    if (!id) return;
+    clearTimeout(id);
+    timeoutIdsRef.current.delete(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      timeoutIdsRef.current.forEach((id) => clearTimeout(id));
+      timeoutIdsRef.current.clear();
+    };
+  }, []);
 
   // Load dismissed tooltips from localStorage
   useEffect(() => {
@@ -87,7 +110,7 @@ export function OnboardingProvider({ children }) {
     
     if (timeSinceLastTooltip < MIN_TIME_BETWEEN_TOOLTIPS) {
       // Schedule retry after remaining time
-      setTimeout(processQueue, MIN_TIME_BETWEEN_TOOLTIPS - timeSinceLastTooltip + 50);
+      scheduleTimeout(processQueue, MIN_TIME_BETWEEN_TOOLTIPS - timeSinceLastTooltip + 50);
       return;
     }
     
@@ -105,8 +128,8 @@ export function OnboardingProvider({ children }) {
   // Process queue when active tooltip is cleared or queue changes
   useEffect(() => {
     if (!activeTooltip && tooltipQueue.length > 0 && isLoaded) {
-      const timer = setTimeout(processQueue, 100);
-      return () => clearTimeout(timer);
+      const timer = scheduleTimeout(processQueue, 100);
+      return () => clearScheduledTimeout(timer);
     }
   }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue]);
 
@@ -122,8 +145,8 @@ export function OnboardingProvider({ children }) {
     });
     
     // Trigger queue processing after a short delay
-    setTimeout(processQueue, 50);
-  }, [processQueue]);
+    scheduleTimeout(processQueue, 50);
+  }, [processQueue, scheduleTimeout]);
 
   // Release a tooltip (either dismissed or component unmounted)
   const releaseTooltip = useCallback((tooltipId) => {

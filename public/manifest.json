@@ -1,0 +1,21 @@
+{
+  "name": "Kogno",
+  "short_name": "Kogno",
+  "description": "Learn Smarter, Not Harder. AI-powered courses, practice exams, and study materials.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/kogno_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "en-US",
+  "dir": "ltr"
+}

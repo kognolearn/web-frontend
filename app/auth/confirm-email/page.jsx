@@ -9,55 +9,72 @@ function ConfirmEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const email = searchParams.get("email");
-  const [checking, setChecking] = useState(false);
-  const [checkCount, setCheckCount] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    // Poll for email confirmation every 3 seconds
-    const checkEmailConfirmation = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        // Check if user exists and email is confirmed
-        if (user && user.email_confirmed_at) {
-          setChecking(true);
-          // Email is confirmed, redirect after a brief confirmation
+    // Listen for auth state changes (fires when user confirms email and session is established)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user?.email_confirmed_at) {
+          setConfirmed(true);
           setTimeout(() => {
             router.push("/");
-          }, 1000);
+          }, 1500);
         }
-      } catch (error) {
-        console.error("Error checking email confirmation:", error);
+      }
+    );
+
+    // Also check if already confirmed on mount
+    const checkInitialState = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email_confirmed_at) {
+        setConfirmed(true);
+        setTimeout(() => {
+          router.push("/");
+        }, 1500);
       }
     };
+    checkInitialState();
 
-    // Check immediately on mount
-    checkEmailConfirmation();
-
-    // Then check every 3 seconds, up to 60 times (3 minutes)
-    const interval = setInterval(() => {
-      setCheckCount((prev) => {
-        if (prev >= 60) {
-          clearInterval(interval);
-          return prev;
-        }
-        checkEmailConfirmation();
-        return prev + 1;
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [router]);
 
-  if (checking) {
+  if (confirmed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
-        <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
+      <div className="relative min-h-screen flex items-center justify-center bg-[var(--background)] px-4 py-12 overflow-hidden">
+        {/* Background effects */}
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
+            style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }}
+          />
+          <div
+            className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl"
+            style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+              backgroundSize: '60px 60px'
+            }}
+          />
+        </div>
+
+        <div className="relative z-10 w-full max-w-md">
+          <div className="text-center mb-8">
+            <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+              Kogno
+            </Link>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/80 backdrop-blur-xl p-8 shadow-2xl">
             <div className="text-center">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20 mb-6">
                 <svg
-                  className="h-8 w-8 text-primary"
+                  className="h-8 w-8 text-green-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -70,12 +87,18 @@ function ConfirmEmailContent() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-2">
+              <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2">
                 Email Confirmed!
               </h1>
               <p className="text-sm text-[var(--muted-foreground)]">
                 Redirecting you to get started...
               </p>
+              <div className="mt-4 flex justify-center">
+                <svg className="animate-spin h-5 w-5 text-[var(--primary)]" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
@@ -84,78 +107,100 @@ function ConfirmEmailContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
-      <div className="w-full max-w-md">
-        {/* Icon */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <svg
-              className="w-8 h-8 text-[var(--foreground)]"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-semibold text-[var(--foreground)] mb-2">
-            Check Your Email
-          </h1>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            We've sent a confirmation link to
-          </p>
-          {email && (
-            <p className="mt-1 font-medium text-[var(--foreground)]">
-              {email}
-            </p>
-          )}
+    <div className="relative min-h-screen flex items-center justify-center bg-[var(--background)] px-4 py-12 overflow-hidden">
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }}
+        />
+        <div
+          className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+            backgroundSize: '60px 60px'
+          }}
+        />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+            Kogno
+          </Link>
         </div>
 
-        {/* Content Card */}
-        <div className="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-1)] p-8 shadow-sm">
-          <div className="space-y-4 text-sm text-[var(--muted-foreground)]">
-            <p>
-              Please check your email and click the confirmation link to activate your account.
+        <div className="rounded-2xl border border-white/10 dark:border-white/5 bg-[var(--surface-1)]/80 backdrop-blur-xl p-8 shadow-2xl">
+          {/* Email Icon */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--primary)]/10 mb-4">
+              <svg
+                className="w-8 h-8 text-[var(--primary)]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2">
+              Check your email
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              We sent a confirmation link to
             </p>
-            <p>
-              After clicking the link, <strong className="text-[var(--foreground)]">return to this page</strong> and we'll automatically redirect you to get started.
-            </p>
-            <p className="text-xs italic text-[var(--muted-foreground)]">
-              ⏱️ Checking for confirmation automatically...
-            </p>
-            
-            <div className="mt-6 rounded-lg border border-[var(--border-muted)] bg-[var(--surface-2)] p-4">
-              <p className="text-xs font-medium text-[var(--muted-foreground-strong)] mb-2">
-                Didn't receive the email?
+            {email && (
+              <p className="mt-1 font-semibold text-[var(--foreground)]">
+                {email}
               </p>
-              <ul className="list-disc list-inside space-y-1 text-xs text-[var(--muted-foreground)]">
-                <li>Check your spam or junk folder</li>
-                <li>Make sure you entered the correct email</li>
-                <li>Wait a few minutes and check again</li>
-                <li>The link will expire in 24 hours</li>
+            )}
+          </div>
+
+          {/* Instructions */}
+          <div className="space-y-4 text-sm text-[var(--muted-foreground)]">
+            <p className="text-center">
+              Click the link in the email to verify your account. This page will automatically update once confirmed.
+            </p>
+
+            <div className="flex items-center justify-center gap-2 text-xs text-[var(--muted-foreground)]/70">
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Waiting for confirmation...</span>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 p-4">
+              <p className="text-xs font-medium text-[var(--foreground)] mb-2">
+                Didn't get the email?
+              </p>
+              <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
+                <li>• Check your spam or junk folder</li>
+                <li>• Make sure you entered the correct email</li>
+                <li>• The link expires in 24 hours</li>
               </ul>
             </div>
+          </div>
 
-            <div className="pt-4">
-              <Link
-                href="/auth/create-account"
-                className="text-sm font-medium text-[var(--foreground)] transition-colors hover:text-primary"
-              >
-                ← Back to Create Account
-              </Link>
-            </div>
+          <div className="mt-6 pt-6 border-t border-white/10 dark:border-white/5 text-center">
+            <Link
+              href="/auth/create-account"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              ← Back to Create Account
+            </Link>
           </div>
         </div>
-
-        {/* Help Text */}
-        <p className="text-center text-xs text-[var(--muted-foreground)] mt-6">
-          Need help? Contact our support team
-        </p>
       </div>
     </div>
   );
@@ -165,7 +210,10 @@ export default function ConfirmEmailPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)] text-[var(--muted-foreground)] transition-colors">
-        <div>Loading...</div>
+        <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
     }>
       <ConfirmEmailContent />

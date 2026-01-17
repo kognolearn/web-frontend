@@ -82,7 +82,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [conversation.messages, conversation.isKognoTyping]);
+  }, [conversation.messages, conversation.isKognoTyping, conversation.isParsing]);
 
   // Handle back navigation
   const handleBack = () => {
@@ -127,6 +127,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
   const renderInputArea = () => {
     if (!conversation.currentStep) return null;
     if (conversation.isKognoTyping) return null;
+    if (conversation.isParsing) return null;
     if (conversation.pendingAction) return null;
 
     const { inputType, placeholder, confirmPlaceholder, accept, skippable, skipLabel, confirmLabel, getDefaultValue } = conversation.currentStep;
@@ -155,7 +156,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             inputType="text"
             placeholder={placeholder || "Tell me what to change..."}
             onSubmit={(value) => conversation.handleSubmitResponse(value, value)}
-            disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+            disabled={flowState.isTopicsLoading || flowState.courseGenerating || conversation.isParsing}
           />
 
           {/* Action buttons */}
@@ -211,7 +212,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
           <CourseInputRenderer
             inputType="content_with_attachments"
             placeholder={placeholder}
-            disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+            disabled={flowState.isTopicsLoading || flowState.courseGenerating || conversation.isParsing}
             contentText={conversation.contentText}
             onContentTextChange={conversation.handleContentTextChange}
             files={conversation.currentFiles}
@@ -249,7 +250,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
           confirmPlaceholder={confirmPlaceholder}
           defaultValue={defaultValue}
           onSubmit={handleInputSubmit}
-          disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+          disabled={flowState.isTopicsLoading || flowState.courseGenerating || conversation.isParsing}
           files={conversation.currentFiles}
           onFileChange={conversation.handleFileUpload}
           onFileRemove={conversation.handleFileRemove}
@@ -389,7 +390,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         })}
 
         {/* Typing indicator */}
-        {conversation.isKognoTyping && (
+        {(conversation.isKognoTyping || conversation.isParsing) && (
           <KognoMessage content="" isTyping={true} />
         )}
 
