@@ -37,6 +37,7 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
     if (!userId) {
       return;
     }
+    retryAttemptRef.current = 0;
 
     const cleanupChannel = () => {
       if (channelRef.current) {

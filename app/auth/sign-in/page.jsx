@@ -6,6 +6,9 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import { getDownloadRedirectPath } from "@/lib/featureFlags";
 
+// Force dynamic rendering due to auth check
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Sign In | Kogno",
   description: "Access your courses and continue learning",
