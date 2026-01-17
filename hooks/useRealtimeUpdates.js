@@ -15,7 +15,8 @@ import { supabase } from '@/lib/supabase/client';
  * @param {Function} callbacks.onModuleComplete - Called when a module finishes generating
  */
 export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete } = {}) {
-  const channelRef = useRef(null);
+  const jobsChannelRef = useRef(null);
+  const coursesChannelRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const retryAttemptRef = useRef(0);
   const callbacksRef = useRef({ onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete });
@@ -40,9 +41,13 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
     retryAttemptRef.current = 0;
 
     const cleanupChannel = () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+      if (jobsChannelRef.current) {
+        supabase.removeChannel(jobsChannelRef.current);
+        jobsChannelRef.current = null;
+      }
+      if (coursesChannelRef.current) {
+        supabase.removeChannel(coursesChannelRef.current);
+        coursesChannelRef.current = null;
       }
     };
 
@@ -60,8 +65,8 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
     const setupChannel = () => {
       cleanupChannel();
 
-      const channel = supabase
-        .channel(`user:${userId}:realtime`)
+      const jobsChannel = supabase
+        .channel(`user:${userId}:jobs`)
         .on('broadcast', { event: 'job_update' }, ({ payload }) => {
           logDebug('[realtime] Job update:', payload);
           callbacksRef.current.onJobUpdate?.(payload);
@@ -70,6 +75,17 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
           logDebug('[realtime] Job progress:', payload);
           callbacksRef.current.onJobProgress?.(payload);
         })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            retryAttemptRef.current = 0;
+            logDebug('[realtime] Subscribed to job updates');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            scheduleReconnect();
+          }
+        });
+
+      const coursesChannel = supabase
+        .channel(`user:${userId}:courses`)
         .on('broadcast', { event: 'course_update' }, ({ payload }) => {
           logDebug('[realtime] Course update:', payload);
           callbacksRef.current.onCourseUpdate?.(payload);
@@ -99,13 +115,14 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             retryAttemptRef.current = 0;
-            logDebug('[realtime] Subscribed to updates');
+            logDebug('[realtime] Subscribed to course updates');
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             scheduleReconnect();
           }
         });
 
-      channelRef.current = channel;
+      jobsChannelRef.current = jobsChannel;
+      coursesChannelRef.current = coursesChannel;
     };
 
     setupChannel();

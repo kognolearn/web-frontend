@@ -172,6 +172,7 @@ export default function CoursePage() {
   });
   const [showPreviewCompletionModal, setShowPreviewCompletionModal] = useState(false);
   const previewCompletionShownRef = useRef(false);
+  const [hasStartedStudying, setHasStartedStudying] = useState(false);
   const [sharedChatState, setSharedChatState] = useState(() => {
     const initialChat = createBlankChat();
     return {
@@ -207,6 +208,7 @@ export default function CoursePage() {
   
   // Track current lesson ID from CourseTabContent for smart plan updates
   const currentLessonIdRef = useRef(null);
+  const refetchStudyPlanRef = useRef(null);
 
   // Subscribe to real-time module completion updates during generation
   const handleModuleComplete = useCallback((payload) => {
@@ -239,14 +241,29 @@ export default function CoursePage() {
       };
     });
 
+    // Refresh study plan so newly-ready lessons can be opened immediately
+    refetchStudyPlanRef.current?.()?.catch?.(() => {});
+
     // When all modules complete, refresh the course data
     if (payload.modulesComplete >= payload.totalModules) {
       setCourseStatus('ready');
     }
   }, [courseId]);
 
+  const handleCourseUpdate = useCallback((payload) => {
+    if (!payload) return;
+    if (payload.courseId && payload.courseId !== courseId) return;
+    if (payload.status) {
+      setCourseStatus(payload.status);
+    }
+    if (payload.title) {
+      setCourseName(payload.title);
+    }
+  }, [courseId]);
+
   useRealtimeUpdates(userId, {
     onModuleComplete: handleModuleComplete,
+    onCourseUpdate: handleCourseUpdate,
   });
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
@@ -587,6 +604,7 @@ export default function CoursePage() {
             previewCourse.name ||
             previewCourse.courseName;
           if (title) setCourseName(title);
+          if (previewCourse.status) setCourseStatus(previewCourse.status);
 
           const metaMode = normalizeCourseMode(
             previewCourse.metadata?.mode ||
@@ -625,6 +643,7 @@ export default function CoursePage() {
               if (courseMeta) {
                 const title = courseMeta.title || courseMeta.course_title || courseMeta.name || courseMeta.courseName;
                 if (title) setCourseName(title);
+                if (courseMeta.status) setCourseStatus(courseMeta.status);
 
                 const metaMode = normalizeCourseMode(
                   courseMeta.mode || courseMeta.course_mode || courseMeta.study_mode || courseMeta.studyMode
@@ -753,10 +772,50 @@ export default function CoursePage() {
         
         return { ...newPlan, modules: newModules };
       });
+      return newPlan;
     } catch (e) {
       console.error('Failed to refetch study plan:', e);
     }
   }, [userId, courseId, courseMode, isPreviewMode]);
+
+  useEffect(() => {
+    refetchStudyPlanRef.current = refetchStudyPlan;
+  }, [refetchStudyPlan]);
+
+  const findFirstLessonInModule = useCallback((plan, moduleTitle) => {
+    if (!plan?.modules?.length) return null;
+    const targetModule = plan.modules.find((mod) => mod.title === moduleTitle);
+    if (!targetModule?.lessons?.length) return null;
+    return targetModule.lessons.find((lesson) => !lesson.is_locked) || targetModule.lessons[0] || null;
+  }, []);
+
+  const handleStartStudying = useCallback(async (module) => {
+    const moduleTitle = module?.moduleName || module?.moduleRef;
+    if (!moduleTitle) return;
+
+    let plan = studyPlan;
+    if (!plan) {
+      plan = await refetchStudyPlan();
+    }
+
+    const lesson = findFirstLessonInModule(plan, moduleTitle);
+    if (!lesson) return;
+
+    setHasStartedStudying(true);
+
+    setTabs((prev) => prev.map((tab) => {
+      if (tab.type !== 'course') return tab;
+      return { ...tab, selectedLessonId: lesson.id, selectedContentType: 'reading' };
+    }));
+
+    const activeCourseTab = tabs.find((tab) => tab.id === activeTabId && tab.type === 'course');
+    const fallbackCourseTab = tabs.find((tab) => tab.type === 'course');
+    const targetTabId = activeCourseTab?.id || fallbackCourseTab?.id || activeTabId;
+    setActiveTabId(targetTabId);
+  }, [studyPlan, refetchStudyPlan, findFirstLessonInModule, tabs, activeTabId]);
+
+  const isGeneratingCourse = courseStatus === 'pending' || courseStatus === 'generating';
+  const shouldShowGeneratingView = isGeneratingCourse && !hasStartedStudying && !isOnboardingPreview;
 
   useEffect(() => {
     if (!isOnboardingPreview || !studyPlan?.modules) return;
@@ -1167,7 +1226,7 @@ export default function CoursePage() {
       )}
 
       {/* Tab Bar */}
-      {!isMobileView && !isOnboardingPreview && (
+      {!isMobileView && !isOnboardingPreview && !shouldShowGeneratingView && (
         <div 
           className={`flex items-center bg-[var(--surface-1)] border-b px-2 pt-2 gap-2 z-50 transition-all duration-200 overflow-visible ${
             isExternalChatHovering 
@@ -1465,107 +1524,116 @@ export default function CoursePage() {
           </AnimatePresence>
         )}
 
-        {renderedTabs.map(tab => {
-          const isTabActive = tab.id === effectiveActiveTabId;
-          const renderTabContent = () => {
-            switch (tab.type) {
-              case 'course':
-                return (
-                  <CourseTabContent
-                    isActive={isTabActive}
-                    courseId={courseId}
-                    userId={userId}
-                    courseName={courseName}
-                    studyPlan={studyPlan}
-                    loading={loading}
-                    error={error}
-                    refetchStudyPlan={refetchStudyPlan}
-                    secondsRemaining={secondsRemaining}
-                    handleTimerUpdate={handleTimerUpdate}
-                    isTimerPaused={isTimerPaused}
-                    onPauseToggle={toggleTimerPause}
-                    initialLessonId={tab.selectedLessonId}
-                    initialContentType={tab.selectedContentType}
-                    onViewStateChange={getTabViewStateChangeHandler(tab.id)}
-                    onTabTitleChange={getTabTitleChangeHandler(tab.id)}
-                    onCurrentLessonChange={handleCurrentLessonChange}
-                    isSettingsModalOpen={isSettingsModalOpen}
-                    setIsSettingsModalOpen={setIsSettingsModalOpen}
-                    isTimerControlsOpen={isTimerControlsOpen}
-                    setIsTimerControlsOpen={setIsTimerControlsOpen}
-                    isEditCourseModalOpen={isEditCourseModalOpen}
-                    setIsEditCourseModalOpen={setIsEditCourseModalOpen}
-                    onOpenChatTab={handleOpenChatTab}
-                    onOpenDiscussionTab={() => addTab('discussion')}
-                    onOpenMessagesTab={() => addTab('messages')}
-                    onChatTabReturn={handleChatTabReturn}
-                    chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
-                    onChatOpenRequestHandled={() => setChatOpenRequest(null)}
-                    hasHiddenContent={hasHiddenContent}
-                    onHiddenContentClick={() => setIsHiddenContentModalOpen(true)}
-                    sharedChatState={sharedChatState}
-                    onSharedChatStateChange={handleSharedChatStateChange}
-                    activeChatId={tab.activeChatId}
-                    onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
-                    focusTimerRef={focusTimerRef}
-                    focusTimerState={focusTimerState}
-                    isDeepStudyCourse={isDeepStudyCourse}
-                    isOnboardingPreview={isOnboardingPreview}
-                  />
-                );
-              case 'chat':
-                return (
-                  <ChatTabContent
-                    isActive={isTabActive}
-                    courseId={courseId}
-                    courseName={courseName}
-                    studyPlan={studyPlan}
-                    onClose={() => closeTab(null, tab.id)}
-                    sharedChatState={sharedChatState}
-                    onSharedChatStateChange={handleSharedChatStateChange}
-                    initialChatId={tab.activeChatId}
-                    onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
-                  />
-                );
-              case 'discussion':
-                return (
-                  <DiscussionTabContent
-                    isActive={isTabActive}
-                    courseId={courseId}
-                    userId={userId}
-                    onClose={() => closeTab(null, tab.id)}
-                    onOpenMessagesTab={() => addTab('messages')}
-                    initialPostId={tab.postId}
-                  />
-                );
-              case 'messages':
-                return (
-                  <MessagesTabContent
-                    isActive={isTabActive}
-                    courseId={courseId}
-                    userId={userId}
-                    onClose={() => closeTab(null, tab.id)}
-                    onOpenDiscussionTab={() => addTab('discussion')}
-                    initialConversationId={tab.conversationId}
-                  />
-                );
-              default:
-                return null;
-            }
-          };
-          return (
-          <div
-            key={tab.id}
-            className="absolute inset-0 w-full h-full"
-            style={{
-              display: isTabActive ? 'block' : 'none',
-              zIndex: isTabActive ? 10 : 0
-            }}
-          >
-            {renderTabContent()}
-          </div>
-        );
-        })}
+        {shouldShowGeneratingView ? (
+          <CourseGeneratingView
+            courseId={courseId}
+            courseName={courseName}
+            generationProgress={generationProgress}
+            onStartStudying={handleStartStudying}
+          />
+        ) : (
+          renderedTabs.map(tab => {
+            const isTabActive = tab.id === effectiveActiveTabId;
+            const renderTabContent = () => {
+              switch (tab.type) {
+                case 'course':
+                  return (
+                    <CourseTabContent
+                      isActive={isTabActive}
+                      courseId={courseId}
+                      userId={userId}
+                      courseName={courseName}
+                      studyPlan={studyPlan}
+                      loading={loading}
+                      error={error}
+                      refetchStudyPlan={refetchStudyPlan}
+                      secondsRemaining={secondsRemaining}
+                      handleTimerUpdate={handleTimerUpdate}
+                      isTimerPaused={isTimerPaused}
+                      onPauseToggle={toggleTimerPause}
+                      initialLessonId={tab.selectedLessonId}
+                      initialContentType={tab.selectedContentType}
+                      onViewStateChange={getTabViewStateChangeHandler(tab.id)}
+                      onTabTitleChange={getTabTitleChangeHandler(tab.id)}
+                      onCurrentLessonChange={handleCurrentLessonChange}
+                      isSettingsModalOpen={isSettingsModalOpen}
+                      setIsSettingsModalOpen={setIsSettingsModalOpen}
+                      isTimerControlsOpen={isTimerControlsOpen}
+                      setIsTimerControlsOpen={setIsTimerControlsOpen}
+                      isEditCourseModalOpen={isEditCourseModalOpen}
+                      setIsEditCourseModalOpen={setIsEditCourseModalOpen}
+                      onOpenChatTab={handleOpenChatTab}
+                      onOpenDiscussionTab={() => addTab('discussion')}
+                      onOpenMessagesTab={() => addTab('messages')}
+                      onChatTabReturn={handleChatTabReturn}
+                      chatOpenRequest={chatOpenRequest && chatOpenRequest.tabId === tab.id ? chatOpenRequest : null}
+                      onChatOpenRequestHandled={() => setChatOpenRequest(null)}
+                      hasHiddenContent={hasHiddenContent}
+                      onHiddenContentClick={() => setIsHiddenContentModalOpen(true)}
+                      sharedChatState={sharedChatState}
+                      onSharedChatStateChange={handleSharedChatStateChange}
+                      activeChatId={tab.activeChatId}
+                      onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
+                      focusTimerRef={focusTimerRef}
+                      focusTimerState={focusTimerState}
+                      isDeepStudyCourse={isDeepStudyCourse}
+                      isOnboardingPreview={isOnboardingPreview}
+                    />
+                  );
+                case 'chat':
+                  return (
+                    <ChatTabContent
+                      isActive={isTabActive}
+                      courseId={courseId}
+                      courseName={courseName}
+                      studyPlan={studyPlan}
+                      onClose={() => closeTab(null, tab.id)}
+                      sharedChatState={sharedChatState}
+                      onSharedChatStateChange={handleSharedChatStateChange}
+                      initialChatId={tab.activeChatId}
+                      onActiveChatIdChange={getTabActiveChatChangeHandler(tab.id)}
+                    />
+                  );
+                case 'discussion':
+                  return (
+                    <DiscussionTabContent
+                      isActive={isTabActive}
+                      courseId={courseId}
+                      userId={userId}
+                      onClose={() => closeTab(null, tab.id)}
+                      onOpenMessagesTab={() => addTab('messages')}
+                      initialPostId={tab.postId}
+                    />
+                  );
+                case 'messages':
+                  return (
+                    <MessagesTabContent
+                      isActive={isTabActive}
+                      courseId={courseId}
+                      userId={userId}
+                      onClose={() => closeTab(null, tab.id)}
+                      onOpenDiscussionTab={() => addTab('discussion')}
+                      initialConversationId={tab.conversationId}
+                    />
+                  );
+                default:
+                  return null;
+              }
+            };
+            return (
+            <div
+              key={tab.id}
+              className="absolute inset-0 w-full h-full"
+              style={{
+                display: isTabActive ? 'block' : 'none',
+                zIndex: isTabActive ? 10 : 0
+              }}
+            >
+              {renderTabContent()}
+            </div>
+          );
+          })
+        )}
       </div>
 
       {/* Global Modals */}

@@ -39,22 +39,17 @@ const mathJaxConfig = {
     packages: { "[+]": ["html", "ams", "newcommand"] },
     inlineMath: [["$", "$"], ["\\(", "\\)"]],
     displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-    // Process escapes to handle \{ and \} properly
     processEscapes: true,
     macros: {
-      // Signal processing functions
       rect: "\\operatorname{rect}",
       tri: "\\operatorname{tri}",
       sinc: "\\operatorname{sinc}",
       sha: "\\operatorname{sha}",
       sgn: "\\operatorname{sgn}",
-      // Fourier transform notation
       F: "\\mathcal{F}",
       Laplace: "\\mathcal{L}",
-      // Common operators
       real: "\\operatorname{Re}",
       imag: "\\operatorname{Im}",
-      // Probability/stats
       Var: "\\operatorname{Var}",
       Cov: "\\operatorname{Cov}",
       E: "\\operatorname{E}",

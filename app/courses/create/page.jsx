@@ -1578,8 +1578,6 @@ function CreateCoursePageContent() {
         }
       }
 
-      redirectToDashboard();
-
       if (syllabusFiles.length > 0) {
         safeSetCourseGenerationMessage("Encoding syllabus materials…");
         const syllabusPayload = await buildFilePayload(syllabusFiles);
@@ -1651,6 +1649,8 @@ function CreateCoursePageContent() {
           window.dispatchEvent(new Event("courses:updated"));
         } catch {}
       }
+
+      redirectToDashboard();
 
       // Course created successfully - dispatch additional refresh events
       // The redirect already happened earlier, but send more events to ensure dashboard refreshes

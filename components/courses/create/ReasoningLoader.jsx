@@ -172,7 +172,7 @@ export default function ReasoningLoader({ className = "", completed = false }) {
       {/* Footer hint */}
       <div className="px-4 py-2 border-t border-[var(--border)] bg-[var(--surface-muted)]">
         <p className="text-xs text-[var(--muted-foreground)] text-center">
-          This usually takes 15-30 seconds
+          This usually takes 1-2 minutes
         </p>
       </div>
     </div>

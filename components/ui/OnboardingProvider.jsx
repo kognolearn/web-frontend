@@ -48,7 +48,7 @@ export function OnboardingProvider({ children }) {
     }, delay);
     timeoutIdsRef.current.add(id);
     return id;
-  }, [scheduleTimeout]);
+  }, []);
 
   const clearScheduledTimeout = useCallback((id) => {
     if (!id) return;
