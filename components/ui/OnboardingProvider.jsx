@@ -48,7 +48,7 @@ export function OnboardingProvider({ children }) {
     }, delay);
     timeoutIdsRef.current.add(id);
     return id;
-  }, []);
+  }, [scheduleTimeout]);
 
   const clearScheduledTimeout = useCallback((id) => {
     if (!id) return;
@@ -131,7 +131,7 @@ export function OnboardingProvider({ children }) {
       const timer = scheduleTimeout(processQueue, 100);
       return () => clearScheduledTimeout(timer);
     }
-  }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue]);
+  }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue, scheduleTimeout, clearScheduledTimeout]);
 
   // Request to show a tooltip (adds to queue with priority)
   const requestTooltip = useCallback((tooltipId, priority = 10) => {

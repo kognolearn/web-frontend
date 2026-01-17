@@ -1,7 +1,65 @@
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import HomeContent from "@/components/onboarding/HomeContent";
+import LandingPage from "@/components/landing/LandingPage";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { generateFAQSchema } from "@/lib/seo/structured-data";
+
+// Landing page FAQs for structured data
+const landingFAQs = [
+  {
+    question: "What file formats can I upload?",
+    answer: "Kogno accepts PDF, DOC, DOCX, PPT, PPTX, and common image formats (PNG, JPG, JPEG). You can upload your syllabus, lecture slides, textbook chapters, or even photos of handwritten notes.",
+  },
+  {
+    question: "Why do I need a .edu email address?",
+    answer: "Kogno is built exclusively for college students. Requiring a .edu email helps us verify student status and ensures our community stays focused on academic excellence.",
+  },
+  {
+    question: "How does the AI tutor work?",
+    answer: "The AI tutor is powered by Claude and has full context of your course materials. Ask it to explain concepts, work through practice problems, or quiz you on material.",
+  },
+  {
+    question: "What's the difference between Deep Study and Cram modes?",
+    answer: "Deep Study mode is for thorough learning when you have time. Cram mode is for when you're short on time before an exam—it prioritizes the most important material.",
+  },
+  {
+    question: "Is my data secure?",
+    answer: "Yes. Your course materials and study data are encrypted and stored securely. We never share your information with third parties.",
+  },
+  {
+    question: "What devices can I use Kogno on?",
+    answer: "Kogno works on any device with a modern web browser—laptop, desktop, tablet, or phone. Your progress syncs across all devices.",
+  },
+];
+
+export const metadata = {
+  title: "Kogno - AI-Powered Study Platform for Students",
+  description: "Upload your syllabus and get personalized study plans, flashcards, practice exams, and an AI tutor. Built for college students with .edu email addresses.",
+  keywords: [
+    "AI learning",
+    "study app",
+    "flashcards",
+    "practice exams",
+    "AI tutor",
+    "college study tool",
+    "syllabus to study plan",
+    "personalized learning",
+    "exam preparation",
+    "spaced repetition",
+    "adaptive learning",
+    "student study platform",
+  ],
+  openGraph: {
+    title: "Kogno - Learn Smarter, Not Harder",
+    description: "Upload your syllabus and get personalized study plans, flashcards, practice exams, and an AI tutor.",
+    type: "website",
+  },
+  twitter: {
+    title: "Kogno - Learn Smarter, Not Harder",
+    description: "Upload your syllabus and get personalized study plans, flashcards, practice exams, and an AI tutor.",
+  },
+};
 
 export default async function Home() {
   const cookieStore = await cookies();
@@ -22,10 +80,17 @@ export default async function Home() {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // Unauthenticated users see the landing page
   if (!session) {
-    redirect("/auth/create-account");
+    return (
+      <>
+        <JsonLd schema={generateFAQSchema(landingFAQs)} />
+        <LandingPage />
+      </>
+    );
   }
 
+  // Authenticated users continue with the existing flow
   const host = headerStore.get("host");
   const proto = headerStore.get("x-forwarded-proto") || "http";
   const baseUrl =
@@ -51,6 +116,7 @@ export default async function Home() {
   } catch (error) {}
 
   if (hasSubscription) {
+    const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }
 
@@ -70,6 +136,7 @@ export default async function Home() {
   } catch (error) {}
 
   if (trialActive) {
+    const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }
 

@@ -10,8 +10,7 @@ import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
 import { Analytics } from "@vercel/analytics/react";
-import { defaultMetadata } from "@/lib/seo/config";
-import { JsonLd, MultiJsonLd } from "@/components/seo/JsonLd";
+import { MultiJsonLd } from "@/components/seo/JsonLd";
 import { generateOrganizationSchema, generateSoftwareApplicationSchema } from "@/lib/seo/structured-data";
 
 
@@ -22,8 +21,16 @@ const nunito = Nunito({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kogno.ai";
+
 export const metadata = {
-  ...defaultMetadata,
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Kogno",
+    template: "%s | Kogno",
+  },
+  description: "Learn Smarter, Not Harder. AI-powered courses, practice exams, and study materials that adapt to your learning style.",
+  manifest: "/manifest.json",
 };
 
 const mathJaxConfig = {

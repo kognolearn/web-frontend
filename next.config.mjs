@@ -1,11 +1,21 @@
+import bundleAnalyzer from "@next/bundle-analyzer";
+
 /** @type {import('next').NextConfig} */
 const backendUrl = process.env.BACKEND_API_URL || "http://localhost:5001";
+const withBundleAnalyzer = bundleAnalyzer({
+	enabled: process.env.ANALYZE === "true",
+});
+
+const nextBodyLimit = process.env.NEXT_BODY_LIMIT || "10mb";
 
 const nextConfig = {
 	api: {
 		bodyParser: {
-			sizeLimit: "10gb",
+			sizeLimit: nextBodyLimit,
 		},
+	},
+	experimental: {
+		optimizePackageImports: ["lucide-react", "framer-motion"],
 	},
 	// Provide sane defaults for local development without requiring env files.
 	env: {
@@ -72,4 +82,4 @@ const nextConfig = {
 	},
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);
