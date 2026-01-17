@@ -1824,41 +1824,6 @@ export default function HomeContent({ variant = 'page' }) {
         className="relative z-10 flex-1 overflow-y-auto px-4 sm:px-6"
       >
         <div className="max-w-2xl mx-auto py-8">
-          {/* Hero section - shown before first message */}
-          <AnimatePresence>
-            {!hasStarted && (
-              <motion.div
-                key="hero"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20, height: 0, marginBottom: 0 }}
-                transition={{ duration: 0.4 }}
-                className="text-center mb-12"
-              >
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight mb-4">
-                  Learn smarter,
-                  <span className="block text-[var(--primary)]">not harder</span>
-                </h1>
-                <p className="text-base sm:text-lg text-[var(--muted-foreground)] max-w-xl mx-auto leading-relaxed mb-6">
-                  Personalized study plans, flashcards, and progress tracking—all in one place.
-                </p>
-                <div className="flex flex-col items-center gap-2 text-[var(--muted-foreground)]">
-                  <span className="text-sm font-medium">Get started</span>
-                  <motion.svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    animate={{ y: [0, 6, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                  </motion.svg>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Chat messages */}
           <AnimatePresence initial={false}>
             {messages.map((m) => (
