@@ -23,7 +23,8 @@ const MIN_NEGOTIATION_PRICE_CENTS = 100;
 const TRIAL_OFFER_MESSAGE =
   "Ok, how about this. I'll let you try it for a week - no credit card. We can set pricing aside while you try it, or keep talking price if you want. Come back next week and we can finish this.";
 const INTRO_FALLBACKS = {
-  reason: "I'm Kogno. What brought you here today?",
+  reason:
+    "Hey! I'm Kogno, what brought you here today? Exam coming up? Friend brought you here? Or just trying to learn something?",
   askUseful: "Got it. What are you hoping to get out of this?",
   explain:
     "Kogno turns your class into a tight study plan with lessons, practice, and exams in one place. List price is $100/month. How does that sound?",
@@ -121,6 +122,7 @@ export default function HomeContent({ variant = 'page' }) {
   const [trialOfferCents, setTrialOfferCents] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [trialDeclined, setTrialDeclined] = useState(false);
+  const [negotiationStatusLoaded, setNegotiationStatusLoaded] = useState(false);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -538,6 +540,10 @@ export default function HomeContent({ variant = 'page' }) {
         }
       } catch (error) {
         console.warn('Failed to load negotiation status:', error);
+      } finally {
+        if (mounted) {
+          setNegotiationStatusLoaded(true);
+        }
       }
     };
 
@@ -549,13 +555,17 @@ export default function HomeContent({ variant = 'page' }) {
 
   // Initial greeting
   useEffect(() => {
+    if (!negotiationStatusLoaded) return;
     if (restoredSessionRef.current) return;
+    if (messagesRef.current.length > 0) return;
+    if (onboardingSessionStartedRef.current) return;
+    if (trialStatusRef.current && trialStatusRef.current !== 'none') return;
     const timer = setTimeout(() => {
       setNegotiationStepSafe(NEGOTIATION_STEPS.INTRO_REASON);
       requestIntroMessage(NEGOTIATION_STEPS.INTRO_REASON);
     }, 400);
     return () => clearTimeout(timer);
-  }, []);
+  }, [negotiationStatusLoaded]);
 
   useEffect(() => {
     if (inputRef.current) {
