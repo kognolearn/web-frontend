@@ -3,21 +3,49 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { getRedirectDestination } from "@/lib/platform";
+import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
+
+const REFERRAL_STORAGE_KEY = "kogno_ref";
+const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [status, setStatus] = useState("verifying");
   const [error, setError] = useState(null);
-  const redirectDestination = getRedirectDestination("/dashboard");
-  const isDownloadRedirect = redirectDestination === "/download";
-  const redirectLabel = isDownloadRedirect ? "download the app" : "your dashboard";
 
   useEffect(() => {
     const handleEmailConfirmation = async () => {
       try {
         // Get the hash fragment from the URL (Supabase sends tokens in the hash)
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
+
+        // Check for error parameters first (e.g., expired OTP)
+        const errorParam = hashParams.get("error");
+        const errorCode = hashParams.get("error_code");
+        const errorDescription = hashParams.get("error_description");
+
+        if (errorParam || errorCode) {
+          // Check if user already has an active session (they may have already confirmed)
+          const { data: { user } } = await supabase.auth.getUser();
+
+          if (user && user.email_confirmed_at) {
+            // User is already confirmed, redirect to onboarding
+            setStatus("success");
+            setTimeout(() => {
+              router.push("/");
+            }, 2000);
+            return;
+          }
+
+          // Show the error
+          setStatus("error");
+          const decodedError = errorDescription
+            ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
+            : errorParam || "Verification failed";
+          setError(decodedError);
+          return;
+        }
+
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
         const type = hashParams.get("type");
@@ -38,10 +66,13 @@ export default function AuthCallbackPage() {
             }
 
             if (data.user) {
+              // Handle post-confirmation tasks
+              await handlePostConfirmation(data.user);
+
               setStatus("success");
-              // Wait a moment to show success message, then redirect
+              // Wait a moment to show success message, then redirect to onboarding
               setTimeout(() => {
-                router.push(redirectDestination);
+                router.push("/");
               }, 2000);
             }
           } else {
@@ -51,9 +82,9 @@ export default function AuthCallbackPage() {
         } else {
           // If no type parameter, check if user is already authenticated
           const { data: { user } } = await supabase.auth.getUser();
-          
+
           if (user) {
-            router.push(redirectDestination);
+            router.push("/");
           } else {
             setStatus("error");
             setError("Invalid confirmation link");
@@ -66,8 +97,42 @@ export default function AuthCallbackPage() {
       }
     };
 
+    const handlePostConfirmation = async (user) => {
+      try {
+        // Cleanup anonymous user if no onboarding continuation
+        const onboardingSession = getOnboardingCourseSession();
+        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
+        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
+        if (!hasOnboardingContinuation) {
+          await cleanupAnonUser();
+        }
+
+        // Attribute referral if there's a stored code
+        const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
+        if (storedRefRaw) {
+          const storedRef = JSON.parse(storedRefRaw);
+          // Check if referral code is still valid (within 30 days)
+          if (storedRef?.code && Date.now() - storedRef.timestamp < REFERRAL_EXPIRY_MS) {
+            await fetch("/api/referrals/attribute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                referredUserId: user.id,
+                code: storedRef.code,
+              }),
+            });
+            // Clear the stored referral code after attribution
+            localStorage.removeItem(REFERRAL_STORAGE_KEY);
+          }
+        }
+      } catch (err) {
+        // Don't block confirmation for post-processing errors
+        console.error("Post-confirmation error:", err);
+      }
+    };
+
     handleEmailConfirmation();
-  }, [redirectDestination, router]);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)] transition-colors">
@@ -129,7 +194,7 @@ export default function AuthCallbackPage() {
                 Your account has been successfully verified.
               </p>
               <p className="text-sm text-[var(--muted-foreground)] mt-2">
-                Redirecting you to {redirectLabel}...
+                Redirecting you to get started...
               </p>
             </div>
           )}

@@ -9,6 +9,7 @@ import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
 import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
+import { Analytics } from "@vercel/analytics/react";
 
 
 const nunito = Nunito({
@@ -69,6 +70,7 @@ export default function RootLayout({ children }) {
                 <TrialNegotiationGate />
                 {children}
                 <FeedbackWidget />
+                <Analytics />
               </OnboardingProvider>
             </CodeEditorSettingsProvider>
           </ThemeProvider>

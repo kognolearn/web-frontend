@@ -3,16 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { cleanupAnonUser, getOnboardingCourseSession } from "@/lib/onboarding";
-import { getRedirectDestination } from "@/lib/platform";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
-const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export default function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo");
   const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     name: "",
@@ -50,6 +46,13 @@ export default function SignUpForm() {
     setLoading(true);
     setError("");
 
+    // Validate .edu email
+    if (!formData.email.toLowerCase().endsWith(".edu")) {
+      setError("Use a student email address");
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
       const { data, error } = await supabase.auth.signUp({
@@ -69,45 +72,14 @@ export default function SignUpForm() {
         return;
       }
 
-      // If account creation is successful, attribute referral and redirect
+      // If account creation is successful, redirect to confirm email page
       if (data.user) {
-        const onboardingSession = getOnboardingCourseSession();
-        const anonId = onboardingSession?.anonUserId || onboardingSession?.anon_user_id;
-        const hasOnboardingContinuation = Boolean(onboardingSession?.jobId && anonId);
-        if (!hasOnboardingContinuation) {
-          await cleanupAnonUser();
-        }
+        // Store referral code attribution for after email confirmation
+        // (will be processed when user confirms email and session is established)
 
-        // Attribute referral if there's a stored code
-        try {
-          const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
-          if (storedRefRaw) {
-            const storedRef = JSON.parse(storedRefRaw);
-            // Check if referral code is still valid (within 30 days)
-            if (storedRef?.code && Date.now() - storedRef.timestamp < REFERRAL_EXPIRY_MS) {
-              await fetch("/api/referrals/attribute", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  referredUserId: data.user.id,
-                  code: storedRef.code,
-                }),
-              });
-              // Clear the stored referral code after attribution
-              localStorage.removeItem(REFERRAL_STORAGE_KEY);
-            }
-          }
-        } catch (refErr) {
-          // Don't block account creation for referral errors
-          console.error("Failed to attribute referral:", refErr);
-        }
-
-        // Redirect to download page to get the desktop app
-        if (redirectTo) {
-          router.push(getRedirectDestination(redirectTo));
-        } else {
-          router.push("/");
-        }
+        // Redirect to confirm email page
+        const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}`;
+        router.push(confirmUrl);
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
@@ -153,9 +125,9 @@ export default function SignUpForm() {
           required
           disabled={loading}
           className="w-full px-4 py-3 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="you@example.com"
+          placeholder="you@university.edu"
         />
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]/70">Use any email address</p>
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]/70">Must be a .edu email address</p>
       </div>
 
       <div>
