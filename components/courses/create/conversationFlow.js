@@ -214,7 +214,7 @@ export const CONVERSATION_FLOW = [
   // Step 13: Creating (loading state)
   {
     id: 'creating',
-    kognoMessage: "Creating your course now... This usually takes about 30 seconds.",
+    kognoMessage: "Creating your course now... You can start studying in a couple minutes.",
     inputType: 'loading',
     showProgress: true,
   },

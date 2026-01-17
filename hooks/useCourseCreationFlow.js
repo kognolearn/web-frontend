@@ -1055,8 +1055,6 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
       payload.exam_details = examDetailsPayload;
 
-      redirectToDashboard();
-
       if (syllabusFiles.length > 0) {
         safeSetCourseGenerationMessage("Encoding syllabus materials…");
         const syllabusPayload = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
@@ -1110,6 +1108,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
           window.dispatchEvent(new Event("courses:updated"));
         } catch {}
       }
+
+      redirectToDashboard();
 
       const dispatchRefreshEvent = () => {
         try {
