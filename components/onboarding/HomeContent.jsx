@@ -514,7 +514,10 @@ export default function HomeContent({ variant = 'page' }) {
           setTrialEndsAtSafe(status.trialEndsAt);
         }
 
-        if (status.confirmedPrice || status.paymentLink || status.trialStatus) {
+        const hasNegotiationState =
+          Boolean(status.confirmedPrice || status.paymentLink) ||
+          (status.trialStatus && status.trialStatus !== 'none');
+        if (hasNegotiationState) {
           onboardingSessionStartedRef.current = true;
           setHasStarted(true);
         }
