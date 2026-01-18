@@ -321,7 +321,7 @@ export default function TourStep() {
       return;
     }
     if (currentTour === "course-features") {
-      const isCourseRoot = /^\\/courses\\/[^/]+$/.test(pathname || "");
+      const isCourseRoot = pathname?.startsWith("/courses/") && !pathname.slice("/courses/".length).includes("/");
       if (!isCourseRoot) {
         endTour(false);
       }
