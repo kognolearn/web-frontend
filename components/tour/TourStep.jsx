@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 import { useGuidedTour } from "./GuidedTourProvider";
 
 /**
@@ -294,12 +295,15 @@ export default function TourStep() {
     isTourActive,
     currentStep,
     currentStepConfig,
+    currentTour,
     totalSteps,
     nextStep,
     skipTour,
     requiresInteraction,
     completeStep,
+    endTour,
   } = useGuidedTour();
+  const pathname = usePathname();
 
   const [targetRect, setTargetRect] = useState(null);
   const [isStepCompleted, setIsStepCompleted] = useState(false);
@@ -308,6 +312,21 @@ export default function TourStep() {
   useEffect(() => {
     setIsStepCompleted(false);
   }, [currentStep]);
+
+  // Stop tour if user navigates away from the relevant page
+  useEffect(() => {
+    if (!currentTour) return;
+    if (currentTour === "course-creation" && pathname !== "/courses/create") {
+      endTour(false);
+      return;
+    }
+    if (currentTour === "course-features") {
+      const isCourseRoot = /^\\/courses\\/[^/]+$/.test(pathname || "");
+      if (!isCourseRoot) {
+        endTour(false);
+      }
+    }
+  }, [currentTour, pathname, endTour]);
 
   // Find and track target element
   useEffect(() => {
