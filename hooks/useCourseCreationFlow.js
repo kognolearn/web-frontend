@@ -1257,6 +1257,44 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     // File types
     syllabusFileTypes,
+
+    // Branching support - state snapshots
+    getStateSnapshot: useCallback(() => ({
+      courseTitle,
+      collegeName,
+      studyMode,
+      studyHours,
+      studyMinutes,
+      syllabusText,
+      examNotes,
+      overviewTopics,
+      moduleConfidenceState,
+      // Note: File objects (syllabusFiles, examFiles) cannot be serialized
+      // Files are treated as "committed" - not branch-able
+    }), [
+      courseTitle,
+      collegeName,
+      studyMode,
+      studyHours,
+      studyMinutes,
+      syllabusText,
+      examNotes,
+      overviewTopics,
+      moduleConfidenceState,
+    ]),
+
+    restoreStateSnapshot: useCallback((snapshot) => {
+      if (!snapshot) return;
+      setCourseTitle(snapshot.courseTitle ?? '');
+      setCollegeName(snapshot.collegeName ?? '');
+      setStudyMode(snapshot.studyMode ?? 'deep');
+      setStudyHours(snapshot.studyHours ?? 5);
+      setStudyMinutes(snapshot.studyMinutes ?? 0);
+      setSyllabusText(snapshot.syllabusText ?? '');
+      setExamNotes(snapshot.examNotes ?? '');
+      setOverviewTopics(snapshot.overviewTopics ?? []);
+      setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});
+    }, []),
   };
 }
 

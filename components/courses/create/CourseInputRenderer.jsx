@@ -194,6 +194,7 @@ function ContentWithAttachments({
   accept,
   disabled = false,
   placeholder = "",
+  submitTourTarget,
 }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -391,6 +392,7 @@ function ContentWithAttachments({
         <button
           type="button"
           onClick={() => onSubmit({ text, files })}
+          data-tour={submitTourTarget || undefined}
           disabled={disabled || !hasContent}
           className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center gap-2"
         >
@@ -427,6 +429,7 @@ export default function CourseInputRenderer({
   contentText = "",
   onContentTextChange,
   onContentSubmit,
+  submitTourTarget,
 }) {
   // For text_confirm, use defaultValue if no value provided
   const initialValue = inputType === "text_confirm" && defaultValue ? defaultValue : value;
@@ -615,6 +618,7 @@ export default function CourseInputRenderer({
         accept={accept}
         disabled={disabled}
         placeholder={placeholder}
+        submitTourTarget={submitTourTarget}
       />
     );
   }
@@ -646,6 +650,7 @@ export default function CourseInputRenderer({
           <button
             type="button"
             onClick={() => onSubmit({ hours, minutes })}
+            data-tour="cram-duration"
             disabled={disabled || (hours === 0 && minutes === 0)}
             className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >

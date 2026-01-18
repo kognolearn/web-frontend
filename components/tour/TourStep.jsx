@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
@@ -307,10 +307,12 @@ export default function TourStep() {
 
   const [targetRect, setTargetRect] = useState(null);
   const [isStepCompleted, setIsStepCompleted] = useState(false);
+  const autoAdvanceRef = useRef(false);
 
   // Reset step completion when step changes
   useEffect(() => {
     setIsStepCompleted(false);
+    autoAdvanceRef.current = false;
   }, [currentStep]);
 
   // Stop tour if user navigates away from the relevant page
@@ -378,17 +380,45 @@ export default function TourStep() {
           document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
           document.querySelector(currentStepConfig.target);
 
-        if (target && (target === e.target || target.contains(e.target))) {
+        if (!target || !(target === e.target || target.contains(e.target))) {
+          return;
+        }
+
+        const clickable = e.target.closest(
+          "button, [role='button'], a, [data-tour-complete='true']"
+        );
+
+        if (!clickable) return;
+
+        setIsStepCompleted(true);
+        completeStep();
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key !== "Enter") return;
+
+        const target =
+          document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
+          document.querySelector(currentStepConfig.target);
+
+        if (!target || !(target === e.target || target.contains(e.target))) {
+          return;
+        }
+
+        const tagName = e.target?.tagName?.toLowerCase();
+        if (tagName === "input" || tagName === "textarea") {
           setIsStepCompleted(true);
           completeStep();
         }
       };
 
       document.addEventListener("click", handleClick, true);
+      document.addEventListener("keydown", handleKeyDown, true);
       return () => {
         window.removeEventListener("scroll", updateTargetRect, true);
         window.removeEventListener("resize", updateTargetRect);
         document.removeEventListener("click", handleClick, true);
+        document.removeEventListener("keydown", handleKeyDown, true);
       };
     }
 
@@ -397,6 +427,37 @@ export default function TourStep() {
       window.removeEventListener("resize", updateTargetRect);
     };
   }, [isTourActive, currentStepConfig, requiresInteraction, completeStep]);
+
+  useEffect(() => {
+    if (!requiresInteraction || !isStepCompleted) return;
+    if (currentStepConfig?.autoAdvance === false) return;
+    if (autoAdvanceRef.current) return;
+
+    autoAdvanceRef.current = true;
+    const timer = setTimeout(() => {
+      nextStep();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [requiresInteraction, isStepCompleted, currentStepConfig, nextStep]);
+
+  useEffect(() => {
+    if (!currentStepConfig?.skipIfMissing) return;
+    if (!currentStepConfig?.target) return;
+    if (targetRect) return;
+
+    const timer = setTimeout(() => {
+      const target =
+        document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
+        document.querySelector(currentStepConfig.target);
+
+      if (!target) {
+        nextStep();
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [currentStepConfig, targetRect, nextStep]);
 
   // Don't render if no active tour or mounting
   if (!isTourActive || !currentStepConfig) return null;

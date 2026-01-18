@@ -12,6 +12,7 @@ import CourseInputRenderer from "./CourseInputRenderer";
 import TopicEditorChat from "./TopicEditorChat";
 import ConfidenceEditorChat from "./ConfidenceEditorChat";
 import HighUsageWarning from "./HighUsageWarning";
+import EditMessageModal from "./EditMessageModal";
 import { calculateProgress } from "./conversationFlow";
 
 /**
@@ -91,6 +92,20 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     }
   };
 
+  // Handle branch creation from edit modal
+  const handleCreateBranch = (newResponse, displayText) => {
+    if (!conversation.editingMessage) return;
+
+    // Find the index of the editing message
+    const messageIndex = conversation.messages.findIndex(
+      (msg) => msg.id === conversation.editingMessage.id
+    );
+
+    if (messageIndex !== -1) {
+      conversation.createBranch(messageIndex, newResponse, displayText);
+    }
+  };
+
   // Render topic editor for current step
   const renderTopicEditor = () => {
     if (!conversation.currentStep?.showTopicEditor) return null;
@@ -164,6 +179,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             <button
               type="button"
               onClick={conversation.handleSkip}
+              data-tour="topics-review"
               disabled={flowState.isTopicsLoading}
               className="flex-1 py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
@@ -197,6 +213,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
           <button
             type="button"
             onClick={conversation.handleConfirm}
+            data-tour="confidence-continue"
             className="w-full py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
             Continue
@@ -207,6 +224,12 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
 
     // Combined content with attachments (text + files)
     if (inputType === "content_with_attachments") {
+      const submitTourTarget =
+        conversation.currentStep?.id === "syllabus_content"
+          ? "syllabus-done"
+          : conversation.currentStep?.id === "exam_content"
+          ? "exam-done"
+          : undefined;
       return (
         <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
           <CourseInputRenderer
@@ -222,6 +245,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
               conversation.handleContentSubmit(conversation.contentText, conversation.currentFiles);
             }}
             accept={accept}
+            submitTourTarget={submitTourTarget}
           />
         </div>
       );
@@ -334,7 +358,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
       >
-        {conversation.messages.map((message) => {
+        {conversation.messages.map((message, index) => {
           if (message.role === "assistant") {
             const isCurrentlyLoading =
               message.inputType === "loading" ||
@@ -376,15 +400,22 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             );
           }
 
+          // Get branch info for this message
+          const branchInfo = conversation.getBranchInfo(index);
+          const isEditable = conversation.isMessageEditable(message);
+
           return (
             <UserResponseBubble
               key={message.id}
               content={message.content}
               files={message.files}
               timestamp={message.timestamp}
-              onEdit={() => conversation.goBack(message.stepId)}
+              onEdit={() => conversation.openEditModal(message)}
               canEdit={!message.superseded && message.stepId !== conversation.currentStep?.id}
+              isEditable={isEditable}
               superseded={message.superseded}
+              branchInfo={branchInfo}
+              onSwitchBranch={conversation.switchBranch}
             />
           );
         })}
@@ -427,6 +458,15 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
 
       {/* Input area */}
       {renderInputArea()}
+
+      {/* Edit Message Modal */}
+      <EditMessageModal
+        isOpen={!!conversation.editingMessage}
+        onClose={conversation.closeEditModal}
+        originalMessage={conversation.editingMessage}
+        stepConfig={conversation.editingMessage?.stepConfig}
+        onCreateBranch={handleCreateBranch}
+      />
     </div>
   );
 }
