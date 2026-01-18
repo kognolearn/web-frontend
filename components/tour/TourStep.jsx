@@ -426,13 +426,15 @@ export default function TourStep() {
   }, [isTourActive, currentStepConfig, requiresInteraction, completeStep]);
 
   useEffect(() => {
-    if (!currentStepConfig?.showIf) return;
+    if (!currentStepConfig?.showIfStudyMode) return;
+    if (typeof window === "undefined") return;
 
     let shouldShow = true;
     try {
-      shouldShow = currentStepConfig.showIf();
+      const storedMode = localStorage.getItem("kogno_study_mode");
+      shouldShow = storedMode === currentStepConfig.showIfStudyMode;
     } catch (error) {
-      console.warn("[Tour] showIf check failed:", error);
+      console.warn("[Tour] showIfStudyMode check failed:", error);
     }
 
     if (shouldShow) return;

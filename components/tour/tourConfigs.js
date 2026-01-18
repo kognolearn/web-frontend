@@ -11,6 +11,7 @@
  * @property {boolean} skippable - Whether this step can be skipped (default: true for tour)
  * @property {boolean} autoAdvance - Auto-advance after interaction completes (default: true for interactive steps)
  * @property {boolean} skipIfMissing - Skip this step if its target is not present (useful for conditional UI)
+ * @property {"cram"} showIfStudyMode - Only show when the stored study mode matches
  */
 
 /**
@@ -49,10 +50,7 @@ export const courseCreationTour = [
     position: "top",
     skippable: false,
     skipIfMissing: true,
-    showIf: () => {
-      if (typeof window === "undefined") return false;
-      return localStorage.getItem("kogno_study_mode") === "cram";
-    },
+    showIfStudyMode: "cram",
   },
   {
     target: "syllabus-choice",
