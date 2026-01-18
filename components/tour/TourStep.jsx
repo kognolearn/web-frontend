@@ -71,7 +71,7 @@ function SpotlightOverlay({ targetRect, onClick }) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] pointer-events-auto"
+      className="fixed inset-0 z-[9999] pointer-events-none"
       onClick={onClick}
       style={{
         background: `
