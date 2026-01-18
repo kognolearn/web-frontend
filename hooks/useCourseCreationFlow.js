@@ -1084,7 +1084,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
       payload.content_version = resolvedContentVersion;
 
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

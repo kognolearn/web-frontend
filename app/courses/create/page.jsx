@@ -1591,7 +1591,7 @@ function CreateCoursePageContent() {
       payload.content_version = resolvedContentVersion;
 
       console.log("[CreateCourse] About to fetch /api/courses");
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
