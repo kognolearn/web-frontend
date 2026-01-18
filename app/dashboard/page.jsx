@@ -12,6 +12,7 @@ import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import { authFetch } from "@/lib/api";
 import {
   getCourseCreateJobs,
@@ -73,7 +74,7 @@ function getCourseTitle(course) {
 function DashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paymentSuccess = searchParams?.get("payment") === "success";
+  const { userSettings, updateUserSettings } = useOnboarding();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +101,18 @@ function DashboardClient() {
       router.replace('/download');
     }
   }, [forceDownloadRedirect, router]);
+
+  // Persist payment success to user settings and strip the URL param
+  useEffect(() => {
+    const paymentParam = searchParams?.get("payment");
+    if (paymentParam !== "success") return;
+
+    if (userSettings && !userSettings.tour_completed && userSettings.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
+
+    router.replace("/dashboard");
+  }, [searchParams, userSettings, updateUserSettings, router]);
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -505,6 +518,10 @@ function DashboardClient() {
       setShowCourseLimitModal(true);
       return false;
     }
+
+    if (userSettings && !userSettings.tour_completed && userSettings.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
     // Allow navigation to proceed
     return true;
   };
@@ -529,7 +546,8 @@ function DashboardClient() {
   
   const hasCourses = courses.length > 0;
   const hasActiveCourseCards = hasCourses;
-  const shouldShowPaymentEmptyState = paymentSuccess && !hasCourses;
+  const isTourCompleted = userSettings?.tour_completed === true;
+  const shouldShowOnboardingEmptyState = !hasCourses && !isTourCompleted;
   const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
@@ -777,16 +795,22 @@ function DashboardClient() {
         <main className="space-y-6">
           {!hasActiveCourseCards ? (
             <div className="flex flex-col items-center justify-center py-16">
-              {shouldShowPaymentEmptyState ? (
+              {shouldShowOnboardingEmptyState ? (
                 <EmptyStateCard
                   title="Create your first course"
                   description="Get started by creating a personalized study plan."
                   ctaText="Create Course"
                   ctaHref="/courses/create"
                   onCtaClick={handleCreateCourseClick}
+                  ctaDataTour="dashboard-create-course"
                 />
               ) : (
-                <Link href="/courses/create" onClick={handleCreateCourseClick} className="btn btn-primary btn-lg">
+                <Link
+                  href="/courses/create"
+                  onClick={handleCreateCourseClick}
+                  className="btn btn-primary btn-lg"
+                  data-tour="dashboard-create-course"
+                >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
@@ -811,6 +835,7 @@ function DashboardClient() {
                 <Link
                   href="/courses/create"
                   onClick={handleCreateCourseClick}
+                  data-tour="dashboard-create-course"
                   className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
                 >
                   {/* Hover gradient overlay */}

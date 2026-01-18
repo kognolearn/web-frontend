@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-export default function EmptyStateCard({ title, description, ctaText, ctaHref, onCtaClick }) {
+export default function EmptyStateCard({ title, description, ctaText, ctaHref, onCtaClick, ctaDataTour }) {
   return (
     <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-6 text-center shadow-lg">
       {title && (
@@ -20,6 +20,7 @@ export default function EmptyStateCard({ title, description, ctaText, ctaHref, o
           href={ctaHref}
           onClick={onCtaClick}
           className="mt-6 inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+          data-tour={ctaDataTour || undefined}
         >
           {ctaText}
         </Link>

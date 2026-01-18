@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { fetchUserSettings, patchUserSettings } from "@/lib/userSettings";
 
 const STORAGE_KEY = "kogno_onboarding_dismissed";
 const MIN_TIME_BETWEEN_TOOLTIPS = 600; // Minimum ms between tooltip transitions
@@ -15,12 +16,16 @@ const OnboardingContext = createContext({
   activeTooltip: null,
   requestTooltip: () => {},
   releaseTooltip: () => {},
+  userSettings: null,
+  refreshUserSettings: () => {},
+  updateUserSettings: () => Promise.resolve(null),
 });
 
 export function OnboardingProvider({ children }) {
   const [dismissedTooltips, setDismissedTooltips] = useState(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   const [isNewUser, setIsNewUser] = useState(true);
+  const [userSettings, setUserSettings] = useState(null);
   
   // Queue system for tooltips - only one shows at a time
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -93,6 +98,49 @@ export function OnboardingProvider({ children }) {
       console.error("Failed to save onboarding state:", e);
     }
   }, [dismissedTooltips, isNewUser, isLoaded]);
+
+  const refreshUserSettings = useCallback(async () => {
+    try {
+      const settings = await fetchUserSettings();
+      if (!settings) {
+        return null;
+      }
+      setUserSettings(settings);
+      if (typeof settings.tour_completed === "boolean") {
+        setIsNewUser(!settings.tour_completed);
+      }
+      if (settings.tour_completed && typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("kogno_tour_state");
+        } catch (e) {
+          console.error("Failed to clear tour state:", e);
+        }
+      }
+      return settings;
+    } catch (e) {
+      console.error("Failed to load user settings:", e);
+      return null;
+    }
+  }, []);
+
+  const updateUserSettings = useCallback(async (updates) => {
+    try {
+      const nextSettings = await patchUserSettings(updates);
+      if (!nextSettings) return null;
+      setUserSettings(nextSettings);
+      if (typeof nextSettings.tour_completed === "boolean") {
+        setIsNewUser(!nextSettings.tour_completed);
+      }
+      return nextSettings;
+    } catch (e) {
+      console.error("Failed to update user settings:", e);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUserSettings();
+  }, [refreshUserSettings]);
 
   // Process the queue to show next tooltip
   const processQueue = useCallback(() => {
@@ -197,6 +245,9 @@ export function OnboardingProvider({ children }) {
         activeTooltip,
         requestTooltip,
         releaseTooltip,
+        userSettings,
+        refreshUserSettings,
+        updateUserSettings,
       }}
     >
       {children}
