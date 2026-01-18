@@ -1619,7 +1619,7 @@ function CreateCoursePageContent() {
       }
 
       if (userSettings && !userSettings.tour_completed) {
-        updateUserSettings({ tour_phase: "course-features" });
+        await updateUserSettings({ tour_completed: true, tour_phase: "course-creation" });
       }
 
       redirectToDashboard();
