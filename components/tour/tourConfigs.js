@@ -49,6 +49,10 @@ export const courseCreationTour = [
     position: "top",
     skippable: false,
     skipIfMissing: true,
+    showIf: () => {
+      if (typeof window === "undefined") return false;
+      return localStorage.getItem("kogno_study_mode") === "cram";
+    },
   },
   {
     target: "syllabus-choice",

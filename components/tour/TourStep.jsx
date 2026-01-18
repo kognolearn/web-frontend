@@ -147,10 +147,7 @@ function TourTooltip({
     >
       {/* Progress indicator */}
       <div className="px-4 pt-3 pb-2 border-b border-[var(--border)]">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
-            Step {currentStep + 1} of {totalSteps}
-          </span>
+        <div className="flex items-center justify-end">
           <div className="flex gap-1">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div
@@ -429,6 +426,23 @@ export default function TourStep() {
   }, [isTourActive, currentStepConfig, requiresInteraction, completeStep]);
 
   useEffect(() => {
+    if (!currentStepConfig?.showIf) return;
+
+    let shouldShow = true;
+    try {
+      shouldShow = currentStepConfig.showIf();
+    } catch (error) {
+      console.warn("[Tour] showIf check failed:", error);
+    }
+
+    if (shouldShow) return;
+
+    setIsStepCompleted(true);
+    completeStep();
+    nextStep();
+  }, [currentStepConfig, completeStep, nextStep]);
+
+  useEffect(() => {
     if (!requiresInteraction || !isStepCompleted) return;
     if (currentStepConfig?.autoAdvance === false) return;
     if (autoAdvanceRef.current) return;
@@ -452,12 +466,14 @@ export default function TourStep() {
         document.querySelector(currentStepConfig.target);
 
       if (!target) {
+        setIsStepCompleted(true);
+        completeStep();
         nextStep();
       }
-    }, 1200);
+    }, 200);
 
     return () => clearTimeout(timer);
-  }, [currentStepConfig, targetRect, nextStep]);
+  }, [currentStepConfig, targetRect, completeStep, nextStep]);
 
   // Don't render if no active tour or mounting
   if (!isTourActive || !currentStepConfig) return null;
