@@ -9,6 +9,9 @@
  * @property {boolean} modal - Whether to show as a centered modal (no target highlight)
  * @property {'top'|'bottom'|'left'|'right'} position - Preferred tooltip position
  * @property {boolean} skippable - Whether this step can be skipped (default: true for tour)
+ * @property {boolean} autoAdvance - Auto-advance after interaction completes (default: true for interactive steps)
+ * @property {boolean} skipIfMissing - Skip this step if its target is not present (useful for conditional UI)
+ * @property {"cram"} showIfStudyMode - Only show when the stored study mode matches
  */
 
 /**
@@ -32,19 +35,79 @@ export const courseCreationTour = [
     skippable: false,
   },
   {
-    target: "syllabus-upload",
-    title: "Upload your syllabus",
-    content: "Upload your course syllabus for a more personalized study plan. We'll extract topics, exam dates, and learning objectives automatically.",
-    interactive: false,
+    target: "study-mode",
+    title: "Choose your study style",
+    content: "Deep Study builds full understanding with detailed explanations and breadth. Cram Mode focuses on high-yield, exam-critical topics and tighter summaries. You can change this later.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+  },
+  {
+    target: "cram-duration",
+    title: "Set your cram timeline",
+    content: "Tell us how much time you have so we can prioritize what matters most.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+    skipIfMissing: true,
+    showIfStudyMode: "cram",
+  },
+  {
+    target: "syllabus-choice",
+    title: "Add your syllabus",
+    content: "Add syllabus info as text, URLs, or files (or skip). We use it to extract topics, dates, and learning objectives.",
+    interactive: true,
     position: "right",
     skippable: false,
   },
   {
-    target: "exam-input",
-    title: "Exam information",
-    content: "Tell us about your exam format (multiple choice, essays, problem sets) so we can prioritize the most relevant content.",
-    interactive: false,
+    target: "syllabus-done",
+    title: "Upload your syllabus",
+    content: "Paste text, add URLs, and/or attach files, then click Done to continue.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+    skipIfMissing: true,
+  },
+  {
+    target: "exam-choice",
+    title: "Exam materials",
+    content: "Add exam info as text, URLs, or files (or skip). We use it to focus on what's most likely to be tested.",
+    interactive: true,
     position: "right",
+    skippable: false,
+  },
+  {
+    target: "exam-done",
+    title: "Upload exam materials",
+    content: "Paste text, add URLs, and/or attach files, then click Done to continue.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+    skipIfMissing: true,
+  },
+  {
+    target: "generate-topics",
+    title: "Generate your topic list",
+    content: "Click here and I'll build your personalized topic list from your materials.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+  },
+  {
+    target: "topics-review",
+    title: "Review your topics",
+    content: "Skim the topics and click “Topics look good!” when you're ready to move on.",
+    interactive: true,
+    position: "top",
+    skippable: false,
+  },
+  {
+    target: "confidence-continue",
+    title: "Set your familiarity",
+    content: "Mark how confident you are in each module, then continue.",
+    interactive: true,
+    position: "top",
     skippable: false,
   },
   {
