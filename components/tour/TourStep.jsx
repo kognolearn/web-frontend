@@ -62,43 +62,6 @@ function calculatePosition(targetRect, tooltipRect, preferredPosition = "bottom"
 }
 
 /**
- * Spotlight overlay component - creates a hole around the target element
- */
-function SpotlightOverlay({ targetRect, onClick }) {
-  if (!targetRect) return null;
-
-  const padding = 8;
-  const borderRadius = 12;
-
-  return (
-    <div
-      className="fixed inset-0 z-[9999] pointer-events-none"
-      onClick={onClick}
-      style={{
-        background: `
-          linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)),
-          linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))
-        `,
-        maskImage: `
-          radial-gradient(
-            ellipse at ${targetRect.left + targetRect.width / 2}px ${targetRect.top + targetRect.height / 2}px,
-            transparent ${Math.max(targetRect.width, targetRect.height) / 2 + padding}px,
-            black ${Math.max(targetRect.width, targetRect.height) / 2 + padding + 2}px
-          )
-        `,
-        WebkitMaskImage: `
-          radial-gradient(
-            ellipse at ${targetRect.left + targetRect.width / 2}px ${targetRect.top + targetRect.height / 2}px,
-            transparent ${Math.max(targetRect.width, targetRect.height) / 2 + padding}px,
-            black ${Math.max(targetRect.width, targetRect.height) / 2 + padding + 2}px
-          )
-        `,
-      }}
-    />
-  );
-}
-
-/**
  * Tour tooltip component
  */
 function TourTooltip({
@@ -222,64 +185,73 @@ function ModalTourStep({
   onSkip,
   canSkip,
 }) {
+  const dragConstraintsRef = useRef(null);
+
   return (
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm" />
 
-      {/* Modal */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed z-[10000] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 max-w-[90vw] bg-[var(--surface-1)] rounded-2xl shadow-2xl border border-[var(--border)]"
-      >
-        {/* Progress */}
-        <div className="px-5 pt-4 pb-3">
-          <div className="flex gap-1.5">
-            {Array.from({ length: totalSteps }).map((_, i) => (
-              <div
-                key={i}
-                className={`flex-1 h-1 rounded-full transition-colors ${
-                  i <= currentStep ? "bg-[var(--primary)]" : "bg-[var(--surface-muted)]"
-                }`}
-              />
-            ))}
+      {/* Drag boundary */}
+      <div ref={dragConstraintsRef} className="fixed inset-0 z-[10000] flex items-center justify-center">
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          drag
+          dragMomentum={false}
+          dragConstraints={dragConstraintsRef}
+          whileTap={{ cursor: "grabbing" }}
+          className="w-96 max-w-[90vw] bg-[var(--surface-1)] rounded-2xl shadow-2xl border border-[var(--border)] cursor-grab"
+        >
+          {/* Progress */}
+          <div className="px-5 pt-4 pb-3">
+            <div className="flex gap-1.5">
+              {Array.from({ length: totalSteps }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`flex-1 h-1 rounded-full transition-colors ${
+                    i <= currentStep ? "bg-[var(--primary)]" : "bg-[var(--surface-muted)]"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="px-5 pb-4">
-          {title && (
-            <h2 className="text-xl font-bold text-[var(--foreground)] mb-3">
-              {title}
-            </h2>
-          )}
-          <p className="text-[var(--muted-foreground)] leading-relaxed">
-            {content}
-          </p>
-        </div>
+          {/* Content */}
+          <div className="px-5 pb-4">
+            {title && (
+              <h2 className="text-xl font-bold text-[var(--foreground)] mb-3">
+                {title}
+              </h2>
+            )}
+            <p className="text-[var(--muted-foreground)] leading-relaxed">
+              {content}
+            </p>
+          </div>
 
-        {/* Actions */}
-        <div className="px-5 pb-5 flex items-center justify-between gap-3">
-          {canSkip ? (
+          {/* Actions */}
+          <div className="px-5 pb-5 flex items-center justify-between gap-3">
+            {canSkip ? (
+              <button
+                onClick={onSkip}
+                className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+              >
+                Skip tour
+              </button>
+            ) : (
+              <div />
+            )}
             <button
-              onClick={onSkip}
-              className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+              onClick={onNext}
+              className="px-5 py-2.5 text-sm font-semibold bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
             >
-              Skip tour
+              {currentStep + 1 === totalSteps ? "Get Started" : "Continue"}
             </button>
-          ) : (
-            <div />
-          )}
-          <button
-            onClick={onNext}
-            className="px-5 py-2.5 text-sm font-semibold bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary)]/90 transition-colors"
-          >
-            {currentStep + 1 === totalSteps ? "Get Started" : "Continue"}
-          </button>
-        </div>
-      </motion.div>
+          </div>
+        </motion.div>
+      </div>
     </>
   );
 }
@@ -498,10 +470,9 @@ export default function TourStep() {
     );
   }
 
-  // Render spotlight + tooltip for targeted steps
+  // Render tooltip for targeted steps
   return createPortal(
     <AnimatePresence>
-      <SpotlightOverlay targetRect={targetRect} onClick={() => {}} />
       <TourTooltip
         title={currentStepConfig.title}
         content={currentStepConfig.content}
