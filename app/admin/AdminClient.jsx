@@ -1736,7 +1736,7 @@ export default function AdminClient() {
                                     </svg>
                                     <div>
                                         <p className="text-sm text-[var(--muted-foreground)]">
-                                            When enabled, new users who have never had a subscription will see the 2-week deal option on the pricing page.
+                                            When enabled, new users who have never had a subscription will see the 2-week deal option in the pricing negotiation flow.
                                             This is a one-time offer - users who have previously subscribed will not see it.
                                         </p>
                                     </div>

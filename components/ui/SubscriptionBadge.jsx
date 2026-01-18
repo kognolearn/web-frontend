@@ -72,7 +72,10 @@ export default function SubscriptionBadge({
 
   if (showLink) {
     return (
-      <Link href={isPaid ? "/subscription" : "/pricing"} className="hover:opacity-80 transition-opacity">
+      <Link
+        href={isPaid ? "/subscription" : "/?continueNegotiation=1"}
+        className="hover:opacity-80 transition-opacity"
+      >
         {badge}
       </Link>
     );

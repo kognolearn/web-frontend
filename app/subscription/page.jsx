@@ -81,7 +81,8 @@ export default function SubscriptionPage() {
     );
   }
 
-  const { hasSubscription, subscription, planLevel } = subscriptionStatus || {};
+  const { hasSubscription, subscription, planLevel, trialEndsAt } = subscriptionStatus || {};
+  const isTrialAccess = planLevel === "paid" && !hasSubscription;
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
@@ -229,6 +230,46 @@ export default function SubscriptionPage() {
                 </button>
               )}
             </>
+          ) : isTrialAccess ? (
+            <>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg
+                    className="w-8 h-8 text-green-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+
+                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+                  Trial Access Active
+                </h2>
+                <p className="text-[var(--text-secondary)] mb-6">
+                  Full Pro access until {trialEndsAt ? formatDate(trialEndsAt) : "the end of your trial"}.
+                </p>
+
+                <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 mb-6">
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Trial ends: {trialEndsAt ? formatDate(trialEndsAt) : "TBD"}.
+                  </p>
+                </div>
+
+                <Link
+                  href="/?continueNegotiation=1"
+                  className="inline-block w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors text-center"
+                >
+                  Resume Pricing Chat
+                </Link>
+              </div>
+            </>
           ) : (
             <>
               <div className="text-center">
@@ -262,10 +303,10 @@ export default function SubscriptionPage() {
                 </div>
 
                 <Link
-                  href="/pricing"
+                  href="/?continueNegotiation=1"
                   className="inline-block w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors text-center"
                 >
-                  Upgrade to Pro
+                  Resume Pricing Chat
                 </Link>
               </div>
             </>

@@ -181,11 +181,11 @@ export default function CourseLimitModal({
             </button>
           )}
           <Link
-            href="/pricing"
+            href="/?continueNegotiation=1"
             onClick={onClose}
             className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors text-center"
           >
-            Upgrade to Premium
+            Resume Pricing Chat
           </Link>
           <button
             onClick={onClose}

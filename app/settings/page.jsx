@@ -306,7 +306,9 @@ export default function SettingsPage() {
     );
   }
 
-  const { hasSubscription, subscription } = subscriptionStatus || {};
+  const { hasSubscription, subscription, planLevel, trialEndsAt } = subscriptionStatus || {};
+  const hasPaidAccess = planLevel === "paid";
+  const isTrialAccess = hasPaidAccess && !hasSubscription;
   const hasConfirmedPrice = typeof negotiationStatus?.confirmedPrice === "number";
   const canContinuePriceSelection = Boolean(negotiationStatus) && !hasConfirmedPrice;
 
@@ -844,6 +846,49 @@ export default function SettingsPage() {
                   </button>
                 )}
               </div>
+            ) : isTrialAccess ? (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Trial Access Active</h3>
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      Full Pro access until {trialEndsAt ? formatDate(trialEndsAt) : "the end of your trial"}.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                  <p className="text-sm text-[var(--muted-foreground)]">Trial ends</p>
+                  <p className="text-base font-medium">{trialEndsAt ? formatDate(trialEndsAt) : "TBD"}</p>
+                </div>
+
+                {canContinuePriceSelection ? (
+                  <button
+                    onClick={handleContinuePriceSelection}
+                    className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Continue price selection
+                  </button>
+                ) : (
+                  <Link
+                    href="/?continueNegotiation=1"
+                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Resume Pricing Chat
+                  </Link>
+                )}
+              </div>
             ) : (
               <div className="text-center py-4">
                 <div className="w-16 h-16 bg-[var(--surface-2)] rounded-full flex items-center justify-center mx-auto mb-4">
@@ -872,13 +917,13 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <Link
-                    href="/pricing"
+                    href="/?continueNegotiation=1"
                     className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Upgrade to Pro
+                    Resume Pricing Chat
                   </Link>
                 )}
               </div>

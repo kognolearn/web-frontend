@@ -44,18 +44,18 @@ export default function UpgradePrompt({
 
         <div className="flex-1">
           <h4 className="font-semibold text-[var(--text-primary)] mb-1">
-            Free Tier Limit Reached
+            Continue Pricing Negotiation
           </h4>
           <p className="text-sm text-[var(--text-secondary)] mb-3">
             You've used {current} of {limit} {label} available on the free plan.
-            Upgrade to Pro for unlimited access.
+            Resume your pricing chat to confirm a price or finish checkout.
           </p>
 
           <Link
-            href="/pricing"
+            href="/?continueNegotiation=1"
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white text-sm font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
           >
-            Upgrade to Pro
+            Resume Pricing Chat
             <svg
               className="w-4 h-4"
               fill="none"

@@ -527,8 +527,8 @@ export default function AdHocExamGradingPage() {
                   Upgrade to Pro to unlock ad-hoc exam grading, faster queues, and detailed feedback.
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                  <Link href="/pricing" className="btn btn-primary btn-sm">
-                    Upgrade to Pro
+                  <Link href="/?continueNegotiation=1" className="btn btn-primary btn-sm">
+                    Resume Pricing Chat
                   </Link>
                   <Link href="/dashboard" className="btn btn-outline btn-sm">
                     Back to dashboard

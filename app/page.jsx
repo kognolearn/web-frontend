@@ -137,7 +137,7 @@ export default async function Home({ searchParams }) {
     }
   } catch (error) {}
 
-  const canContinueNegotiation = continueNegotiation && confirmedPrice === null;
+  const canContinueNegotiation = continueNegotiation === true;
 
   if ((trialActive || trialFree) && !canContinueNegotiation) {
     const { redirect } = await import("next/navigation");

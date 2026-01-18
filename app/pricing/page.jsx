@@ -1,4 +1,4 @@
-import PricingClient from "./PricingClient";
+import { redirect } from "next/navigation";
 
 // Pricing page is noindex because pricing is negotiation-based
 export const metadata = {
@@ -11,5 +11,5 @@ export const metadata = {
 };
 
 export default function PricingPage() {
-  return <PricingClient />;
+  redirect("/?continueNegotiation=1");
 }
