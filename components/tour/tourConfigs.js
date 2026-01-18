@@ -70,6 +70,14 @@ export const courseFeaturesTour = [
     skippable: false,
   },
   {
+    target: "first-lesson",
+    title: "Start your first lesson",
+    content: "You can begin learning immediately while the rest of the course generates. Click the first lesson to dive in.",
+    interactive: true,
+    position: "right",
+    skippable: false,
+  },
+  {
     target: "cheatsheet-tab",
     title: "Quick Reference Cheatsheet",
     content: "Access a condensed summary of key concepts, formulas, and definitions. Perfect for quick review before exams.",

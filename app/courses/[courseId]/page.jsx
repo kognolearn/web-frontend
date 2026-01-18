@@ -13,7 +13,9 @@ import TimerControlsModal from "@/components/courses/TimerControlsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import PersonalTimer from "@/components/courses/PersonalTimer";
+import { useGuidedTour } from "@/components/tour";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
@@ -103,6 +105,8 @@ export default function CoursePage() {
   const { courseId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { userSettings } = useOnboarding();
+  const { startTour, isTourActive, currentTour } = useGuidedTour();
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -638,6 +642,18 @@ export default function CoursePage() {
 
   const isGeneratingCourse = courseStatus === 'pending' || courseStatus === 'generating';
   const visibleModuleRefs = isGeneratingCourse ? readyModuleRefs : null;
+  const hasTourLessons = useMemo(() => {
+    return Boolean(studyPlan?.modules?.some((module) => Array.isArray(module.lessons) && module.lessons.length > 0));
+  }, [studyPlan]);
+  const shouldStartFeaturesTour =
+    Boolean(userSettings && !userSettings.tour_completed && userSettings.tour_phase === "course-features");
+
+  useEffect(() => {
+    if (!shouldStartFeaturesTour || !hasTourLessons) return;
+    if (!isTourActive || currentTour !== "course-features") {
+      startTour("course-features");
+    }
+  }, [shouldStartFeaturesTour, hasTourLessons, isTourActive, currentTour, startTour]);
 
 
 
