@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 export async function POST(request, { params }) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request, { params }) {
     }
 
     // Build the backend API URL - targeting a new endpoint for topic modification
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/modify-topics`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/modify-topics`;
 
     // Build request body
     const requestBody = {

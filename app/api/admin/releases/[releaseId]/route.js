@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 async function proxyRequest(request, method, releaseId) {
   try {

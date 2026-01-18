@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 export async function PATCH(request, { params }) {
   try {
@@ -11,7 +11,7 @@ export async function PATCH(request, { params }) {
     const { mastery_status, familiarity_score } = body;
 
     // Build the backend API URL
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/progress`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/progress`;
 
     // Forward the request to the backend API
     const response = await fetch(backendUrl, {

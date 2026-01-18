@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 async function forwardRequest(request, method) {
   const headers = { "Content-Type": "application/json" };

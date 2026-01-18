@@ -1,6 +1,6 @@
 // POST /api/chatbot
 // Proxies requests to backend POST /chat endpoint
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 export async function POST(request) {
   try {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 // Helper to get auth token from cookies (for sendBeacon which doesn't support headers)
 async function getTokenFromCookies() {

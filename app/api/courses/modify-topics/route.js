@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 export async function POST(request) {
   try {
@@ -17,7 +17,7 @@ export async function POST(request) {
     }
 
     // Build the backend API URL - no courseId needed for pre-course topic modification
-    const backendUrl = `${BACKEND_API_URL}/courses/modify-topics`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/modify-topics`;
 
     // Build request body - userId will be derived from JWT in backend
     const requestBody = {
