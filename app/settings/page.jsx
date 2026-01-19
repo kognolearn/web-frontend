@@ -351,6 +351,17 @@ export default function SettingsPage() {
         throw new Error(data.error || "Failed to delete account");
       }
 
+      // Clear all localStorage data related to user session
+      try {
+        localStorage.removeItem("kogno_onboarding_session_v1");
+        localStorage.removeItem("kogno_anon_user_id");
+        localStorage.removeItem("kogno_onboarding_dismissed");
+        localStorage.removeItem("kogno_tour_state");
+        sessionStorage.removeItem("kogno_onboarding_tab");
+      } catch (e) {
+        console.warn("Failed to clear local storage:", e);
+      }
+
       // Sign out and redirect to home
       await supabase.auth.signOut();
       router.push("/");
