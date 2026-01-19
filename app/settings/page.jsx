@@ -348,6 +348,9 @@ export default function SettingsPage() {
 
       if (!res.ok) {
         const data = await res.json();
+        if (data.code === "ACTIVE_SUBSCRIPTION") {
+          throw new Error("You must cancel your subscription before deleting your account. Go to the Subscription section above to manage your subscription.");
+        }
         throw new Error(data.error || "Failed to delete account");
       }
 
