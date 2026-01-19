@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
-
 const REFERRAL_STORAGE_KEY = "kogno_ref";
+const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 
 /**
  * SignUpForm component
@@ -60,33 +59,36 @@ export default function SignUpForm({ variant = "standalone" }) {
     }
 
     try {
-      console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.name,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const response = await fetch("/api/auth/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          fullName: formData.name,
+          mode: "signup",
+        }),
       });
 
-      if (error) {
-        setError(error.message);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(payload?.error || "Unable to send verification code.");
         setLoading(false);
         return;
       }
 
-      // If account creation is successful, redirect to confirm email page
-      if (data.user) {
-        // Store referral code attribution for after email confirmation
-        // (will be processed when user confirms email and session is established)
-
-        // Redirect to confirm email page
-        const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}`;
-        router.push(confirmUrl);
+      try {
+        localStorage.setItem(OTP_FLOW_STORAGE_KEY, JSON.stringify({
+          email: formData.email,
+          verificationType: payload?.verificationType || "signup",
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store OTP flow info:", err);
       }
+
+      const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}`;
+      router.push(confirmUrl);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
