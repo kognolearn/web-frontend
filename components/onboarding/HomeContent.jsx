@@ -825,39 +825,14 @@ export default function HomeContent({ variant = 'page' }) {
     };
   };
 
-  const extractPriceCandidates = (parts) => {
-    const text = Array.isArray(parts) ? parts.join(' ') : String(parts || '');
-    if (!text) return [];
-    const matches = [];
-    const pattern =
-      /\$?\s*(\d{1,3}(?:\.\d{1,2})?)\s*(?:\/\s*mo(?:nth)?|per\s*month|monthly|\/\s*month|mo\b)/gi;
-    let match = pattern.exec(text);
-    while (match) {
-      const value = Number(match[1]);
-      if (Number.isFinite(value)) {
-        matches.push(Math.round(value * 100));
-      }
-      match = pattern.exec(text);
-    }
-    return matches;
-  };
-
   const extractPriceFromReply = (parts) => {
-    const matches = extractPriceCandidates(parts);
-    return matches.length > 0 ? matches[0] : null;
-  };
-
-  const selectOfferCents = (parts, suggestedPrice) => {
-    const matches = extractPriceCandidates(parts)
-      .map((value) => resolveOfferCents(value))
-      .filter((value) => value !== null);
-    const normalizedSuggested = resolveOfferCents(suggestedPrice);
-    if (normalizedSuggested !== null && matches.length > 0) {
-      const exactMatch = matches.find((value) => value === normalizedSuggested);
-      if (exactMatch !== undefined) return exactMatch;
-    }
-    if (matches.length > 0) return matches[0];
-    return normalizedSuggested;
+    const text = Array.isArray(parts) ? parts.join(' ') : String(parts || '');
+    if (!text) return null;
+    const match = text.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)\s*(?:\/\s*mo(?:nth)?|per\s*month|monthly|\/\s*month|mo\b)/i);
+    if (!match) return null;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) return null;
+    return Math.round(value * 100);
   };
 
   const getOfferCentsFromMessage = (message) => {
@@ -1013,10 +988,12 @@ export default function HomeContent({ variant = 'page' }) {
       ? payload.replyParts
       : [getNegotiationFallback()];
     let suggestedPrice = payload.suggestedPrice;
-    const resolvedOffer = selectOfferCents(replyParts, suggestedPrice);
-    const latestOfferCents = rememberLatestOffer(resolvedOffer);
-    if (Number.isFinite(resolvedOffer)) {
-      suggestedPrice = resolvedOffer;
+    const inferredOffer = (suggestedPrice === null || suggestedPrice === undefined)
+      ? extractPriceFromReply(replyParts)
+      : null;
+    const latestOfferCents = rememberLatestOffer(suggestedPrice ?? inferredOffer);
+    if ((suggestedPrice === null || suggestedPrice === undefined) && Number.isFinite(inferredOffer)) {
+      suggestedPrice = inferredOffer;
     }
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerTrial = Boolean(payload.offerTrial);
