@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
 
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 const DEFAULT_VERIFICATION_TYPE = "signup";
@@ -55,6 +56,12 @@ function ConfirmEmailContent() {
         if (event === "SIGNED_IN" && session?.user?.email_confirmed_at) {
           setConfirmed(true);
           setTimeout(() => {
+            const joinRedirect = getJoinRedirectPath();
+            if (joinRedirect) {
+              clearJoinIntent();
+              router.push(joinRedirect);
+              return;
+            }
             router.push("/");
           }, 1500);
         }
@@ -67,6 +74,12 @@ function ConfirmEmailContent() {
       if (user?.email_confirmed_at) {
         setConfirmed(true);
         setTimeout(() => {
+          const joinRedirect = getJoinRedirectPath();
+          if (joinRedirect) {
+            clearJoinIntent();
+            router.push(joinRedirect);
+            return;
+          }
           router.push("/");
         }, 1500);
       }
@@ -153,6 +166,12 @@ function ConfirmEmailContent() {
     setConfirmed(true);
     setSubmitting(false);
     setTimeout(() => {
+      const joinRedirect = getJoinRedirectPath();
+      if (joinRedirect) {
+        clearJoinIntent();
+        router.push(joinRedirect);
+        return;
+      }
       router.push("/");
     }, 1500);
   };

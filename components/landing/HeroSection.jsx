@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import SignUpForm from "@/components/auth/SignUpForm";
 
-export default function HeroSection() {
+export default function HeroSection({ signInHref = "/auth/sign-in" }) {
   return (
     <section className="relative min-h-[90vh] flex items-center py-16 lg:py-24">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -49,7 +49,7 @@ export default function HeroSection() {
               <div className="mt-6 pt-4 border-t border-white/10 text-center">
                 <p className="text-sm text-[var(--muted-foreground)]">
                   Already have an account?{" "}
-                  <Link href="/auth/sign-in" className="text-[var(--primary)] hover:underline font-medium">
+                  <Link href={signInHref} className="text-[var(--primary)] hover:underline font-medium">
                     Sign in
                   </Link>
                 </p>

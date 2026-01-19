@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { getRedirectDestination } from "@/lib/platform";
 import { authFetch } from "@/lib/api";
+import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 
@@ -63,6 +64,12 @@ export default function SignInForm() {
       if (data?.user) {
         if (redirectTo) {
           router.push(getRedirectDestination(redirectTo));
+          return;
+        }
+        const joinRedirect = getJoinRedirectPath();
+        if (joinRedirect) {
+          clearJoinIntent();
+          router.push(getRedirectDestination(joinRedirect));
           return;
         }
 
