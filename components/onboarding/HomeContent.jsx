@@ -1074,9 +1074,15 @@ export default function HomeContent({ variant = 'page' }) {
 
       const replyParts = extractReplyParts(response, getNegotiationFallback());
       const suggestedPriceRaw = response?.suggestedPrice;
-      let suggestedPrice = Number.isFinite(Number(suggestedPriceRaw))
-        ? Math.round(Number(suggestedPriceRaw))
-        : null;
+      let suggestedPrice = null;
+      if (suggestedPriceRaw !== null && suggestedPriceRaw !== undefined && suggestedPriceRaw !== '') {
+        const parsed = typeof suggestedPriceRaw === 'string'
+          ? Number(suggestedPriceRaw.trim())
+          : Number(suggestedPriceRaw);
+        if (Number.isFinite(parsed)) {
+          suggestedPrice = Math.round(parsed);
+        }
+      }
       if (suggestedPrice !== null && suggestedPrice < 100) {
         suggestedPrice = Math.round(suggestedPrice * 100);
       }
