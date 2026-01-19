@@ -228,7 +228,7 @@ function ConfirmEmailContent() {
 
         <div className="relative z-10 w-full max-w-md">
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+            <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
               Kogno
             </Link>
           </div>
@@ -293,7 +293,7 @@ function ConfirmEmailContent() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+          <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
             Kogno
           </Link>
         </div>

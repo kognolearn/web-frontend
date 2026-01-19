@@ -659,16 +659,16 @@ function DashboardClient() {
         <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl relative z-10">
           {/* Top bar */}
           <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center gap-2">
               <Image 
                 src="/images/kogno_logo.png" 
                 alt="Kogno Logo" 
-                width={240} 
-                height={80} 
-                className="h-10 sm:h-16 w-auto object-contain"
+                width={32} 
+                height={32} 
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
                 priority
               />
-              <span className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--primary)]">
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
                 Kogno
               </span>
             </Link>

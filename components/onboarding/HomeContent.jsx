@@ -1393,8 +1393,14 @@ export default function HomeContent({ variant = 'page' }) {
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/5">
-        <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-[var(--primary)]">
-          <Image src="/images/kogno_logo.png" alt="Kogno" width={32} height={32} />
+        <Link href="/" className="flex items-center gap-2 text-lg sm:text-xl font-bold text-[var(--primary)]">
+          <Image
+            src="/images/kogno_logo.png"
+            alt="Kogno"
+            width={32}
+            height={32}
+            className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
+          />
           Kogno
         </Link>
         <button

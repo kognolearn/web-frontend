@@ -258,16 +258,16 @@ export default function AdHocExamGradingPage() {
       <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-16 pt-8">
         <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
-            <Link href="/dashboard" className="flex items-center">
+            <Link href="/dashboard" className="flex items-center gap-2">
               <Image
                 src="/images/kogno_logo.png"
                 alt="Kogno Logo"
-                width={200}
-                height={70}
-                className="h-10 w-auto object-contain"
+                width={32}
+                height={32}
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
                 priority
               />
-              <span className="text-xl font-extrabold tracking-tight text-[var(--primary)]">
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
                 Kogno
               </span>
             </Link>

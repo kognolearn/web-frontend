@@ -384,9 +384,9 @@ export default function SettingsPage() {
               <Image
                 src="/images/kogno_logo.png"
                 alt="Kogno Logo"
-                width={120}
-                height={40}
-                className="h-8 w-auto object-contain"
+                width={32}
+                height={32}
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
               />
             </Link>
           </div>
