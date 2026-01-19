@@ -289,6 +289,28 @@ export default function SettingsPage() {
     });
   };
 
+  const getTimeLeftLabel = (dateStr) => {
+    if (!dateStr) return "TBD";
+    const diffMs = new Date(dateStr).getTime() - Date.now();
+    if (diffMs <= 0) return "Expired";
+    const minuteMs = 60 * 1000;
+    const hourMs = 60 * minuteMs;
+    const dayMs = 24 * hourMs;
+
+    if (diffMs < hourMs) {
+      const minutes = Math.max(1, Math.ceil(diffMs / minuteMs));
+      return `${minutes} min${minutes === 1 ? "" : "s"} left`;
+    }
+
+    if (diffMs < dayMs) {
+      const hours = Math.ceil(diffMs / hourMs);
+      return `${hours} hour${hours === 1 ? "" : "s"} left`;
+    }
+
+    const days = Math.ceil(diffMs / dayMs);
+    return `${days} day${days === 1 ? "" : "s"} left`;
+  };
+
   const getProductLabel = (productType) => {
     switch (productType) {
       case "monthly": return "Monthly Plan";
@@ -865,6 +887,8 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
                   <p className="text-sm text-[var(--muted-foreground)]">Trial ends</p>
                   <p className="text-base font-medium">{trialEndsAt ? formatDate(trialEndsAt) : "TBD"}</p>
+                  <p className="text-sm text-[var(--muted-foreground)] mt-2">Time left</p>
+                  <p className="text-base font-medium">{getTimeLeftLabel(trialEndsAt)}</p>
                 </div>
 
                 {canContinuePriceSelection ? (
