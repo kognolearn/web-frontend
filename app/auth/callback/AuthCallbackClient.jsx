@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -31,6 +32,12 @@ export default function AuthCallbackClient() {
             // User is already confirmed, redirect to onboarding
             setStatus("success");
             setTimeout(() => {
+              const joinRedirect = getJoinRedirectPath();
+              if (joinRedirect) {
+                clearJoinIntent();
+                router.push(joinRedirect);
+                return;
+              }
               router.push("/");
             }, 2000);
             return;
@@ -71,6 +78,12 @@ export default function AuthCallbackClient() {
               setStatus("success");
               // Wait a moment to show success message, then redirect to onboarding
               setTimeout(() => {
+                const joinRedirect = getJoinRedirectPath();
+                if (joinRedirect) {
+                  clearJoinIntent();
+                  router.push(joinRedirect);
+                  return;
+                }
                 router.push("/");
               }, 2000);
             }
@@ -83,6 +96,12 @@ export default function AuthCallbackClient() {
           const { data: { user } } = await supabase.auth.getUser();
 
           if (user) {
+            const joinRedirect = getJoinRedirectPath();
+            if (joinRedirect) {
+              clearJoinIntent();
+              router.push(joinRedirect);
+              return;
+            }
             router.push("/");
           } else {
             setStatus("error");
