@@ -83,40 +83,6 @@ export async function middleware(request) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const hostname = request.headers.get('host')
-
-  // Check if we are on dev.kognolearn.com
-  if (hostname === 'dev.kognolearn.com') {
-    // Allow auth related routes to proceed to avoid blocking sign-in/callback flows
-    if (request.nextUrl.pathname.startsWith('/auth/callback') || 
-        request.nextUrl.pathname.startsWith('/api/auth')) {
-      return response
-    }
-
-    if (!user) {
-      // If not signed in, redirect to sign-in page
-      // Avoid redirect loop if already on sign-in page or other auth pages
-      if (!request.nextUrl.pathname.startsWith('/auth/')) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/auth/sign-in'
-        url.searchParams.set('redirectTo', request.nextUrl.pathname)
-        return NextResponse.redirect(url)
-      }
-    } else {
-      // If signed in, check if admin
-      const { data: adminData, error } = await supabase
-        .from('admins')
-        .select('email')
-        .eq('email', user.email)
-        .single()
-
-      if (error || !adminData) {
-        // Not an admin, redirect to production
-        return NextResponse.redirect('https://kognolearn.com')
-      }
-    }
-  }
-
   // Handle admin routes with separate auth flow
   if (request.nextUrl.pathname.startsWith('/admin')) {
     // Always allow the admin sign-in page
