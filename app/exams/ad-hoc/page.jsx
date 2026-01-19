@@ -275,7 +275,12 @@ export default function AdHocExamGradingPage() {
               {subscriptionStatus && (
                 <SubscriptionBadge
                   planLevel={subscriptionStatus.planLevel}
-                  expiresAt={subscriptionStatus.subscription?.currentPeriodEnd}
+                  trialActive={subscriptionStatus.trialActive}
+                  expiresAt={
+                    subscriptionStatus.trialActive
+                      ? subscriptionStatus.trialEndsAt
+                      : subscriptionStatus.subscription?.currentPeriodEnd
+                  }
                   className="hidden sm:inline-flex"
                 />
               )}

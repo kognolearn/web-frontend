@@ -4,11 +4,13 @@ import Link from "next/link";
 
 export default function SubscriptionBadge({
   planLevel = "free",
+  trialActive = false,
   expiresAt = null,
   className = "",
   showLink = true,
 }) {
   const isPaid = planLevel === "paid";
+  const isTrial = Boolean(trialActive);
   const isExpiringSoon = expiresAt && new Date(expiresAt) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const formatDate = (dateStr) => {
@@ -44,9 +46,14 @@ export default function SubscriptionBadge({
               d="M5 13l4 4L19 7"
             />
           </svg>
-          Pro
-          {isExpiringSoon && expiresAt && (
-            <span className="opacity-75">(expires {formatDate(expiresAt)})</span>
+          {isTrial ? "Free Trial" : "Pro"}
+          {isTrial && expiresAt ? (
+            <span className="opacity-75">(ends {formatDate(expiresAt)})</span>
+          ) : (
+            isExpiringSoon &&
+            expiresAt && (
+              <span className="opacity-75">(expires {formatDate(expiresAt)})</span>
+            )
           )}
         </>
       ) : (

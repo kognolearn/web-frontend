@@ -485,6 +485,7 @@ function DashboardClient() {
   const hasPremiumAccess =
     subscriptionStatus?.planLevel === 'paid' || subscriptionStatus?.trialActive;
   const isFreeTier = !hasPremiumAccess;
+  const premiumBadgeLabel = subscriptionStatus?.trialActive ? "Free Trial" : "Pro";
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -716,7 +717,7 @@ function DashboardClient() {
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
-                        Pro
+                        {premiumBadgeLabel}
                       </div>
                     )}
                   </div>
