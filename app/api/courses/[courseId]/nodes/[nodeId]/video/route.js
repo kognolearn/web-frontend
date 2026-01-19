@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 /**
  * PATCH /api/courses/:courseId/nodes/:nodeId/video
@@ -13,7 +13,7 @@ export async function PATCH(request, { params }) {
     const body = await request.json();
     const { completed = true } = body;
 
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/video`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/video`;
 
     const response = await fetch(backendUrl, {
       method: 'PATCH',

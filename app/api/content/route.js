@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 export async function GET(request) {
   try {
@@ -37,7 +37,7 @@ export async function GET(request) {
     }
 
     // Build the backend API URL
-    const backendUrl = new URL(`${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}`);
+    const backendUrl = new URL(`${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}`);
     backendUrl.searchParams.set('userId', userId);
 
     // Forward the request to the backend API

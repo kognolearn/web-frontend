@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import DurationInput from "@/components/ui/DurationInput";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
@@ -28,6 +29,7 @@ import TopicExplorer from "@/components/courses/TopicExplorer";
 import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
 import { motion } from "framer-motion";
 import { getRedirectDestination } from "@/lib/platform";
+import { useGuidedTour } from "@/components/tour";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
@@ -469,6 +471,8 @@ function buildCurrentModulesPayload(overviewTopics) {
 function CreateCoursePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { userSettings, updateUserSettings } = useOnboarding();
+  const { startTour, isTourActive, currentTour } = useGuidedTour();
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const nextWeek = useMemo(() => {
     const d = new Date();
@@ -491,6 +495,25 @@ function CreateCoursePageContent() {
       localStorage.setItem('kogno_course_create_ui_mode', uiMode);
     }
   }, [uiMode]);
+
+  const shouldStartCourseCreationTour =
+    Boolean(userSettings && !userSettings.tour_completed && (!userSettings.tour_phase || userSettings.tour_phase === "course-creation"));
+
+  useEffect(() => {
+    if (!shouldStartCourseCreationTour) return;
+
+    if (uiMode !== "chat") {
+      setUiMode("chat");
+    }
+
+    if (!isTourActive || currentTour !== "course-creation") {
+      startTour("course-creation");
+    }
+
+    if (userSettings?.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
+  }, [shouldStartCourseCreationTour, uiMode, isTourActive, currentTour, startTour, updateUserSettings, userSettings]);
 
   const [studyHours, setStudyHours] = useState(5);
   const [studyMinutes, setStudyMinutes] = useState(0);
@@ -1568,7 +1591,7 @@ function CreateCoursePageContent() {
       payload.content_version = resolvedContentVersion;
 
       console.log("[CreateCourse] About to fetch /api/courses");
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1593,6 +1616,10 @@ function CreateCoursePageContent() {
         try {
           window.dispatchEvent(new Event("courses:updated"));
         } catch {}
+      }
+
+      if (userSettings && !userSettings.tour_completed) {
+        updateUserSettings({ tour_phase: "course-features" });
       }
 
       redirectToDashboard();
@@ -1641,6 +1668,8 @@ function CreateCoursePageContent() {
     studyMode,
     studyHours,
     studyMinutes,
+    userSettings,
+    updateUserSettings,
   ]);
 
   // Floating Navigation Logic

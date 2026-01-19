@@ -303,7 +303,17 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [courseId, setCourseId] = useState(null);
 
   // Study mode
-  const [studyMode, setStudyMode] = useState("deep");
+  const [studyMode, setStudyModeState] = useState("deep");
+  const setStudyMode = useCallback((mode) => {
+    setStudyModeState(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("kogno_study_mode", mode);
+      } catch (error) {
+        console.warn("[CourseCreation] Unable to persist study mode:", error);
+      }
+    }
+  }, []);
   const [studyHours, setStudyHours] = useState(5);
   const [studyMinutes, setStudyMinutes] = useState(0);
   const [studyTimeError, setStudyTimeError] = useState(false);
@@ -1084,7 +1094,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
       payload.content_version = resolvedContentVersion;
 
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1257,6 +1267,44 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     // File types
     syllabusFileTypes,
+
+    // Branching support - state snapshots
+    getStateSnapshot: useCallback(() => ({
+      courseTitle,
+      collegeName,
+      studyMode,
+      studyHours,
+      studyMinutes,
+      syllabusText,
+      examNotes,
+      overviewTopics,
+      moduleConfidenceState,
+      // Note: File objects (syllabusFiles, examFiles) cannot be serialized
+      // Files are treated as "committed" - not branch-able
+    }), [
+      courseTitle,
+      collegeName,
+      studyMode,
+      studyHours,
+      studyMinutes,
+      syllabusText,
+      examNotes,
+      overviewTopics,
+      moduleConfidenceState,
+    ]),
+
+    restoreStateSnapshot: useCallback((snapshot) => {
+      if (!snapshot) return;
+      setCourseTitle(snapshot.courseTitle ?? '');
+      setCollegeName(snapshot.collegeName ?? '');
+      setStudyMode(snapshot.studyMode ?? 'deep');
+      setStudyHours(snapshot.studyHours ?? 5);
+      setStudyMinutes(snapshot.studyMinutes ?? 0);
+      setSyllabusText(snapshot.syllabusText ?? '');
+      setExamNotes(snapshot.examNotes ?? '');
+      setOverviewTopics(snapshot.overviewTopics ?? []);
+      setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});
+    }, []),
   };
 }
 

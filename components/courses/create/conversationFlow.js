@@ -89,6 +89,7 @@ export const CONVERSATION_FLOW = [
       },
     ],
     skippable: false,
+    tourTarget: 'study-mode',
   },
 
   // Step 4: Duration (Cram only)
@@ -112,7 +113,7 @@ export const CONVERSATION_FLOW = [
       { id: 'skip', label: 'Skip', icon: 'skip', description: "I'll add materials later" },
     ],
     skippable: true,
-    tourTarget: 'syllabus-upload', // data-tour attribute for tour highlighting
+    tourTarget: 'syllabus-choice', // data-tour attribute for tour highlighting
   },
 
   // Step 5a: Syllabus Content (combined text + files)
@@ -141,7 +142,7 @@ export const CONVERSATION_FLOW = [
       { id: 'skip', label: 'Skip', icon: 'skip', description: "I don't have any exam materials" },
     ],
     skippable: true,
-    tourTarget: 'exam-input', // data-tour attribute for tour highlighting
+    tourTarget: 'exam-choice', // data-tour attribute for tour highlighting
   },
 
   // Step 6a: Exam Content (combined text + files)
@@ -167,6 +168,7 @@ export const CONVERSATION_FLOW = [
     confirmLabel: 'Generate Topics',
     action: 'generateTopics',
     skippable: false,
+    tourTarget: 'generate-topics',
   },
 
   // Step 8: Topics Loading (shown during generation)

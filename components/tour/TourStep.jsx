@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 import { useGuidedTour } from "./GuidedTourProvider";
 
 /**
@@ -71,7 +72,7 @@ function SpotlightOverlay({ targetRect, onClick }) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] pointer-events-auto"
+      className="fixed inset-0 z-[9999] pointer-events-none"
       onClick={onClick}
       style={{
         background: `
@@ -146,10 +147,7 @@ function TourTooltip({
     >
       {/* Progress indicator */}
       <div className="px-4 pt-3 pb-2 border-b border-[var(--border)]">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
-            Step {currentStep + 1} of {totalSteps}
-          </span>
+        <div className="flex items-center justify-end">
           <div className="flex gap-1">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div
@@ -294,20 +292,40 @@ export default function TourStep() {
     isTourActive,
     currentStep,
     currentStepConfig,
+    currentTour,
     totalSteps,
     nextStep,
     skipTour,
     requiresInteraction,
     completeStep,
+    endTour,
   } = useGuidedTour();
+  const pathname = usePathname();
 
   const [targetRect, setTargetRect] = useState(null);
   const [isStepCompleted, setIsStepCompleted] = useState(false);
+  const autoAdvanceRef = useRef(false);
 
   // Reset step completion when step changes
   useEffect(() => {
     setIsStepCompleted(false);
+    autoAdvanceRef.current = false;
   }, [currentStep]);
+
+  // Stop tour if user navigates away from the relevant page
+  useEffect(() => {
+    if (!currentTour) return;
+    if (currentTour === "course-creation" && pathname !== "/courses/create") {
+      endTour(false);
+      return;
+    }
+    if (currentTour === "course-features") {
+      const isCourseRoot = pathname?.startsWith("/courses/") && !pathname.slice("/courses/".length).includes("/");
+      if (!isCourseRoot) {
+        endTour(false);
+      }
+    }
+  }, [currentTour, pathname, endTour]);
 
   // Find and track target element
   useEffect(() => {
@@ -359,17 +377,45 @@ export default function TourStep() {
           document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
           document.querySelector(currentStepConfig.target);
 
-        if (target && (target === e.target || target.contains(e.target))) {
+        if (!target || !(target === e.target || target.contains(e.target))) {
+          return;
+        }
+
+        const clickable = e.target.closest(
+          "button, [role='button'], a, [data-tour-complete='true']"
+        );
+
+        if (!clickable) return;
+
+        setIsStepCompleted(true);
+        completeStep();
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key !== "Enter") return;
+
+        const target =
+          document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
+          document.querySelector(currentStepConfig.target);
+
+        if (!target || !(target === e.target || target.contains(e.target))) {
+          return;
+        }
+
+        const tagName = e.target?.tagName?.toLowerCase();
+        if (tagName === "input" || tagName === "textarea") {
           setIsStepCompleted(true);
           completeStep();
         }
       };
 
       document.addEventListener("click", handleClick, true);
+      document.addEventListener("keydown", handleKeyDown, true);
       return () => {
         window.removeEventListener("scroll", updateTargetRect, true);
         window.removeEventListener("resize", updateTargetRect);
         document.removeEventListener("click", handleClick, true);
+        document.removeEventListener("keydown", handleKeyDown, true);
       };
     }
 
@@ -378,6 +424,58 @@ export default function TourStep() {
       window.removeEventListener("resize", updateTargetRect);
     };
   }, [isTourActive, currentStepConfig, requiresInteraction, completeStep]);
+
+  useEffect(() => {
+    if (!currentStepConfig?.showIfStudyMode) return;
+    if (typeof window === "undefined") return;
+
+    let shouldShow = true;
+    try {
+      const storedMode = localStorage.getItem("kogno_study_mode");
+      shouldShow = storedMode === currentStepConfig.showIfStudyMode;
+    } catch (error) {
+      console.warn("[Tour] showIfStudyMode check failed:", error);
+    }
+
+    if (shouldShow) return;
+
+    setIsStepCompleted(true);
+    completeStep();
+    nextStep();
+  }, [currentStepConfig, completeStep, nextStep]);
+
+  useEffect(() => {
+    if (!requiresInteraction || !isStepCompleted) return;
+    if (currentStepConfig?.autoAdvance === false) return;
+    if (autoAdvanceRef.current) return;
+
+    autoAdvanceRef.current = true;
+    const timer = setTimeout(() => {
+      nextStep();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [requiresInteraction, isStepCompleted, currentStepConfig, nextStep]);
+
+  useEffect(() => {
+    if (!currentStepConfig?.skipIfMissing) return;
+    if (!currentStepConfig?.target) return;
+    if (targetRect) return;
+
+    const timer = setTimeout(() => {
+      const target =
+        document.querySelector(`[data-tour="${currentStepConfig.target}"]`) ||
+        document.querySelector(currentStepConfig.target);
+
+      if (!target) {
+        setIsStepCompleted(true);
+        completeStep();
+        nextStep();
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [currentStepConfig, targetRect, completeStep, nextStep]);
 
   // Don't render if no active tour or mounting
   if (!isTourActive || !currentStepConfig) return null;

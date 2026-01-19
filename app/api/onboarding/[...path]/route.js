@@ -1,5 +1,5 @@
 // Proxy onboarding requests to backend /onboarding endpoints.
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 export async function GET(request, { params }) {
   return proxyRequest(request, params, "GET");

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 /**
  * POST /api/courses/:courseId/nodes/:nodeId/grade
@@ -58,7 +58,7 @@ export async function POST(request, { params }) {
     }
 
     // Build the backend API URL
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/grade`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/grade`;
 
     console.log(`[Grade API] Grading section ${sectionId || 'all'} for node ${nodeId} in course ${courseId}`);
 

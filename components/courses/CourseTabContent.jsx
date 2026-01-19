@@ -2417,6 +2417,7 @@ export default function CourseTabContent({
                       {!isCollapsed && (
                         <div className="px-3 pb-3 space-y-1">
                           {module.lessons?.map((lesson, lessonIdx) => {
+                            const isFirstLesson = moduleIdx === 0 && lessonIdx === 0;
                             const lessonCompleted = isLessonFullyCompleted(lesson.id);
                             // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
                             const lessonStatus = lesson.status || lesson.mastery_status || getLessonMasteryStatus(lesson.id);
@@ -2427,6 +2428,7 @@ export default function CourseTabContent({
                               <button
                                 key={lesson.id || lessonIdx}
                                 type="button"
+                                data-tour={isFirstLesson ? "first-lesson" : undefined}
                                 onClick={() => {
                                   setSelectedLesson(lesson);
                                   setSelectedReviewModule(null);
