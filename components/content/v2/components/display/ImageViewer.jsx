@@ -66,7 +66,7 @@ export default function ImageViewer({
       <img
         src={image.url}
         alt={image.alt || `Image ${index + 1}`}
-        className="max-w-full h-auto rounded-xl object-contain mx-auto"
+        className="w-full h-auto rounded-xl"
       />
       {image.caption && (
         <p className="mt-2 text-sm text-center text-[var(--muted-foreground)]">
