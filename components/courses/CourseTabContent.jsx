@@ -19,7 +19,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
-import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
+import { V2ContentRenderer, V2SectionRenderer, isV2Content } from "@/components/content/v2";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -41,7 +41,9 @@ const prettyFormat = (fmt) => {
 const normalizeContentSequenceToken = (token) => {
   if (!token) return null;
   const normalized = String(token).trim().toLowerCase().replace(/[-\s]+/g, "_");
-  if (normalized === "quiz" || normalized === "mini_quiz" || normalized === "miniquiz") return "mini_quiz";
+  if (normalized === "quiz" || normalized === "mini_quiz" || normalized === "miniquiz" || normalized === "assessment") return "mini_quiz";
+  // V1.5: Support indexed interactive tasks (interactive_task_0, interactive_task_1, etc.)
+  if (normalized.match(/^interactive_task_\d+$/)) return normalized;
   if (normalized === "interactive_practice" || normalized === "interactive_task") return "interactive_task";
   if (normalized === "flashcard") return "flashcards";
   if (normalized === "videos") return "video";
@@ -323,14 +325,32 @@ function ItemContent({
       );
     }
     case "mini_quiz": {
+      // V1.5: Check for atomic assessment format (layout + grading_logic)
+      if (data?.assessment?.layout && data?.assessment?.grading_logic) {
+        return (
+          <V2SectionRenderer
+            section={{
+              id: 'lesson-assessment',
+              title: data.assessment.title || 'Check Your Understanding',
+              layout: data.assessment.layout,
+              grading_logic: data.assessment.grading_logic
+            }}
+            courseId={courseId}
+            nodeId={id}
+            userId={userId}
+          />
+        );
+      }
+
       // Check if this is a Module Quiz with practice problems (has both quiz and practice)
       const hasPractice = data?.practice_problems && data.practice_problems.length > 0;
       const currentTab = moduleQuizTab || 'quiz';
-      
+
       if (hasPractice && currentTab === 'practice') {
         return <PracticeProblems problems={data.practice_problems} />;
       }
-      
+
+      // Legacy V1 quiz format
       return (
         <Quiz
           key={id}
@@ -349,9 +369,38 @@ function ItemContent({
       return <PracticeProblems problems={practiceProblems} />;
     }
     case "interactive_practice":
-    case "interactive_task": {
+    case "interactive_task":
+    default: {
+      // Check if this is an indexed task format (e.g., interactive_task_0, interactive_task_1)
+      if (!normFmt.startsWith('interactive_task') && !normFmt.startsWith('interactive_practice') && normFmt !== 'interactive_task' && normFmt !== 'interactive_practice') {
+        // This is the actual default case - show fallback content
+        return (
+          <article className="card rounded-[28px] px-6 py-6 sm:px-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                {prettyFormat(normFmt || "Content")}
+              </h2>
+            </div>
+            <div className="text-sm text-[var(--muted-foreground)]">
+              Content format not recognized. Raw data available for admin users.
+            </div>
+          </article>
+        );
+      }
+
       // Interactive Task (formerly interactive practice)
-      const taskData = data?.interactive_task || data?.interactive_practice || data || {};
+      // V1.5: Support multiple interactive tasks (interactive_tasks array)
+      let taskData;
+      if (normFmt.match(/^interactive_task_\d+$/)) {
+        // Indexed task from interactive_tasks array
+        const taskIndex = parseInt(normFmt.split('_').pop(), 10) || 0;
+        const tasks = data?.interactive_tasks || (data?.interactive_task ? [data.interactive_task] : []);
+        taskData = tasks[taskIndex] || {};
+      } else {
+        // Legacy single task format
+        taskData = data?.interactive_task || data?.interactive_practice || data || {};
+      }
+
       const rawTaskContent = (() => {
         if (typeof taskData === "string") return taskData;
         if (!taskData || (typeof taskData === "object" && Object.keys(taskData).length === 0)) {
@@ -393,17 +442,6 @@ function ItemContent({
         </div>
       );
     }
-    default:
-      return (
-        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-[var(--foreground)]">Content</span>
-          </div>
-          <pre className="overflow-auto text-xs p-4 bg-[var(--surface-2)] rounded-lg">
-            {JSON.stringify(data ?? cached.data, null, 2)}
-          </pre>
-        </article>
-      );
   }
 }
 
@@ -1424,12 +1462,31 @@ export default function CourseTabContent({
       if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
       if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
       // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
-      if (data.questions || data.mcq || data.frq) types.push({ label: "Quiz", value: "mini_quiz" });
+
+      // V1.5: Check for assessment (atomic components) or legacy quiz (MCQ questions)
+      if (data.assessment?.layout) {
+        types.push({ label: "Assessment", value: "mini_quiz" });
+      } else if (data.questions || data.mcq || data.frq) {
+        types.push({ label: "Quiz", value: "mini_quiz" });
+      }
+
       // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
-      // Interactive practice: parsons, skeleton, matching, blackbox
-      const ip = data.interactive_practice || data.interactive_task;
-      if (ip) {
-        types.push({ label: "Interactive Task", value: "interactive_task" });
+
+      // V1.5: Handle multiple interactive tasks (interactive_tasks array)
+      if (Array.isArray(data.interactive_tasks) && data.interactive_tasks.length > 0) {
+        data.interactive_tasks.forEach((task, idx) => {
+          types.push({
+            label: task.title || `Interactive Task ${idx + 1}`,
+            value: `interactive_task_${idx}`,
+            taskIndex: idx
+          });
+        });
+      } else {
+        // Legacy: single interactive_task or interactive_practice
+        const ip = data.interactive_practice || data.interactive_task;
+        if (ip) {
+          types.push({ label: "Interactive Task", value: "interactive_task" });
+        }
       }
     }
     if (types.length === 0) {
