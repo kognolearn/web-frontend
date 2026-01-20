@@ -1258,14 +1258,14 @@ export default function ReadingRenderer({
                     src={block.url}
                     alt={imageAlt}
                     loading="lazy"
-                    className="max-w-full h-auto rounded-xl mx-auto"
+                    className="w-full h-auto rounded-xl"
                   />
                 );
                 return (
-                  <figure key={idx} className="my-6">
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+                  <figure key={idx} className="my-6 w-full">
+                    <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
                       {block.fullUrl ? (
-                        <a href={block.fullUrl} target="_blank" rel="noopener noreferrer">
+                        <a href={block.fullUrl} target="_blank" rel="noopener noreferrer" className="block w-full">
                           {imageElement}
                         </a>
                       ) : (

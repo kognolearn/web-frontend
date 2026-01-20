@@ -60,13 +60,13 @@ export default function ImageViewer({
   const renderImage = (image, index) => (
     <div
       key={index}
-      className={`relative group ${zoomable ? "cursor-zoom-in" : ""}`}
+      className={`relative group w-full ${zoomable ? "cursor-zoom-in" : ""}`}
       onClick={() => handleZoom(image)}
     >
       <img
         src={image.url}
         alt={image.alt || `Image ${index + 1}`}
-        className="max-w-full h-auto rounded-xl object-contain mx-auto"
+        className="w-full h-auto rounded-xl object-contain"
       />
       {image.caption && (
         <p className="mt-2 text-sm text-center text-[var(--muted-foreground)]">
@@ -84,7 +84,7 @@ export default function ImageViewer({
   );
 
   return (
-    <div id={id} className="v2-image-viewer">
+    <div id={id} className="v2-image-viewer w-full">
       {/* Single Layout */}
       {layout === "single" && renderImage(images[0], 0)}
 

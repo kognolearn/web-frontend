@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
 import { authFetch } from "@/lib/api";
 
-export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress, canOpen = true }) {
+export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress, canOpen = true, isSharedWithMe = false }) {
   const router = useRouter();
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -194,43 +194,74 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
 
         {/* Header with title and actions */}
         <div className="flex items-start justify-between gap-3">
-          <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 flex-1 ${timeLabel ? 'pr-28' : ''}`}>
-            {courseCode}
-          </h3>
+          <div className="flex-1 min-w-0">
+            <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 ${timeLabel ? 'pr-28' : ''}`}>
+              {courseCode}
+            </h3>
+            {/* Shared with me indicator */}
+            {isSharedWithMe && (
+              <div className="flex items-center gap-1 mt-1">
+                <svg className="w-3 h-3 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Shared with you</span>
+              </div>
+            )}
+          </div>
 
           {/* Action buttons - shown on hover, replaces time badge position */}
           <div className={`flex items-center gap-0.5 transition-all duration-300 ease-out shrink-0 -mt-1 ${
-            timeLabel 
-              ? 'absolute top-3 right-3 z-20 translate-x-0 opacity-100 md:translate-x-4 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100' 
+            timeLabel
+              ? 'absolute top-3 right-3 z-20 translate-x-0 opacity-100 md:translate-x-4 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100'
               : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 -mr-1'
           }`}>
-            <Tooltip content={shareCopied ? "Copied!" : "Share"} position="bottom">
-              <button
-                onClick={handleShareClick}
-                className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all"
-                aria-label="Share course"
-              >
-                {shareCopied ? (
-                  <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
+            {/* Only show share button for courses you own */}
+            {!isSharedWithMe && (
+              <Tooltip content={shareCopied ? "Copied!" : "Share"} position="bottom">
+                <button
+                  onClick={handleShareClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all"
+                  aria-label="Share course"
+                >
+                  {shareCopied ? (
+                    <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                  )}
+                </button>
+              </Tooltip>
+            )}
+            {/* Only show delete button for courses you own */}
+            {!isSharedWithMe && (
+              <Tooltip content="Delete" position="bottom">
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                )}
-              </button>
-            </Tooltip>
-            <Tooltip content="Delete" position="bottom">
-              <button
-                onClick={handleDeleteClick}
-                className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-rose-500 hover:bg-rose-500/10 transition-all"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </Tooltip>
+                </button>
+              </Tooltip>
+            )}
+            {/* For shared courses, show a "Leave" button instead */}
+            {isSharedWithMe && (
+              <Tooltip content="Leave course" position="bottom">
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-amber-500 hover:bg-amber-500/10 transition-all"
+                  aria-label="Leave shared course"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
 
