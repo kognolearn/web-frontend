@@ -1,43 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { authFetch } from "@/lib/api";
 import HomeContent from "@/components/onboarding/HomeContent";
+import { supabase } from "@/lib/supabase/client";
 
 export default function TrialNegotiationGate() {
   const [showGate, setShowGate] = useState(false);
-  const timerRef = useRef(null);
 
   useEffect(() => {
     let active = true;
-
-    const clearTimer = () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-
-    const scheduleCheck = (trialEndsAt) => {
-      if (!trialEndsAt) return;
-      const endsAt = new Date(trialEndsAt);
-      if (!Number.isFinite(endsAt.getTime())) return;
-      const ms = endsAt.getTime() - Date.now();
-      if (ms <= 0) return;
-      clearTimer();
-      timerRef.current = setTimeout(() => {
-        if (active) {
-          void loadStatus();
-        }
-      }, ms + 1000);
-    };
 
     const loadStatus = async () => {
       try {
         const subRes = await authFetch("/api/stripe?endpoint=subscription-status");
         if (!active || !subRes.ok) {
-          setShowGate(false);
+          if (active) {
+            setShowGate(false);
+          }
           return;
         }
         const subData = await subRes.json().catch(() => ({}));
@@ -48,7 +29,9 @@ export default function TrialNegotiationGate() {
 
         const negRes = await authFetch("/api/onboarding/negotiation-status");
         if (!active || !negRes.ok) {
-          setShowGate(false);
+          if (active) {
+            setShowGate(false);
+          }
           return;
         }
         const negData = await negRes.json().catch(() => ({}));
@@ -57,19 +40,24 @@ export default function TrialNegotiationGate() {
         } else {
           setShowGate(false);
         }
-        if (negData?.trialStatus === "active") {
-          scheduleCheck(negData?.trialEndsAt);
-        }
       } catch (error) {
-        setShowGate(false);
+        if (active) {
+          setShowGate(false);
+        }
       }
     };
 
     void loadStatus();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN") {
+        void loadStatus();
+      }
+    });
+
     return () => {
       active = false;
-      clearTimer();
+      subscription?.unsubscribe();
     };
   }, []);
 

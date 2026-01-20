@@ -47,6 +47,29 @@ function isWebAllowedPath(pathname) {
   return false
 }
 
+const AUTH_PAGE_PATHS = [
+  '/auth/sign-in',
+  '/auth/create-account',
+  '/auth/sign-up',
+  '/auth/signup',
+  '/sign-up',
+]
+
+function isAuthPagePath(pathname) {
+  return AUTH_PAGE_PATHS.some((authPath) =>
+    pathname === authPath || pathname.startsWith(`${authPath}/`)
+  )
+}
+
+function isSignedOutAllowedPath(pathname) {
+  if (pathname === '/') return true
+  if (pathname.startsWith('/api')) return true
+  if (pathname === '/auth/sign-in' || pathname.startsWith('/auth/sign-in/')) return true
+  if (pathname === '/auth/confirm-email' || pathname.startsWith('/auth/confirm-email/')) return true
+  if (pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) return true
+  return false
+}
+
 export async function middleware(request) {
   const forceDownloadRedirect = isDownloadRedirectEnabled()
   let response = NextResponse.next({
@@ -82,11 +105,15 @@ export async function middleware(request) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const pathname = request.nextUrl.pathname
 
   // Handle admin routes with separate auth flow
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  if (pathname.startsWith('/admin')) {
     // Always allow the admin sign-in page
-    if (request.nextUrl.pathname === '/admin/sign-in') {
+    if (pathname === '/admin/sign-in') {
       // If already authenticated and is admin, redirect to admin dashboard
       if (user) {
         const { data: adminData } = await supabase
@@ -128,6 +155,83 @@ export async function middleware(request) {
 
     // User is admin, allow access
     return response
+  }
+
+  if (pathname.startsWith('/api')) {
+    return response
+  }
+
+  if (!user) {
+    if (!isSignedOutAllowedPath(pathname)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      if (!url.searchParams.has('redirectTo')) {
+        const redirectPath = `${pathname}${request.nextUrl.search}`
+        url.searchParams.set('redirectTo', redirectPath)
+      }
+      return NextResponse.redirect(url)
+    }
+    return response
+  }
+
+  let hasAccess = false
+  let trialExpired = false
+
+  try {
+    const statusUrl = new URL('/api/stripe?endpoint=subscription-status', request.nextUrl.origin)
+    const headers = {}
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`
+    }
+    const statusRes = await fetch(statusUrl, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+    })
+    if (statusRes.ok) {
+      const status = await statusRes.json().catch(() => ({}))
+      hasAccess = Boolean(status?.hasSubscription) || Boolean(status?.trialActive)
+    }
+  } catch (error) {
+    // Keep defaults on status failures.
+  }
+
+  if (!hasAccess) {
+    try {
+      const negotiationUrl = new URL('/api/onboarding/negotiation-status', request.nextUrl.origin)
+      const headers = {}
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`
+      }
+      const negotiationRes = await fetch(negotiationUrl, {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+      })
+      if (negotiationRes.ok) {
+        const negotiation = await negotiationRes.json().catch(() => ({}))
+        const trialStatus = typeof negotiation?.trialStatus === 'string' ? negotiation.trialStatus : 'none'
+        if (trialStatus === 'active') {
+          hasAccess = true
+        } else if (trialStatus === 'expired' || trialStatus === 'expired_free') {
+          trialExpired = true
+        }
+      }
+    } catch (error) {
+      // Keep defaults on negotiation status failures.
+    }
+  }
+
+  if (hasAccess) {
+    if (pathname === '/' || isAuthPagePath(pathname)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+  } else if (!trialExpired && pathname !== '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url)
   }
 
   // Redirect authenticated web users away from product routes to /download
