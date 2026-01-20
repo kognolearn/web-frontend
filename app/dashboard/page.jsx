@@ -485,6 +485,7 @@ function DashboardClient() {
   const hasPremiumAccess =
     subscriptionStatus?.planLevel === 'paid' || subscriptionStatus?.trialActive;
   const isFreeTier = !hasPremiumAccess;
+  const premiumBadgeLabel = subscriptionStatus?.trialActive ? "Free Trial" : "Pro";
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -658,16 +659,16 @@ function DashboardClient() {
         <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl relative z-10">
           {/* Top bar */}
           <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center gap-2">
               <Image 
                 src="/images/kogno_logo.png" 
                 alt="Kogno Logo" 
-                width={240} 
-                height={80} 
-                className="h-10 sm:h-16 w-auto object-contain"
+                width={32} 
+                height={32} 
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
                 priority
               />
-              <span className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--primary)]">
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
                 Kogno
               </span>
             </Link>
@@ -716,7 +717,7 @@ function DashboardClient() {
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
-                        Pro
+                        {premiumBadgeLabel}
                       </div>
                     )}
                   </div>
@@ -856,6 +857,7 @@ function DashboardClient() {
                 const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
                 const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
+                const isSharedWithMe = course.is_shared_with_me === true;
                 return (
                   <CourseCard
                     key={course.id}
@@ -867,6 +869,7 @@ function DashboardClient() {
                     topicsProgress={progress}
                     canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
+                    isSharedWithMe={isSharedWithMe}
                   />
                 );
               })}

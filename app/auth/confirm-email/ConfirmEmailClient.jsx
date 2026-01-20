@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
 
 // Auth constants
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
@@ -56,6 +57,12 @@ function ConfirmEmailContent() {
         if (event === "SIGNED_IN" && session?.user?.email_confirmed_at) {
           setConfirmed(true);
           setTimeout(() => {
+            const joinRedirect = getJoinRedirectPath();
+            if (joinRedirect) {
+              clearJoinIntent();
+              router.push(joinRedirect);
+              return;
+            }
             router.push("/");
           }, 1500);
         }
@@ -68,6 +75,12 @@ function ConfirmEmailContent() {
       if (user?.email_confirmed_at) {
         setConfirmed(true);
         setTimeout(() => {
+          const joinRedirect = getJoinRedirectPath();
+          if (joinRedirect) {
+            clearJoinIntent();
+            router.push(joinRedirect);
+            return;
+          }
           router.push("/");
         }, 1500);
       }
@@ -154,6 +167,12 @@ function ConfirmEmailContent() {
     setConfirmed(true);
     setSubmitting(false);
     setTimeout(() => {
+      const joinRedirect = getJoinRedirectPath();
+      if (joinRedirect) {
+        clearJoinIntent();
+        router.push(joinRedirect);
+        return;
+      }
       router.push("/");
     }, 1500);
   };
@@ -229,7 +248,7 @@ function ConfirmEmailContent() {
 
         <div className="relative z-10 w-full max-w-md">
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+            <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
               Kogno
             </Link>
           </div>
@@ -294,7 +313,7 @@ function ConfirmEmailContent() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+          <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
             Kogno
           </Link>
         </div>

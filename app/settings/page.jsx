@@ -289,6 +289,28 @@ export default function SettingsPage() {
     });
   };
 
+  const getTimeLeftLabel = (dateStr) => {
+    if (!dateStr) return "TBD";
+    const diffMs = new Date(dateStr).getTime() - Date.now();
+    if (diffMs <= 0) return "Expired";
+    const minuteMs = 60 * 1000;
+    const hourMs = 60 * minuteMs;
+    const dayMs = 24 * hourMs;
+
+    if (diffMs < hourMs) {
+      const minutes = Math.max(1, Math.ceil(diffMs / minuteMs));
+      return `${minutes} min${minutes === 1 ? "" : "s"} left`;
+    }
+
+    if (diffMs < dayMs) {
+      const hours = Math.ceil(diffMs / hourMs);
+      return `${hours} hour${hours === 1 ? "" : "s"} left`;
+    }
+
+    const days = Math.ceil(diffMs / dayMs);
+    return `${days} day${days === 1 ? "" : "s"} left`;
+  };
+
   const getProductLabel = (productType) => {
     switch (productType) {
       case "monthly": return "Monthly Plan";
@@ -326,7 +348,21 @@ export default function SettingsPage() {
 
       if (!res.ok) {
         const data = await res.json();
+        if (data.code === "ACTIVE_SUBSCRIPTION") {
+          throw new Error("You must cancel your subscription before deleting your account. Go to the Subscription section above to manage your subscription.");
+        }
         throw new Error(data.error || "Failed to delete account");
+      }
+
+      // Clear all localStorage data related to user session
+      try {
+        localStorage.removeItem("kogno_onboarding_session_v1");
+        localStorage.removeItem("kogno_anon_user_id");
+        localStorage.removeItem("kogno_onboarding_dismissed");
+        localStorage.removeItem("kogno_tour_state");
+        sessionStorage.removeItem("kogno_onboarding_tab");
+      } catch (e) {
+        console.warn("Failed to clear local storage:", e);
       }
 
       // Sign out and redirect to home
@@ -362,9 +398,9 @@ export default function SettingsPage() {
               <Image
                 src="/images/kogno_logo.png"
                 alt="Kogno Logo"
-                width={120}
-                height={40}
-                className="h-8 w-auto object-contain"
+                width={32}
+                height={32}
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
               />
             </Link>
           </div>
@@ -865,6 +901,8 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
                   <p className="text-sm text-[var(--muted-foreground)]">Trial ends</p>
                   <p className="text-base font-medium">{trialEndsAt ? formatDate(trialEndsAt) : "TBD"}</p>
+                  <p className="text-sm text-[var(--muted-foreground)] mt-2">Time left</p>
+                  <p className="text-base font-medium">{getTimeLeftLabel(trialEndsAt)}</p>
                 </div>
 
                 {canContinuePriceSelection ? (

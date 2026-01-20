@@ -101,7 +101,7 @@ export default function AdminSignInClient() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+          <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
             Kogno
           </Link>
           <span className="ml-2 px-2 py-1 text-xs font-semibold bg-red-600 text-white rounded">

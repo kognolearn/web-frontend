@@ -60,7 +60,7 @@ export default function ImageViewer({
   const renderImage = (image, index) => (
     <div
       key={index}
-      className={`relative group ${zoomable ? "cursor-zoom-in" : ""}`}
+      className={`relative group w-full ${zoomable ? "cursor-zoom-in" : ""}`}
       onClick={() => handleZoom(image)}
     >
       <img
@@ -84,7 +84,7 @@ export default function ImageViewer({
   );
 
   return (
-    <div id={id} className="v2-image-viewer">
+    <div id={id} className="v2-image-viewer w-full">
       {/* Single Layout */}
       {layout === "single" && renderImage(images[0], 0)}
 
