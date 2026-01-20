@@ -1258,7 +1258,7 @@ export default function ReadingRenderer({
                     src={block.url}
                     alt={imageAlt}
                     loading="lazy"
-                    className="w-full h-auto rounded-xl"
+                    className="max-w-full h-auto rounded-xl mx-auto"
                   />
                 );
                 return (
