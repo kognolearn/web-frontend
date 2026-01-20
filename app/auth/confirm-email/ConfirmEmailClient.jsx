@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 
+// Auth constants
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 const DEFAULT_VERIFICATION_TYPE = "signup";
 const RESEND_COOLDOWN_SECONDS = 30;
