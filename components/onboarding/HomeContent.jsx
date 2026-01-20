@@ -757,16 +757,31 @@ export default function HomeContent({ variant = 'page' }) {
     negotiationSyncTimerRef.current = setTimeout(runNegotiationSync, 600);
   };
 
+  const INTERNAL_REPLY_PATTERNS = [
+    /suggestedPrice/i,
+    /suggested_price/i,
+    /askConfirmation/i,
+    /offerTrial/i,
+    /offer_trial/i,
+  ];
+
+  const sanitizeReplyParts = (parts, fallback) => {
+    const cleaned = parts
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .filter((part) => !INTERNAL_REPLY_PATTERNS.some((pattern) => pattern.test(part)));
+    return cleaned.length > 0 ? cleaned : [fallback];
+  };
+
   const extractReplyParts = (response, fallback) => {
     if (Array.isArray(response?.reply)) {
-      return response.reply.map((part) => String(part || '').trim()).filter(Boolean);
+      return sanitizeReplyParts(response.reply, fallback);
     }
     if (Array.isArray(response?.replyParts)) {
-      return response.replyParts.map((part) => String(part || '').trim()).filter(Boolean);
+      return sanitizeReplyParts(response.replyParts, fallback);
     }
     if (typeof response?.reply === 'string') {
-      const trimmed = response.reply.trim();
-      return trimmed ? [trimmed] : [fallback];
+      return sanitizeReplyParts([response.reply], fallback);
     }
     return [fallback];
   };
@@ -894,6 +909,22 @@ export default function HomeContent({ variant = 'page' }) {
     if (message.meta?.offerType === 'trial') return true;
     if (typeof message.text !== 'string') return false;
     return message.text === TRIAL_OFFER_MESSAGE || message.text.includes('try it for a week');
+  };
+
+  const getLatestOfferMeta = (list) => {
+    if (!Array.isArray(list)) return null;
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const message = list[i];
+      if (!message || message.type !== 'bot') continue;
+      if (isTrialOfferMessage(message)) {
+        return { index: i, type: 'trial', offerCents: getOfferCentsFromMessage(message) };
+      }
+      const offerCents = getOfferCentsFromMessage(message);
+      if (Number.isFinite(offerCents) && message.meta?.offerType !== 'trial' && !isTrialOfferMessage(message)) {
+        return { index: i, type: 'price', offerCents };
+      }
+    }
+    return null;
   };
 
   const requestIntroMessage = async (step, latestUserMessage = null) => {
@@ -1348,13 +1379,15 @@ export default function HomeContent({ variant = 'page' }) {
     const wantsDifferentPrice = mentionsAnyPrice && !mentionsCurrentPrice;
     const shortAffirmation = hasAffirmation && words.length <= 4;
     const canConfirmNow = canConfirmPriceNow();
+    const latestOfferMeta = getLatestOfferMeta(messagesRef.current);
+    const confirmButtonVisible = canConfirmNow && latestOfferMeta?.type === 'price';
     const shouldConfirm =
       !hasNegation &&
       !hasCounterCue &&
       !wantsDifferentPrice &&
       (isExplicitAccept || (shortAffirmation && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
 
-    if (canConfirmNow && shouldConfirm) {
+    if (confirmButtonVisible && shouldConfirm) {
       await handleConfirmPrice(currentPrice);
       return;
     }
@@ -1420,6 +1453,10 @@ export default function HomeContent({ variant = 'page' }) {
     }
     return null;
   })();
+  const latestOfferIndex = Math.max(
+    latestPriceOfferMessage?.index ?? -1,
+    latestTrialOfferMessage?.index ?? -1
+  );
   const allowOfferActions =
     !showExpiredGateActions &&
     !isThinking &&
@@ -1490,11 +1527,15 @@ export default function HomeContent({ variant = 'page' }) {
             {messages.map((m, index) => {
               if (m.type === 'bot') {
                 const isLatestPriceOffer =
-                  allowOfferActions && latestPriceOfferMessage?.index === index;
+                  allowOfferActions &&
+                  latestPriceOfferMessage?.index === index &&
+                  latestOfferIndex === index;
                 const isLatestTrialOffer =
-                  allowOfferActions && trialStatus === 'offered' && latestTrialOfferMessage?.index === index;
+                  allowOfferActions &&
+                  trialStatus === 'offered' &&
+                  latestTrialOfferMessage?.index === index &&
+                  latestOfferIndex === index;
                 const offerCents = isLatestPriceOffer ? latestPriceOfferMessage?.offerCents : null;
-                const trialOfferCents = isLatestTrialOffer ? latestTrialOfferMessage?.offerCents : null;
                 return (
                   <div key={m.id}>
                     <BotMessage>{m.text}</BotMessage>
@@ -1532,14 +1573,6 @@ export default function HomeContent({ variant = 'page' }) {
                     {isLatestTrialOffer && showFreeTrialAction && (
                       <div className="flex justify-start -mt-2 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          {canConfirmPrice && Number.isFinite(trialOfferCents) && (
-                            <button
-                              onClick={() => handleConfirmPrice(trialOfferCents)}
-                              className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
-                            >
-                              Accept {formatPrice(trialOfferCents)}/month
-                            </button>
-                          )}
                           <button
                             onClick={startTrial}
                             className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
