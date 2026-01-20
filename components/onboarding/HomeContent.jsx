@@ -18,6 +18,7 @@ const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const MAX_NEGOTIATION_OFFERS = 6;
+const MIN_DISTINCT_OFFERS_FOR_CONFIRM = 5;
 const MIN_NEGOTIATION_PRICE_CENTS = 100;
 const TRIAL_OFFER_MESSAGE =
   "Ok, how about this. I'll let you try it for a week - no credit card. We can set pricing aside while you try it, or keep talking price if you want. Come back next week and we can finish this.";
@@ -814,6 +815,14 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   const canOfferTrial = () => getOfferCount() >= MAX_NEGOTIATION_OFFERS && !trialDeclinedRef.current;
+  const canConfirmPriceNow = () => {
+    const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    return (
+      offers.length >= MIN_DISTINCT_OFFERS_FOR_CONFIRM ||
+      trialStatusRef.current === 'offered' ||
+      trialDeclinedRef.current
+    );
+  };
 
   const getNegotiationMeta = () => {
     const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
@@ -822,6 +831,7 @@ export default function HomeContent({ variant = 'page' }) {
       lastOfferCents: offers.length > 0 ? offers[offers.length - 1] : null,
       trialStatus: trialStatusRef.current,
       trialDeclined: trialDeclinedRef.current,
+      awaitingConfirmation: awaitingConfirmationRef.current,
     };
   };
 
@@ -997,6 +1007,7 @@ export default function HomeContent({ variant = 'page' }) {
     }
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerTrial = Boolean(payload.offerTrial);
+    const confirmed = Boolean(payload.confirmed);
     const trialBlocked = !canOfferTrial();
     if (trialBlocked) {
       const filtered = replyParts.filter((part) => !/trial|no credit card|free week/i.test(part));
@@ -1023,6 +1034,18 @@ export default function HomeContent({ variant = 'page' }) {
 
     if (offerTrial && trialBlocked && replyParts.length === 0) {
       replyParts = [getNegotiationFallback()];
+    }
+
+    if (confirmed) {
+      const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+      const lastOffer = offers.length > 0 ? offers[offers.length - 1] : currentPrice;
+      const confirmPrice =
+        Number.isFinite(suggestedPrice) ? suggestedPrice : lastOffer;
+      enqueueReplyParts('chat', replyParts, latestOfferCents ? { offerCents: latestOfferCents, offerType: 'price' } : {});
+      if (Number.isFinite(confirmPrice)) {
+        void handleConfirmPrice(confirmPrice);
+      }
+      return true;
     }
 
     if (offerTrial && canOfferTrial()) {
@@ -1091,12 +1114,14 @@ export default function HomeContent({ variant = 'page' }) {
       }
       const askConfirmation = Boolean(response?.askConfirmation);
       const offerTrial = Boolean(response?.offerTrial);
+      const confirmed = Boolean(response?.confirmed);
 
       queueNegotiationResponse(turnId, {
         replyParts,
         suggestedPrice,
         askConfirmation,
         offerTrial,
+        confirmed,
       });
     } catch (error) {
       if (handleLimitReached(error)) return;
@@ -1105,6 +1130,7 @@ export default function HomeContent({ variant = 'page' }) {
         suggestedPrice: null,
         askConfirmation: false,
         offerTrial: false,
+        confirmed: false,
       });
     } finally {
       setThinkingDelta(-1);
@@ -1284,13 +1310,14 @@ export default function HomeContent({ variant = 'page' }) {
     const mentionsAnyPrice = /\$?\d+(\.\d+)?/.test(normalized);
     const wantsDifferentPrice = mentionsAnyPrice && !mentionsCurrentPrice;
     const shortAffirmation = hasAffirmation && words.length <= 4;
+    const canConfirmNow = canConfirmPriceNow();
     const shouldConfirm =
       !hasNegation &&
       !hasCounterCue &&
       !wantsDifferentPrice &&
       (isExplicitAccept || (shortAffirmation && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
 
-    if (shouldConfirm) {
+    if (canConfirmNow && shouldConfirm) {
       await handleConfirmPrice(currentPrice);
       return;
     }
@@ -1331,6 +1358,9 @@ export default function HomeContent({ variant = 'page' }) {
   const showExpiredGateActions = trialStatus === 'expired' && !trialExpiredAcknowledged;
   const isInputDisabled =
     isRedirecting || chatEnded || limitReached || (trialStatus === 'expired' && !trialExpiredAcknowledged);
+  const distinctOfferCount = Array.isArray(offerHistory) ? offerHistory.length : 0;
+  const canConfirmPrice =
+    distinctOfferCount >= MIN_DISTINCT_OFFERS_FOR_CONFIRM || trialStatus === 'offered' || trialDeclined;
   const latestPriceOfferMessage = (() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
@@ -1423,22 +1453,33 @@ export default function HomeContent({ variant = 'page' }) {
             {messages.map((m, index) => {
               if (m.type === 'bot') {
                 const isLatestPriceOffer =
-                  allowOfferActions && trialStatus !== 'offered' && latestPriceOfferMessage?.index === index;
+                  allowOfferActions && latestPriceOfferMessage?.index === index;
                 const isLatestTrialOffer =
                   allowOfferActions && trialStatus === 'offered' && latestTrialOfferMessage?.index === index;
                 const offerCents = isLatestPriceOffer ? latestPriceOfferMessage?.offerCents : null;
+                const trialOfferCents = isLatestTrialOffer ? latestTrialOfferMessage?.offerCents : null;
                 return (
                   <div key={m.id}>
                     <BotMessage>{m.text}</BotMessage>
                     {isLatestPriceOffer && Number.isFinite(offerCents) && (
                       <div className="flex justify-start -mt-2 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            onClick={() => handleConfirmPrice(offerCents)}
-                            className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
-                          >
-                            Accept {formatPrice(offerCents)}/month
-                          </button>
+                          {canConfirmPrice && (
+                            <button
+                              onClick={() => handleConfirmPrice(offerCents)}
+                              className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+                            >
+                              Accept {formatPrice(offerCents)}/month
+                            </button>
+                          )}
+                          {showFreeTrialAction && (
+                            <button
+                              onClick={startTrial}
+                              className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+                            >
+                              Accept free trial
+                            </button>
+                          )}
                           {showFreeLimitedAction && (
                             <button
                               onClick={continueWithFreePlan}
@@ -1454,6 +1495,14 @@ export default function HomeContent({ variant = 'page' }) {
                     {isLatestTrialOffer && showFreeTrialAction && (
                       <div className="flex justify-start -mt-2 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
+                          {canConfirmPrice && Number.isFinite(trialOfferCents) && (
+                            <button
+                              onClick={() => handleConfirmPrice(trialOfferCents)}
+                              className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+                            >
+                              Accept {formatPrice(trialOfferCents)}/month
+                            </button>
+                          )}
                           <button
                             onClick={startTrial}
                             className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
