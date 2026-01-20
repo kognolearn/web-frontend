@@ -788,15 +788,16 @@ export default function HomeContent({ variant = 'page' }) {
 
   const enqueueReplyParts = (type, parts, meta = {}) => {
     if (!Array.isArray(parts) || parts.length === 0) return;
-    parts.forEach((text, index) => {
-      if (!text) return;
-      const entry = {
+    const entries = parts
+      .map((text, index) => ({
         type,
         text,
         meta: index === parts.length - 1 ? meta : {},
-      };
-      enqueueMessage(entry);
-    });
+      }))
+      .filter((entry) => entry.text);
+    if (entries.length === 0) return;
+    queueRef.current.push(...entries);
+    flushQueue();
   };
 
   const enqueueMessage = (entry) => {
