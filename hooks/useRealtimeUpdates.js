@@ -13,13 +13,14 @@ import { supabase } from '@/lib/supabase/client';
  * @param {Function} callbacks.onJobProgress - Called when job progress updates
  * @param {Function} callbacks.onCourseUpdate - Called when course status changes
  * @param {Function} callbacks.onModuleComplete - Called when a module finishes generating
+ * @param {Function} callbacks.onNodeUpdate - Called when a node content is updated (shared courses)
  */
-export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete } = {}) {
+export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete, onNodeUpdate } = {}) {
   const jobsChannelRef = useRef(null);
   const coursesChannelRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const retryAttemptRef = useRef(0);
-  const callbacksRef = useRef({ onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete });
+  const callbacksRef = useRef({ onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete, onNodeUpdate });
   const debugRealtime = process.env.NEXT_PUBLIC_REALTIME_DEBUG === 'true';
 
   const logDebug = useCallback((...args) => {
@@ -31,8 +32,8 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
 
   // Keep callbacks ref updated to avoid stale closures
   useEffect(() => {
-    callbacksRef.current = { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete };
-  }, [onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete]);
+    callbacksRef.current = { onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete, onNodeUpdate };
+  }, [onJobUpdate, onJobProgress, onCourseUpdate, onModuleComplete, onNodeUpdate]);
 
   useEffect(() => {
     if (!userId) {
@@ -136,6 +137,103 @@ export function useRealtimeUpdates(userId, { onJobUpdate, onJobProgress, onCours
       cleanupChannel();
     };
   }, [userId, logDebug]);
+
+  return null;
+}
+
+/**
+ * Hook for subscribing to course-level Realtime updates (for shared courses).
+ * All users with access to the course will receive these updates.
+ *
+ * @param {string} courseId - Course ID to subscribe to updates for
+ * @param {Object} callbacks - Callback functions for different update types
+ * @param {Function} callbacks.onCourseUpdate - Called when course status changes
+ * @param {Function} callbacks.onModuleComplete - Called when a module finishes generating
+ * @param {Function} callbacks.onNodeUpdate - Called when a node content is updated
+ */
+export function useCourseRealtimeUpdates(courseId, { onCourseUpdate, onModuleComplete, onNodeUpdate } = {}) {
+  const courseChannelRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
+  const retryAttemptRef = useRef(0);
+  const callbacksRef = useRef({ onCourseUpdate, onModuleComplete, onNodeUpdate });
+  const debugRealtime = process.env.NEXT_PUBLIC_REALTIME_DEBUG === 'true';
+
+  const logDebug = useCallback((...args) => {
+    if (debugRealtime) {
+      // eslint-disable-next-line no-console
+      console.log(...args);
+    }
+  }, [debugRealtime]);
+
+  // Keep callbacks ref updated to avoid stale closures
+  useEffect(() => {
+    callbacksRef.current = { onCourseUpdate, onModuleComplete, onNodeUpdate };
+  }, [onCourseUpdate, onModuleComplete, onNodeUpdate]);
+
+  useEffect(() => {
+    if (!courseId) {
+      return;
+    }
+    retryAttemptRef.current = 0;
+
+    const cleanupChannel = () => {
+      if (courseChannelRef.current) {
+        supabase.removeChannel(courseChannelRef.current);
+        courseChannelRef.current = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (retryTimeoutRef.current) return;
+      retryAttemptRef.current += 1;
+      const delay = Math.min(30000, 1000 * 2 ** (retryAttemptRef.current - 1));
+      retryTimeoutRef.current = setTimeout(() => {
+        retryTimeoutRef.current = null;
+        setupChannel();
+      }, delay);
+      logDebug('[realtime] Course channel reconnect scheduled in', delay, 'ms');
+    };
+
+    const setupChannel = () => {
+      cleanupChannel();
+
+      const courseChannel = supabase
+        .channel(`course:${courseId}:updates`)
+        .on('broadcast', { event: 'course_update' }, ({ payload }) => {
+          logDebug('[realtime] Shared course update:', payload);
+          callbacksRef.current.onCourseUpdate?.(payload);
+        })
+        .on('broadcast', { event: 'module_complete' }, ({ payload }) => {
+          logDebug('[realtime] Shared course module complete:', payload);
+          callbacksRef.current.onModuleComplete?.(payload);
+        })
+        .on('broadcast', { event: 'node_update' }, ({ payload }) => {
+          logDebug('[realtime] Shared course node update:', payload);
+          callbacksRef.current.onNodeUpdate?.(payload);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            retryAttemptRef.current = 0;
+            logDebug('[realtime] Subscribed to course updates for', courseId);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            scheduleReconnect();
+          }
+        });
+
+      courseChannelRef.current = courseChannel;
+    };
+
+    setupChannel();
+
+    // Cleanup on unmount or courseId change
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      cleanupChannel();
+    };
+  }, [courseId, logDebug]);
 
   return null;
 }

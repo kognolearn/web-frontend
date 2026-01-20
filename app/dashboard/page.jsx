@@ -857,6 +857,7 @@ function DashboardClient() {
                 const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
                 const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
+                const isSharedWithMe = course.is_shared_with_me === true;
                 return (
                   <CourseCard
                     key={course.id}
@@ -868,6 +869,7 @@ function DashboardClient() {
                     topicsProgress={progress}
                     canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
                     onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
+                    isSharedWithMe={isSharedWithMe}
                   />
                 );
               })}
