@@ -1253,9 +1253,11 @@ export default function ReadingRenderer({
               case "image":
                 const credit = [block.author, block.license].filter(Boolean).join(" | ");
                 const imageAlt = block.alt || block.caption || "Reading image";
+                // Use fullUrl (high-res) if available, otherwise fall back to url (may be thumbnail)
+                const imageSrc = block.fullUrl || block.url;
                 const imageElement = (
                   <img
-                    src={block.url}
+                    src={imageSrc}
                     alt={imageAlt}
                     loading="lazy"
                     className="w-full h-auto rounded-xl"
