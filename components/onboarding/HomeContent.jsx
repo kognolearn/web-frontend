@@ -125,6 +125,8 @@ export default function HomeContent({ variant = 'page' }) {
   const negotiationSyncTimerRef = useRef(null);
   const negotiationSyncInFlightRef = useRef(false);
   const negotiationSyncQueuedRef = useRef(false);
+  const messageQueueTimerRef = useRef(null);
+  const messageQueueActiveRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -149,6 +151,16 @@ export default function HomeContent({ variant = 'page' }) {
     if (resolved === null) return null;
     latestOfferCentsRef.current = resolved;
     return resolved;
+  };
+
+  const getMessageDelayMs = (text) => {
+    const length = typeof text === 'string' ? text.trim().length : 0;
+    if (!length) return 0;
+    const baseMs = 250;
+    const perCharMs = 16;
+    const maxMs = 3000;
+    const delay = baseMs + length * perCharMs;
+    return Math.min(Math.max(delay, baseMs), maxMs);
   };
 
   const getNegotiationFallback = () => {
@@ -519,7 +531,7 @@ export default function HomeContent({ variant = 'page' }) {
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     setIsRedirecting(false);
-    queueRef.current = [];
+    clearMessageQueue();
     introInFlightRef.current = false;
     introQueueRef.current = [];
     setAwaitingConfirmationSafe(false);
@@ -619,7 +631,7 @@ export default function HomeContent({ variant = 'page' }) {
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     setIsRedirecting(false);
-    queueRef.current = [];
+    clearMessageQueue();
     setAwaitingConfirmationSafe(false);
     addBotMessage(message, 'chat');
     return true;
@@ -645,7 +657,7 @@ export default function HomeContent({ variant = 'page' }) {
     setIsThinking(false);
     introInFlightRef.current = false;
     introQueueRef.current = [];
-    queueRef.current = [];
+    clearMessageQueue();
     redirectUrlRef.current = null;
     flowCompleteRef.current = false;
     pendingNegotiationResponsesRef.current = new Map();
@@ -780,12 +792,37 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   const flushQueue = () => {
-    const queue = queueRef.current;
-    if (!queue.length) return;
-    while (queue.length) {
+    if (messageQueueActiveRef.current) return;
+    messageQueueActiveRef.current = true;
+
+    const processNext = () => {
+      const queue = queueRef.current;
       const next = queue.shift();
+      if (!next) {
+        messageQueueActiveRef.current = false;
+        messageQueueTimerRef.current = null;
+        return;
+      }
       addBotMessage(next.text, next.type, next.meta);
+      if (queue.length === 0) {
+        messageQueueActiveRef.current = false;
+        messageQueueTimerRef.current = null;
+        return;
+      }
+      const delay = getMessageDelayMs(next.text);
+      messageQueueTimerRef.current = setTimeout(processNext, delay);
+    };
+
+    processNext();
+  };
+
+  const clearMessageQueue = () => {
+    queueRef.current = [];
+    if (messageQueueTimerRef.current) {
+      clearTimeout(messageQueueTimerRef.current);
+      messageQueueTimerRef.current = null;
     }
+    messageQueueActiveRef.current = false;
   };
 
   const ensureOnboardingSession = async () => {
