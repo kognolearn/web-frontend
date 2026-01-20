@@ -5,6 +5,7 @@ import { MathJax } from "better-react-mathjax";
 import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
 import { authFetch } from "@/lib/api";
+import { Callout, RevealBlock, TabGroup, VideoEmbed } from "@/components/content/v2/components/display";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -197,6 +198,186 @@ function parseImageBlock(lines, startIdx) {
 }
 
 /**
+ * Parse a video block in the format:
+ * :::video
+ * url: https://youtube.com/...
+ * title: Video Title
+ * caption: Video caption
+ * :::
+ */
+function parseVideoBlock(lines, startIdx) {
+  let i = startIdx + 1;
+  const fields = {};
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
+    if (/^:::/.test(line)) {
+      i++;
+      break;
+    }
+
+    const match = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+    if (match) {
+      fields[match[1].toLowerCase()] = match[2].trim();
+    }
+    i++;
+  }
+
+  if (!fields.url) {
+    return null;
+  }
+
+  return {
+    type: "embedded_video",
+    url: fields.url,
+    title: fields.title || "",
+    caption: fields.caption || "",
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a callout block in the format:
+ * :::callout{type="info"}
+ * Content goes here
+ * :::
+ */
+function parseCalloutBlock(lines, startIdx, attrs) {
+  let i = startIdx + 1;
+  const contentLines = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  // Parse attributes: type="info", title="My Title", collapsible
+  const typeMatch = attrs.match(/type\s*=\s*["']([^"']+)["']/i);
+  const titleMatch = attrs.match(/title\s*=\s*["']([^"']+)["']/i);
+  const collapsible = /collapsible/i.test(attrs);
+
+  return {
+    type: "callout",
+    calloutType: typeMatch?.[1] || "info",
+    title: titleMatch?.[1] || "",
+    content: contentLines.join("\n").trim(),
+    collapsible,
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a reveal block in the format:
+ * :::reveal{label="Show Solution"}
+ * Hidden content goes here
+ * :::
+ */
+function parseRevealBlock(lines, startIdx, attrs) {
+  let i = startIdx + 1;
+  const contentLines = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  // Parse attributes: label="Show Hint"
+  const labelMatch = attrs.match(/label\s*=\s*["']([^"']+)["']/i);
+
+  return {
+    type: "reveal",
+    label: labelMatch?.[1] || "Show",
+    content: contentLines.join("\n").trim(),
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a tab group in the format:
+ * :::tabs
+ * :::tab{label="Tab 1"}
+ * Tab 1 content
+ * :::tab{label="Tab 2"}
+ * Tab 2 content
+ * :::
+ */
+function parseTabGroup(lines, startIdx) {
+  let i = startIdx + 1;
+  const tabs = [];
+  let currentTab = null;
+  let currentContent = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // End of entire tab group
+    if (/^:::$/.test(trimmed) || (/^:::/.test(trimmed) && !/^:::tab/i.test(trimmed))) {
+      // Save last tab if any
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      i++;
+      break;
+    }
+
+    // Start of a new tab
+    const tabMatch = trimmed.match(/^:::tab\s*\{([^}]*)\}/i);
+    if (tabMatch) {
+      // Save previous tab if any
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      // Parse tab attributes: label="Tab Label"
+      const labelMatch = tabMatch[1].match(/label\s*=\s*["']([^"']+)["']/i);
+      currentTab = {
+        id: `tab-${tabs.length}`,
+        label: labelMatch?.[1] || `Tab ${tabs.length + 1}`,
+      };
+      currentContent = [];
+      i++;
+      continue;
+    }
+
+    // Add line to current tab content
+    if (currentTab) {
+      currentContent.push(line);
+    }
+    i++;
+  }
+
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  return {
+    type: "tab_group",
+    tabs,
+    endIdx: i,
+  };
+}
+
+/**
  * Parse content string into structured blocks for rendering
  * Handles: headings, paragraphs, lists, code blocks, math, questions, emphasis
  */
@@ -260,7 +441,49 @@ function parseContent(content) {
         continue;
       }
     }
-    
+
+    // Video block (:::video)
+    if (/^:::\s*video/i.test(trimmed)) {
+      const videoBlock = parseVideoBlock(lines, i);
+      if (videoBlock) {
+        blocks.push(videoBlock);
+        i = videoBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Callout block (:::callout{type="info"})
+    const calloutMatch = trimmed.match(/^:::\s*callout\s*\{([^}]*)\}/i);
+    if (calloutMatch) {
+      const calloutBlock = parseCalloutBlock(lines, i, calloutMatch[1]);
+      if (calloutBlock) {
+        blocks.push(calloutBlock);
+        i = calloutBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Reveal block (:::reveal{label="Show"})
+    const revealMatch = trimmed.match(/^:::\s*reveal\s*\{([^}]*)\}/i);
+    if (revealMatch) {
+      const revealBlock = parseRevealBlock(lines, i, revealMatch[1]);
+      if (revealBlock) {
+        blocks.push(revealBlock);
+        i = revealBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Tab group (:::tabs)
+    if (/^:::\s*tabs/i.test(trimmed)) {
+      const tabGroupBlock = parseTabGroup(lines, i);
+      if (tabGroupBlock) {
+        blocks.push(tabGroupBlock);
+        i = tabGroupBlock.endIdx;
+        continue;
+      }
+    }
+
     // Question block (starts with "Question:" or "**Question:**" or "**Check Your Understanding**")
     if (/^(\*\*)?Question:?\*?\*?/i.test(trimmed) || /^\*\*Check Your Understanding\*\*/i.test(trimmed)) {
       console.log('[ReadingRenderer] Detected Check Your Understanding block:', lines.slice(i, i + 20).join('\n'));
@@ -1286,7 +1509,59 @@ export default function ReadingRenderer({
                     )}
                   </figure>
                 );
-                
+
+              case "embedded_video":
+                return (
+                  <div key={idx} className="my-6">
+                    <VideoEmbed
+                      id={`video-${idx}`}
+                      video_url={block.url}
+                    />
+                    {(block.title || block.caption) && (
+                      <div className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                        {block.title && <span className="font-medium">{block.title}</span>}
+                        {block.title && block.caption && " — "}
+                        {block.caption}
+                      </div>
+                    )}
+                  </div>
+                );
+
+              case "callout":
+                return (
+                  <div key={idx} className="my-6">
+                    <Callout
+                      id={`callout-${idx}`}
+                      type={block.calloutType}
+                      title={block.title || undefined}
+                      content={block.content}
+                      collapsible={block.collapsible}
+                    />
+                  </div>
+                );
+
+              case "reveal":
+                return (
+                  <div key={idx} className="my-6">
+                    <RevealBlock
+                      id={`reveal-${idx}`}
+                      trigger_label={block.label}
+                      content={block.content}
+                      reveal_type="click"
+                    />
+                  </div>
+                );
+
+              case "tab_group":
+                return (
+                  <div key={idx} className="my-6 rounded-xl border border-[var(--border)] overflow-hidden">
+                    <TabGroup
+                      id={`tabs-${idx}`}
+                      tabs={block.tabs}
+                    />
+                  </div>
+                );
+
               case "paragraph":
                 return (
                   <p key={idx} className="my-4 leading-7 text-[var(--foreground)]">
