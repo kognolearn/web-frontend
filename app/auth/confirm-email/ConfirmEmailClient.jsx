@@ -13,13 +13,6 @@ const OTP_LENGTH = 6;
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
-const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
-const DEFAULT_VERIFICATION_TYPE = "signup";
-const RESEND_COOLDOWN_SECONDS = 30;
-const OTP_LENGTH = 6;
-const REFERRAL_STORAGE_KEY = "kogno_ref";
-const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
-
 function ConfirmEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
