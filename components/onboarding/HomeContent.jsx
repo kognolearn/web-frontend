@@ -18,6 +18,7 @@ const LIMIT_REACHED_MESSAGE =
   "You have hit the limit on the number of attempts you can use this feature.";
 const CREATE_ACCOUNT_ACCESS_COOKIE = "kogno_onboarding_create_account";
 const MAX_NEGOTIATION_OFFERS = 6;
+const MIN_DISTINCT_OFFERS_FOR_CONFIRM = 5;
 const MIN_NEGOTIATION_PRICE_CENTS = 100;
 const TRIAL_OFFER_MESSAGE =
   "Ok, how about this. I'll let you try it for a week - no credit card. We can set pricing aside while you try it, or keep talking price if you want. Come back next week and we can finish this.";
@@ -124,6 +125,8 @@ export default function HomeContent({ variant = 'page' }) {
   const negotiationSyncTimerRef = useRef(null);
   const negotiationSyncInFlightRef = useRef(false);
   const negotiationSyncQueuedRef = useRef(false);
+  const messageQueueTimerRef = useRef(null);
+  const messageQueueActiveRef = useRef(false);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -148,6 +151,16 @@ export default function HomeContent({ variant = 'page' }) {
     if (resolved === null) return null;
     latestOfferCentsRef.current = resolved;
     return resolved;
+  };
+
+  const getMessageDelayMs = (text) => {
+    const length = typeof text === 'string' ? text.trim().length : 0;
+    if (!length) return 0;
+    const baseMs = 250;
+    const perCharMs = 16;
+    const maxMs = 3000;
+    const delay = baseMs + length * perCharMs;
+    return Math.min(Math.max(delay, baseMs), maxMs);
   };
 
   const getNegotiationFallback = () => {
@@ -518,7 +531,7 @@ export default function HomeContent({ variant = 'page' }) {
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     setIsRedirecting(false);
-    queueRef.current = [];
+    clearMessageQueue();
     introInFlightRef.current = false;
     introQueueRef.current = [];
     setAwaitingConfirmationSafe(false);
@@ -618,7 +631,7 @@ export default function HomeContent({ variant = 'page' }) {
     pendingRequestsRef.current = 0;
     setIsThinking(false);
     setIsRedirecting(false);
-    queueRef.current = [];
+    clearMessageQueue();
     setAwaitingConfirmationSafe(false);
     addBotMessage(message, 'chat');
     return true;
@@ -644,7 +657,7 @@ export default function HomeContent({ variant = 'page' }) {
     setIsThinking(false);
     introInFlightRef.current = false;
     introQueueRef.current = [];
-    queueRef.current = [];
+    clearMessageQueue();
     redirectUrlRef.current = null;
     flowCompleteRef.current = false;
     pendingNegotiationResponsesRef.current = new Map();
@@ -744,31 +757,47 @@ export default function HomeContent({ variant = 'page' }) {
     negotiationSyncTimerRef.current = setTimeout(runNegotiationSync, 600);
   };
 
+  const INTERNAL_REPLY_PATTERNS = [
+    /suggestedPrice/i,
+    /suggested_price/i,
+    /askConfirmation/i,
+    /offerTrial/i,
+    /offer_trial/i,
+  ];
+
+  const sanitizeReplyParts = (parts, fallback) => {
+    const cleaned = parts
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .filter((part) => !INTERNAL_REPLY_PATTERNS.some((pattern) => pattern.test(part)));
+    return cleaned.length > 0 ? cleaned : [fallback];
+  };
+
   const extractReplyParts = (response, fallback) => {
     if (Array.isArray(response?.reply)) {
-      return response.reply.map((part) => String(part || '').trim()).filter(Boolean);
+      return sanitizeReplyParts(response.reply, fallback);
     }
     if (Array.isArray(response?.replyParts)) {
-      return response.replyParts.map((part) => String(part || '').trim()).filter(Boolean);
+      return sanitizeReplyParts(response.replyParts, fallback);
     }
     if (typeof response?.reply === 'string') {
-      const trimmed = response.reply.trim();
-      return trimmed ? [trimmed] : [fallback];
+      return sanitizeReplyParts([response.reply], fallback);
     }
     return [fallback];
   };
 
   const enqueueReplyParts = (type, parts, meta = {}) => {
     if (!Array.isArray(parts) || parts.length === 0) return;
-    parts.forEach((text, index) => {
-      if (!text) return;
-      const entry = {
+    const entries = parts
+      .map((text, index) => ({
         type,
         text,
         meta: index === parts.length - 1 ? meta : {},
-      };
-      enqueueMessage(entry);
-    });
+      }))
+      .filter((entry) => entry.text);
+    if (entries.length === 0) return;
+    queueRef.current.push(...entries);
+    flushQueue();
   };
 
   const enqueueMessage = (entry) => {
@@ -779,12 +808,37 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   const flushQueue = () => {
-    const queue = queueRef.current;
-    if (!queue.length) return;
-    while (queue.length) {
+    if (messageQueueActiveRef.current) return;
+    messageQueueActiveRef.current = true;
+
+    const processNext = () => {
+      const queue = queueRef.current;
       const next = queue.shift();
+      if (!next) {
+        messageQueueActiveRef.current = false;
+        messageQueueTimerRef.current = null;
+        return;
+      }
       addBotMessage(next.text, next.type, next.meta);
+      if (queue.length === 0) {
+        messageQueueActiveRef.current = false;
+        messageQueueTimerRef.current = null;
+        return;
+      }
+      const delay = getMessageDelayMs(next.text);
+      messageQueueTimerRef.current = setTimeout(processNext, delay);
+    };
+
+    processNext();
+  };
+
+  const clearMessageQueue = () => {
+    queueRef.current = [];
+    if (messageQueueTimerRef.current) {
+      clearTimeout(messageQueueTimerRef.current);
+      messageQueueTimerRef.current = null;
     }
+    messageQueueActiveRef.current = false;
   };
 
   const ensureOnboardingSession = async () => {
@@ -814,6 +868,14 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   const canOfferTrial = () => getOfferCount() >= MAX_NEGOTIATION_OFFERS && !trialDeclinedRef.current;
+  const canConfirmPriceNow = () => {
+    const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+    return (
+      offers.length >= MIN_DISTINCT_OFFERS_FOR_CONFIRM ||
+      trialStatusRef.current === 'offered' ||
+      trialDeclinedRef.current
+    );
+  };
 
   const getNegotiationMeta = () => {
     const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
@@ -822,6 +884,7 @@ export default function HomeContent({ variant = 'page' }) {
       lastOfferCents: offers.length > 0 ? offers[offers.length - 1] : null,
       trialStatus: trialStatusRef.current,
       trialDeclined: trialDeclinedRef.current,
+      awaitingConfirmation: awaitingConfirmationRef.current,
     };
   };
 
@@ -847,6 +910,22 @@ export default function HomeContent({ variant = 'page' }) {
     if (message.meta?.offerType === 'trial') return true;
     if (typeof message.text !== 'string') return false;
     return message.text === TRIAL_OFFER_MESSAGE || message.text.includes('try it for a week');
+  };
+
+  const getLatestOfferMeta = (list) => {
+    if (!Array.isArray(list)) return null;
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const message = list[i];
+      if (!message || message.type !== 'bot') continue;
+      if (isTrialOfferMessage(message)) {
+        return { index: i, type: 'trial', offerCents: getOfferCentsFromMessage(message) };
+      }
+      const offerCents = getOfferCentsFromMessage(message);
+      if (Number.isFinite(offerCents) && message.meta?.offerType !== 'trial' && !isTrialOfferMessage(message)) {
+        return { index: i, type: 'price', offerCents };
+      }
+    }
+    return null;
   };
 
   const requestIntroMessage = async (step, latestUserMessage = null) => {
@@ -997,6 +1076,7 @@ export default function HomeContent({ variant = 'page' }) {
     }
     const askConfirmation = Boolean(payload.askConfirmation);
     const offerTrial = Boolean(payload.offerTrial);
+    const confirmed = Boolean(payload.confirmed);
     const trialBlocked = !canOfferTrial();
     if (trialBlocked) {
       const filtered = replyParts.filter((part) => !/trial|no credit card|free week/i.test(part));
@@ -1023,6 +1103,18 @@ export default function HomeContent({ variant = 'page' }) {
 
     if (offerTrial && trialBlocked && replyParts.length === 0) {
       replyParts = [getNegotiationFallback()];
+    }
+
+    if (confirmed) {
+      const offers = Array.isArray(offerHistoryRef.current) ? offerHistoryRef.current : [];
+      const lastOffer = offers.length > 0 ? offers[offers.length - 1] : currentPrice;
+      const confirmPrice =
+        Number.isFinite(suggestedPrice) ? suggestedPrice : lastOffer;
+      enqueueReplyParts('chat', replyParts, latestOfferCents ? { offerCents: latestOfferCents, offerType: 'price' } : {});
+      if (Number.isFinite(confirmPrice)) {
+        void handleConfirmPrice(confirmPrice);
+      }
+      return true;
     }
 
     if (offerTrial && canOfferTrial()) {
@@ -1091,12 +1183,14 @@ export default function HomeContent({ variant = 'page' }) {
       }
       const askConfirmation = Boolean(response?.askConfirmation);
       const offerTrial = Boolean(response?.offerTrial);
+      const confirmed = Boolean(response?.confirmed);
 
       queueNegotiationResponse(turnId, {
         replyParts,
         suggestedPrice,
         askConfirmation,
         offerTrial,
+        confirmed,
       });
     } catch (error) {
       if (handleLimitReached(error)) return;
@@ -1105,6 +1199,7 @@ export default function HomeContent({ variant = 'page' }) {
         suggestedPrice: null,
         askConfirmation: false,
         offerTrial: false,
+        confirmed: false,
       });
     } finally {
       setThinkingDelta(-1);
@@ -1284,13 +1379,16 @@ export default function HomeContent({ variant = 'page' }) {
     const mentionsAnyPrice = /\$?\d+(\.\d+)?/.test(normalized);
     const wantsDifferentPrice = mentionsAnyPrice && !mentionsCurrentPrice;
     const shortAffirmation = hasAffirmation && words.length <= 4;
+    const canConfirmNow = canConfirmPriceNow();
+    const latestOfferMeta = getLatestOfferMeta(messagesRef.current);
+    const confirmButtonVisible = canConfirmNow && latestOfferMeta?.type === 'price';
     const shouldConfirm =
       !hasNegation &&
       !hasCounterCue &&
       !wantsDifferentPrice &&
       (isExplicitAccept || (shortAffirmation && (awaitingConfirmationRef.current || mentionsCurrentPrice)));
 
-    if (shouldConfirm) {
+    if (confirmButtonVisible && shouldConfirm) {
       await handleConfirmPrice(currentPrice);
       return;
     }
@@ -1331,6 +1429,9 @@ export default function HomeContent({ variant = 'page' }) {
   const showExpiredGateActions = trialStatus === 'expired' && !trialExpiredAcknowledged;
   const isInputDisabled =
     isRedirecting || chatEnded || limitReached || (trialStatus === 'expired' && !trialExpiredAcknowledged);
+  const distinctOfferCount = Array.isArray(offerHistory) ? offerHistory.length : 0;
+  const canConfirmPrice =
+    distinctOfferCount >= MIN_DISTINCT_OFFERS_FOR_CONFIRM || trialStatus === 'offered' || trialDeclined;
   const latestPriceOfferMessage = (() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
@@ -1353,6 +1454,10 @@ export default function HomeContent({ variant = 'page' }) {
     }
     return null;
   })();
+  const latestOfferIndex = Math.max(
+    latestPriceOfferMessage?.index ?? -1,
+    latestTrialOfferMessage?.index ?? -1
+  );
   const allowOfferActions =
     !showExpiredGateActions &&
     !isThinking &&
@@ -1423,9 +1528,14 @@ export default function HomeContent({ variant = 'page' }) {
             {messages.map((m, index) => {
               if (m.type === 'bot') {
                 const isLatestPriceOffer =
-                  allowOfferActions && trialStatus !== 'offered' && latestPriceOfferMessage?.index === index;
+                  allowOfferActions &&
+                  latestPriceOfferMessage?.index === index &&
+                  latestOfferIndex === index;
                 const isLatestTrialOffer =
-                  allowOfferActions && trialStatus === 'offered' && latestTrialOfferMessage?.index === index;
+                  allowOfferActions &&
+                  trialStatus === 'offered' &&
+                  latestTrialOfferMessage?.index === index &&
+                  latestOfferIndex === index;
                 const offerCents = isLatestPriceOffer ? latestPriceOfferMessage?.offerCents : null;
                 return (
                   <div key={m.id}>
@@ -1433,12 +1543,22 @@ export default function HomeContent({ variant = 'page' }) {
                     {isLatestPriceOffer && Number.isFinite(offerCents) && (
                       <div className="flex justify-start -mt-2 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            onClick={() => handleConfirmPrice(offerCents)}
-                            className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
-                          >
-                            Accept {formatPrice(offerCents)}/month
-                          </button>
+                          {canConfirmPrice && (
+                            <button
+                              onClick={() => handleConfirmPrice(offerCents)}
+                              className="px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium hover:opacity-90 transition-opacity"
+                            >
+                              Accept {formatPrice(offerCents)}/month
+                            </button>
+                          )}
+                          {showFreeTrialAction && (
+                            <button
+                              onClick={startTrial}
+                              className="px-6 py-2.5 rounded-xl border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+                            >
+                              Accept free trial
+                            </button>
+                          )}
                           {showFreeLimitedAction && (
                             <button
                               onClick={continueWithFreePlan}

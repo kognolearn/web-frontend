@@ -57,17 +57,20 @@ export default function ImageViewer({
     setComparisonPosition(Math.max(0, Math.min(100, percent)));
   };
 
-  const renderImage = (image, index) => (
-    <div
-      key={index}
-      className={`relative group w-full ${zoomable ? "cursor-zoom-in" : ""}`}
-      onClick={() => handleZoom(image)}
-    >
-      <img
-        src={image.url}
-        alt={image.alt || `Image ${index + 1}`}
-        className="w-full h-auto rounded-xl object-contain"
-      />
+  const renderImage = (image, index) => {
+    // Use fullUrl (high-res) if available, otherwise fall back to url (may be thumbnail)
+    const imageSrc = image.fullUrl || image.url;
+    return (
+      <div
+        key={index}
+        className={`relative group w-full ${zoomable ? "cursor-zoom-in" : ""}`}
+        onClick={() => handleZoom(image)}
+      >
+        <img
+          src={imageSrc}
+          alt={image.alt || `Image ${index + 1}`}
+          className="w-full h-auto rounded-xl"
+        />
       {image.caption && (
         <p className="mt-2 text-sm text-center text-[var(--muted-foreground)]">
           {image.caption}
@@ -81,7 +84,8 @@ export default function ImageViewer({
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div id={id} className="v2-image-viewer w-full">
@@ -160,7 +164,7 @@ export default function ImageViewer({
         >
           {/* Background (Right) Image */}
           <img
-            src={images[1].url}
+            src={images[1].fullUrl || images[1].url}
             alt={images[1].alt || "Comparison image 2"}
             className="w-full h-auto"
           />
@@ -171,7 +175,7 @@ export default function ImageViewer({
             style={{ width: `${comparisonPosition}%` }}
           >
             <img
-              src={images[0].url}
+              src={images[0].fullUrl || images[0].url}
               alt={images[0].alt || "Comparison image 1"}
               className="w-full h-auto"
               style={{
@@ -228,7 +232,7 @@ export default function ImageViewer({
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              src={zoomedImage.url}
+              src={zoomedImage.fullUrl || zoomedImage.url}
               alt={zoomedImage.alt}
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}

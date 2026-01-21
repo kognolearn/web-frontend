@@ -16,7 +16,7 @@ import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { useGuidedTour } from "@/components/tour";
-import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
+import { useRealtimeUpdates, useCourseRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
@@ -179,9 +179,25 @@ export default function CoursePage() {
     }
   }, [courseId]);
 
+  // Handle node content updates (for shared courses when content is regenerated)
+  const handleNodeUpdate = useCallback((payload) => {
+    if (!payload) return;
+    if (payload.courseId && payload.courseId !== courseId) return;
+    // Refresh study plan to get updated node content
+    refetchStudyPlanRef.current?.()?.catch?.(() => {});
+  }, [courseId]);
+
+  // User-level realtime updates (for personal course changes)
   useRealtimeUpdates(userId, {
     onModuleComplete: handleModuleComplete,
     onCourseUpdate: handleCourseUpdate,
+  });
+
+  // Course-level realtime updates (for shared courses - all users see updates)
+  useCourseRealtimeUpdates(courseId, {
+    onModuleComplete: handleModuleComplete,
+    onCourseUpdate: handleCourseUpdate,
+    onNodeUpdate: handleNodeUpdate,
   });
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
 
+// Auth constants
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 const DEFAULT_VERIFICATION_TYPE = "signup";
 const RESEND_COOLDOWN_SECONDS = 30;

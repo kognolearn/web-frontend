@@ -200,7 +200,7 @@ export default function JoinCourseClient() {
           <div className="bg-[var(--surface-2)] rounded-xl p-4 mb-6">
             <h3 className="font-semibold text-[var(--foreground)] mb-1">{shareInfo.course.title}</h3>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Join this course to study together and access shared materials
+              Join to study together with your own progress tracking
             </p>
           </div>
         )}
@@ -256,7 +256,7 @@ export default function JoinCourseClient() {
         </div>
 
         <p className="text-xs text-[var(--muted-foreground)] text-center mt-6">
-          By joining, you'll get your own copy of the course materials and can participate in the study group discussions.
+          By joining, you'll get access to the shared course and can track your own progress while participating in the study group.
         </p>
       </div>
 

@@ -868,7 +868,7 @@ function DashboardClient() {
                     status={effectiveStatus}
                     topicsProgress={progress}
                     canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
-                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
+                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle, isSharedWithMe })}
                     isSharedWithMe={isSharedWithMe}
                   />
                 );

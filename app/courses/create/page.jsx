@@ -472,7 +472,8 @@ function CreateCoursePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userSettings, updateUserSettings } = useOnboarding();
-  const { startTour, isTourActive, currentTour } = useGuidedTour();
+  const { startTour, isTourActive, currentTour, endTour } = useGuidedTour();
+  const isCourseCreationTourEnabled = false;
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const nextWeek = useMemo(() => {
     const d = new Date();
@@ -497,7 +498,15 @@ function CreateCoursePageContent() {
   }, [uiMode]);
 
   const shouldStartCourseCreationTour =
+    isCourseCreationTourEnabled &&
     Boolean(userSettings && !userSettings.tour_completed && (!userSettings.tour_phase || userSettings.tour_phase === "course-creation"));
+
+  useEffect(() => {
+    if (isCourseCreationTourEnabled) return;
+    if (currentTour === "course-creation") {
+      endTour(false);
+    }
+  }, [isCourseCreationTourEnabled, currentTour, endTour]);
 
   useEffect(() => {
     if (!shouldStartCourseCreationTour) return;
@@ -1618,7 +1627,7 @@ function CreateCoursePageContent() {
         } catch {}
       }
 
-      if (userSettings && !userSettings.tour_completed) {
+      if (isCourseCreationTourEnabled && userSettings && !userSettings.tour_completed) {
         await updateUserSettings({ tour_completed: true, tour_phase: "course-creation" });
       }
 
@@ -1670,6 +1679,7 @@ function CreateCoursePageContent() {
     studyMinutes,
     userSettings,
     updateUserSettings,
+    isCourseCreationTourEnabled,
   ]);
 
   // Floating Navigation Logic
