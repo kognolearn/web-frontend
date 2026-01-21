@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
 
 /**
  * NumericAnswer - Number input with tolerance display
@@ -16,6 +17,8 @@ import React, { useState, useCallback } from "react";
  * @param {string} props.placeholder - Placeholder text
  * @param {string} [props.unit] - Unit label
  * @param {number} [props.tolerance] - Display tolerance (actual in grading_logic)
+ * @param {string} [props.prompt] - Question text (supports markdown/LaTeX)
+ * @param {string} [props.question] - Alternative question text prop (alias for prompt)
  */
 export default function NumericAnswer({
   id,
@@ -28,7 +31,11 @@ export default function NumericAnswer({
   placeholder = "Enter a number",
   unit,
   tolerance,
+  prompt,
+  question,
 }) {
+  // Support both 'prompt' and 'question' prop names
+  const questionText = prompt || question;
   const [inputValue, setInputValue] = useState(
     value !== undefined ? String(value) : ""
   );
@@ -65,6 +72,13 @@ export default function NumericAnswer({
 
   return (
     <div id={id} className="v2-numeric-answer">
+      {/* Question */}
+      {questionText && (
+        <div className="mb-4">
+          <MarkdownRenderer content={questionText} />
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <input
