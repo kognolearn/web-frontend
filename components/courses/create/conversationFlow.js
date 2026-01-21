@@ -102,62 +102,76 @@ export const CONVERSATION_FLOW = [
     skippable: false,
   },
 
-  // Step 5: Syllabus Intro
-  {
-    id: 'syllabus_intro',
-    kognoMessage: "Now let's get your course materials. The more detail you share - like course calendars, order of topics, or exam info - the better I can tailor this course to your current quarter's class.",
-    inputType: 'options',
-    field: 'syllabusChoice',
-    options: [
-      { id: 'upload', label: 'Upload content', icon: 'upload', description: 'Paste text and/or upload files (PDFs, docs, images)', recommended: true },
-      { id: 'skip', label: 'Skip', icon: 'skip', description: "I'll add materials later" },
-    ],
-    skippable: true,
-    tourTarget: 'syllabus-choice', // data-tour attribute for tour highlighting
-  },
+  // ============================================
+  // DEEP STUDY MODE STEPS
+  // ============================================
 
-  // Step 5a: Syllabus Content (combined text + files)
+  // Syllabus content - DEEP STUDY ONLY
   {
     id: 'syllabus_content',
-    kognoMessage: "Share your syllabus content below. You can paste text and/or attach files.",
+    kognoMessage: "Share any course materials you have - syllabi, outlines, lecture notes, or topic lists. The more detail you provide, the better I can customize your learning experience!",
     inputType: 'content_with_attachments',
     field: 'syllabusContent',
     textField: 'syllabusText',
     filesField: 'syllabusFiles',
-    condition: (state) => state.syllabusChoice === 'upload',
+    condition: (state) => state.studyMode === 'deep',
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
-    placeholder: 'Paste your syllabus, course outline, or any relevant text here...',
+    placeholder: 'Paste your syllabus, course outline, topic list, or any relevant details...',
     skippable: true,
-    skipLabel: 'Done',
+    skipLabel: 'Skip for now',
+    tourTarget: 'syllabus-content',
   },
 
-  // Step 6: Exam Intro
-  {
-    id: 'exam_intro',
-    kognoMessage: "Here's where things get good. Do you have any practice exams, past tests, or info about what'll be on your exam?",
-    inputType: 'options',
-    field: 'examChoice',
-    options: [
-      { id: 'upload', label: 'Upload content', icon: 'exam', description: 'Paste text and/or upload files (past tests, study guides)', recommended: true },
-      { id: 'skip', label: 'Skip', icon: 'skip', description: "I don't have any exam materials" },
-    ],
-    skippable: true,
-    tourTarget: 'exam-choice', // data-tour attribute for tour highlighting
-  },
-
-  // Step 6a: Exam Content (combined text + files)
+  // Exam content - DEEP STUDY ONLY
   {
     id: 'exam_content',
-    kognoMessage: "Share your exam materials below. You can paste text and/or attach files.",
+    kognoMessage: "Got any practice exams, past tests, or info about what you'll be tested on? Upload them here and I'll make sure to focus on what matters most.",
     inputType: 'content_with_attachments',
     field: 'examContent',
     textField: 'examNotes',
     filesField: 'examFiles',
-    condition: (state) => state.examChoice === 'upload',
+    condition: (state) => state.studyMode === 'deep',
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
-    placeholder: 'Paste exam info, topics covered, question types, or any relevant details...',
+    placeholder: 'Paste exam info, topics covered, question types, or upload past exams...',
     skippable: true,
-    skipLabel: 'Done',
+    skipLabel: 'Skip for now',
+    tourTarget: 'exam-content',
+  },
+
+  // ============================================
+  // CRAM MODE STEPS
+  // ============================================
+
+  // Practice exams - CRAM MODE ONLY
+  {
+    id: 'cram_practice_exams',
+    kognoMessage: "Let's maximize your exam score. Upload any practice exams, sample questions, problem sets, or past tests you have. These are gold for cram mode - I'll focus on exactly what you need to know.",
+    inputType: 'content_with_attachments',
+    field: 'cramPracticeExams',
+    textField: 'examNotes',
+    filesField: 'examFiles',
+    condition: (state) => state.studyMode === 'cram',
+    accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
+    placeholder: 'Upload practice exams, sample questions, problem sets, or paste exam content...',
+    skippable: true,
+    skipLabel: 'Skip for now',
+    tourTarget: 'cram-exams',
+  },
+
+  // Exam info - CRAM MODE ONLY
+  {
+    id: 'cram_exam_info',
+    kognoMessage: "Any other exam details? Topics your professor said will be on the test, learning objectives, or a course calendar showing what's covered? This helps me laser-focus on what matters for your exam.",
+    inputType: 'content_with_attachments',
+    field: 'cramExamInfo',
+    textField: 'syllabusText',
+    filesField: 'syllabusFiles',
+    condition: (state) => state.studyMode === 'cram',
+    accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
+    placeholder: 'Topics for the exam, professor objectives, course calendar up to exam date...',
+    skippable: true,
+    skipLabel: 'Skip for now',
+    tourTarget: 'cram-info',
   },
 
   // Step 7: Generate Topics Prompt
