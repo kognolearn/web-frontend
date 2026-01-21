@@ -291,6 +291,16 @@ export async function GET(request) {
         ...((contentPayload.interactive_practice || contentPayload.interactivePractice || lesson.interactive_practice || lesson.interactivePractice || contentPayload.interactive_task || contentPayload.interactiveTask || lesson.interactive_task || lesson.interactiveTask) && {
           interactive_task: contentPayload.interactive_practice || contentPayload.interactivePractice || lesson.interactive_practice || lesson.interactivePractice || contentPayload.interactive_task || contentPayload.interactiveTask || lesson.interactive_task || lesson.interactiveTask
         }),
+
+        // V1.5 Assessment (atomic components with layout and grading_logic)
+        ...(contentPayload.assessment?.layout && contentPayload.assessment?.grading_logic && {
+          assessment: contentPayload.assessment
+        }),
+
+        // V1.5 Interactive Tasks (multiple tasks array)
+        ...(Array.isArray(contentPayload.interactive_tasks) && contentPayload.interactive_tasks.length > 0 && {
+          interactive_tasks: contentPayload.interactive_tasks
+        }),
       }
     };
 
