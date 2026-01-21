@@ -68,21 +68,38 @@ export default function V2SectionRenderer({
     });
   }, [section.layout, sectionId]);
 
-  // Separate display components from gradable components
-  const { displayComponents, gradableComponents } = useMemo(() => {
-    const display = [];
-    const gradable = [];
+  // Group components into question blocks: each block has leading context + a gradable component
+  // Display components before a question become context for that question
+  // Display components at the end (after all questions) are shown as footer content
+  const { questionBlocks, footerComponents } = useMemo(() => {
+    const blocks = [];
+    let currentContext = [];
 
     components.forEach((comp) => {
       if (isGradableType(comp.type)) {
-        gradable.push(comp);
+        // Create a block with accumulated context and this question
+        blocks.push({
+          context: currentContext,
+          question: comp,
+        });
+        currentContext = [];
       } else {
-        display.push(comp);
+        // Display components accumulate as context for the next question
+        currentContext.push(comp);
       }
     });
 
-    return { displayComponents: display, gradableComponents: gradable };
+    // Any remaining display components after the last question are footer
+    return {
+      questionBlocks: blocks,
+      footerComponents: currentContext,
+    };
   }, [components]);
+
+  // Extract gradable components for progress tracking
+  const gradableComponents = useMemo(() => {
+    return questionBlocks.map(block => block.question);
+  }, [questionBlocks]);
 
   // Check if section has any gradable components
   const hasGradableComponents = gradableComponents.length > 0;
@@ -259,8 +276,10 @@ export default function V2SectionRenderer({
     };
   }, [isGraded, sectionGrade]);
 
-  // Get current question data
-  const currentQuestion = gradableComponents[currentQuestionIndex];
+  // Get current question block data (includes context + question)
+  const currentBlock = questionBlocks[currentQuestionIndex];
+  const currentQuestion = currentBlock?.question;
+  const currentContext = currentBlock?.context || [];
   const currentQuestionGrade = currentQuestion ? sectionGrade?.results?.[currentQuestion.id] : null;
 
   return (
@@ -282,13 +301,6 @@ export default function V2SectionRenderer({
               {section.description}
             </p>
           )}
-        </div>
-      )}
-
-      {/* Display Components (headers, instructions, etc.) */}
-      {displayComponents.length > 0 && (
-        <div className="mb-6 space-y-4">
-          {displayComponents.map((component, index) => renderComponent(component, index, false))}
         </div>
       )}
 
@@ -362,6 +374,13 @@ export default function V2SectionRenderer({
                   </div>
                 )}
               </div>
+
+              {/* Context for this question (markdown, images, etc.) */}
+              {currentContext.length > 0 && (
+                <div className="mb-4 space-y-3 pb-4 border-b border-[var(--border)]/50">
+                  {currentContext.map((comp, idx) => renderComponent(comp, idx, false))}
+                </div>
+              )}
 
               {/* Question Content */}
               {currentQuestion && renderComponent(currentQuestion, currentQuestionIndex)}
@@ -602,8 +621,15 @@ export default function V2SectionRenderer({
         </div>
       )}
 
-      {/* No gradable components - just show display content */}
-      {!hasGradableComponents && displayComponents.length === 0 && (
+      {/* Footer Components (after last question) */}
+      {footerComponents.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {footerComponents.map((component, index) => renderComponent(component, index, false))}
+        </div>
+      )}
+
+      {/* No content available */}
+      {!hasGradableComponents && footerComponents.length === 0 && (
         <div className="p-4 text-center text-[var(--muted-foreground)]">
           No content available
         </div>
