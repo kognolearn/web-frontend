@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
 
 /**
  * ShortAnswer - Single line text input
@@ -16,6 +17,8 @@ import React, { useState, useCallback } from "react";
  * @param {string} props.placeholder - Placeholder text
  * @param {number} [props.max_length] - Maximum character length
  * @param {boolean} [props.case_sensitive] - Whether matching is case sensitive
+ * @param {string} [props.prompt] - Question text (supports markdown/LaTeX)
+ * @param {string} [props.question] - Alternative question text prop (alias for prompt)
  */
 export default function ShortAnswer({
   id,
@@ -28,7 +31,11 @@ export default function ShortAnswer({
   placeholder = "Enter your answer...",
   max_length = 200,
   case_sensitive = false,
+  prompt,
+  question,
 }) {
+  // Support both 'prompt' and 'question' prop names
+  const questionText = prompt || question;
   const [localValue, setLocalValue] = useState(value || "");
 
   const currentValue = value !== undefined ? value : localValue;
@@ -53,6 +60,13 @@ export default function ShortAnswer({
 
   return (
     <div id={id} className="v2-short-answer">
+      {/* Question */}
+      {questionText && (
+        <div className="mb-4">
+          <MarkdownRenderer content={questionText} />
+        </div>
+      )}
+
       <div className="relative">
         <input
           type="text"

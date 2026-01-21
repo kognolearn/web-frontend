@@ -763,7 +763,29 @@ export default function TaskRenderer({
   userId,
   onTaskComplete,
 }) {
-  const layout = Array.isArray(taskData?.layout) ? taskData.layout : [];
+  // Ensure each component has a unique ID by checking for duplicates
+  const layout = useMemo(() => {
+    const rawLayout = Array.isArray(taskData?.layout) ? taskData.layout : [];
+    const seenIds = new Set();
+    const taskId = taskData?.id || taskData?.task_id || 'task';
+
+    return rawLayout.map((block, index) => {
+      let uniqueId = block.id;
+
+      if (!uniqueId || seenIds.has(uniqueId)) {
+        // Create unique ID using task context, type, and index
+        uniqueId = `${taskId}_${block.type || 'block'}_${index}`;
+      }
+
+      seenIds.add(uniqueId);
+
+      if (uniqueId !== block.id) {
+        return { ...block, id: uniqueId, _originalId: block.id };
+      }
+      return block;
+    });
+  }, [taskData?.layout, taskData?.id, taskData?.task_id]);
+
   const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
   const [answers, setAnswers] = useState(initialAnswers);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -889,6 +911,17 @@ export default function TaskRenderer({
     });
   }, [courseId, nodeId, onSubmit]);
 
+  // Create mapping from unique IDs back to original IDs for submission
+  const idMapping = useMemo(() => {
+    const mapping = {};
+    layout.forEach((block) => {
+      if (block._originalId) {
+        mapping[block.id] = block._originalId;
+      }
+    });
+    return mapping;
+  }, [layout]);
+
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
 
@@ -902,8 +935,15 @@ export default function TaskRenderer({
     setSubmitError(null);
     setGradePayload(null);
 
+    // Map answers back to original IDs for backend compatibility
+    const submissionAnswers = {};
+    for (const [uniqueId, value] of Object.entries(answers)) {
+      const originalId = idMapping[uniqueId] || uniqueId;
+      submissionAnswers[originalId] = value;
+    }
+
     try {
-      const submission = await submitAnswers(answers, abortController.signal);
+      const submission = await submitAnswers(submissionAnswers, abortController.signal);
       let payload = null;
       let job = null;
       let result = null;
@@ -943,7 +983,7 @@ export default function TaskRenderer({
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, isSubmitting, submitAnswers, onTaskComplete]);
+  }, [answers, isSubmitting, submitAnswers, onTaskComplete, idMapping]);
 
   const gradeSummary = useMemo(() => {
     const grade = gradePayload?.grade;
