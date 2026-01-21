@@ -17,6 +17,7 @@ import { Check, X } from "lucide-react";
  * @param {boolean} [props.isGraded] - Whether section is graded
  * @param {boolean} [props.isGradable] - Whether this component is gradable
  * @param {string} [props.question] - Question text (supports markdown/LaTeX)
+ * @param {string} [props.prompt] - Alternative question text prop (alias for question)
  * @param {Array<{id: string, text: string}|string>} props.options - Available options (can be strings or objects)
  * @param {false} [props.multi_select] - Must be false for single select
  */
@@ -29,9 +30,12 @@ export default function SelectGroup({
   isGraded = false,
   isGradable = false,
   question,
+  prompt,
   options = [],
   multi_select = false,
 }) {
+  // Support both 'question' and 'prompt' prop names
+  const questionText = question || prompt;
   const [localValue, setLocalValue] = useState(value || null);
   const [hoveredOption, setHoveredOption] = useState(null);
 
@@ -72,9 +76,9 @@ export default function SelectGroup({
   return (
     <div id={id} className="v2-select-group">
       {/* Question */}
-      {question && (
+      {questionText && (
         <div className="mb-4">
-          <MarkdownRenderer content={question} />
+          <MarkdownRenderer content={questionText} />
         </div>
       )}
 

@@ -15,6 +15,8 @@ import { Check, X } from "lucide-react";
  * @param {Object} [props.grade] - Grade result
  * @param {boolean} [props.isGraded] - Whether section is graded
  * @param {boolean} [props.isGradable] - Whether this component is gradable
+ * @param {string} [props.question] - Question text (supports markdown/LaTeX)
+ * @param {string} [props.prompt] - Alternative question text prop (alias for question)
  * @param {Array<{id: string, label: string}>} props.options - Available options
  */
 export default function MultiSelectGroup({
@@ -25,8 +27,12 @@ export default function MultiSelectGroup({
   grade,
   isGraded = false,
   isGradable = false,
+  question,
+  prompt,
   options = [],
 }) {
+  // Support both 'question' and 'prompt' prop names
+  const questionText = question || prompt;
   const [localValue, setLocalValue] = useState(value || []);
 
   const currentValue = value !== undefined ? value : localValue;
@@ -57,7 +63,15 @@ export default function MultiSelectGroup({
   };
 
   return (
-    <div id={id} className="v2-multi-select-group space-y-2">
+    <div id={id} className="v2-multi-select-group">
+      {/* Question */}
+      {questionText && (
+        <div className="mb-4">
+          <MarkdownRenderer content={questionText} />
+        </div>
+      )}
+
+      <div className="space-y-2">
       {options.map((option) => {
         const isSelected = currentValue.includes(option.id);
         const status = getOptionStatus(option.id);
@@ -128,6 +142,7 @@ export default function MultiSelectGroup({
           </button>
         );
       })}
+      </div>
 
       {/* Selection count */}
       {!isGraded && (
