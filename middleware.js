@@ -211,9 +211,11 @@ export async function middleware(request) {
       if (negotiationRes.ok) {
         const negotiation = await negotiationRes.json().catch(() => ({}))
         const trialStatus = typeof negotiation?.trialStatus === 'string' ? negotiation.trialStatus : 'none'
-        if (trialStatus === 'active') {
+        if (trialStatus === 'active' || trialStatus === 'expired_free') {
+          // active trial or free tier user (accepted trial in past) should go to dashboard
           hasAccess = true
-        } else if (trialStatus === 'expired' || trialStatus === 'expired_free') {
+        } else if (trialStatus === 'expired') {
+          // expired trial but hasn't chosen free plan yet - show negotiation UI
           trialExpired = true
         }
       }

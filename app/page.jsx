@@ -99,6 +99,9 @@ export default async function Home() {
 
   let hasSubscription = false;
   let trialActive = false;
+  let hasAccess = false;
+
+  // Check subscription status
   try {
     const res = await fetch(
       `${baseUrl}/api/stripe?endpoint=subscription-status`,
@@ -114,10 +117,35 @@ export default async function Home() {
       const data = await res.json().catch(() => ({}));
       hasSubscription = Boolean(data?.hasSubscription);
       trialActive = Boolean(data?.trialActive);
+      hasAccess = hasSubscription || trialActive;
     }
   } catch (error) {}
 
-  if (trialActive || hasSubscription) {
+  // If no subscription/trial, also check negotiation status for expired_free users
+  if (!hasAccess) {
+    try {
+      const negotiationRes = await fetch(
+        `${baseUrl}/api/onboarding/negotiation-status`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          cache: "no-store",
+        }
+      );
+      if (negotiationRes.ok) {
+        const negotiation = await negotiationRes.json().catch(() => ({}));
+        const trialStatus = typeof negotiation?.trialStatus === 'string' ? negotiation.trialStatus : 'none';
+        // Users with active trial or who chose free plan after trial should go to dashboard
+        if (trialStatus === 'active' || trialStatus === 'expired_free') {
+          hasAccess = true;
+        }
+      }
+    } catch (error) {}
+  }
+
+  if (hasAccess) {
     const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }
