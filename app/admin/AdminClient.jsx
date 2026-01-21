@@ -347,7 +347,12 @@ export default function AdminClient() {
     const [usageByUserData, setUsageByUserData] = useState([]);
     const [usageByCourseData, setUsageByCourseData] = useState([]);
     const [studySessionStats, setStudySessionStats] = useState(null);
-    
+    const [courseTimeseriesData, setCourseTimeseriesData] = useState([]);
+
+    // Course sorting state
+    const [courseSortField, setCourseSortField] = useState("totalCost");
+    const [courseSortDirection, setCourseSortDirection] = useState("desc");
+
     // Date range state
     const [activePreset, setActivePreset] = useState(30); // Default to last 30 days
     const [startDate, setStartDate] = useState("");
@@ -772,21 +777,24 @@ export default function AdminClient() {
                     : {};
 
                 const dateParams = `startDate=${startDate}&endDate=${endDate}`;
-                const [usageByUserRes, usageByCourseRes, studySessionRes] = await Promise.all([
+                const [usageByUserRes, usageByCourseRes, studySessionRes, timeseriesRes] = await Promise.all([
                     fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/study-sessions?${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/course-generation-timeseries?${dateParams}&groupBy=day`, { headers }),
                 ]);
 
-                const [usageByUserResult, usageByCourseResult, studySessionResult] = await Promise.all([
+                const [usageByUserResult, usageByCourseResult, studySessionResult, timeseriesResult] = await Promise.all([
                     usageByUserRes.json(),
                     usageByCourseRes.json(),
                     studySessionRes.json(),
+                    timeseriesRes.json(),
                 ]);
 
                 setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
                 setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
                 setStudySessionStats(studySessionResult.success ? studySessionResult : null);
+                setCourseTimeseriesData(timeseriesResult.success ? (timeseriesResult.timeseries || []) : []);
             } catch (err) {
                 console.error("Error fetching date-range data:", err);
             } finally {
@@ -1336,9 +1344,37 @@ export default function AdminClient() {
 
                     {/* Course Breakdown Table */}
                     <div className="card">
-                        <div className="p-4 border-b border-[var(--border)]">
-                            <h3 className="font-semibold">Course-by-Course Breakdown</h3>
-                            <p className="text-xs text-[var(--muted-foreground)] mt-1">Average cost, token usage, and other metrics per course</p>
+                        <div className="p-4 border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <h3 className="font-semibold">Course-by-Course Breakdown</h3>
+                                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                    {usageByCourseData.length} courses • Sorted by {courseSortField.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs text-[var(--muted-foreground)]">Sort by:</label>
+                                <select
+                                    value={courseSortField}
+                                    onChange={(e) => setCourseSortField(e.target.value)}
+                                    className="text-sm px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-[var(--foreground)]"
+                                >
+                                    <option value="totalCost">Cost (Total)</option>
+                                    <option value="totalTokens">Tokens (Total)</option>
+                                    <option value="requestCount">API Calls</option>
+                                    <option value="lastApiCall">Most Recent</option>
+                                    <option value="firstApiCall">Oldest First</option>
+                                    <option value="courseName">Name (A-Z)</option>
+                                </select>
+                                <button
+                                    onClick={() => setCourseSortDirection(d => d === "asc" ? "desc" : "asc")}
+                                    className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors"
+                                    title={courseSortDirection === "asc" ? "Ascending" : "Descending"}
+                                >
+                                    <svg className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${courseSortDirection === "asc" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -1352,7 +1388,7 @@ export default function AdminClient() {
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Total Cost</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Cost/Call</th>
                                         <th className="text-right py-3 px-4 font-medium text-[var(--muted-foreground)]">Avg Tokens/Call</th>
-                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Sources</th>
+                                        <th className="text-left py-3 px-4 font-medium text-[var(--muted-foreground)]">Last Activity</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1363,8 +1399,24 @@ export default function AdminClient() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        usageByCourseData
-                                            .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
+                                        [...usageByCourseData]
+                                            .sort((a, b) => {
+                                                let aVal, bVal;
+                                                if (courseSortField === "courseName") {
+                                                    aVal = (a.courseName || "").toLowerCase();
+                                                    bVal = (b.courseName || "").toLowerCase();
+                                                    return courseSortDirection === "asc"
+                                                        ? aVal.localeCompare(bVal)
+                                                        : bVal.localeCompare(aVal);
+                                                } else if (courseSortField === "lastApiCall" || courseSortField === "firstApiCall") {
+                                                    aVal = new Date(a[courseSortField] || 0).getTime();
+                                                    bVal = new Date(b[courseSortField] || 0).getTime();
+                                                } else {
+                                                    aVal = a[courseSortField] || 0;
+                                                    bVal = b[courseSortField] || 0;
+                                                }
+                                                return courseSortDirection === "asc" ? aVal - bVal : bVal - aVal;
+                                            })
                                             .map((course, idx) => (
                                                 <tr key={course.courseId || idx} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
                                                     <td className="py-3 px-4">
@@ -1398,19 +1450,13 @@ export default function AdminClient() {
                                                     <td className="py-3 px-4 text-right text-[var(--muted-foreground)]">
                                                         {course.requestCount > 0 ? Math.round((course.totalTokens || 0) / course.requestCount).toLocaleString() : '0'}
                                                     </td>
-                                                    <td className="py-3 px-4 text-left max-w-[200px]">
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {(course.sources || []).slice(0, 5).map((source, i) => (
-                                                                <span key={i} className="inline-flex items-center rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-xs text-[var(--muted-foreground)]">
-                                                                    {source}
-                                                                </span>
-                                                            ))}
-                                                            {(course.sources?.length || 0) > 5 && (
-                                                                <span className="text-xs text-[var(--muted-foreground)]">
-                                                                    +{course.sources.length - 5} more
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                    <td className="py-3 px-4 text-left text-xs text-[var(--muted-foreground)]">
+                                                        {course.lastApiCall ? (
+                                                            <div className="flex flex-col">
+                                                                <span>{new Date(course.lastApiCall).toLocaleDateString()}</span>
+                                                                <span className="text-[10px]">{new Date(course.lastApiCall).toLocaleTimeString()}</span>
+                                                            </div>
+                                                        ) : '—'}
                                                     </td>
                                                 </tr>
                                             ))
@@ -1495,6 +1541,132 @@ export default function AdminClient() {
                                 )}
                             </div>
                         </div>
+                    </div>
+
+                    {/* Course Generation Trends Over Time */}
+                    <div className="card p-6">
+                        <h3 className="font-semibold mb-4">Course Generation Trends Over Time</h3>
+                        <p className="text-xs text-[var(--muted-foreground)] mb-4">
+                            Daily averages for cost, tokens, and API calls per course
+                        </p>
+                        {courseTimeseriesData.length === 0 ? (
+                            <div className="h-64 flex items-center justify-center text-[var(--muted-foreground)]">
+                                {dateRangeLoading ? "Loading..." : "No timeseries data available"}
+                            </div>
+                        ) : (
+                            <div className="grid gap-6 lg:grid-cols-3">
+                                {/* Avg Cost per Course */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-2">Avg Cost per Course</h4>
+                                    <div className="h-48 flex items-end gap-1">
+                                        {courseTimeseriesData.slice(-30).map((d, i) => {
+                                            const maxVal = Math.max(...courseTimeseriesData.slice(-30).map(x => x.avgCostPerCourse || 0));
+                                            const height = maxVal > 0 ? ((d.avgCostPerCourse || 0) / maxVal) * 100 : 0;
+                                            return (
+                                                <div key={i} className="flex-1 flex flex-col items-center group relative">
+                                                    <div
+                                                        className="w-full bg-[#EF4444] rounded-t transition-all hover:bg-[#DC2626]"
+                                                        style={{ height: `${Math.max(height, 2)}%` }}
+                                                    />
+                                                    <div className="absolute bottom-full mb-2 hidden group-hover:block bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs whitespace-nowrap z-10">
+                                                        <div className="font-medium">${(d.avgCostPerCourse || 0).toFixed(2)}</div>
+                                                        <div className="text-[var(--muted-foreground)]">{d.period}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1">
+                                        <span>{courseTimeseriesData.slice(-30)[0]?.period || ''}</span>
+                                        <span>{courseTimeseriesData.slice(-30).slice(-1)[0]?.period || ''}</span>
+                                    </div>
+                                </div>
+
+                                {/* Avg Tokens per Course */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-2">Avg Tokens per Course</h4>
+                                    <div className="h-48 flex items-end gap-1">
+                                        {courseTimeseriesData.slice(-30).map((d, i) => {
+                                            const maxVal = Math.max(...courseTimeseriesData.slice(-30).map(x => x.avgTokensPerCourse || 0));
+                                            const height = maxVal > 0 ? ((d.avgTokensPerCourse || 0) / maxVal) * 100 : 0;
+                                            return (
+                                                <div key={i} className="flex-1 flex flex-col items-center group relative">
+                                                    <div
+                                                        className="w-full bg-[var(--primary)] rounded-t transition-all hover:opacity-80"
+                                                        style={{ height: `${Math.max(height, 2)}%` }}
+                                                    />
+                                                    <div className="absolute bottom-full mb-2 hidden group-hover:block bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs whitespace-nowrap z-10">
+                                                        <div className="font-medium">{(d.avgTokensPerCourse || 0).toLocaleString()}</div>
+                                                        <div className="text-[var(--muted-foreground)]">{d.period}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1">
+                                        <span>{courseTimeseriesData.slice(-30)[0]?.period || ''}</span>
+                                        <span>{courseTimeseriesData.slice(-30).slice(-1)[0]?.period || ''}</span>
+                                    </div>
+                                </div>
+
+                                {/* Courses Generated per Day */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-[var(--muted-foreground)] mb-2">Courses per Day</h4>
+                                    <div className="h-48 flex items-end gap-1">
+                                        {courseTimeseriesData.slice(-30).map((d, i) => {
+                                            const maxVal = Math.max(...courseTimeseriesData.slice(-30).map(x => x.courseCount || 0));
+                                            const height = maxVal > 0 ? ((d.courseCount || 0) / maxVal) * 100 : 0;
+                                            return (
+                                                <div key={i} className="flex-1 flex flex-col items-center group relative">
+                                                    <div
+                                                        className="w-full bg-[#3B82F6] rounded-t transition-all hover:bg-[#2563EB]"
+                                                        style={{ height: `${Math.max(height, 2)}%` }}
+                                                    />
+                                                    <div className="absolute bottom-full mb-2 hidden group-hover:block bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs whitespace-nowrap z-10">
+                                                        <div className="font-medium">{d.courseCount} courses</div>
+                                                        <div className="text-[var(--muted-foreground)]">{d.period}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1">
+                                        <span>{courseTimeseriesData.slice(-30)[0]?.period || ''}</span>
+                                        <span>{courseTimeseriesData.slice(-30).slice(-1)[0]?.period || ''}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Summary Stats */}
+                        {courseTimeseriesData.length > 0 && (
+                            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mt-6 pt-6 border-t border-[var(--border)]">
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-[#EF4444]">
+                                        ${(courseTimeseriesData.reduce((sum, d) => sum + (d.avgCostPerCourse || 0), 0) / courseTimeseriesData.length).toFixed(2)}
+                                    </p>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Avg Cost/Course (period)</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-[var(--primary)]">
+                                        {Math.round(courseTimeseriesData.reduce((sum, d) => sum + (d.avgTokensPerCourse || 0), 0) / courseTimeseriesData.length).toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Avg Tokens/Course (period)</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-[#3B82F6]">
+                                        {courseTimeseriesData.reduce((sum, d) => sum + (d.courseCount || 0), 0)}
+                                    </p>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Total Courses (period)</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-[var(--foreground)]">
+                                        {courseTimeseriesData.reduce((sum, d) => sum + (d.apiCalls || 0), 0).toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Total API Calls (period)</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
