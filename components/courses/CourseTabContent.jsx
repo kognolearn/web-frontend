@@ -19,7 +19,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
-import { V2ContentRenderer, V2SectionRenderer, isV2Content } from "@/components/content/v2";
+import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -41,9 +41,7 @@ const prettyFormat = (fmt) => {
 const normalizeContentSequenceToken = (token) => {
   if (!token) return null;
   const normalized = String(token).trim().toLowerCase().replace(/[-\s]+/g, "_");
-  if (normalized === "quiz" || normalized === "mini_quiz" || normalized === "miniquiz" || normalized === "assessment") return "mini_quiz";
-  // V1.5: Support indexed interactive tasks (interactive_task_0, interactive_task_1, etc.)
-  if (normalized.match(/^interactive_task_\d+$/)) return normalized;
+  if (normalized === "quiz" || normalized === "mini_quiz" || normalized === "miniquiz") return "mini_quiz";
   if (normalized === "interactive_practice" || normalized === "interactive_task") return "interactive_task";
   if (normalized === "flashcard") return "flashcards";
   if (normalized === "videos") return "video";
@@ -325,32 +323,14 @@ function ItemContent({
       );
     }
     case "mini_quiz": {
-      // V1.5: Check for atomic assessment format (layout + grading_logic)
-      if (data?.assessment?.layout && data?.assessment?.grading_logic) {
-        return (
-          <V2SectionRenderer
-            section={{
-              id: 'lesson-assessment',
-              title: data.assessment.title || 'Check Your Understanding',
-              layout: data.assessment.layout,
-              grading_logic: data.assessment.grading_logic
-            }}
-            courseId={courseId}
-            nodeId={id}
-            userId={userId}
-          />
-        );
-      }
-
       // Check if this is a Module Quiz with practice problems (has both quiz and practice)
       const hasPractice = data?.practice_problems && data.practice_problems.length > 0;
       const currentTab = moduleQuizTab || 'quiz';
-
+      
       if (hasPractice && currentTab === 'practice') {
         return <PracticeProblems problems={data.practice_problems} />;
       }
-
-      // Legacy V1 quiz format
+      
       return (
         <Quiz
           key={id}
@@ -368,78 +348,113 @@ function ItemContent({
       const practiceProblems = data?.practice_problems || [];
       return <PracticeProblems problems={practiceProblems} />;
     }
+    case "assessment": {
+      // V1.5: Atomic component-based assessment (replaces MCQ quiz)
+      if (data?.assessment?.layout && data?.assessment?.grading_logic) {
+        return (
+          <V2ContentRenderer
+            content={{
+              version: 2,
+              sections: [{
+                id: 'lesson-assessment',
+                title: data.assessment.title || 'Check Your Understanding',
+                layout: data.assessment.layout,
+                grading_logic: data.assessment.grading_logic,
+              }],
+            }}
+            courseId={courseId}
+            nodeId={id}
+            activeSectionIndex={0}
+            isAdmin={isAdmin}
+          />
+        );
+      }
+      // Fallback to legacy quiz if assessment data is missing
+      return (
+        <Quiz
+          key={id}
+          questions={data?.questions || []}
+          onQuestionChange={onQuizQuestionChange}
+          onQuizCompleted={handleQuizCompleted}
+          userId={userId}
+          courseId={courseId}
+          lessonId={id}
+        />
+      );
+    }
     case "interactive_practice":
     case "interactive_task":
     default: {
-      // Check if this is an indexed task format (e.g., interactive_task_0, interactive_task_1)
-      if (!normFmt.startsWith('interactive_task') && !normFmt.startsWith('interactive_practice') && normFmt !== 'interactive_task' && normFmt !== 'interactive_practice') {
-        // This is the actual default case - show fallback content
+      // Handle indexed interactive tasks (interactive_task_0, interactive_task_1, etc.)
+      if (resolvedFormat.startsWith('interactive_task')) {
+        // V1.5: Support indexed tasks or single task
+        let taskData;
+        const indexMatch = resolvedFormat.match(/^interactive_task_(\d+)$/);
+
+        if (indexMatch) {
+          // Indexed task: get from interactive_tasks array
+          const taskIndex = parseInt(indexMatch[1], 10);
+          const tasksArray = data?.interactive_tasks || [];
+          taskData = tasksArray[taskIndex] || data?.interactive_task || data?.interactive_practice || {};
+        } else {
+          // Single task: use legacy format
+          const tasksArray = data?.interactive_tasks || [];
+          taskData = tasksArray[0] || data?.interactive_task || data?.interactive_practice || data || {};
+        }
+
+        const rawTaskContent = (() => {
+          if (typeof taskData === "string") return taskData;
+          if (!taskData || (typeof taskData === "object" && Object.keys(taskData).length === 0)) {
+            return "";
+          }
+          return JSON.stringify(taskData, null, 2);
+        })();
+
         return (
-          <article className="card rounded-[28px] px-6 py-6 sm:px-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                {prettyFormat(normFmt || "Content")}
-              </h2>
-            </div>
-            <div className="text-sm text-[var(--muted-foreground)]">
-              Content format not recognized. Raw data available for admin users.
-            </div>
-          </article>
+          <div className="space-y-4">
+            {isAdmin && (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowRawContent((prev) => !prev)}
+                  className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+                  aria-pressed={showRawContent}
+                >
+                  {showRawContent ? "Hide raw content" : "Show raw content"}
+                </button>
+              </div>
+            )}
+            {isAdmin && showRawContent && (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
+                <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Raw text
+                </div>
+                <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                  {rawTaskContent || "No raw content available."}
+                </pre>
+              </div>
+            )}
+            <TaskRenderer
+              taskData={taskData}
+              courseId={courseId}
+              nodeId={id}
+              userId={userId}
+              onTaskComplete={onTaskComplete}
+            />
+          </div>
         );
       }
 
-      // Interactive Task (formerly interactive practice)
-      // V1.5: Support multiple interactive tasks (interactive_tasks array)
-      let taskData;
-      if (normFmt.match(/^interactive_task_\d+$/)) {
-        // Indexed task from interactive_tasks array
-        const taskIndex = parseInt(normFmt.split('_').pop(), 10) || 0;
-        const tasks = data?.interactive_tasks || (data?.interactive_task ? [data.interactive_task] : []);
-        taskData = tasks[taskIndex] || {};
-      } else {
-        // Legacy single task format
-        taskData = data?.interactive_task || data?.interactive_practice || data || {};
-      }
-
-      const rawTaskContent = (() => {
-        if (typeof taskData === "string") return taskData;
-        if (!taskData || (typeof taskData === "object" && Object.keys(taskData).length === 0)) {
-          return "";
-        }
-        return JSON.stringify(taskData, null, 2);
-      })();
+      // Default fallback: show raw JSON
       return (
-        <div className="space-y-4">
-          {isAdmin && (
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setShowRawContent((prev) => !prev)}
-                className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
-                aria-pressed={showRawContent}
-              >
-                {showRawContent ? "Hide raw content" : "Show raw content"}
-              </button>
-            </div>
-          )}
-          {isAdmin && showRawContent && (
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
-              <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Raw text
-              </div>
-              <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                {rawTaskContent || "No raw content available."}
-              </pre>
-            </div>
-          )}
-          <TaskRenderer
-            taskData={taskData}
-            courseId={courseId}
-            nodeId={id}
-            userId={userId}
-            onTaskComplete={onTaskComplete}
-          />
-        </div>
+        <article className="card rounded-[28px] px-6 py-6 sm:px-8">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-[var(--foreground)]">Content</span>
+          </div>
+          <pre className="overflow-auto text-xs p-4 bg-[var(--surface-2)] rounded-lg">
+            {JSON.stringify(data ?? cached.data, null, 2)}
+          </pre>
+        </article>
       );
     }
   }
@@ -1458,35 +1473,34 @@ export default function CourseTabContent({
         }));
       }
 
-      // V1 content: return traditional content types
+      // V1/V1.5 content: return traditional content types
       if (data.body || data.reading) types.push({ label: "Reading", value: "reading" });
       if (data.videos && data.videos.length > 0) types.push({ label: "Video", value: "video" });
-      // if (data.cards && data.cards.length > 0) types.push({ label: "Flashcards", value: "flashcards" });
 
-      // V1.5: Check for assessment (atomic components) or legacy quiz (MCQ questions)
-      if (data.assessment?.layout) {
-        types.push({ label: "Assessment", value: "mini_quiz" });
+      // V1.5 assessment (atomic components) takes precedence over V1 quiz (MCQ)
+      if (data.assessment?.layout && data.assessment?.grading_logic) {
+        types.push({ label: "Assessment", value: "assessment" });
       } else if (data.questions || data.mcq || data.frq) {
+        // V1 legacy quiz format
         types.push({ label: "Quiz", value: "mini_quiz" });
       }
 
-      // if (data.practice_problems && data.practice_problems.length > 0) types.push({ label: "Practice", value: "practice" });
+      // V1.5: Handle multiple interactive tasks
+      const tasksArray = data.interactive_tasks || [];
+      const singleTask = data.interactive_practice || data.interactive_task;
 
-      // V1.5: Handle multiple interactive tasks (interactive_tasks array)
-      if (Array.isArray(data.interactive_tasks) && data.interactive_tasks.length > 0) {
-        data.interactive_tasks.forEach((task, idx) => {
+      if (tasksArray.length > 1) {
+        // Multiple tasks: add each with index
+        tasksArray.forEach((task, idx) => {
           types.push({
-            label: task.title || `Interactive Task ${idx + 1}`,
+            label: task?.title || `Interactive Task ${idx + 1}`,
             value: `interactive_task_${idx}`,
-            taskIndex: idx
+            taskIndex: idx,
           });
         });
-      } else {
-        // Legacy: single interactive_task or interactive_practice
-        const ip = data.interactive_practice || data.interactive_task;
-        if (ip) {
-          types.push({ label: "Interactive Task", value: "interactive_task" });
-        }
+      } else if (tasksArray.length === 1 || singleTask) {
+        // Single task (V1 or V1.5 with one task)
+        types.push({ label: "Interactive Task", value: "interactive_task" });
       }
     }
     if (types.length === 0) {
