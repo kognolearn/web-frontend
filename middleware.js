@@ -177,13 +177,15 @@ export async function middleware(request) {
   let hasAccess = false
   let trialExpired = false
 
+  // Call backend directly (internal API routes can fail on Vercel Edge)
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com'
+
   try {
-    const statusUrl = new URL('/api/stripe?endpoint=subscription-status', request.nextUrl.origin)
     const headers = {}
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`
     }
-    const statusRes = await fetch(statusUrl, {
+    const statusRes = await fetch(`${backendUrl}/stripe/subscription-status`, {
       method: 'GET',
       headers,
       cache: 'no-store',
@@ -198,12 +200,11 @@ export async function middleware(request) {
 
   if (!hasAccess) {
     try {
-      const negotiationUrl = new URL('/api/onboarding/negotiation-status', request.nextUrl.origin)
       const headers = {}
       if (session?.access_token) {
         headers.Authorization = `Bearer ${session.access_token}`
       }
-      const negotiationRes = await fetch(negotiationUrl, {
+      const negotiationRes = await fetch(`${backendUrl}/onboarding/negotiation-status`, {
         method: 'GET',
         headers,
         cache: 'no-store',

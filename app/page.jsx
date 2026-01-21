@@ -91,20 +91,17 @@ export default async function Home() {
   }
 
   // Authenticated users continue with the existing flow
-  const host = headerStore.get("host");
-  const proto = headerStore.get("x-forwarded-proto") || "http";
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (host ? `${proto}://${host}` : "http://localhost:3000");
+  // Call backend directly (internal API routes can fail on Vercel Edge)
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
   let hasSubscription = false;
   let trialActive = false;
   let hasAccess = false;
 
-  // Check subscription status
+  // Check subscription status directly from backend
   try {
     const res = await fetch(
-      `${baseUrl}/api/stripe?endpoint=subscription-status`,
+      `${backendUrl}/stripe/subscription-status`,
       {
         method: "GET",
         headers: {
@@ -119,13 +116,15 @@ export default async function Home() {
       trialActive = Boolean(data?.trialActive);
       hasAccess = hasSubscription || trialActive;
     }
-  } catch (error) {}
+  } catch (error) {
+    console.error("[page.jsx] subscription-status fetch failed:", error);
+  }
 
   // If no subscription/trial, also check negotiation status for expired_free users
   if (!hasAccess) {
     try {
       const negotiationRes = await fetch(
-        `${baseUrl}/api/onboarding/negotiation-status`,
+        `${backendUrl}/onboarding/negotiation-status`,
         {
           method: "GET",
           headers: {
@@ -142,7 +141,9 @@ export default async function Home() {
           hasAccess = true;
         }
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error("[page.jsx] negotiation-status fetch failed:", error);
+    }
   }
 
   if (hasAccess) {
