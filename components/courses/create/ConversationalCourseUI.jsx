@@ -65,6 +65,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
   const conversation = useCourseConversation(flowState);
   const chatContainerRef = useRef(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
+  const [inputDraft, setInputDraft] = useState("");
 
   // Poll queue status for high usage warnings
   const { isHighUsage, creditUtilization, estimatedWaitMinutes } = useQueueStatus({
@@ -84,6 +85,11 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [conversation.messages, conversation.isKognoTyping, conversation.isParsing]);
+
+  // Reset any draft input when the step changes
+  useEffect(() => {
+    setInputDraft("");
+  }, [conversation.currentStep?.id]);
 
   // Handle back navigation
   const handleBack = () => {
@@ -246,6 +252,9 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             }}
             accept={accept}
             submitTourTarget={submitTourTarget}
+            skippable={skippable}
+            skipLabel={skipLabel || "Skip for now"}
+            onSkip={conversation.handleSkip}
           />
         </div>
       );
@@ -274,6 +283,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
           confirmPlaceholder={confirmPlaceholder}
           defaultValue={defaultValue}
           onSubmit={handleInputSubmit}
+          onValueChange={setInputDraft}
           disabled={flowState.isTopicsLoading || flowState.courseGenerating || conversation.isParsing}
           files={conversation.currentFiles}
           onFileChange={conversation.handleFileUpload}
@@ -286,26 +296,52 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         />
 
         {/* Skip button for file uploads */}
-        {inputType === "file" && skippable && (
-          <button
-            type="button"
-            onClick={conversation.handleSkip}
-            className="w-full mt-2 py-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          >
-            {skipLabel || "Skip"}
-          </button>
-        )}
+        {inputType === "file" && skippable && (() => {
+          const skipBlocked = (conversation.currentFiles?.length || 0) > 0;
+          const skipTitle = skipBlocked ? "Remove content to skip." : undefined;
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                if (skipBlocked) {
+                  e.preventDefault();
+                  return;
+                }
+                conversation.handleSkip();
+              }}
+              aria-disabled={skipBlocked}
+              tabIndex={skipBlocked ? -1 : undefined}
+              title={skipTitle}
+              className={`w-full mt-2 py-2 text-[var(--muted-foreground)] transition-colors ${skipBlocked ? "opacity-40 cursor-not-allowed" : "hover:text-[var(--foreground)]"}`}
+            >
+              {skipLabel || "Skip"}
+            </button>
+          );
+        })()}
 
         {/* Skip button for text inputs */}
-        {(inputType === "text" || inputType === "textarea") && skippable && (
-          <button
-            type="button"
-            onClick={conversation.handleSkip}
-            className="w-full mt-2 py-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          >
-            {skipLabel || "Skip"}
-          </button>
-        )}
+        {(inputType === "text" || inputType === "textarea") && skippable && (() => {
+          const skipBlocked = inputDraft.trim().length > 0;
+          const skipTitle = skipBlocked ? "Remove content to skip." : undefined;
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                if (skipBlocked) {
+                  e.preventDefault();
+                  return;
+                }
+                conversation.handleSkip();
+              }}
+              aria-disabled={skipBlocked}
+              tabIndex={skipBlocked ? -1 : undefined}
+              title={skipTitle}
+              className={`w-full mt-2 py-2 text-sm text-[var(--muted-foreground)] transition-colors ${skipBlocked ? "opacity-40 cursor-not-allowed" : "hover:text-[var(--foreground)]"}`}
+            >
+              {skipLabel || "Skip"}
+            </button>
+          );
+        })()}
       </div>
     );
   };

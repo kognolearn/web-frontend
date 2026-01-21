@@ -20,6 +20,7 @@ import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
 import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
+import { AlertTriangle } from "lucide-react";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -92,6 +93,23 @@ const resolveAsyncResult = async (response, options = {}) => {
     throw new Error("Job completed but no result was returned.");
   }
   return result;
+};
+
+// Helper function: interpolates between primary green and muted gray for cram mode priority
+const getPriorityColor = (priorityScore, isCramMode) => {
+  if (!isCramMode) return null; // No special styling in deep study mode
+
+  // priorityScore: 0.0 = gray, 1.0 = bright sage green
+  const greenPercent = Math.round(priorityScore * 100);
+  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--muted-foreground) ${100 - greenPercent}%)`;
+};
+
+// For badge backgrounds, use a lighter tint
+const getPriorityBgColor = (priorityScore, isCramMode) => {
+  if (!isCramMode) return null;
+
+  const greenPercent = Math.round(priorityScore * 100);
+  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--surface-muted) ${100 - greenPercent}%)`;
 };
 
 // ItemContent component
@@ -569,6 +587,7 @@ export default function CourseTabContent({
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [userInitials, setUserInitials] = useState("");
   const [userName, setUserName] = useState("");
+  const [showPriorityInfo, setShowPriorityInfo] = useState(false);
 
   const visibleModules = useMemo(() => {
     if (!studyPlan?.modules) return [];
@@ -1974,19 +1993,35 @@ export default function CourseTabContent({
             </button>
           )}
 
-          {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
-            <Tooltip content="Some content is hidden. Add more time to see all content." position="bottom">
-              <button
-                type="button"
-                onClick={() => onHiddenContentClick?.()}
-                className="flex items-center justify-center w-11 h-11 rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-lg backdrop-blur-xl transition-all hover:bg-amber-500/20"
-                title="Content hidden - click to add time"
-              >
-                <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                </svg>
-              </button>
-            </Tooltip>
+          {!isDeepStudyCourse && hasHiddenContent && (
+            <div className="relative">
+              <Tooltip content="View priority info" position="bottom">
+                <button
+                  type="button"
+                  onClick={() => setShowPriorityInfo(!showPriorityInfo)}
+                  className="flex items-center justify-center w-11 h-11 rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-lg backdrop-blur-xl transition-all hover:bg-amber-500/20"
+                >
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                </button>
+              </Tooltip>
+              <AnimatePresence>
+                {showPriorityInfo && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                    className="absolute right-0 top-full mt-2 z-50 w-72 p-4 rounded-xl bg-[var(--surface-1)] border border-amber-500/20 shadow-xl"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-[var(--foreground)]">
+                        You don't have time to finish everything. We've highlighted what's the most important content to focus on.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           )}
 
           <Tooltip content={shareCopied ? "Link copied" : "Copy share link"} position="bottom">
@@ -2444,6 +2479,12 @@ export default function CourseTabContent({
                     >
                       {(() => {
                         const moduleCompleted = isModuleCompleted(module);
+                        const isCramMode = !isDeepStudyCourse;
+                        const modulePriorityScore = module.priority_score ?? 1; // Default to high priority
+
+                        // Get interpolated color for this module's priority
+                        const priorityColor = getPriorityColor(modulePriorityScore, isCramMode);
+
                         return (
                           <button
                             type="button"
@@ -2457,10 +2498,19 @@ export default function CourseTabContent({
                               setCollapsedModules(newCollapsed);
                             }}
                             className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
+                            style={isCramMode ? { borderLeft: `2px solid ${priorityColor}` } : undefined}
                           >
                             <div className="flex items-center gap-2.5">
                               {/* Module number badge - shows checkmark if all lessons completed */}
-                              <div className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums bg-gradient-to-br from-[var(--primary)] to-[var(--primary)]/80 shadow-[var(--primary)]/25">
+                              <div
+                                className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums"
+                                style={isCramMode ? {
+                                  background: `linear-gradient(135deg, ${priorityColor}, color-mix(in srgb, ${priorityColor} 80%, black 20%))`
+                                } : {
+                                  background: 'linear-gradient(to bottom right, var(--primary), var(--primary)/80)',
+                                  boxShadow: 'var(--primary)/25'
+                                }}
+                              >
                                 {moduleCompleted ? (
                                   <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -2469,14 +2519,17 @@ export default function CourseTabContent({
                                   moduleIdx + 1
                                 )}
                               </div>
-                              <h3 className="text-xs uppercase tracking-[0.15em] font-semibold text-left text-[var(--primary)]">
+                              <h3
+                                className="text-xs uppercase tracking-[0.15em] font-semibold text-left"
+                                style={isCramMode ? { color: priorityColor } : { color: 'var(--primary)' }}
+                              >
                                 {module.title}
                               </h3>
                             </div>
-                            <svg 
+                            <svg
                               className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                              fill="none" 
-                              stroke="currentColor" 
+                              fill="none"
+                              stroke="currentColor"
                               viewBox="0 0 24 24"
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -2494,7 +2547,16 @@ export default function CourseTabContent({
                             const lessonStatus = lesson.status || lesson.mastery_status || getLessonMasteryStatus(lesson.id);
                             // Show completion UI if status is anything other than 'pending'
                             const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
-                            
+
+                            // Priority gradient for cram mode
+                            const isCramMode = !isDeepStudyCourse;
+                            const priorityScore = lesson.priority_score ?? 1; // Default to high priority
+                            const priorityColor = getPriorityColor(priorityScore, isCramMode);
+                            const priorityBgColor = getPriorityBgColor(priorityScore, isCramMode);
+
+                            // Selected state takes precedence for text color
+                            const isSelected = selectedLesson?.id === lesson.id;
+
                             return (
                               <button
                                 key={lesson.id || lessonIdx}
@@ -2519,19 +2581,34 @@ export default function CourseTabContent({
                                   setCurrentViewingItem(null);
                                 }}
                                 className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
-                                  selectedLesson?.id === lesson.id
-                                    ? "bg-[var(--primary)]/15 text-[var(--primary)] font-medium shadow-sm"
-                                    : "hover:bg-[var(--surface-muted)] text-[var(--foreground)]"
+                                  isSelected
+                                    ? "bg-[var(--primary)]/15 font-medium shadow-sm"
+                                    : "hover:bg-[var(--surface-muted)]"
                                 }`}
+                                style={isCramMode ? {
+                                  borderLeft: `2px solid ${priorityColor}`,
+                                  color: isSelected ? 'var(--primary)' : priorityColor
+                                } : {
+                                  color: isSelected ? 'var(--primary)' : 'var(--foreground)'
+                                }}
                               >
                                 {/* Lesson number badge - shows checkmark if completed */}
-                                <span className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
-                                  showCompleted
-                                    ? "bg-[var(--primary)] text-white"
-                                    : selectedLesson?.id === lesson.id
-                                      ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                                      : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
-                                }`}>
+                                <span
+                                  className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
+                                    showCompleted
+                                      ? "bg-[var(--primary)] text-white"
+                                      : isSelected && !isCramMode
+                                        ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                                        : !isCramMode
+                                          ? "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
+                                          : ""
+                                  }`}
+                                  style={showCompleted ? undefined : isCramMode ? {
+                                    backgroundColor: priorityBgColor,
+                                    color: priorityColor,
+                                    border: `1px solid color-mix(in srgb, ${priorityColor} 30%, transparent 70%)`
+                                  } : undefined}
+                                >
                                   {showCompleted ? (
                                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -2873,11 +2950,11 @@ export default function CourseTabContent({
                         </button>
                      )}
                      
-                     {/* Hidden Content */}
-                     {!isDeepStudyCourse && hasHiddenContent && secondsRemaining !== null && (
-                        <button onClick={() => { onHiddenContentClick?.(); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
-                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                          <span className="text-sm font-medium">Hidden Content</span>
+                     {/* Priority Info */}
+                     {!isDeepStudyCourse && hasHiddenContent && (
+                        <button onClick={() => { setShowPriorityInfo(!showPriorityInfo); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          <span className="text-sm font-medium">Priority Info</span>
                         </button>
                      )}
 

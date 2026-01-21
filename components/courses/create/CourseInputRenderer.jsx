@@ -195,6 +195,9 @@ function ContentWithAttachments({
   disabled = false,
   placeholder = "",
   submitTourTarget,
+  skippable = false,
+  skipLabel = "Skip for now",
+  onSkip,
 }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -278,6 +281,9 @@ function ContentWithAttachments({
   };
 
   const hasContent = text.trim().length > 0 || files.length > 0;
+  const skipBlocked = hasContent;
+  const skipLocked = disabled || skipBlocked;
+  const skipTitle = skipBlocked ? "Remove content to skip." : undefined;
 
   return (
     <div
@@ -387,8 +393,31 @@ function ContentWithAttachments({
         </div>
       )}
 
-      {/* Submit button */}
-      <div className="flex justify-end">
+      {/* Submit button and skip link */}
+      <div className="flex items-center justify-between">
+        {/* Subtle skip link on the left */}
+        {skippable && onSkip ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              if (skipLocked) {
+                e.preventDefault();
+                return;
+              }
+              onSkip();
+            }}
+            aria-disabled={skipLocked}
+            tabIndex={skipLocked ? -1 : undefined}
+            title={skipTitle}
+            className={`text-sm text-[var(--muted-foreground)] transition-colors underline-offset-2 ${skipLocked ? "opacity-40 cursor-not-allowed" : "hover:text-[var(--foreground)] hover:underline"}`}
+          >
+            {skipLabel}
+          </button>
+        ) : (
+          <div />
+        )}
+
+        {/* Done button on the right */}
         <button
           type="button"
           onClick={() => onSubmit({ text, files })}
@@ -415,6 +444,7 @@ export default function CourseInputRenderer({
   defaultValue = "",
   onChange,
   onSubmit,
+  onValueChange,
   placeholder = "",
   disabled = false,
   files = [],
@@ -430,11 +460,25 @@ export default function CourseInputRenderer({
   onContentTextChange,
   onContentSubmit,
   submitTourTarget,
+  // Skip props for content_with_attachments
+  skippable = false,
+  skipLabel = "Skip for now",
+  onSkip,
 }) {
   // For text_confirm, use defaultValue if no value provided
   const initialValue = inputType === "text_confirm" && defaultValue ? defaultValue : value;
   const [localValue, setLocalValue] = useState(initialValue);
   const inputRef = useRef(null);
+
+  const updateLocalValue = useCallback(
+    (nextValue) => {
+      setLocalValue(nextValue);
+      if (onValueChange) {
+        onValueChange(nextValue);
+      }
+    },
+    [onValueChange]
+  );
 
   const handleKeyDown = useCallback(
     (e) => {
@@ -442,19 +486,19 @@ export default function CourseInputRenderer({
         e.preventDefault();
         if (localValue.trim()) {
           onSubmit(localValue);
-          setLocalValue("");
+          updateLocalValue("");
         }
       }
     },
-    [localValue, onSubmit]
+    [localValue, onSubmit, updateLocalValue]
   );
 
   const handleSubmit = useCallback(() => {
     if (localValue.trim()) {
       onSubmit(localValue);
-      setLocalValue("");
+      updateLocalValue("");
     }
-  }, [localValue, onSubmit]);
+  }, [localValue, onSubmit, updateLocalValue]);
 
   // Text input
   if (inputType === "text") {
@@ -465,7 +509,7 @@ export default function CourseInputRenderer({
             ref={inputRef}
             type="text"
             value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => updateLocalValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
@@ -496,7 +540,7 @@ export default function CourseInputRenderer({
         e.preventDefault();
         if (localValue.trim()) {
           onSubmit(localValue);
-          setLocalValue("");
+          updateLocalValue("");
         }
       }
     };
@@ -504,7 +548,7 @@ export default function CourseInputRenderer({
     const handleConfirmSubmit = () => {
       if (localValue.trim()) {
         onSubmit(localValue);
-        setLocalValue("");
+        updateLocalValue("");
       }
     };
 
@@ -524,7 +568,7 @@ export default function CourseInputRenderer({
             type="button"
             onClick={() => {
               setShowInput(true);
-              setLocalValue("");
+              updateLocalValue("");
             }}
             disabled={disabled}
             className="px-6 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-muted)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
@@ -543,7 +587,7 @@ export default function CourseInputRenderer({
             ref={inputRef}
             type="text"
             value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => updateLocalValue(e.target.value)}
             onKeyDown={handleConfirmKeyDown}
             placeholder={placeholder}
             disabled={disabled}
@@ -572,7 +616,7 @@ export default function CourseInputRenderer({
         <textarea
           ref={inputRef}
           value={localValue}
-          onChange={(e) => setLocalValue(e.target.value)}
+          onChange={(e) => updateLocalValue(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
           rows={4}
@@ -619,6 +663,9 @@ export default function CourseInputRenderer({
         disabled={disabled}
         placeholder={placeholder}
         submitTourTarget={submitTourTarget}
+        skippable={skippable}
+        skipLabel={skipLabel}
+        onSkip={onSkip}
       />
     );
   }
@@ -671,7 +718,7 @@ export default function CourseInputRenderer({
             ref={inputRef}
             type="text"
             value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => updateLocalValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
