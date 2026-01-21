@@ -64,6 +64,7 @@ export default function V2ContentRenderer({
 function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGradeComplete, isAdmin }) {
   const { setSectionGraded, setSectionProgress } = useV2Content();
   const [gradingSection, setGradingSection] = useState(null);
+  const sections = content.sections || [];
 
   const { gradeSection, isGrading, error } = useV2Grading({
     courseId,
@@ -76,8 +77,12 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
       setGradingSection(sectionId);
       setSectionProgress(sectionId, "submitted");
 
+      // Find the section to get its grading_logic
+      const section = sections.find(s => s.id === sectionId);
+      const gradingLogic = section?.grading_logic;
+
       try {
-        const result = await gradeSection(sectionId, sectionAnswers);
+        const result = await gradeSection(sectionId, sectionAnswers, gradingLogic);
 
         if (result.success) {
           // Map results to expected format
@@ -103,10 +108,9 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
         setGradingSection(null);
       }
     },
-    [gradeSection, setSectionGraded, setSectionProgress, onGradeComplete]
+    [gradeSection, setSectionGraded, setSectionProgress, onGradeComplete, sections]
   );
 
-  const sections = content.sections || [];
   const currentSection = sections[activeSectionIndex];
 
   if (!currentSection) {

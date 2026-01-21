@@ -20,9 +20,10 @@ export function useV2Grading({ courseId, nodeId }) {
    * Grade a section
    * @param {string} sectionId - Section to grade
    * @param {Object.<string, *>} answers - Answers for the section { componentId: value }
+   * @param {Array} [gradingLogic] - Grading rules for the section
    * @returns {Promise<{success: boolean, grade?: Object, error?: string}>}
    */
-  const gradeSection = useCallback(async (sectionId, answers) => {
+  const gradeSection = useCallback(async (sectionId, answers, gradingLogic) => {
     // Cancel any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -38,8 +39,9 @@ export function useV2Grading({ courseId, nodeId }) {
 
     try {
       const requestBody = {
-        section_id: sectionId,
+        sectionId,
         answers,
+        ...(gradingLogic && { grading_logic: gradingLogic }),
       };
       console.log('[useV2Grading] Sending grade request:', JSON.stringify(requestBody, null, 2));
 
