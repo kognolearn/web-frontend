@@ -9,6 +9,8 @@ export default function TimerControlsModal({
   onClose,
   secondsRemaining,
   onTimerUpdate,
+  minSeconds = 0,
+  isCourseGenerating = false,
   isTimerPaused,
   onPauseToggle,
   focusTimerRef,
@@ -50,6 +52,8 @@ export default function TimerControlsModal({
               <TimerControls 
                 currentSeconds={secondsRemaining}
                 onTimerUpdate={onTimerUpdate}
+                minSeconds={minSeconds}
+                isLocked={isCourseGenerating}
                 isTimerPaused={isTimerPaused}
                 onPauseToggle={onPauseToggle}
               />
