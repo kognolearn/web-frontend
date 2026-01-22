@@ -214,6 +214,12 @@ export default function CoursePage() {
   }, [isDeepStudyCourse]);
 
   useEffect(() => {
+    if (isGeneratingCourse) {
+      setIsTimerControlsOpen(false);
+    }
+  }, [isGeneratingCourse]);
+
+  useEffect(() => {
     sharedChatStateRef.current = sharedChatState;
   }, [sharedChatState]);
 
@@ -664,6 +670,20 @@ export default function CoursePage() {
   const shouldStartFeaturesTour =
     Boolean(userSettings && !userSettings.tour_completed && userSettings.tour_phase === "course-features");
 
+  const minLessonSeconds = useMemo(() => {
+    if (!studyPlan?.modules) return 0;
+    let minMinutes = null;
+    for (const module of studyPlan.modules) {
+      if (module.is_practice_exam_module) continue;
+      for (const lesson of (module.lessons || [])) {
+        const duration = typeof lesson.duration === "number" ? lesson.duration : null;
+        if (!duration || duration <= 0) continue;
+        minMinutes = minMinutes === null ? duration : Math.min(minMinutes, duration);
+      }
+    }
+    return minMinutes === null ? 0 : Math.ceil(minMinutes * 60);
+  }, [studyPlan]);
+
   useEffect(() => {
     if (!shouldStartFeaturesTour || !hasTourLessons) return;
     if (!isTourActive || currentTour !== "course-features") {
@@ -675,15 +695,19 @@ export default function CoursePage() {
 
   const handleTimerUpdate = useCallback(async (newSeconds) => {
     if (!userId || !courseId) return;
+    if (isGeneratingCourse) return;
     const nextSeconds = isDeepStudyCourse ? MAX_DEEP_STUDY_SECONDS : newSeconds;
-    setSecondsRemaining(nextSeconds);
+    const safeSeconds = (!isDeepStudyCourse && minLessonSeconds > 0)
+      ? Math.max(nextSeconds, minLessonSeconds)
+      : nextSeconds;
+    setSecondsRemaining(safeSeconds);
     try {
       await authFetch(`/api/courses/${courseId}/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          seconds_to_complete: nextSeconds
+          seconds_to_complete: safeSeconds
         })
       });
       // Refresh study plan to add/remove modules based on new time
@@ -691,7 +715,7 @@ export default function CoursePage() {
     } catch (e) {
       console.error('Failed to update timer:', e);
     }
-  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse]);
+  }, [userId, courseId, refetchStudyPlan, isDeepStudyCourse, isGeneratingCourse, minLessonSeconds]);
 
   const toggleTimerPause = useCallback(() => {
     setIsTimerPaused((prev) => !prev);
@@ -1378,6 +1402,7 @@ export default function CoursePage() {
                       focusTimerRef={focusTimerRef}
                       focusTimerState={focusTimerState}
                       isDeepStudyCourse={isDeepStudyCourse}
+                      isCourseGenerating={isGeneratingCourse}
                       readyModuleRefs={visibleModuleRefs}
                     />
                   );
@@ -1443,6 +1468,8 @@ export default function CoursePage() {
           onClose={() => setIsTimerControlsOpen(false)}
           secondsRemaining={secondsRemaining}
           onTimerUpdate={handleTimerUpdate}
+          minSeconds={minLessonSeconds}
+          isCourseGenerating={isGeneratingCourse}
           isTimerPaused={isTimerPaused}
           onPauseToggle={toggleTimerPause}
           focusTimerRef={focusTimerRef}
@@ -1455,6 +1482,8 @@ export default function CoursePage() {
         onClose={() => setIsSettingsModalOpen(false)}
         currentSeconds={secondsRemaining}
         onTimerUpdate={handleTimerUpdate}
+        minSeconds={minLessonSeconds}
+        isCourseGenerating={isGeneratingCourse}
         courseName={courseName}
         isTimerPaused={isTimerPaused}
         onPauseToggle={toggleTimerPause}

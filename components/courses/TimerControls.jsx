@@ -7,10 +7,13 @@ import DurationInput from "@/components/ui/DurationInput";
 export default function TimerControls({ 
   currentSeconds, 
   onTimerUpdate,
+  minSeconds = 0,
+  isLocked = false,
   isTimerPaused,
   onPauseToggle
 }) {
   const [customDuration, setCustomDuration] = useState({ hours: 0, minutes: 0 });
+  const minimumSeconds = typeof minSeconds === "number" ? minSeconds : 0;
 
   const formatTime = (seconds) => {
     if (seconds === null || seconds === undefined) return "Not set";
@@ -22,23 +25,41 @@ export default function TimerControls({
   };
 
   const handleTimerAdjust = async (adjustment) => {
+    if (isLocked) return;
     const newSeconds = Math.max(0, (currentSeconds || 0) + adjustment);
+    if (minimumSeconds > 0 && newSeconds < minimumSeconds) return;
     await onTimerUpdate(newSeconds);
   };
 
   const handleCustomTimeSet = async () => {
+    if (isLocked) return;
     const hours = customDuration.hours || 0;
     const minutes = customDuration.minutes || 0;
     const newSeconds = hours * 3600 + minutes * 60;
     
-    if (newSeconds >= 0) {
+    if (newSeconds >= 0 && (minimumSeconds === 0 || newSeconds >= minimumSeconds)) {
       await onTimerUpdate(newSeconds);
       setCustomDuration({ hours: 0, minutes: 0 });
     }
   };
 
+  const canAdjust = (adjustment) => {
+    if (isLocked) return false;
+    const nextSeconds = Math.max(0, (currentSeconds || 0) + adjustment);
+    return minimumSeconds === 0 || nextSeconds >= minimumSeconds;
+  };
+
+  const customSeconds = (customDuration.hours || 0) * 3600 + (customDuration.minutes || 0) * 60;
+  const canSetCustom = !isLocked && (customSeconds > 0) && (minimumSeconds === 0 || customSeconds >= minimumSeconds);
+
   return (
     <div className="space-y-4">
+      {isLocked && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600">
+          Course generation is still in progress. Timer controls will unlock once it completes.
+        </div>
+      )}
+
       {/* Current Timer Display with Pause Button */}
       <div className="flex items-center gap-2">
         <div className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:p-4">
@@ -51,7 +72,8 @@ export default function TimerControls({
           <button
             type="button"
             onClick={onPauseToggle}
-            className="flex items-center justify-center h-[50px] w-[50px] sm:h-[58px] sm:w-[58px] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            disabled={isLocked}
+            className="flex items-center justify-center h-[50px] w-[50px] sm:h-[58px] sm:w-[58px] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
             title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
           >
             {isTimerPaused ? (
@@ -77,32 +99,41 @@ export default function TimerControls({
           <button
             type="button"
             onClick={() => handleTimerAdjust(-60 * 60)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            disabled={!canAdjust(-60 * 60)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="block text-lg">−1h</span>
           </button>
           <button
             type="button"
             onClick={() => handleTimerAdjust(-15 * 60)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            disabled={!canAdjust(-15 * 60)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="block text-lg">−15m</span>
           </button>
           <button
             type="button"
             onClick={() => handleTimerAdjust(15 * 60)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            disabled={!canAdjust(15 * 60)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="block text-lg">+15m</span>
           </button>
           <button
             type="button"
             onClick={() => handleTimerAdjust(60 * 60)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50"
+            disabled={!canAdjust(60 * 60)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm font-medium transition-all hover:bg-[var(--surface-muted)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="block text-lg">+1h</span>
           </button>
         </div>
+        {minimumSeconds > 0 && (
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+            Minimum time needed to complete a lesson: <span className="font-semibold text-[var(--foreground)]">{formatTime(minimumSeconds)}</span>
+          </p>
+        )}
       </div>
 
       {/* Custom Time Input */}
@@ -129,7 +160,7 @@ export default function TimerControls({
           <button
             type="button"
             onClick={handleCustomTimeSet}
-            disabled={(customDuration.hours || 0) === 0 && (customDuration.minutes || 0) === 0}
+            disabled={!canSetCustom}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--primary)]/30 transition hover:bg-[var(--primary)]/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

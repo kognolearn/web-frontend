@@ -95,21 +95,11 @@ const resolveAsyncResult = async (response, options = {}) => {
   return result;
 };
 
-// Helper function: interpolates between primary green and muted gray for cram mode priority
-const getPriorityColor = (priorityScore, isCramMode) => {
-  if (!isCramMode) return null; // No special styling in deep study mode
-
-  // priorityScore: 0.0 = gray, 1.0 = bright sage green
-  const greenPercent = Math.round(priorityScore * 100);
-  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--muted-foreground) ${100 - greenPercent}%)`;
-};
-
-// For badge backgrounds, use a lighter tint
-const getPriorityBgColor = (priorityScore, isCramMode) => {
-  if (!isCramMode) return null;
-
-  const greenPercent = Math.round(priorityScore * 100);
-  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--surface-muted) ${100 - greenPercent}%)`;
+// Helper function: background tint for cram mode priority
+const getPriorityBgColor = (priorityScore) => {
+  const clampedScore = Math.max(0, Math.min(1, priorityScore || 0));
+  const greenPercent = Math.round(clampedScore * 100);
+  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--surface-2) ${100 - greenPercent}%)`;
 };
 
 // ItemContent component
@@ -580,6 +570,7 @@ export default function CourseTabContent({
   focusTimerRef,
   focusTimerState,
   isDeepStudyCourse = false,
+  isCourseGenerating = false,
   readyModuleRefs = null
 }) {
   const router = useRouter();
@@ -1870,6 +1861,7 @@ export default function CourseTabContent({
     (focusTimerState.seconds > 0 || focusTimerState.isRunning || focusTimerState.isCompleted)
   );
   const shouldShowTimerCard = ((!isDeepStudyCourse && secondsRemaining !== null) || isFocusTimerVisible);
+  const isCramPriorityMode = !isDeepStudyCourse && !isCourseGenerating;
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
@@ -1885,7 +1877,8 @@ export default function CourseTabContent({
             <button
               type="button"
               onClick={onPauseToggle}
-              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+              disabled={isCourseGenerating}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-60"
               title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
             >
               {isTimerPaused ? (
@@ -1903,15 +1896,16 @@ export default function CourseTabContent({
           {/* Combined Timer Display Card (Clickable) */}
           {shouldShowTimerCard && (
             (() => {
-              const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
-              const containerProps = !isDeepStudyCourse && secondsRemaining !== null
+              const isTimerInteractive = !isDeepStudyCourse && secondsRemaining !== null && !isCourseGenerating;
+              const Container = isTimerInteractive ? 'button' : 'div';
+              const containerProps = isTimerInteractive
                 ? {
                     type: 'button',
                     onClick: () => setIsTimerControlsOpen(true),
                     className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
                   }
                 : {
-                    className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl"
+                    className: "flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-4 py-2 shadow-lg backdrop-blur-xl opacity-70"
                   };
               return (
                 <Container {...containerProps}>
@@ -1993,7 +1987,7 @@ export default function CourseTabContent({
             </button>
           )}
 
-          {!isDeepStudyCourse && hasHiddenContent && (
+          {isCramPriorityMode && hasHiddenContent && (
             <div className="relative">
               <Tooltip content="View priority info" position="bottom">
                 <button
@@ -2479,11 +2473,6 @@ export default function CourseTabContent({
                     >
                       {(() => {
                         const moduleCompleted = isModuleCompleted(module);
-                        const isCramMode = !isDeepStudyCourse;
-                        const modulePriorityScore = module.priority_score ?? 1; // Default to high priority
-
-                        // Get interpolated color for this module's priority
-                        const priorityColor = getPriorityColor(modulePriorityScore, isCramMode);
 
                         return (
                           <button
@@ -2498,15 +2487,12 @@ export default function CourseTabContent({
                               setCollapsedModules(newCollapsed);
                             }}
                             className={`w-full p-3 flex items-center justify-between hover:bg-[var(--surface-muted)]/50 transition-colors ${isCollapsed ? 'rounded-xl' : 'rounded-t-xl'}`}
-                            style={isCramMode ? { borderLeft: `2px solid ${priorityColor}` } : undefined}
                           >
                             <div className="flex items-center gap-2.5">
                               {/* Module number badge - shows checkmark if all lessons completed */}
                               <div
                                 className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums"
-                                style={isCramMode ? {
-                                  background: `linear-gradient(135deg, ${priorityColor}, color-mix(in srgb, ${priorityColor} 80%, black 20%))`
-                                } : {
+                                style={{
                                   background: 'linear-gradient(to bottom right, var(--primary), var(--primary)/80)',
                                   boxShadow: 'var(--primary)/25'
                                 }}
@@ -2521,7 +2507,7 @@ export default function CourseTabContent({
                               </div>
                               <h3
                                 className="text-xs uppercase tracking-[0.15em] font-semibold text-left"
-                                style={isCramMode ? { color: priorityColor } : { color: 'var(--primary)' }}
+                                style={{ color: 'var(--primary)' }}
                               >
                                 {module.title}
                               </h3>
@@ -2548,11 +2534,9 @@ export default function CourseTabContent({
                             // Show completion UI if status is anything other than 'pending'
                             const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
 
-                            // Priority gradient for cram mode
-                            const isCramMode = !isDeepStudyCourse;
+                            // Priority background for cram mode
                             const priorityScore = lesson.priority_score ?? 1; // Default to high priority
-                            const priorityColor = getPriorityColor(priorityScore, isCramMode);
-                            const priorityBgColor = getPriorityBgColor(priorityScore, isCramMode);
+                            const priorityBgColor = isCramPriorityMode ? getPriorityBgColor(priorityScore) : null;
 
                             // Selected state takes precedence for text color
                             const isSelected = selectedLesson?.id === lesson.id;
@@ -2583,13 +2567,13 @@ export default function CourseTabContent({
                                 className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
                                   isSelected
                                     ? "bg-[var(--primary)]/15 font-medium shadow-sm"
-                                    : "hover:bg-[var(--surface-muted)]"
+                                    : isCramPriorityMode
+                                      ? "hover:shadow-sm"
+                                      : "hover:bg-[var(--surface-muted)]"
                                 }`}
-                                style={isCramMode ? {
-                                  borderLeft: `2px solid ${priorityColor}`,
-                                  color: isSelected ? 'var(--primary)' : priorityColor
-                                } : {
-                                  color: isSelected ? 'var(--primary)' : 'var(--foreground)'
+                                style={{
+                                  ...(isCramPriorityMode && !isSelected && priorityBgColor ? { backgroundColor: priorityBgColor } : {}),
+                                  ...(isSelected ? { color: 'var(--primary)' } : {})
                                 }}
                               >
                                 {/* Lesson number badge - shows checkmark if completed */}
@@ -2597,17 +2581,10 @@ export default function CourseTabContent({
                                   className={`min-w-[1.375rem] h-[1.375rem] flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums transition-colors ${
                                     showCompleted
                                       ? "bg-[var(--primary)] text-white"
-                                      : isSelected && !isCramMode
+                                      : isSelected
                                         ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                                        : !isCramMode
-                                          ? "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
-                                          : ""
+                                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] border border-[var(--border)]/50"
                                   }`}
-                                  style={showCompleted ? undefined : isCramMode ? {
-                                    backgroundColor: priorityBgColor,
-                                    color: priorityColor,
-                                    border: `1px solid color-mix(in srgb, ${priorityColor} 30%, transparent 70%)`
-                                  } : undefined}
                                 >
                                   {showCompleted ? (
                                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -2828,7 +2805,8 @@ export default function CourseTabContent({
               <button
                 type="button"
                 onClick={onPauseToggle}
-                className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+                disabled={isCourseGenerating}
+                className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-60"
                 title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
               >
                 {isTimerPaused ? (
@@ -2846,15 +2824,16 @@ export default function CourseTabContent({
             {/* Combined Timer Display Card (Clickable) */}
             {shouldShowTimerCard && (
               (() => {
-                const Container = !isDeepStudyCourse && secondsRemaining !== null ? 'button' : 'div';
-                const containerProps = !isDeepStudyCourse && secondsRemaining !== null
+                const isTimerInteractive = !isDeepStudyCourse && secondsRemaining !== null && !isCourseGenerating;
+                const Container = isTimerInteractive ? 'button' : 'div';
+                const containerProps = isTimerInteractive
                   ? {
                       type: 'button',
                       onClick: () => setIsTimerControlsOpen(true),
                       className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
                     }
                   : {
-                      className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl"
+                      className: "flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 px-2 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-xl opacity-70"
                     };
                 return (
                   <Container {...containerProps}>
@@ -2951,7 +2930,7 @@ export default function CourseTabContent({
                      )}
                      
                      {/* Priority Info */}
-                     {!isDeepStudyCourse && hasHiddenContent && (
+                     {isCramPriorityMode && hasHiddenContent && (
                         <button onClick={() => { setShowPriorityInfo(!showPriorityInfo); setIsMobileMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] w-full text-left">
                           <AlertTriangle className="w-4 h-4 text-amber-500" />
                           <span className="text-sm font-medium">Priority Info</span>
