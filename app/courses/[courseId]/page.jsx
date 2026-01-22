@@ -214,12 +214,6 @@ export default function CoursePage() {
   }, [isDeepStudyCourse]);
 
   useEffect(() => {
-    if (isGeneratingCourse) {
-      setIsTimerControlsOpen(false);
-    }
-  }, [isGeneratingCourse]);
-
-  useEffect(() => {
     sharedChatStateRef.current = sharedChatState;
   }, [sharedChatState]);
 
@@ -683,6 +677,12 @@ export default function CoursePage() {
     }
     return minMinutes === null ? 0 : Math.ceil(minMinutes * 60);
   }, [studyPlan]);
+
+  useEffect(() => {
+    if (isGeneratingCourse) {
+      setIsTimerControlsOpen(false);
+    }
+  }, [isGeneratingCourse]);
 
   useEffect(() => {
     if (!shouldStartFeaturesTour || !hasTourLessons) return;
