@@ -221,6 +221,27 @@ function buildOverviewFromTopics(topics, groupId, groupTitle) {
   ];
 }
 
+function buildOverviewTopicsFromPlanSummary(planSummary) {
+  if (!planSummary || !Array.isArray(planSummary.modules)) return [];
+  return planSummary.modules.map((module, index) => ({
+    id: module.id || `module-${index + 1}`,
+    title: module.title || `Module ${index + 1}`,
+    description: "",
+    likelyOnExam: true,
+    subtopics: (module.lessons || []).map((lesson, lessonIndex) =>
+      createSubtopic({
+        id: lesson.slug_id || `lesson-${index + 1}-${lessonIndex + 1}`,
+        title: lesson.title || `Lesson ${lessonIndex + 1}`,
+        overviewId: module.id || `module-${index + 1}`,
+        familiarity: defaultTopicRating,
+        source: "unified_plan",
+        bloomLevel: lesson.bloom_level || "Understand",
+        examRelevanceReasoning: "",
+      })
+    ),
+  }));
+}
+
 function parseTopicPayload(result) {
   let payload = result;
   for (const key of nestedPayloadKeys) {
@@ -352,6 +373,20 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
   const [cramTopicStrategy, setCramTopicStrategy] = useState("generate");
   const [manualTopicsInput, setManualTopicsInput] = useState("");
+
+  // Unified Plan state (when ENABLE_UNIFIED_PLANNER feature flag is enabled)
+  const [useUnifiedPlanner, setUseUnifiedPlanner] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const localFlag = localStorage.getItem("kogno_unified_planner") === "true";
+    const envFlag = process.env.NEXT_PUBLIC_ENABLE_UNIFIED_PLANNER === "true";
+    return localFlag || envFlag;
+  });
+  const [planId, setPlanId] = useState(null);
+  const [planSummary, setPlanSummary] = useState(null);
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const [isPlanUpdating, setIsPlanUpdating] = useState(false);
+  const [planModifyError, setPlanModifyError] = useState("");
 
   const isCramMode = studyMode === "cram";
 
@@ -918,13 +953,274 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     }
   }, [overviewTopics, topicModifyPrompt, userId]);
 
-  // Generate course
-  const handleGenerateCourse = useCallback(async () => {
-    const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
-    if (allSubtopics.length === 0) {
-      setCourseGenerationError("Add at least one topic before creating the course.");
+  // ============================================
+  // UNIFIED PLAN HANDLERS
+  // ============================================
+
+  /**
+   * Generate a unified course plan (combines topics + lesson architect)
+   */
+  const handleGenerateUnifiedPlan = useCallback(async () => {
+    if (!userId) {
+      setPlanError("You need to be signed in to generate a plan.");
       return;
     }
+
+    const trimmedTitle = courseTitle.trim();
+    if (!trimmedTitle) {
+      setPlanError("Provide a course title before generating a plan.");
+      return;
+    }
+
+    setPlanError(null);
+    setPlanModifyError("");
+    setIsPlanLoading(true);
+    setCourseGenerationError("");
+    // Clear existing topics state since we're using unified plan
+    setOverviewTopics([]);
+    setDeletedSubtopics([]);
+
+    const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
+    const trimmedUniversity = collegeName.trim();
+    const payload = {
+      userId,
+      courseTitle: trimmedTitle,
+      university: trimmedUniversity || null,
+      finishByDate: finishByIso || null,
+      syllabusText: syllabusText.trim() || "Not provided.",
+      mode: studyMode,
+    };
+
+    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
+    if (examFormatDetails) {
+      payload.examFormatDetails = examFormatDetails;
+    }
+
+    if (syllabusFiles.length > 0) {
+      payload.syllabusFiles = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
+    }
+
+    if (examFiles.length > 0) {
+      payload.examFiles = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
+    }
+
+    const MAX_RETRIES = 3;
+    let lastError = null;
+    const payloadStr = JSON.stringify(payload);
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await authFetch(`/api/courses/unified-plan`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store",
+          },
+          body: payloadStr,
+        });
+
+        const { result } = await resolveAsyncJobResponse(res, { errorLabel: "generate plan" });
+
+        if (!result) {
+          throw new Error("Plan generation completed but no result was returned.");
+        }
+
+        // Store plan data
+        const newPlanId = result.planId;
+        const summary = result.summary;
+
+        if (!newPlanId || !summary) {
+          throw new Error("Plan generation returned incomplete data.");
+        }
+
+        setPlanId(newPlanId);
+        setPlanSummary(summary);
+
+        if (result.ragSessionId) {
+          setRagSessionId(result.ragSessionId);
+        }
+
+        // Also build overviewTopics from plan for compatibility with existing confidence editor
+        setOverviewTopics(buildOverviewTopicsFromPlanSummary(summary));
+
+        setPlanError(null);
+        setIsPlanLoading(false);
+        return;
+      } catch (error) {
+        console.error(`Unified plan attempt ${attempt} failed:`, error);
+        lastError = error;
+
+        if (attempt < MAX_RETRIES) {
+          continue;
+        }
+      }
+    }
+
+    setPlanId(null);
+    setPlanSummary(null);
+    setOverviewTopics([]);
+    setPlanError(lastError?.message || "Plan generation failed. Please try again.");
+    setIsPlanLoading(false);
+  }, [
+    collegeName,
+    courseTitle,
+    examFiles,
+    examNotes,
+    examDetailsProvided,
+    syllabusFiles,
+    syllabusText,
+    userId,
+    studyMode,
+    studyHours,
+    studyMinutes,
+  ]);
+
+  /**
+   * Generate and apply confidence adjustments to the cached plan
+   */
+  const handleAdjustConfidence = useCallback(async () => {
+    if (!planId) {
+      setPlanError("No plan available to adjust.");
+      return;
+    }
+
+    if (!userId) {
+      setPlanError("You need to be signed in.");
+      return;
+    }
+
+    // Build confidence map from moduleConfidenceState
+    const confidenceMap = {};
+    const presets = moduleConfidencePresets || {
+      new: { baseScore: 0.1 },
+      somewhat: { baseScore: 0.5 },
+      confident: { baseScore: 0.9 },
+    };
+
+    Object.entries(moduleConfidenceState).forEach(([moduleId, state]) => {
+      const mode = state?.mode || "somewhat";
+      confidenceMap[moduleId] = presets[mode]?.baseScore || 0.5;
+    });
+
+    // If no adjustments needed (all at default), skip the API call
+    const allDefault = Object.values(confidenceMap).every((score) => score === 0.5);
+    if (allDefault) {
+      console.log("[useCourseCreationFlow] All modules at default confidence, skipping adjustment.");
+      return;
+    }
+
+    try {
+      const res = await authFetch(`/api/courses/adjust-confidence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId,
+          confidenceMap,
+          mode: studyMode,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate adjustments");
+      }
+
+      const { patches } = data;
+
+      // If there are patches, apply them
+      if (patches && patches.length > 0) {
+        const applyRes = await authFetch(`/api/courses/apply-patches`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId, patches }),
+        });
+
+        const applyData = await applyRes.json();
+
+        if (!applyRes.ok) {
+          throw new Error(applyData.error || "Failed to apply patches");
+        }
+
+        // Update plan summary with the adjusted version
+        if (applyData.updatedSummary) {
+          setPlanSummary(applyData.updatedSummary);
+          setOverviewTopics(buildOverviewTopicsFromPlanSummary(applyData.updatedSummary));
+        }
+
+        console.log(`[useCourseCreationFlow] Applied ${patches.length} confidence adjustments.`);
+      }
+    } catch (error) {
+      console.error("Confidence adjustment failed:", error);
+      setPlanError(error.message || "Failed to adjust plan based on confidence.");
+    }
+  }, [planId, moduleConfidenceState, studyMode, userId]);
+
+  /**
+   * Apply natural language modifications to the cached plan
+   */
+  const handleModifyPlan = useCallback(async (requestText) => {
+    if (!planId) {
+      setPlanModifyError("No plan available to modify.");
+      return;
+    }
+
+    if (!userId) {
+      setPlanModifyError("You need to be signed in.");
+      return;
+    }
+
+    const trimmed = typeof requestText === "string" ? requestText.trim() : "";
+    if (!trimmed) {
+      setPlanModifyError("Enter a change request to update the plan.");
+      return;
+    }
+
+    setIsPlanUpdating(true);
+    setPlanModifyError("");
+
+    try {
+      const res = await authFetch(`/api/courses/modify-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId, request: trimmed }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to modify plan");
+      }
+
+      const { patches } = data;
+      if (patches && patches.length > 0) {
+        const applyRes = await authFetch(`/api/courses/apply-patches`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId, patches }),
+        });
+
+        const applyData = await applyRes.json();
+        if (!applyRes.ok) {
+          throw new Error(applyData.error || "Failed to apply plan changes");
+        }
+
+        if (applyData.updatedSummary) {
+          setPlanSummary(applyData.updatedSummary);
+          setOverviewTopics(buildOverviewTopicsFromPlanSummary(applyData.updatedSummary));
+        }
+      }
+    } catch (error) {
+      console.error("Plan modification failed:", error);
+      setPlanModifyError(error.message || "Failed to modify plan.");
+    } finally {
+      setIsPlanUpdating(false);
+    }
+  }, [planId, userId]);
+
+  // Generate course
+  const handleGenerateCourse = useCallback(async () => {
+    const usingUnifiedPlan = Boolean(useUnifiedPlanner && planId);
+    const allSubtopics = overviewTopics.flatMap((overview) => overview.subtopics);
 
     if (!userId) {
       setCourseGenerationError("You need to be signed in to create your course.");
@@ -938,59 +1234,74 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       return;
     }
 
-    const cleanTopics = allSubtopics
-      .map((subtopic) => (typeof subtopic.title === "string" ? subtopic.title.trim() : ""))
-      .filter(Boolean);
+    let cleanTopics = [];
+    let topicFamiliarityMap = {};
+    let grokDraft = null;
+    let userConfidenceMap = {};
 
-    if (cleanTopics.length === 0) {
-      setCourseGenerationError("Your topic list is empty. Please add topics before creating the course.");
-      return;
-    }
+    if (!usingUnifiedPlan) {
+      if (allSubtopics.length === 0) {
+        setCourseGenerationError("Add at least one topic before creating the course.");
+        return;
+      }
 
-    const cleanTopicSet = new Set(cleanTopics);
+      cleanTopics = allSubtopics
+        .map((subtopic) => (typeof subtopic.title === "string" ? subtopic.title.trim() : ""))
+        .filter(Boolean);
 
-    const topicFamiliarityMap = allSubtopics.reduce((acc, subtopic) => {
-      const title = typeof subtopic.title === "string" ? subtopic.title.trim() : "";
-      if (!title || !cleanTopicSet.has(title)) return acc;
-      const score = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
-      acc[title] = scoreToFamiliarityBand(score);
-      return acc;
-    }, {});
+      if (cleanTopics.length === 0) {
+        setCourseGenerationError("Your topic list is empty. Please add topics before creating the course.");
+        return;
+      }
 
-    const fallbackGrokDraft = buildGrokDraftPayload(overviewTopics);
-    let grokDraft = fallbackGrokDraft;
-    if (generatedGrokDraft?.topics?.length) {
-      const currentTopicIds = new Set(
-        allSubtopics
-          .map((subtopic) => (typeof subtopic.id === "string" ? subtopic.id.trim() : ""))
-          .filter(Boolean)
-      );
-      const backendTopics = generatedGrokDraft.topics.filter((topic) => currentTopicIds.has(topic.id));
-      const backendIds = new Set(backendTopics.map((topic) => topic.id));
-      const fallbackLookup = new Map(
-        (fallbackGrokDraft?.topics || []).map((topic) => [topic.id, topic])
-      );
-      const supplementalTopics = Array.from(currentTopicIds)
-        .map((id) => fallbackLookup.get(id))
-        .filter((topic) => topic && !backendIds.has(topic.id));
-      const combined = [...backendTopics, ...supplementalTopics];
-      grokDraft = { topics: combined };
-    }
+      const cleanTopicSet = new Set(cleanTopics);
 
-    if (!grokDraft.topics.length) {
-      setCourseGenerationError("Topics are missing identifiers. Please rebuild and try again.");
-      return;
-    }
+      topicFamiliarityMap = allSubtopics.reduce((acc, subtopic) => {
+        const title = typeof subtopic.title === "string" ? subtopic.title.trim() : "";
+        if (!title || !cleanTopicSet.has(title)) return acc;
+        const score = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
+        acc[title] = scoreToFamiliarityBand(score);
+        return acc;
+      }, {});
 
-    const userConfidenceMap = allSubtopics.reduce((acc, subtopic) => {
-      const id = typeof subtopic.id === "string" ? subtopic.id.trim() : "";
-      if (!id) return acc;
-      acc[id] = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
-      return acc;
-    }, {});
+      const fallbackGrokDraft = buildGrokDraftPayload(overviewTopics);
+      grokDraft = fallbackGrokDraft;
+      if (generatedGrokDraft?.topics?.length) {
+        const currentTopicIds = new Set(
+          allSubtopics
+            .map((subtopic) => (typeof subtopic.id === "string" ? subtopic.id.trim() : ""))
+            .filter(Boolean)
+        );
+        const backendTopics = generatedGrokDraft.topics.filter((topic) => currentTopicIds.has(topic.id));
+        const backendIds = new Set(backendTopics.map((topic) => topic.id));
+        const fallbackLookup = new Map(
+          (fallbackGrokDraft?.topics || []).map((topic) => [topic.id, topic])
+        );
+        const supplementalTopics = Array.from(currentTopicIds)
+          .map((id) => fallbackLookup.get(id))
+          .filter((topic) => topic && !backendIds.has(topic.id));
+        const combined = [...backendTopics, ...supplementalTopics];
+        grokDraft = { topics: combined };
+      }
 
-    if (Object.keys(userConfidenceMap).length === 0) {
-      setCourseGenerationError("Unable to map topic confidence. Please rebuild your topics.");
+      if (!grokDraft.topics.length) {
+        setCourseGenerationError("Topics are missing identifiers. Please rebuild and try again.");
+        return;
+      }
+
+      userConfidenceMap = allSubtopics.reduce((acc, subtopic) => {
+        const id = typeof subtopic.id === "string" ? subtopic.id.trim() : "";
+        if (!id) return acc;
+        acc[id] = resolveSubtopicConfidence(subtopic.overviewId, subtopic.id);
+        return acc;
+      }, {});
+
+      if (Object.keys(userConfidenceMap).length === 0) {
+        setCourseGenerationError("Unable to map topic confidence. Please rebuild your topics.");
+        return;
+      }
+    } else if (!planSummary) {
+      setCourseGenerationError("Generate a course plan before creating the course.");
       return;
     }
 
@@ -1023,7 +1334,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     setCourseGenerating(true);
     setCourseGenerationError("");
-    safeSetCourseGenerationMessage("Locking in your topic roadmap…");
+    safeSetCourseGenerationMessage(usingUnifiedPlan ? "Locking in your course plan…" : "Locking in your topic roadmap…");
 
     try {
       const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
@@ -1038,18 +1349,31 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
           }
         : { notes: "Not provided.", has_exam_materials: false };
 
+      let unifiedPlanPayload = null;
+      if (usingUnifiedPlan) {
+        safeSetCourseGenerationMessage("Preparing your course plan…");
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
+        const planRes = await authFetch(`${baseUrl}/courses/plan/${planId}`, {
+          headers: { "Content-Type": "application/json" },
+        });
+        const planData = await planRes.json().catch(() => ({}));
+        if (!planRes.ok) {
+          throw new Error(planData.error || "Failed to fetch the unified plan.");
+        }
+        unifiedPlanPayload = planData.plan || null;
+        if (!unifiedPlanPayload) {
+          throw new Error("Unified plan payload is missing.");
+        }
+      }
+
       const payload = {
         userId,
         className,
         courseTitle: className,
         university: collegeName.trim() || undefined,
         finishByDate: finishByIso || undefined,
-        topics: cleanTopics,
-        topicFamiliarity: topicFamiliarityMap,
         syllabusText: trimmedSyllabusText || "Not provided.",
         syllabus_text: syllabusTextPayload,
-        grok_draft: grokDraft,
-        user_confidence_map: userConfidenceMap,
         mode: studyMode,
         courseMetadata: {
           title: className,
@@ -1059,8 +1383,28 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
         ...(ragSessionId && { rag_session_id: ragSessionId }),
       };
 
-      if (Object.keys(topicFamiliarityMap).length === 0) {
-        delete payload.topicFamiliarity;
+      if (usingUnifiedPlan) {
+        const confidenceMap = {};
+        const presets = moduleConfidencePresets || {
+          new: { baseScore: 0.1 },
+          somewhat: { baseScore: 0.5 },
+          confident: { baseScore: 0.9 },
+        };
+        Object.entries(moduleConfidenceState).forEach(([moduleId, state]) => {
+          const mode = state?.mode || "somewhat";
+          confidenceMap[moduleId] = presets[mode]?.baseScore || 0.5;
+        });
+        payload.planId = planId;
+        payload.unified_plan = unifiedPlanPayload;
+        payload.module_confidence_map = confidenceMap;
+      } else {
+        payload.topics = cleanTopics;
+        payload.topicFamiliarity = topicFamiliarityMap;
+        payload.grok_draft = grokDraft;
+        payload.user_confidence_map = userConfidenceMap;
+        if (Object.keys(topicFamiliarityMap).length === 0) {
+          delete payload.topicFamiliarity;
+        }
       }
 
       payload.exam_details = examDetailsPayload;
@@ -1091,7 +1435,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
       payload.seconds_to_complete = secondsToComplete;
 
-      const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
+      const resolvedContentVersion = usingUnifiedPlan ? 2 : (hasCheckedAdmin && isAdmin ? contentVersion : 1);
       payload.content_version = resolvedContentVersion;
 
       const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
@@ -1150,6 +1494,10 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     userId,
     courseTitle,
     collegeName,
+    useUnifiedPlanner,
+    planId,
+    planSummary,
+    moduleConfidenceState,
     syllabusText,
     syllabusFiles,
     examNotes,
@@ -1231,6 +1579,16 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     courseGenerationError,
     courseGenerationMessage,
 
+    // Unified Plan
+    useUnifiedPlanner,
+    setUseUnifiedPlanner,
+    planId,
+    planSummary,
+    isPlanLoading,
+    planError,
+    isPlanUpdating,
+    planModifyError,
+
     // Manual topics
     newTopicTitle,
     setNewTopicTitle,
@@ -1261,6 +1619,9 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     handleGenerateTopics,
     handleModifyTopics,
     handleGenerateCourse,
+    handleGenerateUnifiedPlan,
+    handleAdjustConfidence,
+    handleModifyPlan,
     resolveSubtopicConfidence,
     clearTopicsState,
     filterAcceptedFiles,
@@ -1279,6 +1640,10 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       examNotes,
       overviewTopics,
       moduleConfidenceState,
+      // Unified plan state
+      useUnifiedPlanner,
+      planId,
+      planSummary,
       // Note: File objects (syllabusFiles, examFiles) cannot be serialized
       // Files are treated as "committed" - not branch-able
     }), [
@@ -1291,6 +1656,9 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       examNotes,
       overviewTopics,
       moduleConfidenceState,
+      useUnifiedPlanner,
+      planId,
+      planSummary,
     ]),
 
     restoreStateSnapshot: useCallback((snapshot) => {
@@ -1304,6 +1672,10 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setExamNotes(snapshot.examNotes ?? '');
       setOverviewTopics(snapshot.overviewTopics ?? []);
       setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});
+      // Restore unified plan state
+      setUseUnifiedPlanner(snapshot.useUnifiedPlanner ?? false);
+      setPlanId(snapshot.planId ?? null);
+      setPlanSummary(snapshot.planSummary ?? null);
     }, []),
   };
 }

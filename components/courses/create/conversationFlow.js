@@ -174,7 +174,11 @@ export const CONVERSATION_FLOW = [
     tourTarget: 'cram-info',
   },
 
-  // Step 7: Generate Topics Prompt
+  // ============================================
+  // LEGACY TOPIC FLOW (when useUnifiedPlanner is false)
+  // ============================================
+
+  // Step 7: Generate Topics Prompt (Legacy)
   {
     id: 'generate_topics_prompt',
     kognoMessage: "Perfect! I've got everything I need. Ready for me to create your personalized topic list?",
@@ -183,17 +187,19 @@ export const CONVERSATION_FLOW = [
     action: 'generateTopics',
     skippable: false,
     tourTarget: 'generate-topics',
+    condition: (state) => !state.useUnifiedPlanner,
   },
 
-  // Step 8: Topics Loading (shown during generation)
+  // Step 8: Topics Loading (Legacy)
   {
     id: 'topics_loading',
     kognoMessage: "Analyzing your materials and building your topic list...",
     inputType: 'loading',
-    isTransient: true, // This step is auto-advanced when loading completes
+    isTransient: true,
+    condition: (state) => !state.useUnifiedPlanner,
   },
 
-  // Step 9: Topics Generated with refinement options
+  // Step 9: Topics Generated with refinement options (Legacy)
   {
     id: 'topics_generated',
     kognoMessage: "Here's what I came up with! I found {topicCount} topics across {moduleCount} modules. Take a look and let me know what you think.",
@@ -204,16 +210,66 @@ export const CONVERSATION_FLOW = [
     skippable: true,
     skipLabel: 'Topics look good!',
     action: 'modifyTopics',
-    allowMultiple: true, // User can refine multiple times
+    allowMultiple: true,
+    condition: (state) => !state.useUnifiedPlanner,
   },
 
-  // Step 11: Confidence Rating
+  // Step 11: Confidence Rating (Legacy)
   {
     id: 'confidence_intro',
     kognoMessage: "Almost there! Now tell me how familiar you are with each module. This helps me personalize your learning path.",
     inputType: 'confidence',
     showConfidenceEditor: true,
     skippable: false,
+    condition: (state) => !state.useUnifiedPlanner,
+  },
+
+  // ============================================
+  // UNIFIED PLAN FLOW (when useUnifiedPlanner is true)
+  // ============================================
+
+  // Generate Unified Plan Prompt
+  {
+    id: 'generate_plan_prompt',
+    kognoMessage: "Perfect! I've got everything I need. Ready for me to create your personalized course plan?",
+    inputType: 'confirm',
+    confirmLabel: 'Generate Course Plan',
+    action: 'generateUnifiedPlan',
+    skippable: false,
+    tourTarget: 'generate-plan',
+    condition: (state) => state.useUnifiedPlanner === true,
+  },
+
+  // Plan Loading
+  {
+    id: 'plan_loading',
+    kognoMessage: "Creating your course plan... This combines topic analysis and lesson structure in one step.",
+    inputType: 'loading',
+    isTransient: true,
+    condition: (state) => state.useUnifiedPlanner === true,
+  },
+
+  // Plan Generated - Shows plan summary with lessons AND confidence editor together
+  {
+    id: 'plan_generated',
+    kognoMessage: (state) => {
+      const moduleCount = state.planSummary?.module_count || 0;
+      const lessonCount = state.planSummary?.lesson_count || 0;
+      const totalMinutes = state.planSummary?.total_minutes || 0;
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+      return `Here's your course plan! ${moduleCount} modules, ${lessonCount} lessons, ~${timeStr} total. Review the plan and rate your confidence for each module.`;
+    },
+    inputType: 'plan_with_confidence',
+    showPlanSummary: true,
+    showConfidenceEditor: true,
+    field: 'planModifyPrompt',
+    placeholder: 'e.g., Add more practice problems, focus more on Chapter 3...',
+    skippable: true,
+    skipLabel: 'Plan looks good!',
+    action: 'adjustConfidence',
+    condition: (state) => state.useUnifiedPlanner === true,
   },
 
   // Step 12: Final Confirmation
@@ -289,7 +345,21 @@ export function interpolateMessage(message, state) {
       return state.overviewTopics?.reduce((sum, m) => sum + (m.subtopics?.length || 0), 0) || 0;
     }
     if (key === 'moduleCount') {
+      // Support both legacy topics and unified plan
+      if (state.planSummary?.module_count) {
+        return state.planSummary.module_count;
+      }
       return state.overviewTopics?.length || 0;
+    }
+    if (key === 'lessonCount') {
+      return state.planSummary?.lesson_count || 0;
+    }
+    if (key === 'totalTime') {
+      const mins = state.planSummary?.total_minutes || 0;
+      const hours = Math.floor(mins / 60);
+      const minutes = mins % 60;
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
     }
     return state[key] || match;
   });
