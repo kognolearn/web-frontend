@@ -184,9 +184,11 @@ export default function KognoMessage({
   onConfirm,
   showTopicEditor = false,
   showConfidenceEditor = false,
+  showPlanSummary = false,
   showProgress = false,
   progressPercent = 0,
   topicEditor,
+  planSummaryView,
   confidenceEditor,
   superseded = false,
   tourTarget,
@@ -250,6 +252,9 @@ export default function KognoMessage({
 
             {/* Topic editor slot */}
             {showTopicEditor && topicEditor && <div className="mt-4">{topicEditor}</div>}
+
+            {/* Plan summary slot */}
+            {showPlanSummary && planSummaryView && <div className="mt-4">{planSummaryView}</div>}
 
             {/* Confidence editor slot */}
             {showConfidenceEditor && confidenceEditor && <div className="mt-4">{confidenceEditor}</div>}

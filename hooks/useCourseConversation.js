@@ -94,6 +94,10 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       overviewTopics: flowState.overviewTopics,
       moduleConfidenceState: flowState.moduleConfidenceState,
       isTopicsLoading: flowState.isTopicsLoading,
+      useUnifiedPlanner: flowState.useUnifiedPlanner,
+      planSummary: flowState.planSummary,
+      isPlanLoading: flowState.isPlanLoading,
+      planError: flowState.planError,
       courseGenerating: flowState.courseGenerating,
       ...previousResponses,
     }),
@@ -219,6 +223,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         field: stepConfig.field,
         showTopicEditor: stepConfig.showTopicEditor,
         showConfidenceEditor: stepConfig.showConfidenceEditor,
+        showPlanSummary: stepConfig.showPlanSummary,
         showProgress: stepConfig.showProgress,
         action: stepConfig.action,
         accept: stepConfig.accept,
@@ -305,6 +310,15 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             // Trigger topic generation (useEffect will advance to topics_generated when done)
             await flowState.handleGenerateTopics();
             break;
+          case "generateUnifiedPlan":
+            // Show loading step message and advance to loading step
+            const planLoadingStep = getStepById("plan_loading");
+            if (planLoadingStep) {
+              setCurrentStepIndex(planLoadingStep.index);
+              await addKognoMessage(planLoadingStep.kognoMessage, planLoadingStep, { immediate: true });
+            }
+            await flowState.handleGenerateUnifiedPlan();
+            break;
 
           case "modifyTopics":
             if (value) {
@@ -331,6 +345,10 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             }
             // Trigger course creation
             await flowState.handleGenerateCourse();
+            break;
+          case "adjustConfidence":
+            await flowState.handleAdjustConfidence();
+            advanceToNextStep();
             break;
 
           case "redirect":
@@ -606,11 +624,24 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       advanceToNextStep();
     }
 
+    // When plan finishes loading, advance from plan_loading to plan_generated
+    if (currentStep.id === "plan_loading" && !flowState.isPlanLoading && flowState.planSummary) {
+      advanceToNextStep();
+    }
+
     // When course finishes generating (if we're still on creating step)
     if (currentStep.id === "creating" && !flowState.courseGenerating) {
       advanceToNextStep();
     }
-  }, [currentStep, flowState.isTopicsLoading, flowState.overviewTopics, flowState.courseGenerating, advanceToNextStep]);
+  }, [
+    currentStep,
+    flowState.isTopicsLoading,
+    flowState.overviewTopics,
+    flowState.isPlanLoading,
+    flowState.planSummary,
+    flowState.courseGenerating,
+    advanceToNextStep,
+  ]);
 
   // Open the edit modal for a message
   const openEditModal = useCallback((message) => {
@@ -703,6 +734,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         field: stepConfig.field,
         showTopicEditor: stepConfig.showTopicEditor,
         showConfidenceEditor: stepConfig.showConfidenceEditor,
+        showPlanSummary: stepConfig.showPlanSummary,
         showProgress: stepConfig.showProgress,
         action: stepConfig.action,
         accept: stepConfig.accept,

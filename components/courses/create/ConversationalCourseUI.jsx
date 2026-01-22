@@ -11,6 +11,7 @@ import UserResponseBubble from "./UserResponseBubble";
 import CourseInputRenderer from "./CourseInputRenderer";
 import TopicEditorChat from "./TopicEditorChat";
 import ConfidenceEditorChat from "./ConfidenceEditorChat";
+import PlanSummaryView from "./PlanSummaryView";
 import HighUsageWarning from "./HighUsageWarning";
 import EditMessageModal from "./EditMessageModal";
 import { calculateProgress } from "./conversationFlow";
@@ -131,9 +132,28 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     );
   };
 
+  // Render plan summary for unified planner flow
+  const renderPlanSummary = () => {
+    if (!conversation.currentStep?.showPlanSummary) return null;
+    if (!flowState.useUnifiedPlanner) return null;
+
+    return (
+      <PlanSummaryView
+        planSummary={flowState.planSummary}
+        moduleConfidenceState={flowState.moduleConfidenceState}
+        onModuleConfidenceChange={flowState.handleModuleModeChange}
+        onPlanModify={flowState.handleModifyPlan}
+        isUpdating={flowState.isPlanUpdating}
+        planModifyError={flowState.planModifyError}
+        isLoading={flowState.isPlanLoading}
+      />
+    );
+  };
+
   // Render confidence editor for current step
   const renderConfidenceEditor = () => {
     if (!conversation.currentStep?.showConfidenceEditor) return null;
+    if (flowState.useUnifiedPlanner && conversation.currentStep?.showPlanSummary) return null;
 
     return (
       <ConfidenceEditorChat
@@ -223,6 +243,22 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             className="w-full py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
             Continue
+          </button>
+        </div>
+      );
+    }
+
+    // Unified plan summary + confidence
+    if (inputType === "plan_with_confidence") {
+      return (
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-1)]">
+          <button
+            type="button"
+            onClick={conversation.handleConfirm}
+            disabled={flowState.isPlanLoading || flowState.isPlanUpdating || conversation.isParsing}
+            className="w-full py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+          >
+            {skipLabel || "Continue"}
           </button>
         </div>
       );
@@ -407,7 +443,10 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
               message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
 
             // Don't show skip button in message for content_with_attachments (it has its own Done button)
-            const showSkipInMessage = message.skippable && message.inputType !== "content_with_attachments";
+            const showSkipInMessage =
+              message.skippable &&
+              message.inputType !== "content_with_attachments" &&
+              message.inputType !== "plan_with_confidence";
 
             return (
               <KognoMessage
@@ -427,8 +466,10 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                 onConfirm={conversation.handleConfirm}
                 showTopicEditor={message.showTopicEditor}
                 showConfidenceEditor={message.showConfidenceEditor}
+                showPlanSummary={message.showPlanSummary}
                 showProgress={message.showProgress}
                 topicEditor={message.showTopicEditor ? renderTopicEditor() : null}
+                planSummaryView={message.showPlanSummary ? renderPlanSummary() : null}
                 confidenceEditor={message.showConfidenceEditor ? renderConfidenceEditor() : null}
                 superseded={message.superseded}
                 tourTarget={message.tourTarget}
@@ -468,6 +509,19 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             <button
               type="button"
               onClick={flowState.handleGenerateTopics}
+              className="mt-2 text-sm text-red-600 underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {flowState.planError && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+            <p className="text-sm text-red-600">{flowState.planError}</p>
+            <button
+              type="button"
+              onClick={flowState.handleGenerateUnifiedPlan}
               className="mt-2 text-sm text-red-600 underline"
             >
               Try again
