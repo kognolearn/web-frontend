@@ -1,4 +1,8 @@
-import { getCourseChatGreeting, getTopicsLoadingMessage } from './courseChatMessages';
+import {
+  getCourseChatGreeting,
+  getTopicsGeneratedMessage,
+  getTopicsLoadingMessage,
+} from './courseChatMessages';
 
 /**
  * Conversation Flow Configuration for Chat-Based Course Creation
@@ -199,7 +203,7 @@ export const CONVERSATION_FLOW = [
   // Step 9: Topics Generated with refinement options (Legacy)
   {
     id: 'topics_generated',
-    kognoMessage: "Here's what I came up with! I found {topicCount} topics across {moduleCount} modules. Take a look and let me know what you think.",
+    kognoMessage: getTopicsGeneratedMessage(),
     inputType: 'topics_with_refinement',
     showTopicEditor: true,
     field: 'topicModifyPrompt',

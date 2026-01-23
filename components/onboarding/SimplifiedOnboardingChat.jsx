@@ -6,17 +6,98 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '@/lib/api';
-import { getAnonUserId } from '@/lib/onboarding';
+import { generateAnonTopics, getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
-import { createMessageQueue, scrollToBottom } from '@/lib/chatHelpers';
+import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
+import TopicApprovalSection from '@/components/onboarding/TopicApprovalSection';
 import {
   getCourseChatCollegeFollowup,
   getCourseChatGreeting,
   getCourseChatRetryMessage,
   getTopicsLoadingMessage,
+  getTopicsGeneratedMessage,
 } from '@/components/courses/create/courseChatMessages';
+import { interpolateMessage } from '@/components/courses/create/conversationFlow';
+import { defaultTopicRating } from '@/app/courses/create/utils';
 
 const STUDY_MODE = 'cram';
+const STAGES = {
+  COLLECTING: 'collecting',
+  GENERATING: 'generating',
+  APPROVAL: 'approval',
+  APPROVED: 'approved',
+};
+
+const normalizeOverviewTopics = (rawTopics) => {
+  if (!Array.isArray(rawTopics)) return [];
+  return rawTopics.map((module, index) => {
+    const moduleId =
+      typeof module?.id === 'string'
+        ? module.id
+        : typeof module?.module_id === 'string'
+        ? module.module_id
+        : `overview_${index + 1}`;
+    const moduleTitle =
+      typeof module === 'string'
+        ? module
+        : typeof module?.title === 'string'
+        ? module.title
+        : typeof module?.name === 'string'
+        ? module.name
+        : `Module ${index + 1}`;
+    const rawSubtopics = Array.isArray(module?.subtopics)
+      ? module.subtopics
+      : Array.isArray(module?.lessons)
+      ? module.lessons
+      : Array.isArray(module?.topics)
+      ? module.topics
+      : [];
+    const subtopics = rawSubtopics.map((subtopic, subIndex) => ({
+      ...subtopic,
+      id:
+        typeof subtopic?.id === 'string'
+          ? subtopic.id
+          : `subtopic_${index + 1}_${subIndex + 1}`,
+      title:
+        typeof subtopic?.title === 'string'
+          ? subtopic.title
+          : typeof subtopic?.name === 'string'
+          ? subtopic.name
+          : `Topic ${subIndex + 1}`,
+      familiarity: Number.isFinite(subtopic?.familiarity)
+        ? subtopic.familiarity
+        : defaultTopicRating,
+    }));
+
+    const baseModule = module && typeof module === 'object' ? module : {};
+    return {
+      ...baseModule,
+      id: moduleId,
+      title: moduleTitle,
+      subtopics,
+    };
+  });
+};
+
+const normalizeTopicsPayload = (payload) => {
+  const safePayload = payload && typeof payload === 'object' ? payload : {};
+  return {
+    ...safePayload,
+    overviewTopics: normalizeOverviewTopics(
+      safePayload.overviewTopics || safePayload.topics || []
+    ),
+  };
+};
+
+const buildInitialRatings = (overviewTopics) =>
+  (overviewTopics || []).reduce((acc, topic) => {
+    if (!topic?.id) return acc;
+    const rating = Number.isFinite(topic?.familiarity)
+      ? topic.familiarity
+      : defaultTopicRating;
+    acc[topic.id] = rating;
+    return acc;
+  }, {});
 
 const parseCourseInfoLocal = (raw) => {
   if (typeof raw !== 'string') return null;
@@ -73,7 +154,11 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     collegeName: '',
     studyMode: STUDY_MODE,
   });
-  const [isComplete, setIsComplete] = useState(false);
+  const [stage, setStage] = useState(STAGES.COLLECTING);
+  const [topicsPayload, setTopicsPayload] = useState(null);
+  const [familiarityRatings, setFamiliarityRatings] = useState({});
+  const [isSavingTopics, setIsSavingTopics] = useState(false);
+  const [topicError, setTopicError] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -82,6 +167,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const messageQueueTimerRef = useRef(null);
   const messageQueueActiveRef = useRef(false);
   const parseAttemptsRef = useRef(0);
+  const anonUserIdRef = useRef(getAnonUserId());
+  const topicsPayloadRef = useRef(topicsPayload);
+  const ratingsRef = useRef(familiarityRatings);
+  const persistTimerRef = useRef(null);
+  const topicsMessageTimerRef = useRef(null);
+  const topicsMessageIdRef = useRef(null);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -117,8 +208,24 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   useEffect(() => {
     return () => {
       messageQueueRef.current?.clearMessageQueue();
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      if (topicsMessageTimerRef.current) {
+        clearTimeout(topicsMessageTimerRef.current);
+        topicsMessageTimerRef.current = null;
+      }
     };
   }, []);
+
+  useEffect(() => {
+    topicsPayloadRef.current = topicsPayload;
+  }, [topicsPayload]);
+
+  useEffect(() => {
+    ratingsRef.current = familiarityRatings;
+  }, [familiarityRatings]);
 
   useEffect(() => {
     scrollToBottom(scrollContainerRef);
@@ -140,7 +247,153 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     enqueueReplyParts('chat', [getCourseChatRetryMessage(parseAttemptsRef.current)]);
   };
 
-  const finalizeCourseInfo = (nextCourseName, nextCollegeName) => {
+  const appendTopicsMessage = (delayMs = 0) => {
+    if (topicsMessageIdRef.current) return;
+    const publish = () => {
+      if (topicsMessageIdRef.current) return;
+      const id = Date.now() + Math.random();
+      topicsMessageIdRef.current = id;
+      appendMessage({ type: 'topics', id });
+    };
+
+    if (delayMs > 0) {
+      if (topicsMessageTimerRef.current) {
+        clearTimeout(topicsMessageTimerRef.current);
+      }
+      topicsMessageTimerRef.current = setTimeout(() => {
+        topicsMessageTimerRef.current = null;
+        publish();
+      }, delayMs);
+      return;
+    }
+
+    publish();
+  };
+
+  const persistAnonCourse = async ({ nextTopics, nextRatings } = {}) => {
+    const anonUserId = anonUserIdRef.current;
+    if (!anonUserId) return;
+
+    const topicsToPersist =
+      typeof nextTopics !== 'undefined' ? nextTopics : topicsPayloadRef.current;
+    const ratingsToPersist =
+      typeof nextRatings !== 'undefined' ? nextRatings : ratingsRef.current;
+    const payload = {};
+
+    if (typeof topicsToPersist !== 'undefined' && topicsToPersist !== null) {
+      payload.topics = topicsToPersist;
+    }
+    if (typeof ratingsToPersist !== 'undefined' && ratingsToPersist !== null) {
+      payload.familiarityRatings = ratingsToPersist;
+    }
+    if (Object.keys(payload).length === 0) return;
+
+    setIsSavingTopics(true);
+    try {
+      await authFetch(`/api/onboarding/anon-course/${anonUserId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Failed to persist anon topics:', error);
+    } finally {
+      setIsSavingTopics(false);
+    }
+  };
+
+  const schedulePersist = ({ nextTopics, nextRatings, immediate = false } = {}) => {
+    if (immediate) {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistAnonCourse({ nextTopics, nextRatings });
+      return;
+    }
+
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      persistAnonCourse({ nextTopics, nextRatings });
+    }, 500);
+  };
+
+  const createAnonCourseRecord = async (courseName, collegeName) => {
+    const anonUserId = anonUserIdRef.current;
+    if (!anonUserId) return null;
+    try {
+      const response = await authFetch('/api/onboarding/anon-course', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          anonUserId,
+          courseName,
+          university: collegeName,
+          studyMode: STUDY_MODE,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Failed to create anon course');
+      }
+      return result?.course || null;
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Failed to create anon course:', error);
+      return null;
+    }
+  };
+
+  const startTopicGeneration = async (courseName, collegeName) => {
+    setStage(STAGES.GENERATING);
+    setIsThinking(true);
+    setTopicError(null);
+
+    enqueueReplyParts('chat', [getTopicsLoadingMessage()]);
+
+    await createAnonCourseRecord(courseName, collegeName);
+
+    try {
+      const result = await generateAnonTopics(
+        anonUserIdRef.current,
+        courseName,
+        collegeName,
+        { studyMode: STUDY_MODE }
+      );
+      const normalizedPayload = normalizeTopicsPayload(result?.topics || {});
+      const normalizedOverview = normalizedPayload.overviewTopics || [];
+      const initialRatings = buildInitialRatings(normalizedOverview);
+
+      setTopicsPayload(normalizedPayload);
+      setFamiliarityRatings(initialRatings);
+      schedulePersist({ nextTopics: normalizedPayload, nextRatings: initialRatings });
+
+      const topicsMessage = interpolateMessage(getTopicsGeneratedMessage(), {
+        overviewTopics: normalizedOverview,
+      });
+      if (topicsMessage) {
+        enqueueReplyParts('chat', [topicsMessage]);
+        appendTopicsMessage(getMessageDelayMs(topicsMessage));
+      } else {
+        appendTopicsMessage();
+      }
+
+      setStage(STAGES.APPROVAL);
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Topic generation failed:', error);
+      setTopicError('Something went wrong generating topics.');
+      enqueueReplyParts('chat', ['Something went wrong generating topics. Please try again.']);
+      appendTopicsMessage(getMessageDelayMs('Something went wrong generating topics. Please try again.'));
+      setStage(STAGES.APPROVAL);
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
+  const finalizeCourseInfo = async (nextCourseName, nextCollegeName) => {
+    if (stage !== STAGES.COLLECTING) return;
     const courseName = nextCourseName?.trim();
     const collegeName = nextCollegeName?.trim();
     if (!courseName || !collegeName) {
@@ -155,11 +408,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     });
     setPendingField(null);
     parseAttemptsRef.current = 0;
-    setIsComplete(true);
-    enqueueReplyParts('chat', [getTopicsLoadingMessage()]);
+    await startTopicGeneration(courseName, collegeName);
   };
 
-  const handleParsedResult = (result) => {
+  const handleParsedResult = async (result) => {
     const courseName = typeof result?.courseName === 'string' ? result.courseName.trim() : '';
     const collegeName =
       typeof result?.university === 'string'
@@ -168,7 +420,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         ? result.collegeName.trim()
         : '';
     if (courseName && collegeName) {
-      finalizeCourseInfo(courseName, collegeName);
+      await finalizeCourseInfo(courseName, collegeName);
       return;
     }
 
@@ -186,7 +438,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const parseCourseInfo = async (message) => {
     const localParsed = parseCourseInfoLocal(message);
     if (localParsed) {
-      handleParsedResult(localParsed);
+      await handleParsedResult(localParsed);
       return;
     }
 
@@ -195,7 +447,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       const response = await authFetch('/api/onboarding/parse-course-info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, anonUserId: getAnonUserId() }),
+        body: JSON.stringify({ message, anonUserId: anonUserIdRef.current }),
       });
 
       const result = await response.json().catch(() => ({}));
@@ -204,7 +456,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         throw new Error(result?.error || 'Failed to parse course info');
       }
 
-      handleParsedResult(result);
+      await handleParsedResult(result);
     } catch (error) {
       handleParseFailure();
     } finally {
@@ -212,15 +464,78 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   };
 
+  const overviewTopics = topicsPayload?.overviewTopics || [];
+
+  const handleTopicTitleChange = (topicId, title) => {
+    if (!topicId) return;
+    const currentPayload = topicsPayloadRef.current;
+    if (!currentPayload) return;
+    const nextOverview = (currentPayload.overviewTopics || []).map((topic) =>
+      topic.id === topicId ? { ...topic, title } : topic
+    );
+    const nextPayload = { ...currentPayload, overviewTopics: nextOverview };
+    setTopicsPayload(nextPayload);
+    schedulePersist({ nextTopics: nextPayload });
+  };
+
+  const handleRatingChange = (topicId, rating) => {
+    if (!topicId) return;
+    const nextRatings = { ...(ratingsRef.current || {}), [topicId]: rating };
+    setFamiliarityRatings(nextRatings);
+    schedulePersist({ nextRatings });
+  };
+
+  const handleTopicRemove = (topic, _index, _rating) => {
+    if (!topic?.id) return;
+    const currentPayload = topicsPayloadRef.current;
+    if (!currentPayload) return;
+    const nextOverview = (currentPayload.overviewTopics || []).filter(
+      (entry) => entry.id !== topic.id
+    );
+    const nextPayload = { ...currentPayload, overviewTopics: nextOverview };
+    const nextRatings = { ...(ratingsRef.current || {}) };
+    delete nextRatings[topic.id];
+    setTopicsPayload(nextPayload);
+    setFamiliarityRatings(nextRatings);
+    schedulePersist({ nextTopics: nextPayload, nextRatings });
+  };
+
+  const handleTopicRestore = (topic, index, rating) => {
+    if (!topic?.id) return;
+    const currentPayload = topicsPayloadRef.current || { overviewTopics: [] };
+    const currentOverview = currentPayload.overviewTopics || [];
+    const nextOverview = [...currentOverview];
+    const safeIndex =
+      Number.isFinite(index) && index >= 0 ? Math.min(index, nextOverview.length) : nextOverview.length;
+    nextOverview.splice(safeIndex, 0, topic);
+    const nextPayload = { ...currentPayload, overviewTopics: nextOverview };
+    const nextRatings = { ...(ratingsRef.current || {}) };
+    nextRatings[topic.id] = Number.isFinite(rating) ? rating : defaultTopicRating;
+    setTopicsPayload(nextPayload);
+    setFamiliarityRatings(nextRatings);
+    schedulePersist({ nextTopics: nextPayload, nextRatings });
+  };
+
+  const handleApproveTopics = () => {
+    if (stage !== STAGES.APPROVAL) return;
+    schedulePersist({ immediate: true });
+    setStage(STAGES.APPROVED);
+  };
+
+  const handleRetryTopics = async () => {
+    if (!courseInfo.courseName || !courseInfo.collegeName) return;
+    await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
+  };
+
   const handleUserSend = async (raw) => {
     const trimmed = raw.trim();
-    if (!trimmed || isThinking || isComplete) return;
+    if (!trimmed || isThinking || stage !== STAGES.COLLECTING) return;
     setInput('');
     addUserMessage(trimmed);
 
     if (pendingField === 'collegeName') {
       if (courseInfo.courseName) {
-        finalizeCourseInfo(courseInfo.courseName, trimmed);
+        await finalizeCourseInfo(courseInfo.courseName, trimmed);
         return;
       }
       setPendingField(null);
@@ -229,7 +544,13 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     await parseCourseInfo(trimmed);
   };
 
-  const isInputDisabled = isThinking || isComplete;
+  const isInputDisabled = isThinking || stage !== STAGES.COLLECTING;
+  const inputPlaceholder =
+    stage === STAGES.GENERATING
+      ? 'Generating topics...'
+      : stage === STAGES.APPROVAL || stage === STAGES.APPROVED
+      ? 'Review topics below...'
+      : 'Type your message...';
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
     : "relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden";
@@ -282,13 +603,34 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       >
         <div className="max-w-2xl mx-auto py-8">
           <AnimatePresence initial={false}>
-            {messages.map((message) =>
-              message.type === 'bot' ? (
-                <BotMessage key={message.id}>{message.text}</BotMessage>
-              ) : (
-                <UserMessage key={message.id}>{message.text}</UserMessage>
-              )
-            )}
+            {messages.map((message) => {
+              if (message.type === 'bot') {
+                return <BotMessage key={message.id}>{message.text}</BotMessage>;
+              }
+              if (message.type === 'user') {
+                return <UserMessage key={message.id}>{message.text}</UserMessage>;
+              }
+              if (message.type === 'topics') {
+                return (
+                  <BotMessage key={message.id}>
+                    <TopicApprovalSection
+                      topics={overviewTopics}
+                      familiarityRatings={familiarityRatings}
+                      onTopicTitleChange={handleTopicTitleChange}
+                      onTopicRemove={handleTopicRemove}
+                      onTopicRestore={handleTopicRestore}
+                      onRatingChange={handleRatingChange}
+                      onApprove={handleApproveTopics}
+                      onRetry={topicError ? handleRetryTopics : null}
+                      isSaving={isSavingTopics}
+                      error={topicError}
+                      isApproved={stage === STAGES.APPROVED}
+                    />
+                  </BotMessage>
+                );
+              }
+              return null;
+            })}
           </AnimatePresence>
 
           {isThinking && <TypingIndicator />}
@@ -312,7 +654,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
                   handleUserSend(input);
                 }
               }}
-              placeholder={isComplete ? 'Generating your course...' : 'Type your message...'}
+              placeholder={inputPlaceholder}
               disabled={isInputDisabled}
               rows={1}
               className="flex-1 bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-3 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 resize-none overflow-hidden"

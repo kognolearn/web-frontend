@@ -4,6 +4,8 @@ const COURSE_CHAT_RETRY_SECOND =
   "I'm still having trouble understanding. Please type the course name and college separately, like: 'Physics 101' and 'Stanford University'";
 
 const TOPICS_LOADING_MESSAGE = 'Analyzing your materials and building your topic list...';
+const TOPICS_GENERATED_MESSAGE =
+  "Here's what I came up with! I found {topicCount} topics across {moduleCount} modules. Take a look and let me know what you think.";
 
 export function getCourseChatGreeting(savedCollege) {
   if (typeof savedCollege === 'string' && savedCollege.trim()) {
@@ -25,4 +27,8 @@ export function getCourseChatRetryMessage(attempt) {
 
 export function getTopicsLoadingMessage() {
   return TOPICS_LOADING_MESSAGE;
+}
+
+export function getTopicsGeneratedMessage() {
+  return TOPICS_GENERATED_MESSAGE;
 }
