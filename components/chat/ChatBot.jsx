@@ -1847,10 +1847,6 @@ Instructions:
     </div>
   );
 
-  const selectionPreview = pendingSelection?.text
-    ? pendingSelection.text.replace(/\s+/g, " ").trim()
-    : "";
-
   const selectionOverlay = pendingSelection && typeof document !== 'undefined'
     ? createPortal(
         <div className="fixed inset-0 z-[120] pointer-events-none">
@@ -1874,30 +1870,17 @@ Instructions:
               left: pendingSelection.buttonPosition.left,
             }}
           >
-            <div className="kogno-selection-popover">
-              <div
-                className="kogno-selection-preview"
-                title={selectionPreview}
-              >
-                {selectionPreview}
-              </div>
-              <div className="kogno-selection-divider" aria-hidden="true" />
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={handleAskFromSelection}
-                className="kogno-selection-action"
-                aria-label="Ask Kogno about selection"
-              >
-                <svg className="kogno-selection-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                Ask Kogno
-              </button>
-            </div>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={handleAskFromSelection}
+              className="flex items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-[var(--primary)]/30 hover:shadow-[var(--primary)]/50 transition-all"
+            >
+              Ask Kogno
+            </button>
           </div>
         </div>,
         document.body
