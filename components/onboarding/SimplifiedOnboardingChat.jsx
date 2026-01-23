@@ -31,6 +31,67 @@ const STAGES = {
 const buildCourseConfirmation = (courseName, collegeName) =>
   `I have ${courseName} at ${collegeName}. Is that right? Reply "yes" to continue, or send the correction.`;
 
+const normalizeCorrectionInput = (value) => {
+  if (typeof value !== 'string') return '';
+  let text = value.trim();
+  if (!text) return '';
+
+  const prefixPatterns = [
+    /^(no|nah|nope|incorrect|wrong)\b[,:;\-\s]*/i,
+    /^(actually|sorry|my bad|i meant|meant|should be|it's|its|it should be)\b[,:;\-\s]*/i,
+  ];
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 4) {
+    changed = false;
+    for (const pattern of prefixPatterns) {
+      const next = text.replace(pattern, '').trim();
+      if (next !== text) {
+        text = next;
+        changed = true;
+      }
+    }
+    guard += 1;
+  }
+
+  return text;
+};
+
+const parseCorrectionLocal = (raw) => {
+  const cleaned = normalizeCorrectionInput(raw);
+  if (!cleaned) return null;
+
+  const parsed = parseCourseInfoLocal(cleaned);
+  if (parsed?.courseName && parsed?.university) {
+    return { courseName: parsed.courseName, collegeName: parsed.university };
+  }
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 2) {
+    const last = tokens[tokens.length - 1];
+    const rest = tokens.slice(0, -1).join(' ');
+    const restHasDigits = /\d/.test(rest);
+    const lastHasDigits = /\d/.test(last);
+    if (restHasDigits && !lastHasDigits && last.length <= 5) {
+      return { courseName: rest, collegeName: last };
+    }
+  }
+
+  const hasDigits = /\d/.test(cleaned);
+  const looksLikeCollege = /university|college|institute|school|polytechnic|tech|academy|campus|state/i.test(
+    cleaned
+  );
+  if (hasDigits && !looksLikeCollege) {
+    return { courseName: cleaned };
+  }
+  if (looksLikeCollege || cleaned.length <= 5) {
+    return { collegeName: cleaned };
+  }
+
+  return null;
+};
+
 const normalizeOverviewTopics = (rawTopics) => {
   if (!Array.isArray(rawTopics)) return [];
   return rawTopics.map((module, index) => {
@@ -159,6 +220,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     studyMode: STUDY_MODE,
   });
   const [isConfirmingCourse, setIsConfirmingCourse] = useState(false);
+  const [needsCourseCorrection, setNeedsCourseCorrection] = useState(false);
   const [stage, setStage] = useState(STAGES.COLLECTING);
   const [topicsPayload, setTopicsPayload] = useState(null);
   const [familiarityRatings, setFamiliarityRatings] = useState({});
@@ -258,9 +320,102 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     router.push('/auth/sign-in');
   };
 
+  const fetchCourseInfo = async (message) => {
+    const response = await authFetch('/api/onboarding/parse-course-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, anonUserId: anonUserIdRef.current }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.error || 'Failed to parse course info');
+    }
+    return result;
+  };
+
   const handleParseFailure = () => {
     parseAttemptsRef.current += 1;
     enqueueReplyParts('chat', [getCourseChatRetryMessage(parseAttemptsRef.current)]);
+  };
+
+  const applyCourseCorrection = (nextCourseName, nextCollegeName) => {
+    const courseName = nextCourseName?.trim() || courseInfo.courseName;
+    const collegeName = nextCollegeName?.trim() || courseInfo.collegeName;
+
+    if (!courseName && !collegeName) {
+      enqueueReplyParts('chat', [
+        "Please send the course name and college together, like 'Physics 101 at Stanford'.",
+      ]);
+      setNeedsCourseCorrection(true);
+      return;
+    }
+    if (!courseName) {
+      enqueueReplyParts('chat', ["What's the course name?"]);
+      setNeedsCourseCorrection(true);
+      return;
+    }
+    if (!collegeName) {
+      enqueueReplyParts('chat', ['Which college or university is it at?']);
+      setNeedsCourseCorrection(true);
+      return;
+    }
+
+    setCourseInfo({
+      courseName,
+      collegeName,
+      studyMode: STUDY_MODE,
+    });
+    setPendingField(null);
+    parseAttemptsRef.current = 0;
+    setNeedsCourseCorrection(false);
+    setIsConfirmingCourse(true);
+    enqueueReplyParts('chat', [buildCourseConfirmation(courseName, collegeName)]);
+  };
+
+  const handleCourseCorrectionInput = async (rawInput) => {
+    const cleaned = normalizeCorrectionInput(rawInput);
+    if (!cleaned) {
+      enqueueReplyParts('chat', [
+        "Please send the course name and college together, like 'Physics 101 at Stanford'.",
+      ]);
+      setNeedsCourseCorrection(true);
+      return;
+    }
+
+    const localUpdate = parseCorrectionLocal(cleaned);
+    if (localUpdate?.courseName && localUpdate?.collegeName) {
+      applyCourseCorrection(localUpdate.courseName, localUpdate.collegeName);
+      return;
+    }
+
+    setIsThinking(true);
+    try {
+      const result = await fetchCourseInfo(cleaned);
+      const courseName = typeof result?.courseName === 'string' ? result.courseName.trim() : '';
+      const collegeName =
+        typeof result?.university === 'string'
+          ? result.university.trim()
+          : typeof result?.collegeName === 'string'
+          ? result.collegeName.trim()
+          : '';
+      applyCourseCorrection(
+        courseName || localUpdate?.courseName || courseInfo.courseName,
+        collegeName || localUpdate?.collegeName || courseInfo.collegeName
+      );
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Correction parse failed:', error);
+      if (localUpdate) {
+        applyCourseCorrection(localUpdate.courseName, localUpdate.collegeName);
+      } else {
+        enqueueReplyParts('chat', [
+          "Please send the course name and college together, like 'Physics 101 at Stanford'.",
+        ]);
+        setNeedsCourseCorrection(true);
+      }
+    } finally {
+      setIsThinking(false);
+    }
   };
 
   const appendTopicsMessage = (delayMs = 0) => {
@@ -367,11 +522,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setIsThinking(true);
     setTopicError(null);
     setIsConfirmingCourse(false);
+    setNeedsCourseCorrection(false);
     generationIntroSentRef.current = false;
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
 
-    enqueueReplyParts('chat', [getTopicsLoadingMessage()]);
+    const topicsHint = 'You can ask me questions while I generate these.';
+    generationHistoryRef.current = [{ role: 'assistant', content: topicsHint }];
+    enqueueReplyParts('chat', [getTopicsLoadingMessage(), topicsHint]);
 
     await createAnonCourseRecord(courseName, collegeName);
 
@@ -429,6 +587,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setPendingField(null);
     parseAttemptsRef.current = 0;
     setIsConfirmingCourse(true);
+    setNeedsCourseCorrection(false);
     enqueueReplyParts('chat', [buildCourseConfirmation(courseName, collegeName)]);
   };
 
@@ -465,18 +624,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
     setIsThinking(true);
     try {
-      const response = await authFetch('/api/onboarding/parse-course-info', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, anonUserId: anonUserIdRef.current }),
-      });
-
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result?.error || 'Failed to parse course info');
-      }
-
+      const result = await fetchCourseInfo(message);
       await handleParsedResult(result);
     } catch (error) {
       handleParseFailure();
@@ -632,13 +780,31 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       }
 
       if (noValues.has(firstWord)) {
+        const remainder = normalized.includes(firstWord)
+          ? trimmed
+              .slice(normalized.indexOf(firstWord) + firstWord.length)
+              .replace(/^[,\s:;-]+/, '')
+              .trim()
+          : '';
         setIsConfirmingCourse(false);
-        enqueueReplyParts('chat', ['Got it - send the correct course and college.']);
+        if (remainder) {
+          await handleCourseCorrectionInput(remainder);
+          return;
+        }
+        setNeedsCourseCorrection(true);
+        enqueueReplyParts('chat', [
+          'Got it - send the correct course and college, or just the part to change.',
+        ]);
         return;
       }
 
       setIsConfirmingCourse(false);
-      await parseCourseInfo(trimmed);
+      await handleCourseCorrectionInput(trimmed);
+      return;
+    }
+
+    if (needsCourseCorrection) {
+      await handleCourseCorrectionInput(trimmed);
       return;
     }
 
@@ -756,6 +922,20 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
       <div className="relative z-10 border-t border-white/5 bg-[var(--background)]/80 backdrop-blur-xl px-4 sm:px-6 py-4">
         <div className="max-w-2xl mx-auto">
+          {stage === STAGES.TOPICS_GENERATING && (
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+                <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
+                Building your topics...
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--primary)]" />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                Ask questions while I pull together your topics.
+              </p>
+            </div>
+          )}
           {stage === STAGES.COURSE_GENERATING && (
             <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
               <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
