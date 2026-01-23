@@ -9,7 +9,6 @@ import { authFetch } from '@/lib/api';
 import { getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, scrollToBottom } from '@/lib/chatHelpers';
-import { supabase } from '@/lib/supabase/client';
 
 const INITIAL_PROMPT = 'What course do you want to study and which university?';
 const RETRY_FIRST =
@@ -140,9 +139,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   }, [input]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/auth/create-account');
+  const handleSignIn = () => {
+    router.push('/auth/sign-in');
   };
 
   const handleParseFailure = () => {
@@ -305,10 +303,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         </Link>
         <button
           type="button"
-          onClick={handleSignOut}
+          onClick={handleSignIn}
           className="px-4 py-2 rounded-xl bg-[var(--surface-1)] border border-white/10 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
         >
-          Sign out
+          Sign in
         </button>
       </header>
 
