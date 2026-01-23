@@ -47,6 +47,10 @@ export default function SettingsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPlanLoading, setAdminPlanLoading] = useState(false);
+
   // Course creation UI preference
   const [courseCreateUiMode, setCourseCreateUiMode] = useState("chat");
   const forceDownloadRedirect = isDownloadRedirectEnabled();
@@ -88,6 +92,17 @@ export default function SettingsPage() {
         }
       } catch (err) {
         console.error("Failed to fetch negotiation status:", err);
+      }
+
+      // Check admin status
+      try {
+        const res = await authFetch("/api/admin/status");
+        if (res.ok) {
+          const data = await res.json();
+          setIsAdmin(data.isAdmin === true);
+        }
+      } catch (err) {
+        // Not an admin or error - that's fine
       }
 
       setLoading(false);
@@ -333,6 +348,35 @@ export default function SettingsPage() {
   const isTrialAccess = hasPaidAccess && !hasSubscription;
   const hasConfirmedPrice = typeof negotiationStatus?.confirmedPrice === "number";
   const canContinuePriceSelection = Boolean(negotiationStatus) && !hasConfirmedPrice;
+
+  const handleTogglePlanLevel = async () => {
+    setAdminPlanLoading(true);
+    const newPlanLevel = hasPaidAccess ? "free" : "paid";
+
+    try {
+      const res = await authFetch("/api/admin/my-plan-level", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planLevel: newPlanLevel }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update plan level");
+      }
+
+      // Refresh subscription status to reflect the change
+      const statusRes = await authFetch("/api/stripe?endpoint=subscription-status");
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setSubscriptionStatus(data);
+      }
+    } catch (err) {
+      console.error("Failed to toggle plan level:", err);
+    } finally {
+      setAdminPlanLoading(false);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "DELETE") return;
@@ -968,6 +1012,74 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+
+        {/* Admin Tools Section - Only visible to admins */}
+        {isAdmin && (
+          <section className="bg-[var(--surface-1)] rounded-2xl border border-purple-500/30 overflow-hidden">
+            <div className="px-6 py-5 border-b border-purple-500/30 bg-purple-500/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
+                  <svg className="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-purple-500">Admin Tools</h2>
+                  <p className="text-sm text-[var(--muted-foreground)]">Testing and development options</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    hasPaidAccess ? "bg-green-500/20" : "bg-[var(--surface-muted)]"
+                  }`}>
+                    <svg className={`w-5 h-5 ${hasPaidAccess ? "text-green-500" : "text-[var(--muted-foreground)]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium">Plan Level Override</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      Currently: <span className={hasPaidAccess ? "text-green-500 font-medium" : "text-[var(--muted-foreground)]"}>
+                        {hasPaidAccess ? "Pro" : "Free"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleTogglePlanLevel}
+                  disabled={adminPlanLoading}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                    hasPaidAccess
+                      ? "bg-[var(--surface-muted)] text-[var(--foreground)] hover:bg-[var(--border)]"
+                      : "bg-green-500 text-white hover:bg-green-600"
+                  }`}
+                >
+                  {adminPlanLoading ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Updating...
+                    </span>
+                  ) : hasPaidAccess ? (
+                    "Switch to Free"
+                  ) : (
+                    "Switch to Pro"
+                  )}
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                This actually updates your plan level in the database for testing purposes.
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* Danger Zone */}
         <section className="bg-[var(--surface-1)] rounded-2xl border border-red-500/30 overflow-hidden">

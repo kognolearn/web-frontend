@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase/client";
 import { getRedirectDestination } from "@/lib/platform";
 import { authFetch } from "@/lib/api";
 import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
+import GoogleSignInButton from "./GoogleSignInButton";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 
@@ -149,6 +150,23 @@ export default function SignInForm() {
           </span>
         ) : "Sign in"}
       </button>
+
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-white/10 dark:border-white/5"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-4 bg-[var(--surface-1)] text-[var(--muted-foreground)]">
+            or
+          </span>
+        </div>
+      </div>
+
+      <GoogleSignInButton
+        mode="signin"
+        redirectTo={redirectTo}
+        disabled={loading}
+      />
     </form>
   );
 }

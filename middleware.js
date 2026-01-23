@@ -192,7 +192,8 @@ export async function middleware(request) {
     })
     if (statusRes.ok) {
       const status = await statusRes.json().catch(() => ({}))
-      hasAccess = Boolean(status?.hasSubscription) || Boolean(status?.trialActive)
+      // hasBasicAccess is true for free tier users who can use the app with limits
+      hasAccess = Boolean(status?.hasSubscription) || Boolean(status?.trialActive) || Boolean(status?.hasBasicAccess)
     }
   } catch (error) {
     // Keep defaults on status failures.
