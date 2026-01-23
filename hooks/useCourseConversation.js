@@ -6,6 +6,10 @@ import {
   interpolateMessage,
   calculateProgress,
 } from "@/components/courses/create/conversationFlow";
+import {
+  getCourseChatCollegeFollowup,
+  getCourseChatRetryMessage,
+} from "@/components/courses/create/courseChatMessages";
 import { authFetch } from "@/lib/api";
 
 /**
@@ -447,7 +451,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             } else if (result.courseName && !result.collegeName) {
               // Got course but not college - ask for college specifically
               await addKognoMessage(
-                `Got it, ${result.courseName}! Which college or university is this course at?`,
+                getCourseChatCollegeFollowup(result.courseName),
                 {
                   id: 'ask_college',
                   inputType: 'text',
@@ -467,14 +471,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
             setParseChatAttempts(newAttempts);
             setIsParsing(false);
 
-            let retryMessage;
-            if (newAttempts === 1) {
-              retryMessage = "Hmm, I couldn't quite catch that! Could you tell me again - what's the course name (like 'Physics 101' or 'Intro to Biology') and which college/university is it at?";
-            } else {
-              retryMessage = "I'm still having trouble understanding. Please type the course name and college separately, like: 'Physics 101' and 'Stanford University'";
-            }
-
-            await addKognoMessage(retryMessage, currentStep);
+            await addKognoMessage(getCourseChatRetryMessage(newAttempts), currentStep);
           }
         } catch (error) {
           console.error('[useCourseConversation] Parse chat input error:', error);

@@ -9,20 +9,12 @@ import { authFetch } from '@/lib/api';
 import { getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, scrollToBottom } from '@/lib/chatHelpers';
-
-const INITIAL_PROMPT = 'What course do you want to study and which university?';
-const RETRY_FIRST =
-  "Hmm, I couldn't quite catch that! Could you tell me again - what's the course name (like 'Physics 101' or 'Intro to Biology') and which college/university is it at?";
-const RETRY_SECOND =
-  "I'm still having trouble understanding. Please type the course name and college separately, like: 'Physics 101' and 'Stanford University'";
-
-const buildCollegeFollowup = (courseName) =>
-  `Got it, ${courseName}! Which college or university is this course at?`;
-const buildCourseFollowup = (collegeName) =>
-  `Great, ${collegeName}. What's the course name?`;
-const buildConfirmation = (courseName, collegeName) =>
-  `Perfect - ${courseName} at ${collegeName}.`;
-const FINAL_MESSAGE = "I'll start building your cram-focused course now.";
+import {
+  getCourseChatCollegeFollowup,
+  getCourseChatGreeting,
+  getCourseChatRetryMessage,
+  getTopicsLoadingMessage,
+} from '@/components/courses/create/courseChatMessages';
 
 const STUDY_MODE = 'cram';
 
@@ -68,7 +60,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const router = useRouter();
   const initialMessageRef = useRef({
     type: 'bot',
-    text: INITIAL_PROMPT,
+    text: getCourseChatGreeting(),
     id: Date.now() + Math.random(),
     meta: {},
   });
@@ -145,8 +137,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   const handleParseFailure = () => {
     parseAttemptsRef.current += 1;
-    const message = parseAttemptsRef.current === 1 ? RETRY_FIRST : RETRY_SECOND;
-    enqueueReplyParts('chat', [message]);
+    enqueueReplyParts('chat', [getCourseChatRetryMessage(parseAttemptsRef.current)]);
   };
 
   const finalizeCourseInfo = (nextCourseName, nextCollegeName) => {
@@ -165,7 +156,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setPendingField(null);
     parseAttemptsRef.current = 0;
     setIsComplete(true);
-    enqueueReplyParts('chat', [buildConfirmation(courseName, collegeName), FINAL_MESSAGE]);
+    enqueueReplyParts('chat', [getTopicsLoadingMessage()]);
   };
 
   const handleParsedResult = (result) => {
@@ -176,9 +167,6 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         : typeof result?.collegeName === 'string'
         ? result.collegeName.trim()
         : '';
-    const clarification =
-      typeof result?.clarification === 'string' ? result.clarification.trim() : '';
-
     if (courseName && collegeName) {
       finalizeCourseInfo(courseName, collegeName);
       return;
@@ -188,21 +176,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       setCourseInfo((prev) => ({ ...prev, courseName }));
       setPendingField('collegeName');
       parseAttemptsRef.current = 0;
-      enqueueReplyParts('chat', [buildCollegeFollowup(courseName)]);
-      return;
-    }
-
-    if (!courseName && collegeName) {
-      setCourseInfo((prev) => ({ ...prev, collegeName }));
-      setPendingField('courseName');
-      parseAttemptsRef.current = 0;
-      enqueueReplyParts('chat', [buildCourseFollowup(collegeName)]);
-      return;
-    }
-
-    if (clarification) {
-      parseAttemptsRef.current = 0;
-      enqueueReplyParts('chat', [clarification]);
+      enqueueReplyParts('chat', [getCourseChatCollegeFollowup(courseName)]);
       return;
     }
 
@@ -247,14 +221,6 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (pendingField === 'collegeName') {
       if (courseInfo.courseName) {
         finalizeCourseInfo(courseInfo.courseName, trimmed);
-        return;
-      }
-      setPendingField(null);
-    }
-
-    if (pendingField === 'courseName') {
-      if (courseInfo.collegeName) {
-        finalizeCourseInfo(trimmed, courseInfo.collegeName);
         return;
       }
       setPendingField(null);
