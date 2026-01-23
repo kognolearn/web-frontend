@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '@/lib/api';
+import { getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, scrollToBottom } from '@/lib/chatHelpers';
 import { supabase } from '@/lib/supabase/client';
@@ -222,7 +223,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       const response = await authFetch('/api/onboarding/parse-course-info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, anonUserId: getAnonUserId() }),
       });
 
       const result = await response.json().catch(() => ({}));
