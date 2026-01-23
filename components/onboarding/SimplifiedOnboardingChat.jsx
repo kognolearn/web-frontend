@@ -33,14 +33,14 @@ const parseCourseInfoLocal = (raw) => {
 
   const atMatch = text.match(/(.+?)\s+at\s+(.+)/i);
   if (atMatch) {
-    return { courseName: atMatch[1].trim(), collegeName: atMatch[2].trim() };
+    return { courseName: atMatch[1].trim(), university: atMatch[2].trim() };
   }
 
   const commaIndex = text.lastIndexOf(',');
   if (commaIndex > 0 && commaIndex < text.length - 1) {
     return {
       courseName: text.slice(0, commaIndex).trim(),
-      collegeName: text.slice(commaIndex + 1).trim(),
+      university: text.slice(commaIndex + 1).trim(),
     };
   }
 
@@ -48,7 +48,7 @@ const parseCourseInfoLocal = (raw) => {
   if (atSymbolIndex > 0 && atSymbolIndex < text.length - 1) {
     return {
       courseName: text.slice(0, atSymbolIndex).trim(),
-      collegeName: text.slice(atSymbolIndex + 1).trim(),
+      university: text.slice(atSymbolIndex + 1).trim(),
     };
   }
 
@@ -56,7 +56,7 @@ const parseCourseInfoLocal = (raw) => {
   if (dashIndex > 0 && dashIndex < text.length - 3) {
     return {
       courseName: text.slice(0, dashIndex).trim(),
-      collegeName: text.slice(dashIndex + 3).trim(),
+      university: text.slice(dashIndex + 3).trim(),
     };
   }
 
@@ -171,7 +171,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   const handleParsedResult = (result) => {
     const courseName = typeof result?.courseName === 'string' ? result.courseName.trim() : '';
-    const collegeName = typeof result?.collegeName === 'string' ? result.collegeName.trim() : '';
+    const collegeName =
+      typeof result?.university === 'string'
+        ? result.university.trim()
+        : typeof result?.collegeName === 'string'
+        ? result.collegeName.trim()
+        : '';
+    const clarification =
+      typeof result?.clarification === 'string' ? result.clarification.trim() : '';
 
     if (courseName && collegeName) {
       finalizeCourseInfo(courseName, collegeName);
@@ -194,6 +201,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       return;
     }
 
+    if (clarification) {
+      parseAttemptsRef.current = 0;
+      enqueueReplyParts('chat', [clarification]);
+      return;
+    }
+
     handleParseFailure();
   };
 
@@ -206,10 +219,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
     setIsThinking(true);
     try {
-      const response = await authFetch('/api/courses/parse-chat-input', {
+      const response = await authFetch('/api/onboarding/parse-course-info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, savedCollege: null }),
+        body: JSON.stringify({ message }),
       });
 
       const result = await response.json().catch(() => ({}));
