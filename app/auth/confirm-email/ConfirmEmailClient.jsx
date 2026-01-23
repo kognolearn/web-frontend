@@ -1,10 +1,11 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
+import { transferAnonData } from "@/lib/onboarding";
 
 // Auth constants
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
@@ -27,6 +28,34 @@ function ConfirmEmailContent() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const transferAttemptedRef = useRef(false);
+  const postConfirmTriggeredRef = useRef(false);
+
+  const attemptAnonTransfer = useCallback(async () => {
+    if (transferAttemptedRef.current) return;
+    transferAttemptedRef.current = true;
+    try {
+      await transferAnonData();
+    } catch (err) {
+      console.error("Anon transfer failed:", err);
+    }
+  }, []);
+
+  const handlePostConfirm = useCallback(() => {
+    if (postConfirmTriggeredRef.current) return;
+    postConfirmTriggeredRef.current = true;
+    setConfirmed(true);
+    void attemptAnonTransfer();
+    setTimeout(() => {
+      const joinRedirect = getJoinRedirectPath();
+      if (joinRedirect) {
+        clearJoinIntent();
+        router.push(joinRedirect);
+        return;
+      }
+      router.push("/");
+    }, 1500);
+  }, [attemptAnonTransfer, router]);
 
   useEffect(() => {
     if (searchEmail) {
@@ -55,16 +84,7 @@ function ConfirmEmailContent() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session?.user?.email_confirmed_at) {
-          setConfirmed(true);
-          setTimeout(() => {
-            const joinRedirect = getJoinRedirectPath();
-            if (joinRedirect) {
-              clearJoinIntent();
-              router.push(joinRedirect);
-              return;
-            }
-            router.push("/");
-          }, 1500);
+          handlePostConfirm();
         }
       }
     );
@@ -73,16 +93,7 @@ function ConfirmEmailContent() {
     const checkInitialState = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email_confirmed_at) {
-        setConfirmed(true);
-        setTimeout(() => {
-          const joinRedirect = getJoinRedirectPath();
-          if (joinRedirect) {
-            clearJoinIntent();
-            router.push(joinRedirect);
-            return;
-          }
-          router.push("/");
-        }, 1500);
+        handlePostConfirm();
       }
     };
     checkInitialState();
@@ -90,7 +101,7 @@ function ConfirmEmailContent() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [handlePostConfirm]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -164,17 +175,8 @@ function ConfirmEmailContent() {
       console.error("Failed to clear OTP flow info:", err);
     }
 
-    setConfirmed(true);
     setSubmitting(false);
-    setTimeout(() => {
-      const joinRedirect = getJoinRedirectPath();
-      if (joinRedirect) {
-        clearJoinIntent();
-        router.push(joinRedirect);
-        return;
-      }
-      router.push("/");
-    }, 1500);
+    handlePostConfirm();
   };
 
   const handleResend = async () => {
