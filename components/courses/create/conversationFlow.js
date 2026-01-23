@@ -1,3 +1,5 @@
+import { getCourseChatGreeting, getTopicsLoadingMessage } from './courseChatMessages';
+
 /**
  * Conversation Flow Configuration for Chat-Based Course Creation
  *
@@ -11,12 +13,7 @@ export const CONVERSATION_FLOW = [
   {
     id: 'course_chat',
     // Dynamic greeting based on saved college
-    kognoMessage: (state) => {
-      if (state.savedCollege && state.savedCollege.trim()) {
-        return `Hey! What course at ${state.savedCollege} do you wanna study?`;
-      }
-      return "Hey! What course do you wanna study and which college is it at?";
-    },
+    kognoMessage: (state) => getCourseChatGreeting(state.savedCollege),
     inputType: 'course_chat',
     field: 'courseChatInput',
     placeholder: "e.g., Physics 101 at Stanford",
@@ -193,7 +190,7 @@ export const CONVERSATION_FLOW = [
   // Step 8: Topics Loading (Legacy)
   {
     id: 'topics_loading',
-    kognoMessage: "Analyzing your materials and building your topic list...",
+    kognoMessage: getTopicsLoadingMessage(),
     inputType: 'loading',
     isTransient: true,
     condition: (state) => !state.useUnifiedPlanner,
