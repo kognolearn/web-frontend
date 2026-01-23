@@ -226,6 +226,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [familiarityRatings, setFamiliarityRatings] = useState({});
   const [isSavingTopics, setIsSavingTopics] = useState(false);
   const [topicError, setTopicError] = useState(null);
+  const [topicsProgress, setTopicsProgress] = useState(0);
+  const [topicsProgressMessage, setTopicsProgressMessage] = useState('');
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -523,6 +525,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setTopicError(null);
     setIsConfirmingCourse(false);
     setNeedsCourseCorrection(false);
+    setTopicsProgress(0);
+    setTopicsProgressMessage('');
     generationIntroSentRef.current = false;
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
@@ -538,7 +542,17 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         anonUserIdRef.current,
         courseName,
         collegeName,
-        { studyMode: STUDY_MODE }
+        {
+          studyMode: STUDY_MODE,
+          onProgress: (progressValue, message) => {
+            if (typeof progressValue === 'number') {
+              setTopicsProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
+            }
+            if (typeof message === 'string' && message.trim()) {
+              setTopicsProgressMessage(message.trim());
+            }
+          },
+        }
       );
       const normalizedPayload = normalizeTopicsPayload(result?.topics || {});
       const normalizedOverview = normalizedPayload.overviewTopics || [];
@@ -558,6 +572,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         appendTopicsMessage();
       }
 
+      setTopicsProgress(100);
       setStage(STAGES.TOPICS_APPROVAL);
     } catch (error) {
       console.error('[SimplifiedOnboardingChat] Topic generation failed:', error);
@@ -833,6 +848,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       : stage === STAGES.COURSE_GENERATING
       ? 'Ask me anything while I build your course...'
       : 'Type your message...';
+  const normalizedTopicsProgress = Number.isFinite(topicsProgress)
+    ? Math.min(Math.max(topicsProgress, 0), 100)
+    : 0;
   const showTyping = isThinking || isGenerationReplying;
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
@@ -924,13 +942,20 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         <div className="max-w-2xl mx-auto">
           {stage === STAGES.TOPICS_GENERATING && (
             <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+              <div className="flex items-center justify-between text-xs font-medium text-[var(--foreground)]">
                 <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
-                Building your topics...
+                <span>Building your topics...</span>
+                <span className="text-[var(--muted-foreground)]">{normalizedTopicsProgress}%</span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--primary)]" />
+                <div
+                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
+                  style={{ width: `${normalizedTopicsProgress}%` }}
+                />
               </div>
+              {topicsProgressMessage && (
+                <p className="mt-2 text-xs text-[var(--muted-foreground)]">{topicsProgressMessage}</p>
+              )}
             </div>
           )}
           {stage === STAGES.COURSE_GENERATING && (
