@@ -5,6 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
+import { createMessageQueue, scrollToBottom } from '@/lib/chatHelpers';
 import * as api from '@/lib/onboarding';
 import { supabase } from '@/lib/supabase/client';
 
@@ -43,30 +45,6 @@ const NEGOTIATION_STEPS = {
   DONE: 'DONE',
 };
 
-
-const BotMessage = ({ children }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="flex justify-start mb-4"
-  >
-    <div className="bg-[var(--surface-1)] text-[var(--foreground)] rounded-2xl rounded-tl-none px-4 py-3 max-w-[85%] shadow-sm border border-white/5 text-sm sm:text-base">
-      {children}
-    </div>
-  </motion.div>
-);
-
-const UserMessage = ({ children }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="flex justify-end mb-4"
-  >
-    <div className="bg-[var(--primary)] text-white rounded-2xl rounded-tr-none px-4 py-3 max-w-[85%] shadow-md text-sm sm:text-base">
-      {children}
-    </div>
-  </motion.div>
-);
 
 export default function HomeContent({ variant = 'page' }) {
   const isOverlay = variant === 'overlay';
@@ -128,12 +106,6 @@ export default function HomeContent({ variant = 'page' }) {
   const messageQueueTimerRef = useRef(null);
   const messageQueueActiveRef = useRef(false);
 
-  const scrollToBottom = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-    }
-  };
-
   const formatPrice = (cents) => {
     if (typeof cents !== 'number' || Number.isNaN(cents)) return '';
     const dollars = cents / 100;
@@ -151,16 +123,6 @@ export default function HomeContent({ variant = 'page' }) {
     if (resolved === null) return null;
     latestOfferCentsRef.current = resolved;
     return resolved;
-  };
-
-  const getMessageDelayMs = (text) => {
-    const length = typeof text === 'string' ? text.trim().length : 0;
-    if (!length) return 0;
-    const baseMs = 250;
-    const perCharMs = 16;
-    const maxMs = 3000;
-    const delay = baseMs + length * perCharMs;
-    return Math.min(Math.max(delay, baseMs), maxMs);
   };
 
   const getNegotiationFallback = () => {
@@ -255,7 +217,7 @@ export default function HomeContent({ variant = 'page' }) {
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(scrollContainerRef);
   }, [messages, isThinking]);
 
   // Capture referral code from URL and store in localStorage
@@ -786,60 +748,17 @@ export default function HomeContent({ variant = 'page' }) {
     return [fallback];
   };
 
-  const enqueueReplyParts = (type, parts, meta = {}) => {
-    if (!Array.isArray(parts) || parts.length === 0) return;
-    const entries = parts
-      .map((text, index) => ({
-        type,
-        text,
-        meta: index === parts.length - 1 ? meta : {},
-      }))
-      .filter((entry) => entry.text);
-    if (entries.length === 0) return;
-    queueRef.current.push(...entries);
-    flushQueue();
-  };
-
-  const enqueueMessage = (entry) => {
-    if (!entry) return;
-    queueRef.current.push(entry);
-
-    flushQueue();
-  };
-
-  const flushQueue = () => {
-    if (messageQueueActiveRef.current) return;
-    messageQueueActiveRef.current = true;
-
-    const processNext = () => {
-      const queue = queueRef.current;
-      const next = queue.shift();
-      if (!next) {
-        messageQueueActiveRef.current = false;
-        messageQueueTimerRef.current = null;
-        return;
-      }
-      addBotMessage(next.text, next.type, next.meta);
-      if (queue.length === 0) {
-        messageQueueActiveRef.current = false;
-        messageQueueTimerRef.current = null;
-        return;
-      }
-      const delay = getMessageDelayMs(next.text);
-      messageQueueTimerRef.current = setTimeout(processNext, delay);
-    };
-
-    processNext();
-  };
-
-  const clearMessageQueue = () => {
-    queueRef.current = [];
-    if (messageQueueTimerRef.current) {
-      clearTimeout(messageQueueTimerRef.current);
-      messageQueueTimerRef.current = null;
-    }
-    messageQueueActiveRef.current = false;
-  };
+  const {
+    enqueueReplyParts,
+    enqueueMessage,
+    flushQueue,
+    clearMessageQueue,
+  } = createMessageQueue({
+    queueRef,
+    isActiveRef: messageQueueActiveRef,
+    timerRef: messageQueueTimerRef,
+    onMessage: addBotMessage,
+  });
 
   const ensureOnboardingSession = async () => {
     if (onboardingSessionStartedRef.current) return;
@@ -1591,17 +1510,7 @@ export default function HomeContent({ variant = 'page' }) {
           </AnimatePresence>
 
           {/* Loading indicator */}
-          {isThinking && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-[var(--surface-1)] px-4 py-3 rounded-2xl rounded-tl-none border border-white/5">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-[var(--muted-foreground)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-[var(--muted-foreground)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-[var(--muted-foreground)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          )}
+          {isThinking && <TypingIndicator />}
 
           {showExpiredGateActions && !isThinking && !chatEnded && !limitReached && (
             <motion.div
