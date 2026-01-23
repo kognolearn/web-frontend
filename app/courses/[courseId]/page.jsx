@@ -23,6 +23,7 @@ import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
+const getCourseTabsStorageKey = (userId, courseId) => `${COURSE_TABS_STORAGE_PREFIX}:${userId}:${courseId}`;
 const normalizeCourseMode = (value) => {
   if (!value) return null;
   const normalized = String(value).trim().toLowerCase().replace(/\s+/g, "_");
