@@ -771,8 +771,8 @@ function DashboardClient() {
           </div>
 
           {/* Welcome header */}
-          <header className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-2">
+          <header className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-4">
               <h1 className="text-2xl sm:text-3xl font-bold sm:text-4xl">
                 Welcome back, {displayName}
               </h1>
