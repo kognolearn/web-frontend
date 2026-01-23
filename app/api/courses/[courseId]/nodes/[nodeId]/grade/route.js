@@ -47,7 +47,7 @@ export async function POST(request, { params }) {
     const { courseId, nodeId } = await params;
     const body = await request.json();
 
-    const { answers, sectionId, sync = false, grading_logic } = body;
+    const { answers, sectionId, sync = false, grading_logic, taskKey, taskId, taskTitle } = body;
 
     // Validate required fields
     if (!answers || typeof answers !== 'object') {
@@ -76,6 +76,9 @@ export async function POST(request, { params }) {
         sectionId,
         sync,
         ...(grading_logic && { grading_logic }),
+        ...(taskKey && { taskKey }),
+        ...(taskId && { taskId }),
+        ...(taskTitle && { taskTitle }),
       }),
     });
 

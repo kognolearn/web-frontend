@@ -81,20 +81,33 @@ export async function GET(request) {
 
     // V2 Content Detection: If content has version 2 and sections array, pass through directly
     if (contentPayload.version === 2 && Array.isArray(contentPayload.sections)) {
+      const resolvedMasteryStatus = lesson.mastery_status || contentPayload.mastery_status || 'pending';
+      const resolvedFamiliarity = lesson.familiarity_score ?? contentPayload.familiarity_score ?? null;
+      const resolvedInteractiveTaskCompleted =
+        lesson.interactive_task_completed ?? contentPayload.interactive_task_completed ?? false;
+      const resolvedAssessmentCompleted =
+        lesson.assessment_completed ?? contentPayload.assessment_completed ?? false;
+
       console.log('[Content API] V2 content detected, passing through directly');
       return NextResponse.json({
         format: 'v2',
         data: {
           // Pass through entire V2 content payload
           ...contentPayload,
+          interactive_task_completed: resolvedInteractiveTaskCompleted,
+          assessment_completed: resolvedAssessmentCompleted,
+          interactive_task_attempts: contentPayload.interactive_task_attempts || lesson.interactive_task_attempts || {},
+          interactive_task_attempt: contentPayload.interactive_task_attempt || lesson.interactive_task_attempt || null,
+          section_attempts: contentPayload.section_attempts || lesson.section_attempts || {},
+          assessment_attempt: contentPayload.assessment_attempt || lesson.assessment_attempt || null,
           // Include lesson metadata
           id: lesson.id,
           title: contentPayload.title || lesson.title,
           module_ref: lesson.module_ref,
           estimated_minutes: lesson.estimated_minutes,
           bloom_level: lesson.bloom_level,
-          mastery_status: lesson.mastery_status || 'pending',
-          familiarity_score: lesson.familiarity_score,
+          mastery_status: resolvedMasteryStatus,
+          familiarity_score: resolvedFamiliarity,
         }
       });
     }
@@ -103,6 +116,12 @@ export async function GET(request) {
     const resolvedReadingCompleted = lesson.readingCompleted ?? contentPayload.readingCompleted ?? false;
     const resolvedVideoCompleted = lesson.videoCompleted ?? contentPayload.videoCompleted ?? false;
     const resolvedQuizCompleted = lesson.quizCompleted ?? contentPayload.quizCompleted ?? false;
+    const resolvedInteractiveTaskCompleted =
+      lesson.interactive_task_completed ?? contentPayload.interactive_task_completed ?? false;
+    const resolvedAssessmentCompleted =
+      lesson.assessment_completed ?? contentPayload.assessment_completed ?? false;
+    const resolvedMasteryStatus = lesson.mastery_status || contentPayload.mastery_status || 'pending';
+    const resolvedFamiliarity = lesson.familiarity_score ?? contentPayload.familiarity_score ?? null;
     const inlineQuestionSelections = (() => {
       if (
         contentPayload.inlineQuestionSelections &&
@@ -151,8 +170,14 @@ export async function GET(request) {
         readingCompleted: resolvedReadingCompleted,
         videoCompleted: resolvedVideoCompleted,
         quizCompleted: resolvedQuizCompleted,
-        mastery_status: lesson.mastery_status || 'pending',
-        familiarity_score: lesson.familiarity_score,
+        mastery_status: resolvedMasteryStatus,
+        familiarity_score: resolvedFamiliarity,
+        interactive_task_completed: resolvedInteractiveTaskCompleted,
+        assessment_completed: resolvedAssessmentCompleted,
+        interactive_task_attempts: contentPayload.interactive_task_attempts || {},
+        interactive_task_attempt: contentPayload.interactive_task_attempt || null,
+        section_attempts: contentPayload.section_attempts || {},
+        assessment_attempt: contentPayload.assessment_attempt || null,
 
         // Content ordering from backend
         ...(contentSequence ? { content_sequence: contentSequence } : {}),

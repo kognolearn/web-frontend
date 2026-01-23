@@ -27,16 +27,6 @@ import { getComponent } from "@/components/content/v2/ComponentRegistry";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 
-const TEXT_FIELD_TYPES = new Set([
-  "code_editor",
-  "code_question",
-  "math_input",
-  "rich_text_area",
-  "table_input",
-  "short_answer",
-  "long_form_response",
-]);
-
 function normalizeType(type) {
   if (!type) return "";
   if (type.includes("_") || type === type.toLowerCase()) {
@@ -45,6 +35,21 @@ function normalizeType(type) {
   return type.replace(/([A-Z])/g, (match, letter, index) =>
     index === 0 ? letter.toLowerCase() : `_${letter.toLowerCase()}`
   );
+}
+
+function isEmptyValue(value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (typeof value === "number") return Number.isNaN(value);
+  if (typeof value === "boolean") return false;
+  if (Array.isArray(value)) {
+    return value.length === 0 || value.every(isEmptyValue);
+  }
+  if (typeof value === "object") {
+    const entries = Object.values(value);
+    return entries.length === 0 || entries.every(isEmptyValue);
+  }
+  return false;
 }
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -762,6 +767,8 @@ export default function TaskRenderer({
   nodeId,
   userId,
   onTaskComplete,
+  initialAnswers: initialAnswersProp,
+  initialGrade: initialGradeProp,
 }) {
   // Ensure each component has a unique ID by checking for duplicates
   const layout = useMemo(() => {
@@ -786,12 +793,15 @@ export default function TaskRenderer({
     });
   }, [taskData?.layout, taskData?.id, taskData?.task_id]);
 
-  const initialAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
-  const [answers, setAnswers] = useState(initialAnswers);
+  const baseAnswers = useMemo(() => buildInitialAnswers(layout), [layout]);
+  const [answers, setAnswers] = useState(baseAnswers);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [gradePayload, setGradePayload] = useState(null);
+  const [gradePayload, setGradePayload] = useState(
+    initialGradeProp ? { grade: initialGradeProp } : null
+  );
   const submitAbortRef = useRef(null);
+  const draftSaveRef = useRef({ timeoutId: null, lastSaved: null });
   const taskKey = useMemo(() => {
     const fallback = taskData?.title || "task";
     return taskData?.id || taskData?.task_id || taskData?.slug || fallback;
@@ -803,68 +813,73 @@ export default function TaskRenderer({
     if (taskKey) parts.push(String(taskKey));
     return parts.join(":");
   }, [courseId, nodeId, taskKey]);
-  const textFieldIds = useMemo(() => {
-    if (!Array.isArray(layout)) return [];
-    return layout
-      .filter(
-        (item) =>
-          item?.id && TEXT_FIELD_TYPES.has(normalizeType(item.type))
-      )
-      .map((item) => item.id);
-  }, [layout]);
+  const mappedInitialAnswers = useMemo(() => {
+    if (!initialAnswersProp || typeof initialAnswersProp !== "object") return {};
+    const mapped = {};
+    for (const block of layout) {
+      if (!block?.id) continue;
+      const originalId = block._originalId || block.id;
+      if (Object.prototype.hasOwnProperty.call(initialAnswersProp, originalId)) {
+        mapped[block.id] = initialAnswersProp[originalId];
+      } else if (Object.prototype.hasOwnProperty.call(initialAnswersProp, block.id)) {
+        mapped[block.id] = initialAnswersProp[block.id];
+      }
+    }
+    return mapped;
+  }, [layout, initialAnswersProp]);
 
   useEffect(() => {
     setSubmitError(null);
-    setGradePayload(null);
+    let mergedAnswers = { ...baseAnswers, ...mappedInitialAnswers };
+    let cachedGrade = null;
 
-    if (!storageKey) {
-      setAnswers(initialAnswers);
-      return;
-    }
-
-    let mergedAnswers = initialAnswers;
-    try {
-      const raw = sessionStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const cachedAnswers = parsed?.answers;
-        if (cachedAnswers && typeof cachedAnswers === "object") {
-          mergedAnswers = { ...initialAnswers };
-          for (const id of textFieldIds) {
-            if (Object.prototype.hasOwnProperty.call(cachedAnswers, id)) {
-              mergedAnswers[id] = cachedAnswers[id];
-            }
+    if (storageKey) {
+      try {
+        const raw = sessionStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const cachedAnswers = parsed?.answers;
+          if (cachedAnswers && typeof cachedAnswers === "object") {
+            mergedAnswers = { ...mergedAnswers, ...cachedAnswers };
+          }
+          if (parsed?.grade && typeof parsed.grade === "object") {
+            cachedGrade = parsed.grade;
           }
         }
+      } catch (error) {
+        console.warn("[TaskRenderer] Failed to read cached answers:", error);
       }
-    } catch (error) {
-      console.warn("[TaskRenderer] Failed to read cached answers:", error);
     }
 
     setAnswers(mergedAnswers);
-  }, [initialAnswers, storageKey, textFieldIds]);
+    if (cachedGrade) {
+      setGradePayload({ grade: cachedGrade });
+    } else if (initialGradeProp) {
+      setGradePayload({ grade: initialGradeProp });
+    } else {
+      setGradePayload(null);
+    }
+  }, [baseAnswers, mappedInitialAnswers, storageKey, initialGradeProp]);
 
   useEffect(() => {
-    if (!storageKey || !textFieldIds.length) return;
-    const snapshot = {};
-    for (const id of textFieldIds) {
-      if (Object.prototype.hasOwnProperty.call(answers, id)) {
-        snapshot[id] = answers[id];
-      }
-    }
+    if (!storageKey) return;
+    const snapshot = Object.fromEntries(
+      Object.entries(answers).filter(([_, value]) => value !== undefined)
+    );
     try {
       sessionStorage.setItem(
         storageKey,
         JSON.stringify({
-          version: 1,
+          version: 2,
           updatedAt: Date.now(),
           answers: snapshot,
+          grade: gradePayload?.grade ?? null,
         })
       );
     } catch (error) {
       console.warn("[TaskRenderer] Failed to cache answers:", error);
     }
-  }, [answers, storageKey, textFieldIds]);
+  }, [answers, storageKey, gradePayload]);
 
   const handleAnswerChange = useCallback((id, value) => {
     setAnswers((prev) => ({
@@ -892,15 +907,25 @@ export default function TaskRenderer({
       throw new Error("Missing course or lesson ID for grading.");
     }
 
+    const taskId = taskData?.id || taskData?.task_id || null;
+    const taskKey = taskId || taskData?.slug || taskData?.title || null;
+    const requestBody = {
+      answers: answersToSubmit,
+      sync: false,
+      ...(Array.isArray(taskData?.grading_logic) && {
+        grading_logic: taskData.grading_logic,
+      }),
+      ...(taskKey && { taskKey }),
+      ...(taskId && { taskId }),
+      ...(taskData?.title && { taskTitle: taskData.title }),
+    };
+
     const response = await authFetch(
       `/api/courses/${courseId}/nodes/${nodeId}/grade`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          answers: answersToSubmit,
-          sync: false,
-        }),
+        body: JSON.stringify(requestBody),
         signal,
       },
     );
@@ -909,7 +934,7 @@ export default function TaskRenderer({
       signal,
       errorLabel: "grade task",
     });
-  }, [courseId, nodeId, onSubmit]);
+  }, [courseId, nodeId, onSubmit, taskData?.grading_logic, taskData?.id, taskData?.task_id, taskData?.slug, taskData?.title]);
 
   // Create mapping from unique IDs back to original IDs for submission
   const idMapping = useMemo(() => {
@@ -921,6 +946,18 @@ export default function TaskRenderer({
     });
     return mapping;
   }, [layout]);
+
+  const mapAnswersToOriginal = useCallback(
+    (sourceAnswers) => {
+      const submissionAnswers = {};
+      for (const [uniqueId, value] of Object.entries(sourceAnswers || {})) {
+        const originalId = idMapping[uniqueId] || uniqueId;
+        submissionAnswers[originalId] = value;
+      }
+      return submissionAnswers;
+    },
+    [idMapping]
+  );
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
@@ -936,11 +973,7 @@ export default function TaskRenderer({
     setGradePayload(null);
 
     // Map answers back to original IDs for backend compatibility
-    const submissionAnswers = {};
-    for (const [uniqueId, value] of Object.entries(answers)) {
-      const originalId = idMapping[uniqueId] || uniqueId;
-      submissionAnswers[originalId] = value;
-    }
+    const submissionAnswers = mapAnswersToOriginal(answers);
 
     try {
       const submission = await submitAnswers(submissionAnswers, abortController.signal);
@@ -983,7 +1016,58 @@ export default function TaskRenderer({
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, isSubmitting, submitAnswers, onTaskComplete, idMapping]);
+  }, [answers, isSubmitting, submitAnswers, onTaskComplete, mapAnswersToOriginal]);
+
+  const saveDraft = useCallback(
+    async (draftAnswers) => {
+      if (!courseId || !nodeId) return;
+      const taskId = taskData?.id || taskData?.task_id || null;
+      const taskKey = taskId || taskData?.slug || taskData?.title || null;
+
+      try {
+        await authFetch(`/api/courses/${courseId}/nodes/${nodeId}/interactive-task/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers: draftAnswers,
+            taskKey,
+            taskId,
+            taskTitle: taskData?.title || null,
+          }),
+        });
+      } catch (error) {
+        console.warn("[TaskRenderer] Failed to autosave answers:", error);
+      }
+    },
+    [courseId, nodeId, taskData?.id, taskData?.task_id, taskData?.slug, taskData?.title]
+  );
+
+  useEffect(() => {
+    if (!courseId || !nodeId) return;
+    const submissionAnswers = mapAnswersToOriginal(answers);
+    const hasMeaningfulAnswers = Object.values(submissionAnswers).some(
+      (value) => !isEmptyValue(value)
+    );
+    if (!hasMeaningfulAnswers) return;
+
+    const serialized = JSON.stringify(submissionAnswers);
+    if (draftSaveRef.current.lastSaved === serialized) return;
+
+    if (draftSaveRef.current.timeoutId) {
+      clearTimeout(draftSaveRef.current.timeoutId);
+    }
+
+    draftSaveRef.current.timeoutId = setTimeout(() => {
+      draftSaveRef.current.lastSaved = serialized;
+      saveDraft(submissionAnswers);
+    }, 1200);
+
+    return () => {
+      if (draftSaveRef.current.timeoutId) {
+        clearTimeout(draftSaveRef.current.timeoutId);
+      }
+    };
+  }, [answers, courseId, nodeId, mapAnswersToOriginal, saveDraft]);
 
   const gradeSummary = useMemo(() => {
     const grade = gradePayload?.grade;

@@ -275,6 +275,33 @@ function ItemContent({
       }
     }
 
+    const sectionAttempts = data?.section_attempts || {};
+    const initialAnswers = {};
+    const initialGrades = {};
+    const initialProgress = {};
+    Object.entries(sectionAttempts).forEach(([sectionId, attempt]) => {
+      if (!attempt || typeof attempt !== "object") return;
+      const hasAnswers =
+        attempt.answers &&
+        typeof attempt.answers === "object" &&
+        Object.keys(attempt.answers).length > 0;
+      if (hasAnswers) {
+        initialAnswers[sectionId] = attempt.answers;
+        initialProgress[sectionId] = "dirty";
+      }
+      if (attempt.grade && typeof attempt.grade === "object") {
+        initialGrades[sectionId] = {
+          status: "graded",
+          passed: attempt.grade.passed,
+          earnedPoints: attempt.grade.earned_points ?? attempt.grade.earnedPoints ?? 0,
+          maxPoints: attempt.grade.total_points ?? attempt.grade.totalPoints ?? 0,
+          results: attempt.grade.results || {},
+          feedback: attempt.grade.feedback,
+        };
+        initialProgress[sectionId] = "graded";
+      }
+    });
+
     return (
       <V2ContentRenderer
         content={data}
@@ -282,6 +309,9 @@ function ItemContent({
         nodeId={id}
         activeSectionIndex={sectionIndex}
         isAdmin={isAdmin}
+        initialAnswers={initialAnswers}
+        initialGrades={initialGrades}
+        initialProgress={initialProgress}
       />
     );
   }
@@ -387,6 +417,40 @@ function ItemContent({
     case "assessment": {
       // V1.5: Atomic component-based assessment (replaces MCQ quiz)
       if (data?.assessment?.layout && data?.assessment?.grading_logic) {
+        const assessmentAttempt =
+          data.assessment_attempt ||
+          data.section_attempts?.['lesson-assessment'] ||
+          null;
+        const assessmentAnswerPayload =
+          assessmentAttempt?.answers && typeof assessmentAttempt.answers === 'object'
+            ? assessmentAttempt.answers
+            : null;
+        const hasAssessmentAnswers =
+          assessmentAnswerPayload && Object.keys(assessmentAnswerPayload).length > 0;
+        const assessmentAnswers = hasAssessmentAnswers
+          ? { 'lesson-assessment': assessmentAnswerPayload }
+          : {};
+        const assessmentGrade = assessmentAttempt?.grade && typeof assessmentAttempt.grade === 'object'
+          ? {
+              status: 'graded',
+              passed: assessmentAttempt.grade.passed,
+              earnedPoints:
+                assessmentAttempt.grade.earned_points ??
+                assessmentAttempt.grade.earnedPoints ??
+                0,
+              maxPoints:
+                assessmentAttempt.grade.total_points ??
+                assessmentAttempt.grade.totalPoints ??
+                0,
+              results: assessmentAttempt.grade.results || {},
+              feedback: assessmentAttempt.grade.feedback,
+            }
+          : null;
+        const assessmentGrades = assessmentGrade ? { 'lesson-assessment': assessmentGrade } : {};
+        const assessmentProgress = hasAssessmentAnswers
+          ? { 'lesson-assessment': assessmentGrade ? 'graded' : 'dirty' }
+          : {};
+
         return (
           <V2ContentRenderer
             content={{
@@ -402,6 +466,9 @@ function ItemContent({
             nodeId={id}
             activeSectionIndex={0}
             isAdmin={isAdmin}
+            initialAnswers={assessmentAnswers}
+            initialGrades={assessmentGrades}
+            initialProgress={assessmentProgress}
             onGradeComplete={(sectionId, gradeData) => {
               // Mark assessment as complete when passed
               if (gradeData?.passed && onTaskComplete) {
@@ -452,6 +519,21 @@ function ItemContent({
           return JSON.stringify(taskData, null, 2);
         })();
 
+        const taskKey =
+          taskData?.id ||
+          taskData?.task_id ||
+          taskData?.slug ||
+          taskData?.title ||
+          'task';
+        const attemptsMap = data?.interactive_task_attempts || {};
+        const fallbackAttempt = data?.interactive_task_attempt || null;
+        let taskAttempt = attemptsMap[taskKey];
+        if (!taskAttempt && !fallbackAttempt && Object.keys(attemptsMap).length === 1) {
+          taskAttempt = Object.values(attemptsMap)[0];
+        } else if (!taskAttempt) {
+          taskAttempt = fallbackAttempt;
+        }
+
         return (
           <div className="space-y-4">
             {isAdmin && (
@@ -481,6 +563,8 @@ function ItemContent({
               courseId={courseId}
               nodeId={id}
               userId={userId}
+              initialAnswers={taskAttempt?.answers}
+              initialGrade={taskAttempt?.grade}
               onTaskComplete={onTaskComplete}
             />
           </div>
@@ -1551,6 +1635,16 @@ export default function CourseTabContent({
           data.interactiveTaskCompleted === true ||
           data.interactive_task_completed === true ||
           data.interactive_task?.completed === true
+        );
+      case 'assessment':
+        return (
+          data.assessmentCompleted === true ||
+          data.assessment_completed === true ||
+          data.assessment_attempt?.grade?.passed === true ||
+          data.section_attempts?.['lesson-assessment']?.grade?.passed === true ||
+          data.mastery_status === 'mastered' ||
+          data.interactiveTaskCompleted === true ||
+          data.interactive_task_completed === true
         );
       default:
         return false;

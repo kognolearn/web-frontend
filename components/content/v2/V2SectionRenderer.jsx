@@ -1,10 +1,27 @@
 "use client";
 
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, Trophy, ChevronLeft, ChevronRight, Check, X, Circle } from "lucide-react";
 import { useV2Content } from "./V2ContentContext";
 import { getComponent, isGradableType, isInputType, isDisplayType } from "./ComponentRegistry";
+import { normalizeSectionComponents } from "./sectionUtils";
+import { authFetch } from "@/lib/api";
+
+function isEmptyValue(value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (typeof value === "number") return Number.isNaN(value);
+  if (typeof value === "boolean") return false;
+  if (Array.isArray(value)) {
+    return value.length === 0 || value.every(isEmptyValue);
+  }
+  if (typeof value === "object") {
+    const entries = Object.values(value);
+    return entries.length === 0 || entries.every(isEmptyValue);
+  }
+  return false;
+}
 
 /**
  * V2SectionRenderer - Renders a single section with its components
@@ -27,6 +44,8 @@ export default function V2SectionRenderer({
   onGrade,
   isGrading = false,
   isAdmin = false,
+  courseId,
+  nodeId,
 }) {
   const {
     answers,
@@ -36,6 +55,7 @@ export default function V2SectionRenderer({
   } = useV2Content();
   const [rawComponents, setRawComponents] = useState({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const autosaveRef = useRef({ timeoutId: null, lastSaved: null });
 
   const sectionId = section.id;
   const sectionAnswers = answers[sectionId] || {};
@@ -45,28 +65,7 @@ export default function V2SectionRenderer({
 
   // In V2 payload, components are in section.layout array
   // Ensure each component has a unique ID by checking for duplicates
-  const components = useMemo(() => {
-    const rawComponents = section.layout || [];
-    const seenIds = new Set();
-
-    return rawComponents.map((component, index) => {
-      // Generate a stable unique ID if missing or duplicate
-      let uniqueId = component.id;
-
-      if (!uniqueId || seenIds.has(uniqueId)) {
-        // Create unique ID using section ID, type, and index
-        uniqueId = `${sectionId}_${component.type || 'component'}_${index}`;
-      }
-
-      seenIds.add(uniqueId);
-
-      // Return component with guaranteed unique ID
-      if (uniqueId !== component.id) {
-        return { ...component, id: uniqueId, _originalId: component.id };
-      }
-      return component;
-    });
-  }, [section.layout, sectionId]);
+  const components = useMemo(() => normalizeSectionComponents(section), [section]);
 
   // Group components into question blocks: each block has leading context + a gradable component
   // Display components before a question become context for that question
@@ -147,6 +146,58 @@ export default function V2SectionRenderer({
     });
     return mapping;
   }, [components]);
+
+  const hasMeaningfulAnswers = useMemo(() => {
+    return Object.values(sectionAnswers).some((value) => !isEmptyValue(value));
+  }, [sectionAnswers]);
+
+  const saveDraft = useCallback(
+    async (draftAnswers) => {
+      if (!courseId || !nodeId || !sectionId) return;
+      try {
+        await authFetch(`/api/courses/${courseId}/nodes/${nodeId}/section/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sectionId,
+            answers: draftAnswers,
+          }),
+        });
+      } catch (error) {
+        console.warn("[V2SectionRenderer] Failed to autosave answers:", error);
+      }
+    },
+    [courseId, nodeId, sectionId]
+  );
+
+  useEffect(() => {
+    if (!courseId || !nodeId || !sectionId) return;
+    if (!hasMeaningfulAnswers) return;
+
+    const submissionAnswers = {};
+    for (const [uniqueId, value] of Object.entries(sectionAnswers)) {
+      const originalId = idMapping[uniqueId] || uniqueId;
+      submissionAnswers[originalId] = value;
+    }
+
+    const serialized = JSON.stringify(submissionAnswers);
+    if (autosaveRef.current.lastSaved === serialized) return;
+
+    if (autosaveRef.current.timeoutId) {
+      clearTimeout(autosaveRef.current.timeoutId);
+    }
+
+    autosaveRef.current.timeoutId = setTimeout(() => {
+      autosaveRef.current.lastSaved = serialized;
+      saveDraft(submissionAnswers);
+    }, 1200);
+
+    return () => {
+      if (autosaveRef.current.timeoutId) {
+        clearTimeout(autosaveRef.current.timeoutId);
+      }
+    };
+  }, [courseId, nodeId, sectionId, hasMeaningfulAnswers, sectionAnswers, idMapping, saveDraft]);
 
   // Handle submit
   const handleSubmit = () => {
