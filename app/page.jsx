@@ -77,7 +77,8 @@ export default async function Home() {
       const data = await res.json().catch(() => ({}));
       hasSubscription = Boolean(data?.hasSubscription);
       trialActive = Boolean(data?.trialActive);
-      hasAccess = hasSubscription || trialActive;
+      // hasBasicAccess is true for free tier users who can use the app with limits
+      hasAccess = hasSubscription || trialActive || Boolean(data?.hasBasicAccess);
     }
   } catch (error) {
     console.error("[page.jsx] subscription-status fetch failed:", error);

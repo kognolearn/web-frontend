@@ -25,6 +25,7 @@ import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import SeedsDisplay from "@/components/ui/SeedsDisplay";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -709,9 +710,11 @@ function DashboardClient() {
                   {/* Avatar with optional connected badge */}
                   <div className="relative flex items-center">
                     {/* Avatar circle */}
-                    <div className="relative z-10 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold ring-2 ring-[var(--surface-1)] group-hover:ring-[var(--primary)]/20 transition-all">
-                      {userInitials}
-                    </div>
+                    <UserAvatar
+                      user={user}
+                      size="md"
+                      className="relative z-10 ring-[var(--surface-1)] group-hover:ring-[var(--primary)]/20 transition-all"
+                    />
                     {/* Pro badge - positioned to overlap slightly */}
                     {subscriptionStatus?.planLevel === "paid" && (
                       <div className="hidden sm:flex items-center gap-1 h-6 pl-5 pr-2.5 -ml-4 rounded-r-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">

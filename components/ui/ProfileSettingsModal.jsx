@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
+import UserAvatar from "./UserAvatar";
 
 export default function ProfileSettingsModal({ isOpen, onClose, onUpdate }) {
   const [fullName, setFullName] = useState("");
@@ -23,17 +24,19 @@ export default function ProfileSettingsModal({ isOpen, onClose, onUpdate }) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [user, setUser] = useState(null);
 
   // Load current user data when modal opens
   useEffect(() => {
     if (isOpen) {
       (async () => {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            setFullName(user.user_metadata?.full_name || "");
-            setSchool(user.user_metadata?.school || "");
-            setUserEmail(user.email || "");
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser) {
+            setUser(currentUser);
+            setFullName(currentUser.user_metadata?.full_name || "");
+            setSchool(currentUser.user_metadata?.school || "");
+            setUserEmail(currentUser.email || "");
           }
         } catch (e) {
           console.error("Error loading user data:", e);
@@ -199,11 +202,7 @@ export default function ProfileSettingsModal({ isOpen, onClose, onUpdate }) {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-4 sm:px-6 sm:py-5 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
-                  <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
+                <UserAvatar user={user} size="lg" />
                 <div>
                   <h2 className="text-lg font-semibold text-[var(--foreground)]">Profile Settings</h2>
                   <p className="text-xs text-[var(--muted-foreground)]">Update your personal information</p>

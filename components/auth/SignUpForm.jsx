@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import GoogleSignInButton from "./GoogleSignInButton";
+
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 
@@ -177,6 +179,26 @@ export default function SignUpForm({ variant = "standalone" }) {
           </span>
         ) : "Get started"}
       </button>
+
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-white/10 dark:border-white/5"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className={`px-4 ${isEmbedded ? "bg-transparent" : "bg-[var(--surface-1)]"} text-[var(--muted-foreground)]`}>
+            or
+          </span>
+        </div>
+      </div>
+
+      <GoogleSignInButton
+        mode="signup"
+        disabled={loading}
+      />
+
+      <p className={`mt-3 text-xs text-center ${isEmbedded ? "text-[var(--foreground)]/60" : "text-[var(--muted-foreground)]/70"}`}>
+        Google sign-up requires a .edu email
+      </p>
     </form>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Sprout } from "lucide-react";
+import Image from "next/image";
 import { authFetch } from "@/lib/api";
 
 export default function SeedsDisplay({ className = "" }) {
@@ -54,18 +54,22 @@ export default function SeedsDisplay({ className = "" }) {
   return (
     <Link
       href="/store"
-      className={`group inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-r from-[var(--primary)]/20 to-[var(--primary)]/10 border border-[var(--primary)]/30 hover:border-[var(--primary)]/50 hover:from-[var(--primary)]/25 hover:to-[var(--primary)]/15 transition-all duration-200 cursor-pointer ${className}`}
+      className={`group inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-[var(--primary)]/15 border-2 border-dashed border-[var(--primary)]/40 hover:border-solid hover:border-[var(--primary)] hover:bg-[var(--primary)]/20 transition-all duration-300 cursor-pointer ${className}`}
       title="Visit the Seed Store"
     >
-      <Sprout className="w-8 h-8 text-[var(--primary)] group-hover:scale-110 transition-transform duration-200" />
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold text-[var(--primary)]">
-          {balance.toLocaleString()}
-        </span>
-        <span className="text-lg font-medium text-[var(--primary)]/80">
-          seeds
-        </span>
-      </div>
+      <Image
+        src="/images/seed_icon.png"
+        alt="Seeds"
+        width={28}
+        height={28}
+        className="w-7 h-7 object-contain group-hover:rotate-12 transition-transform duration-300"
+      />
+      <span className="text-xl font-bold text-[var(--primary)]">
+        {balance.toLocaleString()}
+      </span>
+      <span className="max-w-0 overflow-hidden group-hover:max-w-24 transition-all duration-300 ease-out text-base font-medium text-[var(--primary)]/80 whitespace-nowrap">
+        seeds
+      </span>
     </Link>
   );
 }

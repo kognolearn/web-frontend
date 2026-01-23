@@ -95,11 +95,38 @@ const resolveAsyncResult = async (response, options = {}) => {
   return result;
 };
 
-// Helper function: background tint for cram mode priority
-const getPriorityBgColor = (priorityScore) => {
-  const clampedScore = Math.max(0, Math.min(1, priorityScore || 0));
-  const greenPercent = Math.round(clampedScore * 100);
-  return `color-mix(in srgb, var(--primary) ${greenPercent}%, var(--surface-2) ${100 - greenPercent}%)`;
+// Helper function to determine if a lesson is a priority in cram mode
+// Returns: 'priority' | 'skip' | null (null = don't show indicator)
+// Uses is_priority flag from backend which is set based on:
+// - Topological sort respecting prerequisites
+// - Greedy selection of highest ROI lessons until time runs out
+const getCramPriorityStatus = (lesson, hasHiddenContent) => {
+  // Only show indicators when user is low on time (hasHiddenContent = true)
+  if (!hasHiddenContent) return null;
+
+  // Use is_priority flag from backend (result of topological greedy selection)
+  // This flag indicates whether the lesson was selected given time constraints
+  if (lesson.is_priority === true) return 'priority';
+  if (lesson.is_priority === false) return 'skip';
+
+  return null;
+};
+
+// Helper function to determine module priority status based on its lessons
+// Returns: 'priority' | 'skip' | 'mixed' | null
+const getModuleCramPriorityStatus = (module, hasHiddenContent) => {
+  if (!hasHiddenContent) return null;
+  if (!module?.lessons?.length) return null;
+
+  // Compute from individual lesson statuses
+  const lessonStatuses = module.lessons.map(l => getCramPriorityStatus(l, hasHiddenContent));
+  const hasPriority = lessonStatuses.some(s => s === 'priority');
+  const hasSkip = lessonStatuses.some(s => s === 'skip');
+
+  if (hasPriority && hasSkip) return 'mixed';
+  if (hasPriority) return 'priority';
+  if (hasSkip) return 'skip';
+  return null;
 };
 
 // ItemContent component
@@ -738,9 +765,30 @@ export default function CourseTabContent({
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [expandedLessons, setExpandedLessons] = useState(new Set());
   const [collapsedModules, setCollapsedModules] = useState(new Set());
+  const [skipModulesInitialized, setSkipModulesInitialized] = useState(false);
   const [selectedContentType, setSelectedContentType] = useState(null);
   const [currentViewingItem, setCurrentViewingItem] = useState(null);
-  
+
+  // Auto-collapse skip modules on initial load (cram mode only)
+  useEffect(() => {
+    if (skipModulesInitialized) return;
+    if (isDeepStudyCourse || isCourseGenerating) return;
+    if (!hasHiddenContent || !visibleModules.length) return;
+
+    const skipModuleIndices = new Set();
+    visibleModules.forEach((module, idx) => {
+      const status = getModuleCramPriorityStatus(module, hasHiddenContent);
+      if (status === 'skip') {
+        skipModuleIndices.add(idx);
+      }
+    });
+
+    if (skipModuleIndices.size > 0) {
+      setCollapsedModules(prev => new Set([...prev, ...skipModuleIndices]));
+      setSkipModulesInitialized(true);
+    }
+  }, [visibleModules, hasHiddenContent, isDeepStudyCourse, isCourseGenerating, skipModulesInitialized]);
+
   // Notify parent of current lesson/content selection for tab restore
   useEffect(() => {
     if (!onViewStateChange) return;
@@ -2009,7 +2057,7 @@ export default function CourseTabContent({
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-[var(--foreground)]">
-                        You don't have time to finish everything. We've highlighted what's the most important content to focus on.
+                        Limited time remaining. Faded lessons have lower exam value and can be skipped if needed.
                       </p>
                     </div>
                   </motion.div>
@@ -2403,15 +2451,20 @@ export default function CourseTabContent({
               
               <AnimatePresence initial={false}>
                 {visibleModules.map((module, moduleIdx) => {
-                  const isCollapsed = collapsedModules.has(moduleIdx);
                   const isPracticeExamModule = module.is_practice_exam_module;
                   const moduleKey = module.title || module.module_ref || `module-${moduleIdx}`;
-                  
+
+                  // Calculate module priority status for cram mode
+                  const modulePriorityStatus = isCramPriorityMode ? getModuleCramPriorityStatus(module, hasHiddenContent) : null;
+                  const isSkipModule = modulePriorityStatus === 'skip';
+
+                  const isCollapsed = collapsedModules.has(moduleIdx);
+
                   // Skip review modules that are shown in the dedicated Review Modules section
-                  const isReviewModule = module.title?.toLowerCase().includes('review') && 
+                  const isReviewModule = module.title?.toLowerCase().includes('review') &&
                     module.lessons?.some(l => reviewModules.some(rm => rm.title === l.title));
                   if (isReviewModule) return null;
-                  
+
                   if (isPracticeExamModule && module.exam) {
                     const exam = module.exam;
                     const isSelected = selectedLesson?.id === exam.id;
@@ -2461,7 +2514,7 @@ export default function CourseTabContent({
                       </motion.div>
                     );
                   }
-                  
+
                   return (
                     <motion.div
                       key={moduleKey}
@@ -2491,10 +2544,14 @@ export default function CourseTabContent({
                             <div className="flex items-center gap-2.5">
                               {/* Module number badge - shows checkmark if all lessons completed */}
                               <div
-                                className="flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-white text-[11px] font-semibold shadow-md tabular-nums"
+                                className={`flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-lg text-[11px] font-semibold shadow-md tabular-nums transition-all ${
+                                  isSkipModule ? 'text-[var(--muted-foreground)] opacity-50' : 'text-white'
+                                }`}
                                 style={{
-                                  background: 'linear-gradient(to bottom right, var(--primary), var(--primary)/80)',
-                                  boxShadow: 'var(--primary)/25'
+                                  background: isSkipModule
+                                    ? 'var(--surface-muted)'
+                                    : 'linear-gradient(to bottom right, var(--primary), var(--primary)/80)',
+                                  boxShadow: isSkipModule ? 'none' : 'var(--primary)/25'
                                 }}
                               >
                                 {moduleCompleted ? (
@@ -2506,8 +2563,10 @@ export default function CourseTabContent({
                                 )}
                               </div>
                               <h3
-                                className="text-xs uppercase tracking-[0.15em] font-semibold text-left"
-                                style={{ color: 'var(--primary)' }}
+                                className={`text-xs uppercase tracking-[0.15em] font-semibold text-left transition-colors ${
+                                  isSkipModule ? 'text-[var(--muted-foreground)] opacity-50' : ''
+                                }`}
+                                style={isSkipModule ? {} : { color: 'var(--primary)' }}
                               >
                                 {module.title}
                               </h3>
@@ -2524,9 +2583,17 @@ export default function CourseTabContent({
                         );
                       })()}
                       
-                      {!isCollapsed && (
-                        <div className="px-3 pb-3 space-y-1">
-                          {module.lessons?.map((lesson, lessonIdx) => {
+                      <AnimatePresence initial={false}>
+                        {!isCollapsed && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: 'easeInOut' }}
+                            className="overflow-hidden"
+                          >
+                            <div className="px-3 pb-3 space-y-1">
+                              {module.lessons?.map((lesson, lessonIdx) => {
                             const isFirstLesson = moduleIdx === 0 && lessonIdx === 0;
                             const lessonCompleted = isLessonFullyCompleted(lesson.id);
                             // Check both 'status' (from plan JSON) and 'mastery_status' (from backend)
@@ -2534,11 +2601,11 @@ export default function CourseTabContent({
                             // Show completion UI if status is anything other than 'pending'
                             const showCompleted = lessonCompleted || (lessonStatus && lessonStatus !== 'pending');
 
-                            // Priority background for cram mode
-                            const priorityScore = lesson.priority_score ?? 1; // Default to high priority
-                            const priorityBgColor = isCramPriorityMode ? getPriorityBgColor(priorityScore) : null;
-                            const showPriorityScore = hasCheckedAdmin && isAdmin && Number.isFinite(priorityScore);
-                            const priorityScoreLabel = showPriorityScore ? priorityScore.toFixed(2) : null;
+                            // Cram mode priority indicator (only shown when low on time)
+                            const cramPriorityStatus = isCramPriorityMode ? getCramPriorityStatus(lesson, hasHiddenContent) : null;
+                            const showPriorityScore = hasCheckedAdmin && isAdmin;
+                            const priorityScore = Number.isFinite(lesson.priority_score) ? lesson.priority_score : null;
+                            const priorityScoreLabel = priorityScore !== null ? priorityScore.toFixed(2) : "—";
 
                             // Selected state takes precedence for text color
                             const isSelected = selectedLesson?.id === lesson.id;
@@ -2569,12 +2636,11 @@ export default function CourseTabContent({
                                 className={`w-full text-left px-3 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 rounded-lg ${
                                   isSelected
                                     ? "bg-[var(--primary)]/15 font-medium shadow-sm"
-                                    : isCramPriorityMode
-                                      ? "hover:shadow-sm"
-                                      : "hover:bg-[var(--surface-muted)]"
+                                    : "hover:bg-[var(--surface-muted)]"
+                                } ${
+                                  cramPriorityStatus === 'skip' && !showCompleted ? "opacity-50" : ""
                                 }`}
                                 style={{
-                                  ...(isCramPriorityMode && !isSelected && priorityBgColor ? { backgroundColor: priorityBgColor } : {}),
                                   ...(isSelected ? { color: 'var(--primary)' } : {})
                                 }}
                               >
@@ -2606,9 +2672,11 @@ export default function CourseTabContent({
                               )}
                             </button>
                           );
-                        })}
-                      </div>
-                    )}
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   );
                 })}
