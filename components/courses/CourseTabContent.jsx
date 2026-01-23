@@ -21,6 +21,7 @@ import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
 import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
 import { AlertTriangle } from "lucide-react";
+import { useSeeds } from "@/components/seeds/SeedsProvider";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -401,6 +402,12 @@ function ItemContent({
             nodeId={id}
             activeSectionIndex={0}
             isAdmin={isAdmin}
+            onGradeComplete={(sectionId, gradeData) => {
+              // Mark assessment as complete when passed
+              if (gradeData?.passed && onTaskComplete) {
+                onTaskComplete();
+              }
+            }}
           />
         );
       }
@@ -606,6 +613,9 @@ export default function CourseTabContent({
   const [userInitials, setUserInitials] = useState("");
   const [userName, setUserName] = useState("");
   const [showPriorityInfo, setShowPriorityInfo] = useState(false);
+
+  // Seeds animation hook
+  const { animateSeedsFromCourse, fetchBalance } = useSeeds();
 
   const visibleModules = useMemo(() => {
     if (!studyPlan?.modules) return [];
@@ -1458,14 +1468,55 @@ export default function CourseTabContent({
       fetchLessonContent(selectedLesson.id, { force: true });
       // Also update the study plan
       await refetchStudyPlan();
-    }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan]);
 
-  const handleTaskCompleted = useCallback(() => {
-    if (selectedLesson?.id && courseId) {
-      fetchLessonContent(selectedLesson.id, { force: true });
+      // Trigger seed animation if seeds were awarded
+      if (result?.seedsAwarded) {
+        const totalSeeds = (result.seedsAwarded.lessonSeeds?.amount || 0) +
+          (result.seedsAwarded.firstLessonMilestone?.amount || 0) +
+          (result.seedsAwarded.courseCompleteMilestone?.amount || 0);
+        if (totalSeeds > 0) {
+          animateSeedsFromCourse(courseId, totalSeeds, 'Completed a quiz');
+          // Refresh balance after animation
+          setTimeout(() => fetchBalance(), 2000);
+        }
+      }
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, animateSeedsFromCourse, fetchBalance]);
+
+  const handleTaskCompleted = useCallback(async () => {
+    if (selectedLesson?.id && courseId) {
+      // Update mastery status to 'mastered' when interactive task passes
+      try {
+        const response = await authFetch(`/api/courses/${courseId}/nodes/${selectedLesson.id}/progress`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mastery_status: 'mastered',
+            familiarity_score: 1.0,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Trigger seed animation if seeds were awarded
+          if (data.seedsAwarded) {
+            const totalSeeds = (data.seedsAwarded.lessonSeeds?.amount || 0) +
+              (data.seedsAwarded.firstLessonMilestone?.amount || 0) +
+              (data.seedsAwarded.courseCompleteMilestone?.amount || 0);
+            if (totalSeeds > 0) {
+              animateSeedsFromCourse(courseId, totalSeeds, 'Completed a task');
+              // Refresh balance after animation
+              setTimeout(() => fetchBalance(), 2000);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[CourseTabContent] Failed to update task completion progress:', error);
+      }
+      fetchLessonContent(selectedLesson.id, { force: true });
+      await refetchStudyPlan();
+    }
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, animateSeedsFromCourse, fetchBalance]);
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {

@@ -894,9 +894,18 @@ export default function Quiz({
           console.error('Question status update failed:', questionStatusResponse.status);
         }
 
+        // Parse response to get seeds info
+        let seedsAwarded = null;
+        try {
+          const progressData = await progressResponse.json();
+          seedsAwarded = progressData.seedsAwarded;
+        } catch {
+          // Response might have been already consumed or empty
+        }
+
         // Notify parent that quiz was completed successfully
         if (typeof onQuizCompleted === 'function') {
-          await onQuizCompleted({ masteryStatus, familiarityScore });
+          await onQuizCompleted({ masteryStatus, familiarityScore, seedsAwarded });
         }
       } catch (error) {
         console.error('Failed to update quiz progress:', error);

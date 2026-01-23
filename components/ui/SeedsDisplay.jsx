@@ -1,41 +1,73 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { authFetch } from "@/lib/api";
+import { useSeeds } from "@/components/seeds/SeedsProvider";
 
 export default function SeedsDisplay({ className = "" }) {
-  const [seeds, setSeeds] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { balance, loading } = useSeeds();
+  const [displayedBalance, setDisplayedBalance] = useState(null);
+  const [isIncrementing, setIsIncrementing] = useState(false);
+  const prevBalanceRef = useRef(null);
+  const animationRef = useRef(null);
 
+  // Animate counter when balance changes
   useEffect(() => {
-    let cancelled = false;
+    if (balance === null) return;
 
-    const fetchSeeds = async () => {
-      try {
-        const res = await authFetch("/api/seeds");
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) {
-            setSeeds(data.seeds);
-          }
+    // First load - just set the value
+    if (prevBalanceRef.current === null) {
+      setDisplayedBalance(balance);
+      prevBalanceRef.current = balance;
+      return;
+    }
+
+    // Balance increased - animate the counter
+    if (balance > prevBalanceRef.current) {
+      const startValue = displayedBalance ?? prevBalanceRef.current;
+      const endValue = balance;
+      const diff = endValue - startValue;
+      const duration = Math.min(1500, diff * 50); // Max 1.5s animation
+      const startTime = Date.now();
+
+      setIsIncrementing(true);
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Ease-out
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const currentValue = Math.round(startValue + diff * eased);
+
+        setDisplayedBalance(currentValue);
+
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          setDisplayedBalance(endValue);
+          setIsIncrementing(false);
         }
-      } catch (err) {
-        console.error("Failed to fetch seeds:", err);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      };
+
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
       }
-    };
-
-    fetchSeeds();
+      animationRef.current = requestAnimationFrame(animate);
+      prevBalanceRef.current = balance;
+    } else {
+      // Balance decreased or same - just set it
+      setDisplayedBalance(balance);
+      prevBalanceRef.current = balance;
+    }
 
     return () => {
-      cancelled = true;
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
     };
-  }, []);
+  }, [balance, displayedBalance]);
 
   if (loading) {
     return (
@@ -49,12 +81,15 @@ export default function SeedsDisplay({ className = "" }) {
     );
   }
 
-  const balance = seeds?.balance ?? 0;
+  const showBalance = displayedBalance ?? balance ?? 0;
 
   return (
     <Link
       href="/store"
-      className={`group inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-[var(--primary)]/15 border-2 border-dashed border-[var(--primary)]/40 hover:border-solid hover:border-[var(--primary)] hover:bg-[var(--primary)]/20 transition-all duration-300 cursor-pointer ${className}`}
+      data-seed-counter
+      className={`group inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-[var(--primary)]/15 border-2 border-dashed border-[var(--primary)]/40 hover:border-solid hover:border-[var(--primary)] hover:bg-[var(--primary)]/20 transition-all duration-300 cursor-pointer ${className} ${
+        isIncrementing ? "seed-counter-active" : ""
+      }`}
       title="Visit the Seed Store"
     >
       <Image
@@ -62,10 +97,16 @@ export default function SeedsDisplay({ className = "" }) {
         alt="Seeds"
         width={28}
         height={28}
-        className="w-7 h-7 object-contain group-hover:rotate-12 transition-transform duration-300"
+        className={`w-7 h-7 object-contain transition-transform duration-300 ${
+          isIncrementing ? "animate-bounce" : "group-hover:rotate-12"
+        }`}
       />
-      <span className="text-xl font-bold text-[var(--primary)]">
-        {balance.toLocaleString()}
+      <span
+        className={`text-xl font-bold text-[var(--primary)] transition-transform ${
+          isIncrementing ? "scale-110" : ""
+        }`}
+      >
+        {showBalance.toLocaleString()}
       </span>
       <span className="max-w-0 overflow-hidden group-hover:max-w-24 transition-all duration-300 ease-out text-base font-medium text-[var(--primary)]/80 whitespace-nowrap">
         seeds

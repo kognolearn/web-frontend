@@ -170,6 +170,7 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
         }
       }}
       aria-label={`Open course ${courseCode}`}
+      data-course-id={courseId}
       className="relative h-full min-h-[11.5rem] rounded-2xl bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/30 border border-[var(--border)] overflow-hidden cursor-pointer transition-all duration-300 group hover:border-[var(--primary)]/50 hover:shadow-xl hover:shadow-[var(--primary)]/10 hover:-translate-y-0.5"
     >
       {/* Hover gradient overlay */}

@@ -15,6 +15,8 @@ import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
 import { Analytics } from "@vercel/analytics/react";
 import { MultiJsonLd } from "@/components/seo/JsonLd";
 import { generateOrganizationSchema, generateSoftwareApplicationSchema } from "@/lib/seo/structured-data";
+import { SeedsProvider } from "@/components/seeds/SeedsProvider";
+import SeedAnimationOrchestrator from "@/components/seeds/SeedAnimationOrchestrator";
 
 
 const nunito = Nunito({
@@ -79,16 +81,19 @@ export default function RootLayout({ children }) {
         <MathJaxContext config={mathJaxConfig}>
           <ThemeProvider>
             <CodeEditorSettingsProvider>
-              <OnboardingProvider>
-                <GuidedTourProvider tourConfigs={tourConfigs}>
-                  <SupabaseSessionProvider />
-                  <TrialNegotiationGate />
-                  {children}
-                  <TourStep />
-                  <FeedbackWidget />
-                  <Analytics />
-                </GuidedTourProvider>
-              </OnboardingProvider>
+              <SeedsProvider>
+                <OnboardingProvider>
+                  <GuidedTourProvider tourConfigs={tourConfigs}>
+                    <SupabaseSessionProvider />
+                    <TrialNegotiationGate />
+                    {children}
+                    <TourStep />
+                    <FeedbackWidget />
+                    <SeedAnimationOrchestrator />
+                    <Analytics />
+                  </GuidedTourProvider>
+                </OnboardingProvider>
+              </SeedsProvider>
             </CodeEditorSettingsProvider>
           </ThemeProvider>
         </MathJaxContext>

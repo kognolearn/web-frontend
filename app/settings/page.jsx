@@ -53,6 +53,11 @@ export default function SettingsPage() {
 
   // Course creation UI preference
   const [courseCreateUiMode, setCourseCreateUiMode] = useState("chat");
+
+  // Cosmetics state
+  const [cosmetics, setCosmetics] = useState([]);
+  const [cosmeticsLoading, setCosmeticsLoading] = useState(false);
+  const [customThemeColor, setCustomThemeColor] = useState("#6366f1");
   const forceDownloadRedirect = isDownloadRedirectEnabled();
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
@@ -103,6 +108,22 @@ export default function SettingsPage() {
         }
       } catch (err) {
         // Not an admin or error - that's fine
+      }
+
+      // Fetch cosmetics
+      try {
+        const res = await authFetch("/api/store?endpoint=cosmetics");
+        if (res.ok) {
+          const data = await res.json();
+          setCosmetics(data.cosmetics || []);
+          // Set custom theme color if user has one
+          const customTheme = data.cosmetics?.find(c => c.cosmetic_type === "custom_theme");
+          if (customTheme?.cosmetic_data?.accent_color) {
+            setCustomThemeColor(customTheme.cosmetic_data.accent_color);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch cosmetics:", err);
       }
 
       setLoading(false);
@@ -743,6 +764,117 @@ export default function SettingsPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Cosmetics Section */}
+        <section className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="px-6 py-5 border-b border-[var(--border)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
+                <svg className="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Cosmetics</h2>
+                <p className="text-sm text-[var(--muted-foreground)]">Customize your profile with items from the store</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Profile Flair */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-[var(--foreground)]">Profile Flair</h3>
+                  <p className="text-sm text-[var(--muted-foreground)]">A special badge displayed on your profile</p>
+                </div>
+                {cosmetics.find(c => c.cosmetic_type === "profile_flair") ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                      </svg>
+                      Supporter
+                    </span>
+                    <span className="text-xs text-green-500 font-medium">Equipped</span>
+                  </div>
+                ) : (
+                  <Link
+                    href="/store"
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-3)] transition-colors"
+                  >
+                    Get from Store
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--border)]" />
+
+            {/* Custom Theme */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-[var(--foreground)]">Custom Theme</h3>
+                  <p className="text-sm text-[var(--muted-foreground)]">Personalize your accent color</p>
+                </div>
+                {!cosmetics.find(c => c.cosmetic_type === "custom_theme") && (
+                  <Link
+                    href="/store"
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-3)] transition-colors"
+                  >
+                    Get from Store
+                  </Link>
+                )}
+              </div>
+              {cosmetics.find(c => c.cosmetic_type === "custom_theme") && (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-[var(--muted-foreground)]">Accent Color:</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={customThemeColor}
+                        onChange={(e) => setCustomThemeColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg cursor-pointer border border-[var(--border)]"
+                      />
+                      <span className="text-sm font-mono text-[var(--muted-foreground)]">{customThemeColor}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setCosmeticsLoading(true);
+                      try {
+                        const res = await authFetch("/api/store?endpoint=cosmetics/custom_theme/color", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ accentColor: customThemeColor }),
+                        });
+                        if (res.ok) {
+                          // Refresh cosmetics
+                          const cosmeticsRes = await authFetch("/api/store?endpoint=cosmetics");
+                          if (cosmeticsRes.ok) {
+                            const data = await cosmeticsRes.json();
+                            setCosmetics(data.cosmetics || []);
+                          }
+                        }
+                      } catch (err) {
+                        console.error("Failed to update theme color:", err);
+                      } finally {
+                        setCosmeticsLoading(false);
+                      }
+                    }}
+                    disabled={cosmeticsLoading}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50"
+                  >
+                    {cosmeticsLoading ? "Saving..." : "Save Color"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>

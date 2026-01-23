@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { MathJax } from "better-react-mathjax";
+import TabGroup from "@/components/content/v2/components/display/TabGroup";
 
 /**
  * Parse content string into structured blocks for rendering
@@ -41,6 +42,72 @@ function parseImageBlock(lines, startIdx) {
     alt: fields.alt || "",
     author: fields.author || "",
     license: fields.license || "",
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a tab group in the format:
+ * :::tabs
+ * :::tab{label="Tab 1"}
+ * Tab 1 content
+ * :::tab{label="Tab 2"}
+ * Tab 2 content
+ * :::
+ */
+function parseTabGroup(lines, startIdx) {
+  let i = startIdx + 1;
+  const tabs = [];
+  let currentTab = null;
+  let currentContent = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // End of entire tab group
+    if (/^:::$/.test(trimmed) || (/^:::/.test(trimmed) && !/^:::tab/i.test(trimmed))) {
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      i++;
+      break;
+    }
+
+    const tabMatch = trimmed.match(/^:::tab\s*\{([^}]*)\}/i);
+    if (tabMatch) {
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      const labelMatch = tabMatch[1].match(/label\s*=\s*["']([^"']+)["']/i);
+      currentTab = {
+        id: `tab-${tabs.length}`,
+        label: labelMatch?.[1] || `Tab ${tabs.length + 1}`,
+      };
+      currentContent = [];
+      i++;
+      continue;
+    }
+
+    if (currentTab) {
+      currentContent.push(line);
+    }
+    i++;
+  }
+
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  return {
+    type: "tab_group",
+    tabs,
     endIdx: i,
   };
 }
@@ -89,6 +156,15 @@ function parseContent(content) {
       if (imageBlock) {
         blocks.push(imageBlock);
         i = imageBlock.endIdx;
+        continue;
+      }
+    }
+
+    if (/^:::\s*tabs/i.test(trimmed)) {
+      const tabGroup = parseTabGroup(lines, i);
+      if (tabGroup) {
+        blocks.push(tabGroup);
+        i = tabGroup.endIdx;
         continue;
       }
     }
@@ -503,6 +579,11 @@ export default function MarkdownRenderer({ content, className = "" }) {
             
           case "hr":
             return <hr key={index} className="my-4 border-[var(--border)]" />;
+
+          case "tab_group":
+            return (
+              <TabGroup key={index} id={`tabs-${index}`} tabs={block.tabs} />
+            );
             
           default:
             return null;
