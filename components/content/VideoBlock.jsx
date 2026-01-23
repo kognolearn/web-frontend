@@ -54,10 +54,10 @@ export default function VideoBlock({
   title, 
   description, 
   className = "",
-  courseId,
-  lessonId,
-  userId,
-  videoCompleted: initialVideoCompleted = false,
+ courseId,
+ lessonId,
+ userId,
+ videoCompleted: initialVideoCompleted = false,
   onVideoViewed
 }) {
   const normalized = normalizeUrl(url);

@@ -4,6 +4,10 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import { getDownloadRedirectPath } from "@/lib/featureFlags";
+
+// Force dynamic rendering due to auth check
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Sign In | Kogno",
@@ -36,7 +40,7 @@ export default async function SignInPage({ searchParams }) {
   } = await supabase.auth.getSession();
 
   if (session) {
-    redirect(redirectTo || "/dashboard");
+    redirect(getDownloadRedirectPath(redirectTo || "/dashboard"));
   }
 
   return (
@@ -63,7 +67,7 @@ export default async function SignInPage({ searchParams }) {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block text-2xl font-bold text-[var(--primary)]">
+          <Link href="/" className="inline-block text-xl font-bold text-[var(--primary)] tracking-tight">
             Kogno
           </Link>
         </div>
@@ -81,15 +85,15 @@ export default async function SignInPage({ searchParams }) {
           </Suspense>
 
           <div className="mt-8 pt-6 border-t border-white/10 dark:border-white/5 text-center">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Don't have an account?{" "}
-              <Link
-                href={`/auth/create-account${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
-                className="font-medium text-[var(--primary)] hover:text-[var(--primary)]/80 transition-colors"
-              >
-                Sign up
-              </Link>
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+              Don't have an account?
             </p>
+            <Link
+              href={`/auth/create-account${redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : ""}`}
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-[var(--surface-1)] border border-white/10 text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors"
+            >
+              Sign up
+            </Link>
           </div>
         </div>
       </div>

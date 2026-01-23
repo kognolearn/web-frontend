@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, AlertCircle, Loader2, Trophy, Target } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Trophy, ChevronLeft, ChevronRight, Check, X, Circle } from "lucide-react";
 import { useV2Content } from "./V2ContentContext";
-import { getComponent, isGradableType, isInputType } from "./ComponentRegistry";
-import QuestionCard from "./components/QuestionCard";
+import { getComponent, isGradableType, isInputType, isDisplayType } from "./ComponentRegistry";
 
 /**
  * V2SectionRenderer - Renders a single section with its components
  *
- * Handles:
- * - Component rendering based on layout type
- * - Answer state management for gradable components
- * - Section grading with submit button
+ * Features:
+ * - One-question-at-a-time navigation for gradable components
+ * - Progress dots showing answered/unanswered status
+ * - Display components shown as header content
  * - Visual feedback for grading results
  *
  * @param {Object} props
@@ -27,6 +26,7 @@ export default function V2SectionRenderer({
   sectionIndex,
   onGrade,
   isGrading = false,
+  isAdmin = false,
 }) {
   const {
     answers,
@@ -34,6 +34,8 @@ export default function V2SectionRenderer({
     sectionProgress,
     setAnswer,
   } = useV2Content();
+  const [rawComponents, setRawComponents] = useState({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
   const sectionId = section.id;
   const sectionAnswers = answers[sectionId] || {};
@@ -42,15 +44,66 @@ export default function V2SectionRenderer({
   const isGraded = progress === "graded";
 
   // In V2 payload, components are in section.layout array
-  const components = section.layout || [];
+  // Ensure each component has a unique ID by checking for duplicates
+  const components = useMemo(() => {
+    const rawComponents = section.layout || [];
+    const seenIds = new Set();
 
-  // Get only gradable components for numbering
-  const gradableComponents = useMemo(() => {
-    return components.filter((comp) => isGradableType(comp.type));
+    return rawComponents.map((component, index) => {
+      // Generate a stable unique ID if missing or duplicate
+      let uniqueId = component.id;
+
+      if (!uniqueId || seenIds.has(uniqueId)) {
+        // Create unique ID using section ID, type, and index
+        uniqueId = `${sectionId}_${component.type || 'component'}_${index}`;
+      }
+
+      seenIds.add(uniqueId);
+
+      // Return component with guaranteed unique ID
+      if (uniqueId !== component.id) {
+        return { ...component, id: uniqueId, _originalId: component.id };
+      }
+      return component;
+    });
+  }, [section.layout, sectionId]);
+
+  // Group components into question blocks: each block has leading context + a gradable component
+  // Display components before a question become context for that question
+  // Display components at the end (after all questions) are shown as footer content
+  const { questionBlocks, footerComponents } = useMemo(() => {
+    const blocks = [];
+    let currentContext = [];
+
+    components.forEach((comp) => {
+      if (isGradableType(comp.type)) {
+        // Create a block with accumulated context and this question
+        blocks.push({
+          context: currentContext,
+          question: comp,
+        });
+        currentContext = [];
+      } else {
+        // Display components accumulate as context for the next question
+        currentContext.push(comp);
+      }
+    });
+
+    // Any remaining display components after the last question are footer
+    return {
+      questionBlocks: blocks,
+      footerComponents: currentContext,
+    };
   }, [components]);
+
+  // Extract gradable components for progress tracking
+  const gradableComponents = useMemo(() => {
+    return questionBlocks.map(block => block.question);
+  }, [questionBlocks]);
 
   // Check if section has any gradable components
   const hasGradableComponents = gradableComponents.length > 0;
+  const totalQuestions = gradableComponents.length;
 
   // Calculate progress stats
   const progressStats = useMemo(() => {
@@ -84,55 +137,110 @@ export default function V2SectionRenderer({
     setAnswer(sectionId, componentId, value);
   };
 
+  // Create mapping from unique IDs back to original IDs for submission
+  const idMapping = useMemo(() => {
+    const mapping = {};
+    components.forEach((comp) => {
+      if (comp._originalId) {
+        mapping[comp.id] = comp._originalId;
+      }
+    });
+    return mapping;
+  }, [components]);
+
   // Handle submit
   const handleSubmit = () => {
     if (isGrading || isGraded || !isSubmittable) return;
-    console.log('[V2SectionRenderer] Submitting answers:', JSON.stringify(sectionAnswers, null, 2));
-    onGrade?.(sectionId, sectionAnswers);
-  };
 
-  // Get question number for a component
-  const getQuestionNumber = (componentId) => {
-    const index = gradableComponents.findIndex((c) => c.id === componentId);
-    return index >= 0 ? index + 1 : null;
+    // Map answers back to original IDs for backend compatibility
+    const submissionAnswers = {};
+    for (const [uniqueId, value] of Object.entries(sectionAnswers)) {
+      const originalId = idMapping[uniqueId] || uniqueId;
+      submissionAnswers[originalId] = value;
+    }
+
+    console.log('[V2SectionRenderer] Submitting answers:', JSON.stringify(submissionAnswers, null, 2));
+    onGrade?.(sectionId, submissionAnswers);
   };
 
   // Check if component has an answer
-  const hasAnswer = (componentId) => {
+  const hasAnswer = useCallback((componentId) => {
     const value = sectionAnswers[componentId];
     if (value === undefined || value === null) return false;
     if (typeof value === "string" && value.trim() === "") return false;
     if (Array.isArray(value) && value.length === 0) return false;
     return true;
+  }, [sectionAnswers]);
+
+  // Navigation handlers
+  const goToQuestion = (index) => {
+    if (index >= 0 && index < totalQuestions) {
+      setCurrentQuestionIndex(index);
+    }
   };
 
-  // Render components
-  const renderComponents = () => {
-    const renderedComponents = components.map((component, index) => {
-      const Component = getComponent(component.type);
+  const goToPrevious = () => goToQuestion(currentQuestionIndex - 1);
+  const goToNext = () => goToQuestion(currentQuestionIndex + 1);
 
-      if (!Component) {
-        console.warn(`Unknown component type: ${component.type}`);
-        return (
-          <div
-            key={component.id || index}
-            className="p-4 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-          >
-            <p className="text-sm">
-              Unknown component type: <code>{component.type}</code>
-            </p>
+  // Toggle raw component view
+  const toggleRawComponent = (componentKey) => {
+    setRawComponents((prev) => ({
+      ...prev,
+      [componentKey]: !prev[componentKey],
+    }));
+  };
+
+  // Render a single component
+  const renderComponent = (component, index, showQuestionNumber = true) => {
+    const componentKey = component.id || `${component.type || "component"}-${index}`;
+    const Component = getComponent(component.type);
+
+    if (!Component) {
+      console.warn(`Unknown component type: ${component.type}`);
+      return (
+        <div
+          key={component.id || index}
+          className="p-4 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        >
+          <p className="text-sm">
+            Unknown component type: <code>{component.type}</code>
+          </p>
+        </div>
+      );
+    }
+
+    // Get component grade if section is graded
+    const componentGrade = sectionGrade?.results?.[component.id];
+    const isGradable = isGradableType(component.type);
+    const isInput = isInputType(component.type);
+
+    const showRaw = isAdmin && Boolean(rawComponents[componentKey]);
+    const componentPayload = component ? JSON.stringify(component, null, 2) : "";
+
+    return (
+      <div key={component.id || index} className="space-y-3">
+        {isAdmin && (
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => toggleRawComponent(componentKey)}
+              className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+              aria-pressed={showRaw}
+            >
+              {showRaw ? "Hide raw component" : "Show raw component"}
+            </button>
           </div>
-        );
-      }
-
-      // Get component grade if section is graded
-      const componentGrade = sectionGrade?.results?.[component.id];
-      const isGradable = isGradableType(component.type);
-      const isInput = isInputType(component.type);
-      const questionNumber = isGradable ? getQuestionNumber(component.id) : null;
-
-      // Spread all component props from spec, plus standard props
-      const componentElement = (
+        )}
+        {showRaw && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/50">
+            <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Raw component
+            </div>
+            <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-[var(--muted-foreground)]">
+              {componentPayload || "No raw content available."}
+            </pre>
+          </div>
+        )}
         <Component
           id={component.id}
           value={sectionAnswers[component.id]}
@@ -147,30 +255,6 @@ export default function V2SectionRenderer({
           isGradable={isGradable}
           {...component.props}
         />
-      );
-
-      // Wrap gradable components in QuestionCard
-      return (
-        <QuestionCard
-          key={component.id || index}
-          questionNumber={questionNumber}
-          totalQuestions={hasGradableComponents ? gradableComponents.length : null}
-          isGraded={isGraded}
-          isCorrect={componentGrade?.passed}
-          hasAnswer={hasAnswer(component.id)}
-          isGradable={isGradable}
-          points={component.props?.points}
-          index={index}
-        >
-          {componentElement}
-        </QuestionCard>
-      );
-    });
-
-    // Stack layout
-    return (
-      <div className="space-y-4">
-        {renderedComponents}
       </div>
     );
   };
@@ -191,6 +275,12 @@ export default function V2SectionRenderer({
       passed,
     };
   }, [isGraded, sectionGrade]);
+
+  // Get current question block data (includes context + question)
+  const currentBlock = questionBlocks[currentQuestionIndex];
+  const currentQuestion = currentBlock?.question;
+  const currentContext = currentBlock?.context || [];
+  const currentQuestionGrade = currentQuestion ? sectionGrade?.results?.[currentQuestion.id] : null;
 
   return (
     <motion.section
@@ -214,213 +304,334 @@ export default function V2SectionRenderer({
         </div>
       )}
 
-      {/* Progress Indicator */}
-      {hasGradableComponents && progressStats.total > 1 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <Target className="w-4 h-4" />
-              <span>
-                {isGraded
-                  ? `${progressStats.correct} of ${progressStats.total} correct`
-                  : `${progressStats.answered} of ${progressStats.total} answered`
-                }
-              </span>
-            </div>
-            {isGraded && scoreDisplay && (
-              <div className="flex items-center gap-2">
-                <Trophy className={`w-4 h-4 ${scoreDisplay.passed ? "text-emerald-500" : "text-rose-500"}`} />
-                <span className={`text-sm font-medium ${
-                  scoreDisplay.passed
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
-                }`}>
-                  {scoreDisplay.percentage}%
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{
-                width: isGraded
-                  ? `${(progressStats.correct / progressStats.total) * 100}%`
-                  : `${(progressStats.answered / progressStats.total) * 100}%`,
-              }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className={`h-full rounded-full ${
-                isGraded
-                  ? scoreDisplay?.passed
-                    ? "bg-emerald-500"
-                    : "bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500"
-                  : "bg-[var(--primary)]"
-              }`}
-              style={{
-                backgroundSize: isGraded && !scoreDisplay?.passed ? "200% 100%" : undefined,
-              }}
-            />
-          </div>
-        </motion.div>
-      )}
-
-      {/* Components */}
-      <div className="mb-6">
-        {renderComponents()}
-      </div>
-
-      {/* Submit Button & Score Display */}
+      {/* Gradable Components - One at a time with navigation */}
       {hasGradableComponents && (
-        <div className="mt-8 border-t border-[var(--border)] pt-6">
+        <div className="space-y-6">
+          {/* Question Card */}
           <AnimatePresence mode="wait">
-            {isGraded && scoreDisplay ? (
-              <motion.div
-                key="score"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className={`relative overflow-hidden rounded-2xl border ${
-                  scoreDisplay.passed
-                    ? "border-emerald-500/50 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5"
-                    : "border-rose-500/50 bg-gradient-to-br from-rose-500/10 to-rose-500/5"
-                }`}
-              >
-                {/* Decorative background */}
-                <div className={`absolute inset-0 opacity-30 ${
-                  scoreDisplay.passed
-                    ? "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-emerald-400/20 to-transparent"
-                    : "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-rose-400/20 to-transparent"
-                }`} />
-
-                <div className="relative flex items-center gap-4 p-5">
-                  <div className={`flex items-center justify-center w-14 h-14 rounded-xl ${
-                    scoreDisplay.passed
-                      ? "bg-emerald-500/20"
-                      : "bg-rose-500/20"
-                  }`}>
-                    {scoreDisplay.passed ? (
-                      <Trophy className="w-7 h-7 text-emerald-500" />
-                    ) : (
-                      <AlertCircle className="w-7 h-7 text-rose-500" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p
-                      className={`text-2xl font-bold ${
-                        scoreDisplay.passed
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-rose-600 dark:text-rose-400"
-                      }`}
-                    >
-                      {scoreDisplay.earned} / {scoreDisplay.max}
-                      <span className="ml-2 text-lg font-normal opacity-80">
-                        ({scoreDisplay.percentage}%)
-                      </span>
-                    </p>
-                    <p
-                      className={`text-sm mt-0.5 ${
-                        scoreDisplay.passed
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : "text-rose-700 dark:text-rose-300"
-                      }`}
-                    >
-                      {scoreDisplay.passed
-                        ? progressStats.correct === progressStats.total
-                          ? "Perfect score! Excellent work!"
-                          : "Great job! You passed this section."
-                        : "Review your answers and try again."}
-                    </p>
-                  </div>
-
-                  {/* Quick stats */}
-                  <div className="hidden sm:flex items-center gap-3 text-sm">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                        {progressStats.correct}
-                      </span>
-                    </div>
-                    {progressStats.total - progressStats.correct > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20">
-                        <AlertCircle className="w-4 h-4 text-rose-500" />
-                        <span className="text-rose-600 dark:text-rose-400 font-medium">
-                          {progressStats.total - progressStats.correct}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="submit"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center justify-between gap-4"
-              >
-                <div className="flex-1">
-                  <p className="text-sm text-[var(--muted-foreground)]">
-                    {progress === "pristine"
-                      ? "Answer the questions above to continue"
-                      : progress === "dirty"
-                      ? `Ready to submit ${progressStats.answered} ${progressStats.answered === 1 ? "answer" : "answers"}`
-                      : "Checking your answers..."}
-                  </p>
-                  {progressStats.total > progressStats.answered && progressStats.answered > 0 && (
-                    <p className="text-xs text-[var(--muted-foreground)] mt-1 opacity-70">
-                      {progressStats.total - progressStats.answered} {progressStats.total - progressStats.answered === 1 ? "question" : "questions"} remaining
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleSubmit}
-                  disabled={isGrading || !isSubmittable}
-                  className={`
-                    flex items-center gap-2 px-6 py-3 rounded-xl
-                    font-medium transition-all
-                    ${
-                      isGrading
-                        ? "bg-[var(--primary)]/50 text-white cursor-wait"
-                        : isSubmittable
-                        ? "bg-[var(--primary)] text-white hover:opacity-90 active:scale-[0.98] shadow-lg shadow-[var(--primary)]/25"
-                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] cursor-not-allowed"
+            <motion.div
+              key={currentQuestionIndex}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className={`
+                relative rounded-2xl border p-6
+                ${isGraded
+                  ? currentQuestionGrade?.passed
+                    ? "border-success/50 bg-success/5"
+                    : "border-danger/50 bg-danger/5"
+                  : hasAnswer(currentQuestion?.id)
+                    ? "border-[var(--primary)]/30 bg-[var(--primary)]/5"
+                    : "border-[var(--border)] bg-[var(--surface-1)]"
+                }
+              `}
+            >
+              {/* Question Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className={`
+                    flex items-center justify-center min-w-[32px] h-8 px-3
+                    rounded-full text-sm font-semibold
+                    ${isGraded
+                      ? currentQuestionGrade?.passed
+                        ? "bg-success/20 text-success"
+                        : "bg-danger/20 text-danger"
+                      : hasAnswer(currentQuestion?.id)
+                        ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)]"
                     }
-                  `}
-                >
-                  {isGrading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Checking...
-                    </>
-                  ) : (
-                    "Submit Answers"
+                  `}>
+                    {currentQuestionIndex + 1}
+                    <span className="text-[var(--muted-foreground)] font-normal ml-0.5">
+                      /{totalQuestions}
+                    </span>
+                  </span>
+
+                  {currentQuestion?.props?.points && (
+                    <span className="text-xs text-[var(--muted-foreground)] bg-[var(--surface-2)] px-2 py-1 rounded-full">
+                      {currentQuestion.props.points} {parseInt(currentQuestion.props.points) === 1 ? "pt" : "pts"}
+                    </span>
                   )}
-                </button>
-              </motion.div>
-            )}
+                </div>
+
+                {/* Status indicator */}
+                {isGraded && (
+                  <div className={`flex items-center gap-2 text-sm font-medium ${
+                    currentQuestionGrade?.passed ? "text-success" : "text-danger"
+                  }`}>
+                    {currentQuestionGrade?.passed ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        Correct
+                      </>
+                    ) : (
+                      <>
+                        <X className="w-5 h-5" />
+                        Incorrect
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Context for this question (markdown, images, etc.) */}
+              {currentContext.length > 0 && (
+                <div className="mb-4 space-y-3 pb-4 border-b border-[var(--border)]/50">
+                  {currentContext.map((comp, idx) => renderComponent(comp, idx, false))}
+                </div>
+              )}
+
+              {/* Question Content */}
+              {currentQuestion && renderComponent(currentQuestion, currentQuestionIndex)}
+            </motion.div>
           </AnimatePresence>
 
-          {/* Section feedback */}
-          {isGraded && sectionGrade?.feedback && (
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`mt-4 text-sm p-4 rounded-xl ${
-                sectionGrade.passed
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-              }`}
+          {/* Navigation */}
+          <div className="flex items-center justify-between">
+            {/* Previous Button */}
+            <button
+              onClick={goToPrevious}
+              disabled={currentQuestionIndex === 0}
+              className={`
+                flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                transition-all
+                ${currentQuestionIndex === 0
+                  ? "text-[var(--muted-foreground)]/50 cursor-not-allowed"
+                  : "text-[var(--foreground)] hover:bg-[var(--surface-2)] active:scale-[0.98]"
+                }
+              `}
             >
-              {sectionGrade.feedback}
-            </motion.p>
-          )}
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+
+            {/* Progress Dots */}
+            <div className="flex items-center gap-1.5">
+              {gradableComponents.map((comp, index) => {
+                const isActive = index === currentQuestionIndex;
+                const isAnswered = hasAnswer(comp.id);
+                const grade = sectionGrade?.results?.[comp.id];
+
+                return (
+                  <button
+                    key={comp.id}
+                    onClick={() => goToQuestion(index)}
+                    className={`
+                      relative w-3 h-3 rounded-full transition-all duration-200
+                      ${isActive ? "scale-125" : "hover:scale-110"}
+                      ${isGraded
+                        ? grade?.passed
+                          ? "bg-success"
+                          : "bg-danger"
+                        : isAnswered
+                          ? "bg-[var(--primary)]"
+                          : "bg-[var(--surface-2)] border border-[var(--border)]"
+                      }
+                    `}
+                    title={`Question ${index + 1}${isAnswered ? " (answered)" : ""}`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeQuestion"
+                        className="absolute inset-[-3px] rounded-full border-2 border-[var(--primary)]"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Next Button */}
+            <button
+              onClick={goToNext}
+              disabled={currentQuestionIndex === totalQuestions - 1}
+              className={`
+                flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                transition-all
+                ${currentQuestionIndex === totalQuestions - 1
+                  ? "text-[var(--muted-foreground)]/50 cursor-not-allowed"
+                  : "text-[var(--foreground)] hover:bg-[var(--surface-2)] active:scale-[0.98]"
+                }
+              `}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Submit Section */}
+          <div className="border-t border-[var(--border)] pt-6">
+            <AnimatePresence mode="wait">
+              {isGraded && scoreDisplay ? (
+                <motion.div
+                  key="score"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className={`relative overflow-hidden rounded-2xl border ${
+                    scoreDisplay.passed
+                      ? "border-success/50 bg-gradient-to-br from-[var(--success)]/10 to-[var(--success)]/5"
+                      : "border-danger/50 bg-gradient-to-br from-[var(--danger)]/10 to-[var(--danger)]/5"
+                  }`}
+                >
+                  {/* Decorative background */}
+                  <div className={`absolute inset-0 opacity-30 ${
+                    scoreDisplay.passed
+                      ? "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-[var(--success)]/20 to-transparent"
+                      : "bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-[var(--danger)]/20 to-transparent"
+                  }`} />
+
+                  <div className="relative flex items-center gap-4 p-5">
+                    <div className={`flex items-center justify-center w-14 h-14 rounded-xl ${
+                      scoreDisplay.passed
+                        ? "bg-success/20"
+                        : "bg-danger/20"
+                    }`}>
+                      {scoreDisplay.passed ? (
+                        <Trophy className="w-7 h-7 text-success" />
+                      ) : (
+                        <AlertCircle className="w-7 h-7 text-danger" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p
+                        className={`text-2xl font-bold ${
+                          scoreDisplay.passed
+                            ? "text-success"
+                            : "text-danger"
+                        }`}
+                      >
+                        {scoreDisplay.earned} / {scoreDisplay.max}
+                        <span className="ml-2 text-lg font-normal opacity-80">
+                          ({scoreDisplay.percentage}%)
+                        </span>
+                      </p>
+                      <p
+                        className={`text-sm mt-0.5 ${
+                          scoreDisplay.passed
+                            ? "text-success opacity-80"
+                            : "text-danger opacity-80"
+                        }`}
+                      >
+                        {scoreDisplay.passed
+                          ? progressStats.correct === progressStats.total
+                            ? "Perfect score! Excellent work!"
+                            : "Great job! You passed this section."
+                          : "Review your answers and try again."}
+                      </p>
+                    </div>
+
+                    {/* Quick stats */}
+                    <div className="hidden sm:flex items-center gap-3 text-sm">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/20">
+                        <CheckCircle2 className="w-4 h-4 text-success" />
+                        <span className="text-success font-medium">
+                          {progressStats.correct}
+                        </span>
+                      </div>
+                      {progressStats.total - progressStats.correct > 0 && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger/20">
+                          <AlertCircle className="w-4 h-4 text-danger" />
+                          <span className="text-danger font-medium">
+                            {progressStats.total - progressStats.correct}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="submit"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className="flex items-center gap-1">
+                        {gradableComponents.map((comp, index) => {
+                          const isAnswered = hasAnswer(comp.id);
+                          return (
+                            <div
+                              key={comp.id}
+                              className={`
+                                w-2 h-2 rounded-full transition-colors
+                                ${isAnswered ? "bg-[var(--primary)]" : "bg-[var(--surface-2)] border border-[var(--border)]"}
+                              `}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span className="text-sm text-[var(--muted-foreground)]">
+                        {progressStats.answered} of {progressStats.total} answered
+                      </span>
+                    </div>
+                    {progressStats.total > progressStats.answered && progressStats.answered > 0 && (
+                      <p className="text-xs text-[var(--muted-foreground)] opacity-70">
+                        {progressStats.total - progressStats.answered} {progressStats.total - progressStats.answered === 1 ? "question" : "questions"} remaining
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isGrading || !isSubmittable}
+                    className={`
+                      flex items-center gap-2 px-6 py-3 rounded-xl
+                      font-medium transition-all
+                      ${
+                        isGrading
+                          ? "bg-[var(--primary)]/50 text-white cursor-wait"
+                          : isSubmittable
+                          ? "bg-[var(--primary)] text-white hover:opacity-90 active:scale-[0.98] shadow-lg shadow-[var(--primary)]/25"
+                          : "bg-[var(--surface-2)] text-[var(--muted-foreground)] cursor-not-allowed"
+                      }
+                    `}
+                  >
+                    {isGrading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      "Submit Answers"
+                    )}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Section feedback */}
+            {isGraded && sectionGrade?.feedback && (
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`mt-4 text-sm p-4 rounded-xl ${
+                  sectionGrade.passed
+                    ? "bg-success/10 text-success"
+                    : "bg-danger/10 text-danger"
+                }`}
+              >
+                {sectionGrade.feedback}
+              </motion.p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Footer Components (after last question) */}
+      {footerComponents.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {footerComponents.map((component, index) => renderComponent(component, index, false))}
+        </div>
+      )}
+
+      {/* No content available */}
+      {!hasGradableComponents && footerComponents.length === 0 && (
+        <div className="p-4 text-center text-[var(--muted-foreground)]">
+          No content available
         </div>
       )}
     </motion.section>

@@ -1,20 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import { getRedirectDestination } from "@/lib/platform";
+import { authFetch } from "@/lib/api";
+import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
+
+const REFERRAL_STORAGE_KEY = "kogno_ref";
 
 export default function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+  const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Capture referral code from URL and store in localStorage (for if user creates an account)
+  useEffect(() => {
+    if (refCode) {
+      try {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          code: refCode,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
+  }, [refCode]);
 
   const handleChange = (e) => {
     setFormData({
@@ -42,7 +62,29 @@ export default function SignInForm() {
       }
 
       if (data?.user) {
-        router.push(redirectTo || "/dashboard");
+        if (redirectTo) {
+          router.push(getRedirectDestination(redirectTo));
+          return;
+        }
+        const joinRedirect = getJoinRedirectPath();
+        if (joinRedirect) {
+          clearJoinIntent();
+          router.push(getRedirectDestination(joinRedirect));
+          return;
+        }
+
+        let hasPremiumAccess = false;
+        try {
+          const res = await authFetch("/api/stripe?endpoint=subscription-status", {
+            method: "GET",
+          });
+          if (res.ok) {
+            const status = await res.json().catch(() => ({}));
+            hasPremiumAccess = status?.planLevel === "paid" || status?.trialActive;
+          }
+        } catch (fetchError) {}
+
+        router.push(hasPremiumAccess ? "/dashboard" : "/");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

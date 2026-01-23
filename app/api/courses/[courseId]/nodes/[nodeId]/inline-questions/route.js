@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 /**
  * GET /api/courses/:courseId/nodes/:nodeId/inline-questions
@@ -10,7 +10,7 @@ export async function GET(request, { params }) {
   try {
     const { courseId, nodeId } = await params;
 
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions`;
 
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -61,7 +61,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/inline-questions`;
 
     const response = await fetch(backendUrl, {
       method: 'PATCH',

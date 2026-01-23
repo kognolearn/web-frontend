@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 // GET /api/courses/:courseId/exams/:type - Fetch list of generated practice exams
 export async function GET(request, { params }) {

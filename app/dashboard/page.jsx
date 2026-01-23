@@ -2,22 +2,28 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
+import EmptyStateCard from "@/components/courses/EmptyStateCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
-import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
-import PersonalizationModal from "@/components/ui/PersonalizationModal";
+import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import { authFetch } from "@/lib/api";
 import {
   getCourseCreateJobs,
   removeCourseCreateJob,
   upsertCourseCreateJob,
 } from "@/utils/courseJobs";
+import SubscriptionBadge from "@/components/ui/SubscriptionBadge";
+import NotificationBell from "@/components/notifications/NotificationBell";
+import { isDesktopApp } from "@/lib/platform";
+import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
+import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -54,8 +60,21 @@ function resolveJobCourseId(job) {
   return null;
 }
 
-export default function DashboardPage() {
+function getCourseTitle(course) {
+  if (!course || typeof course !== "object") return "Untitled Course";
+  return (
+    course.title ||
+    course.course_title ||
+    course.name ||
+    course.courseName ||
+    "Untitled Course"
+  );
+}
+
+function DashboardClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { userSettings, updateUserSettings } = useOnboarding();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +87,32 @@ export default function DashboardPage() {
   const refreshRetryRef = useRef(null);
   const coursesRef = useRef([]);
   const [pendingJobs, setPendingJobs] = useState([]);
-  
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const forceDownloadRedirect = isDownloadRedirectEnabled();
+
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isProfileSettingsModalOpen, setIsProfileSettingsModalOpen] = useState(false);
-  const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
+  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
   const profileMenuRef = useRef(null);
+
+  // Redirect web users to download page (backup guard - middleware handles this primarily)
+  useEffect(() => {
+    if (forceDownloadRedirect && !isDesktopApp()) {
+      router.replace('/download');
+    }
+  }, [forceDownloadRedirect, router]);
+
+  // Persist payment success to user settings and strip the URL param
+  useEffect(() => {
+    const paymentParam = searchParams?.get("payment");
+    if (paymentParam !== "success") return;
+
+    if (userSettings && !userSettings.tour_completed && userSettings.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
+
+    router.replace("/dashboard");
+  }, [searchParams, userSettings, updateUserSettings, router]);
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -89,6 +128,10 @@ export default function DashboardPage() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isProfileMenuOpen]);
+
+
+
+
 
   // Handle send feedback
   const handleSendFeedback = () => {
@@ -154,16 +197,17 @@ export default function DashboardPage() {
     
     if (!hasPendingCourses) return;
 
-    // Poll every 5 seconds for pending courses
+    // Reduced polling frequency - realtime handles most updates now
+    // This is a fallback in case realtime misses something
     pollingRef.current = setInterval(async () => {
       const updatedCourses = await loadCourses(userId, true);
       const stillPending = updatedCourses.some(c => c.status === 'pending');
-      
+
       if (!stillPending && pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
-    }, 5000);
+    }, 30000); // Reduced from 5s to 30s - realtime handles most updates
   }, [loadCourses]);
 
   const loadPendingJobs = useCallback((userId) => {
@@ -253,11 +297,86 @@ export default function DashboardPage() {
     const jobs = loadPendingJobs(userId);
     if (!jobs.length) return;
 
+    // Initial check immediately
     pollCourseJobs(userId);
+    // Reduced polling frequency - realtime handles most updates now
+    // This is a fallback in case realtime misses something
     jobPollingRef.current = setInterval(() => {
       pollCourseJobs(userId);
-    }, 5000);
+    }, 30000); // Reduced from 5s to 30s - realtime handles most updates
   }, [loadPendingJobs, pollCourseJobs]);
+
+  // Handle realtime job updates - called when backend broadcasts job status changes
+  const handleRealtimeJobUpdate = useCallback((payload) => {
+    if (!user?.id) return;
+
+    const { jobId, status, courseId } = payload;
+    const normalizedStatus = status?.toLowerCase() || '';
+
+    // Update local job tracking
+    if (courseId || status) {
+      upsertCourseCreateJob(user.id, { jobId, courseId, status });
+    }
+
+    const isFinished = terminalJobStatuses.has(normalizedStatus);
+
+    if (isFinished) {
+      // Remove from local storage and state
+      removeCourseCreateJob(user.id, jobId);
+      setPendingJobs(prev => prev.filter(j => j.jobId !== jobId));
+
+      // Refresh courses list to show the new/updated course
+      loadCourses(user.id, true).then(courseList => {
+        startPollingForPendingCourses(user.id, courseList);
+      });
+    } else {
+      // Update pending jobs state
+      setPendingJobs(prev => {
+        const existing = prev.find(j => j.jobId === jobId);
+        if (existing) {
+          return prev.map(j => j.jobId === jobId ? { ...j, status, courseId: courseId || j.courseId } : j);
+        }
+        return prev;
+      });
+    }
+  }, [user?.id, loadCourses, startPollingForPendingCourses]);
+
+  // Handle realtime course updates - called when course status changes in DB
+  const handleRealtimeCourseUpdate = useCallback((payload) => {
+    const { courseId, status, title } = payload;
+
+    setCourses(prev => {
+      const existingIndex = prev.findIndex(c => c.id === courseId);
+      if (existingIndex >= 0) {
+        // Update existing course
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], status, ...(title && { title }) };
+        return updated;
+      }
+      // Course not in list yet - might be newly created, trigger refresh
+      if (user?.id) {
+        loadCourses(user.id, true);
+      }
+      return prev;
+    });
+  }, [user?.id, loadCourses]);
+
+  const handleRealtimeModuleComplete = useCallback((payload) => {
+    const courseId = payload?.courseId;
+    if (!courseId) return;
+    setCourses(prev => prev.map(course => (
+      course.id === courseId
+        ? { ...course, has_ready_modules: true }
+        : course
+    )));
+  }, []);
+
+  // Subscribe to realtime updates
+  useRealtimeUpdates(user?.id, {
+    onJobUpdate: handleRealtimeJobUpdate,
+    onCourseUpdate: handleRealtimeCourseUpdate,
+    onModuleComplete: handleRealtimeModuleComplete,
+  });
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -339,6 +458,35 @@ export default function DashboardPage() {
     };
   }, [user]);
 
+  // Fetch subscription status
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch('/api/stripe?endpoint=subscription-status');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setSubscriptionStatus(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch subscription status:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const hasPremiumAccess =
+    subscriptionStatus?.planLevel === 'paid' || subscriptionStatus?.trialActive;
+  const isFreeTier = !hasPremiumAccess;
+  const premiumBadgeLabel = subscriptionStatus?.trialActive ? "Free Trial" : "Pro";
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/");
@@ -357,6 +505,26 @@ export default function DashboardPage() {
     } else {
       throw new Error("Failed to delete course");
     }
+  };
+
+  const handleCreateCourseClick = (e) => {
+    // Check if user is on free tier and has hit the course limit
+    const totalLimit = 2;
+    const generatedLimit = 1;
+    const totalCount = courses.length;
+    const generatedCount = courses.filter(c => c.is_generated).length;
+
+    if (isFreeTier && (totalCount >= totalLimit || generatedCount >= generatedLimit)) {
+      e.preventDefault();
+      setShowCourseLimitModal(true);
+      return false;
+    }
+
+    if (userSettings && !userSettings.tour_completed && userSettings.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
+    // Allow navigation to proceed
+    return true;
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
@@ -378,6 +546,10 @@ export default function DashboardPage() {
   })();
   
   const hasCourses = courses.length > 0;
+  const hasActiveCourseCards = hasCourses;
+  const isTourCompleted = userSettings?.tour_completed === true;
+  const shouldShowOnboardingEmptyState = !hasCourses && !isTourCompleted;
+  const generatedCourseCount = courses.filter((c) => c.is_generated).length;
   // Count courses that are pending or generating based on course status only
   const pendingCount = courses.filter((c) =>
     c.status === "pending" || c.status === "generating"
@@ -487,20 +659,20 @@ export default function DashboardPage() {
         <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl relative z-10">
           {/* Top bar */}
           <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center gap-2">
               <Image 
                 src="/images/kogno_logo.png" 
                 alt="Kogno Logo" 
-                width={240} 
-                height={80} 
-                className="h-10 sm:h-16 w-auto object-contain"
+                width={32} 
+                height={32} 
+                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
                 priority
               />
-              <span className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--primary)]">
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
                 Kogno
               </span>
             </Link>
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
               {hasCheckedAdmin && isAdmin && (
                 <Link
                   href="/admin"
@@ -523,47 +695,49 @@ export default function DashboardPage() {
                   </svg>
                 </Link>
               )}
-              {/* Profile icon with dropdown */}
+              {/* Notifications */}
+              <NotificationBell />
+              {/* Profile with connected subscription badge */}
               <div className="relative z-[100]" ref={profileMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold transition-all hover:opacity-90 hover:scale-105"
+                  className="group flex items-center transition-all"
                   title="Profile Menu"
                 >
-                  {userInitials}
+                  {/* Avatar with optional connected badge */}
+                  <div className="relative flex items-center">
+                    {/* Avatar circle */}
+                    <div className="relative z-10 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[var(--primary)] text-white text-xs sm:text-sm font-semibold ring-2 ring-[var(--surface-1)] group-hover:ring-[var(--primary)]/20 transition-all">
+                      {userInitials}
+                    </div>
+                    {/* Pro badge - positioned to overlap slightly */}
+                    {subscriptionStatus?.planLevel === "paid" && (
+                      <div className="hidden sm:flex items-center gap-1 h-6 pl-5 pr-2.5 -ml-4 rounded-r-full bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-semibold">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {premiumBadgeLabel}
+                      </div>
+                    )}
+                  </div>
                 </button>
                 
                 {/* Profile dropdown menu */}
                 {isProfileMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl">
                     <div className="p-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileMenuOpen(false);
-                          setIsProfileSettingsModalOpen(true);
-                        }}
+                      <Link
+                        href="/settings"
+                        onClick={() => setIsProfileMenuOpen(false)}
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        Profile Settings
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileMenuOpen(false);
-                          setIsPersonalizationModalOpen(true);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                        </svg>
-                        Personalization
-                      </button>
+                        Settings
+                      </Link>
                       <button
                         type="button"
                         onClick={handleSendFeedback}
@@ -602,29 +776,48 @@ export default function DashboardPage() {
                 Welcome back, {displayName}
               </h1>
               <p className="text-sm sm:text-base text-[var(--muted-foreground)]">
-                {hasCourses ? "Continue your learning journey." : "Create your first course to get started."}
+                {hasActiveCourseCards ? "Continue your learning journey." : "Create your first course to get started."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {pendingCount > 0 ? (
-                <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-500"></span>
-                  Building: {pendingCount}
-                </div>
-              ) : null}
+              <Link
+                href="/exams/ad-hoc"
+                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Grade exam
+              </Link>
             </div>
           </header>
         </div>
         {/* Courses section */}
         <main className="space-y-6">
-          {!hasCourses ? (
+          {!hasActiveCourseCards ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Link href="/courses/create" className="btn btn-primary btn-lg">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create your first course
-              </Link>
+              {shouldShowOnboardingEmptyState ? (
+                <EmptyStateCard
+                  title="Create your first course"
+                  description="Get started by creating a personalized study plan."
+                  ctaText="Create Course"
+                  ctaHref="/courses/create"
+                  onCtaClick={handleCreateCourseClick}
+                  ctaDataTour="dashboard-create-course"
+                />
+              ) : (
+                <Link
+                  href="/courses/create"
+                  onClick={handleCreateCourseClick}
+                  className="btn btn-primary btn-lg"
+                  data-tour="dashboard-create-course"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create your first course
+                </Link>
+              )}
             </div>
           ) : (
             <div
@@ -642,11 +835,13 @@ export default function DashboardPage() {
               >
                 <Link
                   href="/courses/create"
+                  onClick={handleCreateCourseClick}
+                  data-tour="dashboard-create-course"
                   className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
                 >
                   {/* Hover gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
-                  
+
                   <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -657,16 +852,12 @@ export default function DashboardPage() {
               </OnboardingTooltip>
 
               {courses.map((course) => {
-                const courseTitle =
-                  course?.title ||
-                  course?.course_title ||
-                  course?.name ||
-                  course?.courseName ||
-                  "Untitled Course";
+                const courseTitle = getCourseTitle(course);
                 // Show as pending/building if course status is pending or generating
                 const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
                 // Use percent_complete from the course object (0-100 range)
                 const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
+                const isSharedWithMe = course.is_shared_with_me === true;
                 return (
                   <CourseCard
                     key={course.id}
@@ -676,7 +867,9 @@ export default function DashboardPage() {
                     secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
                     status={effectiveStatus}
                     topicsProgress={progress}
-                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle })}
+                    canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
+                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle, isSharedWithMe })}
+                    isSharedWithMe={isSharedWithMe}
                   />
                 );
               })}
@@ -692,15 +885,25 @@ export default function DashboardPage() {
         onConfirm={handleDeleteCourse}
       />
 
-      <ProfileSettingsModal
-        isOpen={isProfileSettingsModalOpen}
-        onClose={() => setIsProfileSettingsModalOpen(false)}
-      />
-
-      <PersonalizationModal
-        isOpen={isPersonalizationModalOpen}
-        onClose={() => setIsPersonalizationModalOpen(false)}
+      <CourseLimitModal
+        isOpen={showCourseLimitModal}
+        onClose={() => setShowCourseLimitModal(false)}
+        courses={courses}
+        userId={user?.id}
+        limit={courses.length >= 2 ? 2 : 1}
+        mode={courses.length >= 2 ? "total" : (generatedCourseCount >= 1 ? "generated" : "total")}
+        onCourseDeleted={(courseId) => {
+          setCourses((prev) => prev.filter((c) => c.id !== courseId));
+        }}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <DashboardClient />
+    </Suspense>
   );
 }

@@ -8,7 +8,7 @@ import VideoBlock from "@/components/content/VideoBlock";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
 import PracticeProblems from "@/components/content/PracticeProblems";
-import InteractivePractice from "@/components/content/InteractivePractice";
+import TaskRenderer from "@/components/content/TaskRenderer";
 import DurationInput from "@/components/ui/DurationInput";
 
 const TABS = [
@@ -310,7 +310,7 @@ function ContentRenderer({ format, data }) {
     }
     case "interactive_practice": {
       return (
-        <InteractivePractice interactivePractice={data?.interactive_practice || data || {}} />
+        <TaskRenderer taskData={data?.interactive_practice || data || {}} />
       );
     }
     default:

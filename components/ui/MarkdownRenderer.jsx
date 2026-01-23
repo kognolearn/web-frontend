@@ -7,6 +7,44 @@ import { MathJax } from "better-react-mathjax";
  * Parse content string into structured blocks for rendering
  * Handles: headings, paragraphs, lists, code blocks, math, blockquotes, tables
  */
+function parseImageBlock(lines, startIdx) {
+  let i = startIdx + 1;
+  const fields = {};
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
+    if (/^:::/i.test(line)) {
+      i++;
+      break;
+    }
+
+    const match = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+    if (match) {
+      fields[match[1].toLowerCase()] = match[2].trim();
+    }
+    i++;
+  }
+
+  if (!fields.url) {
+    return null;
+  }
+
+  return {
+    type: "image",
+    url: fields.url,
+    fullUrl: fields.full_url || fields.fullurl,
+    caption: fields.caption || "",
+    alt: fields.alt || "",
+    author: fields.author || "",
+    license: fields.license || "",
+    endIdx: i,
+  };
+}
+
 function parseContent(content) {
   if (!content) return [];
   
@@ -44,6 +82,15 @@ function parseContent(content) {
     if (!trimmed) {
       i++;
       continue;
+    }
+
+    if (/^:::\s*image/i.test(trimmed)) {
+      const imageBlock = parseImageBlock(lines, i);
+      if (imageBlock) {
+        blocks.push(imageBlock);
+        i = imageBlock.endIdx;
+        continue;
+      }
     }
     
     // Headings
@@ -340,6 +387,41 @@ export default function MarkdownRenderer({ content, className = "" }) {
               <HeadingTag key={index} className="font-bold text-[var(--foreground)] mt-4 mb-2">
                 <InlineContent text={block.content} />
               </HeadingTag>
+            );
+
+          case "image":
+            const credit = [block.author, block.license].filter(Boolean).join(" | ");
+            const imageAlt = block.alt || block.caption || "Image";
+            const imageElement = (
+              <img
+                src={block.url}
+                alt={imageAlt}
+                loading="lazy"
+                className="w-full h-auto rounded-lg"
+              />
+            );
+            return (
+              <figure key={index} className="my-3">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+                  {block.fullUrl ? (
+                    <a href={block.fullUrl} target="_blank" rel="noopener noreferrer">
+                      {imageElement}
+                    </a>
+                  ) : (
+                    imageElement
+                  )}
+                </div>
+                {(block.caption || credit) && (
+                  <figcaption className="mt-2 text-xs text-[var(--muted-foreground)] leading-relaxed">
+                    {block.caption && <InlineContent text={block.caption} />}
+                    {credit && (
+                      <span className="block mt-1 text-[10px] text-[var(--muted-foreground)]">
+                        {credit}
+                      </span>
+                    )}
+                  </figcaption>
+                )}
+              </figure>
             );
             
           case "paragraph":

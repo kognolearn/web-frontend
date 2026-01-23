@@ -17,7 +17,7 @@ export default function AdminGuard({ children }) {
                 } = await supabase.auth.getSession();
 
                 if (!session) {
-                    router.push("/login"); // Or wherever you want to redirect unauthenticated users
+                    router.push("/admin/sign-in");
                     return;
                 }
 
@@ -29,14 +29,14 @@ export default function AdminGuard({ children }) {
 
                 if (error || !adminData) {
                     console.warn("Access denied: User is not an admin.");
-                    router.push("/"); // Redirect non-admins to home
+                    router.push("/admin/sign-in?error=not_admin");
                     return;
                 }
 
                 setIsAdmin(true);
             } catch (err) {
                 console.error("Error checking admin status:", err);
-                router.push("/");
+                router.push("/admin/sign-in");
             } finally {
                 setLoading(false);
             }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 /**
  * POST /api/courses/:courseId/nodes/:nodeId/grade
@@ -47,7 +47,7 @@ export async function POST(request, { params }) {
     const { courseId, nodeId } = await params;
     const body = await request.json();
 
-    const { answers, sectionId, sync = false } = body;
+    const { answers, sectionId, sync = false, grading_logic } = body;
 
     // Validate required fields
     if (!answers || typeof answers !== 'object') {
@@ -58,7 +58,7 @@ export async function POST(request, { params }) {
     }
 
     // Build the backend API URL
-    const backendUrl = `${BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/grade`;
+    const backendUrl = `${NEXT_PUBLIC_BACKEND_API_URL}/courses/${courseId}/nodes/${nodeId}/grade`;
 
     console.log(`[Grade API] Grading section ${sectionId || 'all'} for node ${nodeId} in course ${courseId}`);
 
@@ -75,6 +75,7 @@ export async function POST(request, { params }) {
         answers,
         sectionId,
         sync,
+        ...(grading_logic && { grading_logic }),
       }),
     });
 

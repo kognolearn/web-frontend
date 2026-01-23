@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
 
 // GET /api/courses/:courseId/cheatsheets - List all cheatsheets
 export async function GET(request, { params }) {

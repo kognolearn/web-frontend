@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Tooltip from "@/components/ui/Tooltip";
+import { authFetch } from "@/lib/api";
 
-export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress }) {
+export default function CourseCard({ courseCode, courseName, courseId, secondsToComplete, status, onDelete, topicsProgress, canOpen = true, isSharedWithMe = false }) {
   const router = useRouter();
-  const shareLink = `https://www.kognolearn.com/share/${courseId}`;
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
   const shareResetRef = useRef(null);
 
   const handleDeleteClick = (e) => {
@@ -15,24 +16,32 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
     if (onDelete) onDelete();
   };
 
-  const handleShareClick = (e) => {
+  const handleShareClick = async (e) => {
     e.stopPropagation();
-    const fallbackOpen = () => {
-      if (typeof window !== "undefined") {
-        window.open(shareLink, "_blank", "noopener,noreferrer");
-      }
-    };
+    if (shareLoading) return;
 
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(shareLink)
-        .then(() => {
-          setShareCopied(true);
-          if (shareResetRef.current) clearTimeout(shareResetRef.current);
-          shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
-        })
-        .catch(fallbackOpen);
-    } else {
-      fallbackOpen();
+    setShareLoading(true);
+    try {
+      // Generate share link via API
+      const res = await authFetch(`/api/courses/${courseId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) throw new Error("Failed to generate share link");
+
+      const data = await res.json();
+      const shareUrl = `${window.location.origin}${data.shareUrl}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      if (shareResetRef.current) clearTimeout(shareResetRef.current);
+      shareResetRef.current = setTimeout(() => setShareCopied(false), 1600);
+    } catch (err) {
+      console.error("Error sharing course:", err);
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -47,8 +56,6 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   };
 
   const openCourse = (e) => {
-    // Don't navigate if course is still building
-    if (status === 'pending') return;
     // Prevent clicks from nested interactive elements if any
     if (e) {
       e.stopPropagation();
@@ -74,62 +81,77 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
   const topicProgressPercent = topicProgressValue !== null ? Math.round(topicProgressValue * 100) : null;
   const timeLabel = isCompleted ? "Done" : shouldShowTimeRemaining ? formatTimeRemaining(secondsToComplete) : null;
   const isPending = status === 'pending' || status === 'generating';
+  const canOpenCourse = !isPending || canOpen;
 
-  // Pending/Building state - show a special loading card
+  // Pending/Building state - show a premium loading card
   if (isPending) {
     return (
       <div
         role="button"
-        tabIndex={-1}
-        aria-label={`Course ${courseCode} is being built`}
-        className="relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/50 border border-amber-500/30"
+        tabIndex={canOpenCourse ? 0 : -1}
+        onClick={canOpenCourse ? openCourse : undefined}
+        onKeyDown={canOpenCourse ? (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openCourse(e);
+          }
+        } : undefined}
+        aria-label={canOpenCourse ? `Open course ${courseCode}` : `Course ${courseCode} is being built.`}
+        aria-disabled={canOpenCourse ? undefined : true}
+        className={`building-card relative h-full min-h-[11.5rem] rounded-2xl flex flex-col overflow-hidden bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-2)]/80 ${canOpenCourse ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
       >
-        {/* Animated gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5" />
-        
-        {/* Shimmer effect */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-amber-400/10 to-transparent transform -skew-x-12 animate-[shimmer_2s_linear_infinite]" style={{ width: '50%' }} />
+        {/* Subtle animated border */}
+        <div className="absolute inset-0 rounded-2xl border border-[var(--primary)]/30" />
+
+        {/* Premium shine effect - diagonal sweep */}
+        <div className="absolute inset-[-100%] overflow-visible">
+          <div className="shine-sweep absolute inset-0" />
         </div>
+
+        {/* Soft inner glow */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[var(--primary)]/[0.06] via-transparent to-[var(--primary)]/[0.03]" />
 
         {/* Content */}
         <div className="relative z-10 flex flex-col p-5 h-full">
-          {/* Building badge */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/25">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-              </span>
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Building</span>
-            </div>
-          </div>
-
           {/* Title */}
-          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug mb-auto">
+          <h3 className="text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug">
             {courseCode}
           </h3>
-          
-          {/* Loading indicator */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-[var(--muted-foreground)]">Generating content...</span>
-            </div>
-            <div className="h-1 rounded-full bg-[var(--surface-2)] overflow-hidden">
-              <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-amber-500 to-orange-400 animate-[loading_1.5s_ease-in-out_infinite]" />
-            </div>
-          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Subtle status text */}
+          <p className="text-xs text-[var(--muted-foreground)]/60 tracking-wide">
+            {canOpenCourse ? "First module ready — click to start." : "Building your course..."}
+          </p>
         </div>
 
         <style jsx>{`
-          @keyframes shimmer {
-            0% { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(300%) skewX(-12deg); }
+          @keyframes shine {
+            0% {
+              transform: translateX(-100%) rotate(25deg);
+            }
+            100% {
+              transform: translateX(250%) rotate(25deg);
+            }
           }
-          @keyframes loading {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(150%); }
-            100% { transform: translateX(-100%); }
+          .shine-sweep::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 0;
+            width: 35%;
+            height: 400%;
+            background: linear-gradient(
+              90deg,
+              transparent 0%,
+              rgba(var(--primary-rgb), 0.1) 40%,
+              rgba(var(--primary-rgb), 0.2) 50%,
+              rgba(var(--primary-rgb), 0.1) 60%,
+              transparent 100%
+            );
+            animation: shine 3s ease-in-out infinite;
           }
         `}</style>
       </div>
@@ -172,43 +194,74 @@ export default function CourseCard({ courseCode, courseName, courseId, secondsTo
 
         {/* Header with title and actions */}
         <div className="flex items-start justify-between gap-3">
-          <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 flex-1 ${timeLabel ? 'pr-28' : ''}`}>
-            {courseCode}
-          </h3>
+          <div className="flex-1 min-w-0">
+            <h3 className={`text-base font-semibold text-[var(--foreground)] line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors duration-200 ${timeLabel ? 'pr-28' : ''}`}>
+              {courseCode}
+            </h3>
+            {/* Shared with me indicator */}
+            {isSharedWithMe && (
+              <div className="flex items-center gap-1 mt-1">
+                <svg className="w-3 h-3 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Shared with you</span>
+              </div>
+            )}
+          </div>
 
           {/* Action buttons - shown on hover, replaces time badge position */}
           <div className={`flex items-center gap-0.5 transition-all duration-300 ease-out shrink-0 -mt-1 ${
-            timeLabel 
-              ? 'absolute top-3 right-3 z-20 translate-x-0 opacity-100 md:translate-x-4 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100' 
+            timeLabel
+              ? 'absolute top-3 right-3 z-20 translate-x-0 opacity-100 md:translate-x-4 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100'
               : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 -mr-1'
           }`}>
-            <Tooltip content={shareCopied ? "Copied!" : "Share"} position="bottom">
-              <button
-                onClick={handleShareClick}
-                className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all"
-                aria-label="Share course"
-              >
-                {shareCopied ? (
-                  <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
+            {/* Only show share button for courses you own */}
+            {!isSharedWithMe && (
+              <Tooltip content={shareCopied ? "Copied!" : "Share"} position="bottom">
+                <button
+                  onClick={handleShareClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all"
+                  aria-label="Share course"
+                >
+                  {shareCopied ? (
+                    <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                  )}
+                </button>
+              </Tooltip>
+            )}
+            {/* Only show delete button for courses you own */}
+            {!isSharedWithMe && (
+              <Tooltip content="Delete" position="bottom">
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                )}
-              </button>
-            </Tooltip>
-            <Tooltip content="Delete" position="bottom">
-              <button
-                onClick={handleDeleteClick}
-                className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-rose-500 hover:bg-rose-500/10 transition-all"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </Tooltip>
+                </button>
+              </Tooltip>
+            )}
+            {/* For shared courses, show a "Leave" button instead */}
+            {isSharedWithMe && (
+              <Tooltip content="Leave course" position="bottom">
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-2 rounded-xl text-[var(--muted-foreground)] hover:text-amber-500 hover:bg-amber-500/10 transition-all"
+                  aria-label="Leave shared course"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
 

@@ -21,7 +21,9 @@ import { Check, X, Lightbulb } from "lucide-react";
  * @param {boolean} [props.isGraded] - Whether section is graded
  * @param {boolean} [props.isGradable] - Whether this component is gradable
  * @param {string} props.template - Template text (may contain {{blankId}} placeholders)
+ * @param {string} [props.prompt_template] - Alternative template prop (alias for template)
  * @param {Array<{id?: string, answer?: string, hint?: string, input_type?: string, case_sensitive?: boolean}>} props.blanks
+ * @param {Array<string>} [props.correct_answers] - Accepted answers (used when no blanks provided)
  * @param {boolean} [props.case_sensitive] - Whether matching is case sensitive (default)
  */
 export default function FillInBlank({
@@ -32,22 +34,30 @@ export default function FillInBlank({
   grade,
   isGraded = false,
   isGradable = false,
-  template = "",
+  template: templateProp = "",
+  prompt_template,
   blanks = [],
+  correct_answers = [],
   case_sensitive = false,
 }) {
+  // Support both 'template' and 'prompt_template' prop names
+  const template = templateProp || prompt_template || "";
+
+  // If no blanks provided but correct_answers exists, create a single blank
+  const effectiveBlanks = blanks.length > 0 ? blanks :
+    correct_answers.length > 0 ? [{ id: "blank_0", answer: correct_answers[0] }] : [];
   // Check if template has placeholders (needed before normalizing value)
   const hasPlaceholders = useMemo(() => /\{\{(\w+)\}\}/.test(template), [template]);
 
   // Normalize blanks to always have id field
   const normalizedBlanks = useMemo(() => {
-    return blanks.map((blank, idx) => ({
+    return effectiveBlanks.map((blank, idx) => ({
       ...blank,
       id: blank.id || `blank_${idx}`,
       input_type: blank.input_type || 'text',
       case_sensitive: blank.case_sensitive ?? case_sensitive,
     }));
-  }, [blanks, case_sensitive]);
+  }, [effectiveBlanks, case_sensitive]);
 
   // Normalize value to always be an object with the correct blank ID key
   const normalizeValue = useCallback((val) => {

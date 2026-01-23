@@ -1,6 +1,7 @@
 Backend API
 -----------
 
+
 Course search is served by the backend API hosted on Render:
 
 - Base URL: https://api.kognolearn.com
@@ -26,6 +27,8 @@ Provide the client-side Supabase env vars in `.env.local` for the web app:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_KEY`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
 
 Notes
 -----

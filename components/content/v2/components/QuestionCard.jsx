@@ -62,17 +62,17 @@ export default function QuestionCard({
       ),
     },
     correct: {
-      border: "border-emerald-500/50",
-      bg: "bg-emerald-500/5",
+      border: "border-success/50",
+      bg: "bg-success/5",
       indicator: (
-        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+        <CheckCircle2 className="w-5 h-5 text-success" />
       ),
     },
     incorrect: {
-      border: "border-rose-500/50",
-      bg: "bg-rose-500/5",
+      border: "border-danger/50",
+      bg: "bg-danger/5",
       indicator: (
-        <XCircle className="w-5 h-5 text-rose-500" />
+        <XCircle className="w-5 h-5 text-danger" />
       ),
     },
   };
@@ -112,9 +112,9 @@ export default function QuestionCard({
                 flex items-center justify-center min-w-[28px] h-7 px-2
                 rounded-full text-xs font-semibold
                 ${status === "correct"
-                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                  ? "bg-success/20 text-success"
                   : status === "incorrect"
-                  ? "bg-rose-500/20 text-rose-600 dark:text-rose-400"
+                  ? "bg-danger/20 text-danger"
                   : status === "answered"
                   ? "bg-[var(--primary)]/20 text-[var(--primary)]"
                   : "bg-[var(--surface-2)] text-[var(--muted-foreground)]"

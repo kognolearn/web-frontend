@@ -25,7 +25,7 @@ export default function NotFound() {
       {/* Navigation */}
       <nav className="absolute top-0 left-0 right-0 z-10 mx-auto max-w-6xl px-6 py-6">
         <div className="flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold text-[var(--primary)]">
+          <Link href="/" className="text-xl font-bold text-[var(--primary)] tracking-tight">
             Kogno
           </Link>
         </div>

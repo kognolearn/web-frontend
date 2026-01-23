@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://api.kognolearn.com';
+const NEXT_PUBLIC_BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'https://api.kognolearn.com';
 
 export async function GET(request, { params }) {
   try {
@@ -13,7 +13,7 @@ export async function GET(request, { params }) {
       );
     }
 
-    const backendUrl = new URL(`${BACKEND_API_URL}/jobs/${encodeURIComponent(jobId)}`);
+    const backendUrl = new URL(`${NEXT_PUBLIC_BACKEND_API_URL}/jobs/${encodeURIComponent(jobId)}`);
 
     const response = await fetch(backendUrl.toString(), {
       method: 'GET',

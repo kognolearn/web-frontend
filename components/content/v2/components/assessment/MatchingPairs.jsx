@@ -1,11 +1,129 @@
 "use client";
 
 import React, { useState, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Check } from "lucide-react";
+import { GripVertical, X, Check, Link2 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+} from "@dnd-kit/core";
 
 /**
- * MatchingPairs - Drag-and-drop or click-to-match
+ * Draggable left item
+ */
+function DraggableLeftItem({ id, content, isMatched, pairGrade, disabled }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id,
+    disabled: disabled || isMatched,
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
+
+  let itemClass = "border-[var(--border)] bg-[var(--surface-2)]";
+  if (pairGrade === "correct") {
+    itemClass = "border-emerald-500 bg-emerald-500/10";
+  } else if (pairGrade === "incorrect") {
+    itemClass = "border-rose-500 bg-rose-500/10";
+  } else if (isMatched) {
+    itemClass = "border-blue-500 bg-blue-500/10";
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(disabled || isMatched ? {} : { ...listeners, ...attributes })}
+      className={`
+        w-full p-3 rounded-xl border ${itemClass}
+        text-left text-sm text-[var(--foreground)]
+        transition-all
+        ${isDragging ? "opacity-50 shadow-lg" : ""}
+        ${disabled || isMatched ? "cursor-default" : "cursor-grab active:cursor-grabbing hover:border-[var(--primary)]/50"}
+      `}
+    >
+      <div className="flex items-center gap-2">
+        {!disabled && !isMatched && (
+          <GripVertical className="w-4 h-4 text-[var(--muted-foreground)] flex-shrink-0" />
+        )}
+        <span className="flex-1">{content}</span>
+        {isMatched && !pairGrade && (
+          <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+            Matched
+          </span>
+        )}
+        {pairGrade === "correct" && <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+        {pairGrade === "incorrect" && <X className="w-4 h-4 text-rose-500 flex-shrink-0" />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Droppable right item
+ */
+function DroppableRightItem({ id, content, matchCount, isAvailable, isOver, disabled }) {
+  const { setNodeRef } = useDroppable({
+    id,
+    disabled: disabled || !isAvailable,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`
+        w-full p-3 rounded-xl border transition-all
+        ${
+          isOver
+            ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-2 ring-[var(--primary)]/20"
+            : matchCount > 0
+            ? "border-blue-500 bg-blue-500/10"
+            : "border-[var(--border)] bg-[var(--surface-2)]"
+        }
+        text-left text-sm text-[var(--foreground)]
+        ${!isAvailable && !isOver ? "opacity-75" : ""}
+      `}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex-1">{content}</span>
+        {matchCount > 0 && (
+          <span className="text-xs text-[var(--muted-foreground)] flex-shrink-0">
+            ({matchCount} match{matchCount !== 1 ? "es" : ""})
+          </span>
+        )}
+        {isOver && isAvailable && (
+          <Link2 className="w-4 h-4 text-[var(--primary)] animate-pulse flex-shrink-0" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Drag overlay
+ */
+function DragOverlayItem({ content }) {
+  return (
+    <div className="p-3 rounded-xl border border-[var(--primary)] bg-[var(--surface-2)] shadow-xl cursor-grabbing">
+      <div className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+        <GripVertical className="w-4 h-4 text-[var(--muted-foreground)]" />
+        <span>{content}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * MatchingPairs - Drag-and-drop matching
  *
  * @param {Object} props
  * @param {string} props.id - Component ID
@@ -34,13 +152,25 @@ export default function MatchingPairs({
   shuffle = true,
 }) {
   const [pairs, setPairs] = useState(value || []);
-  const [selectedLeft, setSelectedLeft] = useState(null);
+  const [activeId, setActiveId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  const currentPairs = value !== undefined ? value : pairs;
+
+  // Configure sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
 
   // Shuffle items if needed (seeded for consistency)
   const shuffledRight = useMemo(() => {
     if (!shuffle) return right_items;
     const items = [...right_items];
-    // Simple shuffle
     for (let i = items.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [items[i], items[j]] = [items[j], items[i]];
@@ -49,43 +179,53 @@ export default function MatchingPairs({
   }, [right_items, shuffle]);
 
   const getMatchForLeft = (leftId) => {
-    const pair = pairs.find(([l]) => l === leftId);
+    const pair = currentPairs.find(([l]) => l === leftId);
     return pair ? pair[1] : null;
   };
 
-  const getMatchForRight = (rightId) => {
-    const matchingPairs = pairs.filter(([, r]) => r === rightId);
-    return matchingPairs.map(([l]) => l);
+  const getMatchesForRight = (rightId) => {
+    return currentPairs.filter(([, r]) => r === rightId).map(([l]) => l);
   };
 
-  const handleLeftClick = useCallback((leftId) => {
-    if (disabled || isGraded) return;
+  const handleDragStart = useCallback((event) => {
+    setActiveId(event.active.id);
+  }, []);
 
-    // If already matched, unselect
-    const existingMatch = getMatchForLeft(leftId);
-    if (existingMatch) {
-      const newPairs = pairs.filter(([l]) => l !== leftId);
-      setPairs(newPairs);
-      onChange?.(newPairs);
+  const handleDragOver = useCallback((event) => {
+    setOverId(event.over?.id || null);
+  }, []);
+
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    setActiveId(null);
+    setOverId(null);
+
+    if (!over) return;
+
+    const leftId = active.id;
+    const rightId = over.id;
+
+    // Check if this is a valid right item
+    const isValidRight = right_items.some((item) => item.id === rightId);
+    if (!isValidRight) return;
+
+    // Check if right item is already matched (and not allow_many_to_one)
+    if (!allow_many_to_one && getMatchesForRight(rightId).length > 0) {
       return;
     }
 
-    setSelectedLeft(leftId);
-  }, [disabled, isGraded, pairs, onChange]);
-
-  const handleRightClick = useCallback((rightId) => {
-    if (disabled || isGraded || !selectedLeft) return;
-
-    // Check if this right item is already matched (and not allow_many_to_one)
-    if (!allow_many_to_one && getMatchForRight(rightId).length > 0) {
-      return;
-    }
-
-    const newPairs = [...pairs.filter(([l]) => l !== selectedLeft), [selectedLeft, rightId]];
+    // Remove existing match for this left item
+    const newPairs = [...currentPairs.filter(([l]) => l !== leftId), [leftId, rightId]];
     setPairs(newPairs);
     onChange?.(newPairs);
-    setSelectedLeft(null);
-  }, [disabled, isGraded, selectedLeft, pairs, allow_many_to_one, onChange]);
+  }, [currentPairs, right_items, allow_many_to_one, onChange]);
+
+  const handleRemoveMatch = useCallback((leftId) => {
+    if (disabled || isGraded) return;
+    const newPairs = currentPairs.filter(([l]) => l !== leftId);
+    setPairs(newPairs);
+    onChange?.(newPairs);
+  }, [disabled, isGraded, currentPairs, onChange]);
 
   // Get grade status for a pair
   const getPairGrade = (leftId) => {
@@ -98,108 +238,106 @@ export default function MatchingPairs({
     return "incorrect";
   };
 
+  const activeItem = activeId ? left_items.find((item) => item.id === activeId) : null;
+
   return (
     <div id={id} className="v2-matching-pairs">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Left column */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-            Match from here
-          </h4>
-          {left_items.map((item) => {
-            const match = getMatchForLeft(item.id);
-            const pairGrade = getPairGrade(item.id);
-            const isSelected = selectedLeft === item.id;
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          {/* Left column - draggable items */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
+              Drag from here
+            </h4>
+            {left_items.map((item) => {
+              const match = getMatchForLeft(item.id);
+              const pairGrade = getPairGrade(item.id);
+              const isMatched = !!match;
 
-            let itemClass = "border-[var(--border)] bg-[var(--surface-2)]";
-            if (pairGrade === "correct") {
-              itemClass = "border-emerald-500 bg-emerald-500/10";
-            } else if (pairGrade === "incorrect") {
-              itemClass = "border-rose-500 bg-rose-500/10";
-            } else if (isSelected) {
-              itemClass = "border-[var(--primary)] bg-[var(--primary)]/10";
-            } else if (match) {
-              itemClass = "border-blue-500 bg-blue-500/10";
-            }
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleLeftClick(item.id)}
-                disabled={disabled || isGraded}
-                className={`
-                  w-full p-3 rounded-xl border ${itemClass}
-                  text-left text-sm text-[var(--foreground)]
-                  transition-all
-                  ${disabled || isGraded ? "cursor-not-allowed" : "cursor-pointer hover:border-[var(--primary)]/50"}
-                `}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span>{item.content}</span>
-                  {match && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
-                      Matched
-                    </span>
-                  )}
-                  {pairGrade === "correct" && <Check className="w-4 h-4 text-emerald-500" />}
-                  {pairGrade === "incorrect" && <X className="w-4 h-4 text-rose-500" />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
-            Match to here
-          </h4>
-          {shuffledRight.map((item) => {
-            const matches = getMatchForRight(item.id);
-            const isAvailable = allow_many_to_one || matches.length === 0;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleRightClick(item.id)}
-                disabled={disabled || isGraded || !selectedLeft || !isAvailable}
-                className={`
-                  w-full p-3 rounded-xl border
-                  ${
-                    matches.length > 0
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-[var(--border)] bg-[var(--surface-2)]"
-                  }
-                  text-left text-sm text-[var(--foreground)]
-                  transition-all
-                  ${
-                    disabled || isGraded || !selectedLeft || !isAvailable
-                      ? "cursor-not-allowed opacity-75"
-                      : "cursor-pointer hover:border-[var(--primary)]/50"
-                  }
-                `}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span>{item.content}</span>
-                  {matches.length > 0 && (
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      ({matches.length} match{matches.length !== 1 ? "es" : ""})
-                    </span>
+              return (
+                <div key={item.id} className="relative">
+                  <DraggableLeftItem
+                    id={item.id}
+                    content={item.content}
+                    isMatched={isMatched}
+                    pairGrade={pairGrade}
+                    disabled={disabled || isGraded}
+                  />
+                  {/* Remove match button */}
+                  {isMatched && !isGraded && !disabled && (
+                    <button
+                      onClick={() => handleRemoveMatch(item.id)}
+                      className="absolute -right-2 -top-2 p-1 rounded-full bg-[var(--surface-1)] border border-[var(--border)] hover:bg-rose-500/10 hover:border-rose-500/50 transition-colors"
+                      title="Remove match"
+                    >
+                      <X className="w-3 h-3 text-[var(--muted-foreground)]" />
+                    </button>
                   )}
                 </div>
-              </button>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* Right column - droppable items */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-3">
+              Drop to match
+            </h4>
+            {shuffledRight.map((item) => {
+              const matches = getMatchesForRight(item.id);
+              const isAvailable = allow_many_to_one || matches.length === 0;
+
+              return (
+                <DroppableRightItem
+                  key={item.id}
+                  id={item.id}
+                  content={item.content}
+                  matchCount={matches.length}
+                  isAvailable={isAvailable}
+                  isOver={overId === item.id && activeId}
+                  disabled={disabled || isGraded}
+                />
+              );
+            })}
+          </div>
         </div>
-      </div>
+
+        <DragOverlay>
+          {activeItem ? <DragOverlayItem content={activeItem.content} /> : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Instructions */}
       {!isGraded && !disabled && (
         <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-          {selectedLeft
-            ? "Now click an item on the right to complete the match"
-            : "Click an item on the left to select it, then click its match on the right"}
+          Drag items from the left and drop them on their matches on the right
         </p>
+      )}
+
+      {/* Match lines visualization */}
+      {currentPairs.length > 0 && !isGraded && (
+        <div className="mt-3 p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
+          <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">Current matches:</p>
+          <div className="space-y-1">
+            {currentPairs.map(([leftId, rightId]) => {
+              const leftItem = left_items.find((i) => i.id === leftId);
+              const rightItem = right_items.find((i) => i.id === rightId);
+              return (
+                <div key={leftId} className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+                  <span className="truncate max-w-[40%]">{leftItem?.content}</span>
+                  <Link2 className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                  <span className="truncate max-w-[40%]">{rightItem?.content}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Grade feedback */}

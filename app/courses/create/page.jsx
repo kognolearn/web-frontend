@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
+import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import DurationInput from "@/components/ui/DurationInput";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
@@ -25,7 +26,10 @@ import {
   scoreToFamiliarityBand
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
+import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
 import { motion } from "framer-motion";
+import { getRedirectDestination } from "@/lib/platform";
+import { useGuidedTour } from "@/components/tour";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
@@ -467,12 +471,59 @@ function buildCurrentModulesPayload(overviewTopics) {
 function CreateCoursePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { userSettings, updateUserSettings } = useOnboarding();
+  const { startTour, isTourActive, currentTour, endTour } = useGuidedTour();
+  const isCourseCreationTourEnabled = false;
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const nextWeek = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     return toDateInputValue(d);
   }, []);
+
+  // UI mode: 'wizard' or 'chat' - read from localStorage on mount
+  const [uiMode, setUiMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kogno_course_create_ui_mode');
+      return saved === 'wizard' ? 'wizard' : 'chat'; // Default to chat
+    }
+    return 'chat';
+  });
+
+  // Persist UI mode preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kogno_course_create_ui_mode', uiMode);
+    }
+  }, [uiMode]);
+
+  const shouldStartCourseCreationTour =
+    isCourseCreationTourEnabled &&
+    Boolean(userSettings && !userSettings.tour_completed && (!userSettings.tour_phase || userSettings.tour_phase === "course-creation"));
+
+  useEffect(() => {
+    if (isCourseCreationTourEnabled) return;
+    if (currentTour === "course-creation") {
+      endTour(false);
+    }
+  }, [isCourseCreationTourEnabled, currentTour, endTour]);
+
+  useEffect(() => {
+    if (!shouldStartCourseCreationTour) return;
+
+    if (uiMode !== "chat") {
+      setUiMode("chat");
+    }
+
+    if (!isTourActive || currentTour !== "course-creation") {
+      startTour("course-creation");
+    }
+
+    if (userSettings?.tour_phase !== "course-creation") {
+      updateUserSettings({ tour_phase: "course-creation" });
+    }
+  }, [shouldStartCourseCreationTour, uiMode, isTourActive, currentTour, startTour, updateUserSettings, userSettings]);
+
   const [studyHours, setStudyHours] = useState(5);
   const [studyMinutes, setStudyMinutes] = useState(0);
   const [studyTimeError, setStudyTimeError] = useState(false);
@@ -488,6 +539,7 @@ function CreateCoursePageContent() {
   // Course title and optional university
   const [courseTitle, setCourseTitle] = useState("");
   const [collegeName, setCollegeName] = useState("");
+  const [savedSchool, setSavedSchool] = useState("");
   const [prefillApplied, setPrefillApplied] = useState(false);
   const [courseId, setCourseId] = useState(null);
 
@@ -536,6 +588,9 @@ function CreateCoursePageContent() {
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [userId, setUserId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
+  const [contentVersion, setContentVersion] = useState(1);
 
   const [isTopicsLoading, setIsTopicsLoading] = useState(false);
   const [topicsError, setTopicsError] = useState(null);
@@ -565,8 +620,19 @@ function CreateCoursePageContent() {
     [overviewTopics]
   );
 
+  const trimmedCourseTitle = courseTitle.trim();
+  const trimmedCollegeName = collegeName.trim();
+  const savedSchoolName = savedSchool.trim();
+  const hasSavedSchool = Boolean(savedSchoolName);
+  const collegePromptName = trimmedCollegeName || savedSchoolName;
+  const coursePrompt = trimmedCourseTitle
+    ? hasSavedSchool && collegePromptName
+      ? `${trimmedCourseTitle} at ${collegePromptName}, right?`
+      : `Great! And where are you taking ${trimmedCourseTitle}?`
+    : "";
+
   const hasStudyTime = studyHours > 0 || studyMinutes > 0;
-  const canProceedFromStep1 = courseTitle.trim() && collegeName.trim();
+  const canProceedFromStep1 = Boolean(trimmedCourseTitle && trimmedCollegeName);
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
@@ -654,6 +720,8 @@ function CreateCoursePageContent() {
     setPrefillApplied(true);
   }, [prefillApplied, searchParams]);
 
+
+
   useEffect(() => {
     let active = true;
     const loadUser = async () => {
@@ -670,9 +738,12 @@ function CreateCoursePageContent() {
         setAuthStatus("ready");
         
         // Pre-fill college name from user's saved school if not already set
-        const savedSchool = user.user_metadata?.school;
-        if (savedSchool && !collegeName) {
-          setCollegeName(savedSchool);
+        const savedSchool = typeof user.user_metadata?.school === "string"
+          ? user.user_metadata.school.trim()
+          : "";
+        setSavedSchool(savedSchool);
+        if (savedSchool) {
+          setCollegeName((prev) => (prev ? prev : savedSchool));
         }
       } catch (error) {
         if (!active) return;
@@ -685,6 +756,40 @@ function CreateCoursePageContent() {
       active = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch("/api/admin/status");
+        if (!res.ok) {
+          throw new Error(`Failed to verify admin (${res.status})`);
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          const admin = body?.isAdmin === true;
+          setIsAdmin(admin);
+          if (!admin) {
+            setContentVersion(1);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check admin status:", err);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setContentVersion(1);
+        }
+      } finally {
+        if (!cancelled) setHasCheckedAdmin(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const handleCourseInputChange = useCallback((event) => {
     setCourseTitle(event.target.value);
@@ -1391,9 +1496,9 @@ function CreateCoursePageContent() {
     const redirectToDashboard = () => {
       if (navigationTriggered) return;
       navigationTriggered = true;
-      
-      // Navigate to dashboard first
-      router.push("/dashboard");
+
+      // Desktop app users go to dashboard, web users go to download
+      router.push(getRedirectDestination("/dashboard"));
       
       // Dispatch multiple refresh events spaced 1 second apart to ensure the dashboard picks up the new course
       // This is needed because on production, the initial event may fire before the dashboard is ready
@@ -1458,14 +1563,11 @@ function CreateCoursePageContent() {
         // Pass rag_session_id if available from topics generation for RAG context continuity
         ...(ragSessionId && { rag_session_id: ragSessionId }),
       };
-
       if (Object.keys(topicFamiliarityMap).length === 0) {
         delete payload.topicFamiliarity;
       }
 
       payload.exam_details = examDetailsPayload;
-
-      redirectToDashboard();
 
       if (syllabusFiles.length > 0) {
         safeSetCourseGenerationMessage("Encoding syllabus materials…");
@@ -1494,11 +1596,11 @@ function CreateCoursePageContent() {
       const secondsToComplete = (studyHours * 3600) + (studyMinutes * 60);
       payload.seconds_to_complete = secondsToComplete;
 
-      // Enable V2 section-based content pipeline
-      payload.content_version = 2;
+      const resolvedContentVersion = hasCheckedAdmin && isAdmin ? contentVersion : 1;
+      payload.content_version = resolvedContentVersion;
 
       console.log("[CreateCourse] About to fetch /api/courses");
-      const baseUrl = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
       const response = await authFetch(`${baseUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1524,6 +1626,12 @@ function CreateCoursePageContent() {
           window.dispatchEvent(new Event("courses:updated"));
         } catch {}
       }
+
+      if (isCourseCreationTourEnabled && userSettings && !userSettings.tour_completed) {
+        await updateUserSettings({ tour_completed: true, tour_phase: "course-creation" });
+      }
+
+      redirectToDashboard();
 
       // Course created successfully - dispatch additional refresh events
       // The redirect already happened earlier, but send more events to ensure dashboard refreshes
@@ -1563,9 +1671,15 @@ function CreateCoursePageContent() {
     ragSessionId,
     resolveSubtopicConfidence,
     router,
+    contentVersion,
+    hasCheckedAdmin,
+    isAdmin,
     studyMode,
     studyHours,
     studyMinutes,
+    userSettings,
+    updateUserSettings,
+    isCourseCreationTourEnabled,
   ]);
 
   // Floating Navigation Logic
@@ -1606,7 +1720,8 @@ function CreateCoursePageContent() {
   const showFloatingNav = !navVisibility.top && !navVisibility.bottom;
 
   const handleFloatingBack = () => {
-    if (currentStep === 1) router.push("/dashboard");
+    // Desktop app users go to dashboard, web users go to download
+    if (currentStep === 1) router.push(getRedirectDestination("/dashboard"));
     else setCurrentStep(prev => prev - 1);
   };
 
@@ -1643,6 +1758,17 @@ function CreateCoursePageContent() {
 
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
+  // Show chat-based UI if uiMode is 'chat'
+  if (uiMode === 'chat') {
+    return (
+      <ConversationalCourseUI
+        onComplete={() => router.push('/dashboard')}
+        onBack={() => router.push('/dashboard')}
+        onSwitchToWizard={() => setUiMode('wizard')}
+      />
+    );
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] py-8 text-[var(--foreground)] transition-colors">
       {/* Animated background */}
@@ -1654,15 +1780,27 @@ function CreateCoursePageContent() {
       <div className={`relative mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${totalSubtopics > 0 && currentStep === 3 ? "max-w-[90rem]" : "max-w-5xl"}`}>
         {/* Header */}
         <div className="mb-6">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-4"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to dashboard
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={() => setUiMode('chat')}
+              className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Switch to Chat Mode
+            </button>
+          </div>
           <h1 className="text-2xl font-bold sm:text-3xl mb-1">Create New Course</h1>
           <p className="text-sm text-[var(--muted-foreground)]">Build your personalized learning plan in 3 simple steps</p>
         </div>
@@ -2489,29 +2627,66 @@ Series & convergence"
                   </svg>
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateCourse}
-                  disabled={!canProceedFromStep3 || courseGenerating}
-                  className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {courseGenerating ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      Create Course
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </>
+                <div className="flex items-center gap-3">
+                  {hasCheckedAdmin && isAdmin && (
+                    <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                        Content
+                      </span>
+                      <div className="inline-flex rounded-md bg-[var(--surface-1)] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setContentVersion(1)}
+                          disabled={courseGenerating}
+                          aria-pressed={contentVersion === 1}
+                          className={`px-2 py-1 text-[11px] font-semibold rounded transition ${
+                            contentVersion === 1
+                              ? "bg-[var(--primary)] text-white shadow-sm"
+                              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          v1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContentVersion(2)}
+                          disabled={courseGenerating}
+                          aria-pressed={contentVersion === 2}
+                          className={`px-2 py-1 text-[11px] font-semibold rounded transition ${
+                            contentVersion === 2
+                              ? "bg-[var(--primary)] text-white shadow-sm"
+                              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          v2
+                        </button>
+                      </div>
+                    </div>
                   )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateCourse}
+                    disabled={!canProceedFromStep3 || courseGenerating}
+                    className="btn btn-primary btn-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {courseGenerating ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        Create Course
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
             </div>

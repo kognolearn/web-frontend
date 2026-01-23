@@ -1,0 +1,52 @@
+# Kogno - AI-Powered Learning Platform
+
+## About Kogno
+Kogno is an AI-powered learning platform that helps students study smarter, not harder. We provide personalized courses, practice exams, cheatsheets, and flashcards that adapt to your learning style.
+
+## Key Features
+- AI-generated courses from any topic or document
+- Adaptive practice exams with instant feedback
+- Smart cheatsheets and study summaries
+- Interactive flashcard decks
+- Progress tracking and analytics
+- Multi-platform desktop app (Windows, macOS, Linux)
+
+## Public Pages
+- Homepage: https://kogno.ai
+- Download App: https://kogno.ai/download
+- LaTeX Reference: https://kogno.ai/help/latex
+- Sign In: https://kogno.ai/auth/sign-in
+- Create Account: https://kogno.ai/auth/create-account
+
+## How It Works
+1. Upload your course materials or describe what you want to learn
+2. Kogno's AI generates a personalized study plan
+3. Learn through interactive lessons, quizzes, and practice problems
+4. Track your progress and identify areas for improvement
+5. Generate practice exams to test your knowledge
+
+## Target Users
+- University and college students
+- High school students
+- Self-learners and professionals
+- Anyone preparing for exams
+
+## Subject Areas
+Kogno supports all academic subjects including:
+- Mathematics and Statistics
+- Physics and Engineering
+- Computer Science
+- Biology and Chemistry
+- Economics and Business
+- Humanities and Social Sciences
+
+## Contact
+Website: https://kogno.ai
+Support: support@kogno.ai
+
+## Technical Information
+- Built with Next.js and React
+- Desktop app built with Electron
+- Available on Windows, macOS (Intel and Apple Silicon), and Linux
+
+Last updated: 2025

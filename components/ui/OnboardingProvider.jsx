@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { fetchUserSettings, patchUserSettings } from "@/lib/userSettings";
 
 const STORAGE_KEY = "kogno_onboarding_dismissed";
 const MIN_TIME_BETWEEN_TOOLTIPS = 600; // Minimum ms between tooltip transitions
@@ -15,17 +16,22 @@ const OnboardingContext = createContext({
   activeTooltip: null,
   requestTooltip: () => {},
   releaseTooltip: () => {},
+  userSettings: null,
+  refreshUserSettings: () => {},
+  updateUserSettings: () => Promise.resolve(null),
 });
 
 export function OnboardingProvider({ children }) {
   const [dismissedTooltips, setDismissedTooltips] = useState(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   const [isNewUser, setIsNewUser] = useState(true);
+  const [userSettings, setUserSettings] = useState(null);
   
   // Queue system for tooltips - only one shows at a time
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [tooltipQueue, setTooltipQueue] = useState([]);
   const lastTooltipTime = useRef(0);
+  const timeoutIdsRef = useRef(new Set());
   
   // Use refs to avoid stale closures
   const activeTooltipRef = useRef(null);
@@ -39,6 +45,28 @@ export function OnboardingProvider({ children }) {
   useEffect(() => {
     tooltipQueueRef.current = tooltipQueue;
   }, [tooltipQueue]);
+
+  const scheduleTimeout = useCallback((fn, delay) => {
+    const id = setTimeout(() => {
+      timeoutIdsRef.current.delete(id);
+      fn();
+    }, delay);
+    timeoutIdsRef.current.add(id);
+    return id;
+  }, []);
+
+  const clearScheduledTimeout = useCallback((id) => {
+    if (!id) return;
+    clearTimeout(id);
+    timeoutIdsRef.current.delete(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      timeoutIdsRef.current.forEach((id) => clearTimeout(id));
+      timeoutIdsRef.current.clear();
+    };
+  }, []);
 
   // Load dismissed tooltips from localStorage
   useEffect(() => {
@@ -71,6 +99,49 @@ export function OnboardingProvider({ children }) {
     }
   }, [dismissedTooltips, isNewUser, isLoaded]);
 
+  const refreshUserSettings = useCallback(async () => {
+    try {
+      const settings = await fetchUserSettings();
+      if (!settings) {
+        return null;
+      }
+      setUserSettings(settings);
+      if (typeof settings.tour_completed === "boolean") {
+        setIsNewUser(!settings.tour_completed);
+      }
+      if (settings.tour_completed && typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("kogno_tour_state");
+        } catch (e) {
+          console.error("Failed to clear tour state:", e);
+        }
+      }
+      return settings;
+    } catch (e) {
+      console.error("Failed to load user settings:", e);
+      return null;
+    }
+  }, []);
+
+  const updateUserSettings = useCallback(async (updates) => {
+    try {
+      const nextSettings = await patchUserSettings(updates);
+      if (!nextSettings) return null;
+      setUserSettings(nextSettings);
+      if (typeof nextSettings.tour_completed === "boolean") {
+        setIsNewUser(!nextSettings.tour_completed);
+      }
+      return nextSettings;
+    } catch (e) {
+      console.error("Failed to update user settings:", e);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUserSettings();
+  }, [refreshUserSettings]);
+
   // Process the queue to show next tooltip
   const processQueue = useCallback(() => {
     // Already have an active tooltip - wait
@@ -87,7 +158,7 @@ export function OnboardingProvider({ children }) {
     
     if (timeSinceLastTooltip < MIN_TIME_BETWEEN_TOOLTIPS) {
       // Schedule retry after remaining time
-      setTimeout(processQueue, MIN_TIME_BETWEEN_TOOLTIPS - timeSinceLastTooltip + 50);
+      scheduleTimeout(processQueue, MIN_TIME_BETWEEN_TOOLTIPS - timeSinceLastTooltip + 50);
       return;
     }
     
@@ -105,10 +176,10 @@ export function OnboardingProvider({ children }) {
   // Process queue when active tooltip is cleared or queue changes
   useEffect(() => {
     if (!activeTooltip && tooltipQueue.length > 0 && isLoaded) {
-      const timer = setTimeout(processQueue, 100);
-      return () => clearTimeout(timer);
+      const timer = scheduleTimeout(processQueue, 100);
+      return () => clearScheduledTimeout(timer);
     }
-  }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue]);
+  }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue, scheduleTimeout, clearScheduledTimeout]);
 
   // Request to show a tooltip (adds to queue with priority)
   const requestTooltip = useCallback((tooltipId, priority = 10) => {
@@ -122,8 +193,8 @@ export function OnboardingProvider({ children }) {
     });
     
     // Trigger queue processing after a short delay
-    setTimeout(processQueue, 50);
-  }, [processQueue]);
+    scheduleTimeout(processQueue, 50);
+  }, [processQueue, scheduleTimeout]);
 
   // Release a tooltip (either dismissed or component unmounted)
   const releaseTooltip = useCallback((tooltipId) => {
@@ -174,6 +245,9 @@ export function OnboardingProvider({ children }) {
         activeTooltip,
         requestTooltip,
         releaseTooltip,
+        userSettings,
+        refreshUserSettings,
+        updateUserSettings,
       }}
     >
       {children}

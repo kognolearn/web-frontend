@@ -1,6 +1,45 @@
 import { NextResponse } from "next/server";
 
-const BASE_URL = process.env.BACKEND_API_URL || "https://api.kognolearn.com";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://api.kognolearn.com";
+
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token).split(".");
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+
+    let json;
+    if (typeof globalThis.atob === "function") {
+      json = globalThis.atob(padded);
+    } else if (typeof Buffer !== "undefined") {
+      json = Buffer.from(padded, "base64").toString("utf8");
+    } else {
+      return null;
+    }
+
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function maybeInjectUserId(url, request) {
+  // Local backend expects userId in query; if caller didn't include it,
+  // try to infer it from the Supabase JWT (sub).
+  if (url.searchParams.get("userId")) return;
+
+  const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
+  const match = authHeader && authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return;
+
+  const payload = decodeJwtPayload(match[1]);
+  const userId = payload?.sub;
+  if (typeof userId === "string" && userId.trim()) {
+    url.searchParams.set("userId", userId.trim());
+  }
+}
 
 function decodeJwtPayload(token) {
   try {

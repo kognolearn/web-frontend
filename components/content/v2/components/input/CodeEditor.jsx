@@ -1,10 +1,58 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Copy, Check, RotateCcw } from "lucide-react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
+import { Copy, Check, RotateCcw, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
+import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-10 text-xs text-[var(--muted-foreground)]">
+      Loading editor...
+    </div>
+  ),
+});
+
+const languageMap = {
+  c: "c",
+  cpp: "cpp",
+  "c++": "cpp",
+  "c/c++": "cpp",
+  python: "python",
+  py: "python",
+  javascript: "javascript",
+  js: "javascript",
+  typescript: "typescript",
+  ts: "typescript",
+  java: "java",
+  csharp: "csharp",
+  "c#": "csharp",
+  go: "go",
+  rust: "rust",
+  ruby: "ruby",
+  php: "php",
+  swift: "swift",
+  kotlin: "kotlin",
+  sql: "sql",
+  html: "html",
+  css: "css",
+  json: "json",
+  xml: "xml",
+  yaml: "yaml",
+  markdown: "markdown",
+  shell: "shell",
+  bash: "shell",
+  html_css: "html",
+  latex: "plaintext",
+  tex: "plaintext",
+  text: "plaintext",
+  plaintext: "plaintext",
+};
 
 /**
- * CodeEditor - Code input with syntax highlighting (basic)
+ * CodeEditor - Code input with Monaco editor
  *
  * @param {Object} props
  * @param {string} props.id - Component ID
@@ -32,13 +80,32 @@ export default function CodeEditor({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
-  const textareaRef = useRef(null);
-  const lineNumbersRef = useRef(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { theme: appTheme } = useTheme();
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const decorationsRef = useRef([]);
 
   const currentValue = value !== undefined ? value : localValue;
 
-  const handleChange = useCallback((e) => {
-    const newValue = e.target.value;
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
+
+  const editorTheme =
+    editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
+
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      readOnly: disabled || isGraded,
+      domReadOnly: disabled || isGraded,
+    };
+  }, [getMonacoOptions, disabled, isGraded]);
+
+  const handleChange = useCallback((nextValue) => {
+    const newValue = nextValue ?? "";
     setLocalValue(newValue);
     onChange?.(newValue);
   }, [onChange]);
@@ -58,56 +125,76 @@ export default function CodeEditor({
     }
   };
 
-  // Sync scroll between line numbers and textarea
-  const handleScroll = (e) => {
-    if (lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = e.target.scrollTop;
-    }
-  };
+  const applyReadonlyDecorations = useCallback(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
 
-  // Handle tab key for indentation
-  const handleKeyDown = (e) => {
-    if (disabled || isGraded) return;
+    const maxLine = model.getLineCount();
+    const decorationLines = (readonly_lines || [])
+      .map((line) => Number(line))
+      .filter((line) => Number.isInteger(line) && line > 0 && line <= maxLine);
 
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const start = e.target.selectionStart;
-      const end = e.target.selectionEnd;
+    const decorations = decorationLines.map((line) => ({
+      range: new monacoRef.current.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: "monaco-readonly-line",
+        linesDecorationsClassName: "monaco-readonly-line-margin",
+      },
+    }));
 
-      const newValue =
-        currentValue.substring(0, start) + "  " + currentValue.substring(end);
+    decorationsRef.current = editorRef.current.deltaDecorations(
+      decorationsRef.current,
+      decorations,
+    );
+  }, [readonly_lines]);
 
-      setLocalValue(newValue);
-      onChange?.(newValue);
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    applyReadonlyDecorations();
+  }, [applyReadonlyDecorations]);
 
-      // Set cursor position after tab
-      setTimeout(() => {
-        e.target.selectionStart = e.target.selectionEnd = start + 2;
-      }, 0);
-    }
-  };
-
-  // Calculate line numbers
-  const lines = currentValue.split("\n");
-  const lineCount = lines.length;
+  useEffect(() => {
+    applyReadonlyDecorations();
+  }, [applyReadonlyDecorations, currentValue]);
 
   // Determine border color based on grade
   let borderClass = "border-[var(--border)]";
   if (isGraded && grade) {
     if (grade.status === "correct" || grade.passed) {
-      borderClass = "border-emerald-500";
+      borderClass = "border-success";
     } else if (grade.status === "incorrect" || grade.passed === false) {
-      borderClass = "border-rose-500";
+      borderClass = "border-danger";
     }
   }
+
+  // Check if this is a text/math-friendly language
+  const isLatexFriendly = ["markdown", "latex", "tex", "text", "plaintext"].includes(
+    rawLanguage
+  );
 
   return (
     <div id={id} className="v2-code-editor">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--surface-2)]">
-        <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-          {language}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
+            {rawLanguage}
+          </span>
+          {isLatexFriendly && (
+            <a
+              href="/help/latex"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+            >
+              Supports LaTeX math notation
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {initial_code && !isGraded && (
             <button
@@ -128,7 +215,7 @@ export default function CodeEditor({
           >
             {copied ? (
               <>
-                <Check className="w-3 h-3 text-emerald-500" />
+                <Check className="w-3 h-3 text-success" />
                 Copied
               </>
             ) : (
@@ -138,65 +225,63 @@ export default function CodeEditor({
               </>
             )}
           </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg
+              hover:bg-[var(--surface-1)] transition-colors"
+            title={isExpanded ? "Collapse editor" : "Expand editor"}
+          >
+            {isExpanded ? (
+              <>
+                <Minimize2 className="w-3 h-3" />
+                Collapse
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3 h-3" />
+                Expand
+              </>
+            )}
+          </button>
         </div>
       </div>
 
       {/* Editor */}
-      <div className={`relative rounded-b-xl border ${borderClass} overflow-hidden`}>
-        <div className="flex">
-          {/* Line numbers */}
-          <div
-            ref={lineNumbersRef}
-            className="flex-shrink-0 p-3 bg-[var(--surface-2)] text-right select-none overflow-hidden"
-            style={{ width: "3rem" }}
-          >
-            {Array.from({ length: lineCount }, (_, i) => (
-              <div
-                key={i + 1}
-                className={`text-xs leading-6 font-mono ${
-                  readonly_lines.includes(i + 1)
-                    ? "text-amber-500"
-                    : "text-[var(--muted-foreground)]"
-                }`}
-              >
-                {i + 1}
-              </div>
-            ))}
-          </div>
-
-          {/* Code textarea */}
-          <textarea
-            ref={textareaRef}
-            value={currentValue}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onScroll={handleScroll}
-            disabled={disabled || isGraded}
-            spellCheck={false}
-            className={`
-              flex-1 p-3 font-mono text-sm leading-6
-              bg-[var(--surface-1)] text-[var(--foreground)]
-              focus:outline-none
-              disabled:opacity-50 disabled:cursor-not-allowed
-              resize-none min-h-[200px]
-              overflow-auto whitespace-pre
-            `}
-            style={{ tabSize: 2 }}
-          />
-        </div>
+      <div className={`relative rounded-b-xl border ${borderClass} overflow-hidden bg-[var(--surface-1)]`}>
+        <MonacoEditor
+          value={currentValue}
+          onChange={handleChange}
+          language={resolvedLanguage}
+          height={isExpanded ? 560 : 280}
+          theme={editorTheme}
+          options={monacoOptions}
+          onMount={handleEditorDidMount}
+        />
       </div>
+
+      {/* Execution error display */}
+      {isGraded && (grade?.stderr || grade?.error) && (
+        <div className="mt-3 rounded-xl border border-danger bg-danger/5 p-4 space-y-2">
+          <span className="text-xs font-medium text-danger uppercase tracking-wide">
+            {grade.error ? "Error" : "Execution Error"}
+          </span>
+          <pre className="p-3 rounded-lg bg-danger/10 font-mono text-xs text-danger overflow-x-auto whitespace-pre-wrap">
+            {grade.error || grade.stderr}
+          </pre>
+        </div>
+      )}
 
       {/* Grade feedback */}
       {isGraded && grade?.feedback && (
         <div className={`mt-3 p-3 rounded-xl border ${
           grade.status === "correct" || grade.passed
-            ? "border-emerald-500/30 bg-emerald-500/10"
-            : "border-rose-500/30 bg-rose-500/10"
+            ? "border-success/50 bg-success/10"
+            : "border-danger/50 bg-danger/10"
         }`}>
           <p className={`text-sm ${
             grade.status === "correct" || grade.passed
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-rose-600 dark:text-rose-400"
+              ? "text-success"
+              : "text-danger"
           }`}>
             {grade.feedback}
           </p>

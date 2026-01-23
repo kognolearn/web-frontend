@@ -5,6 +5,7 @@ import { MathJax } from "better-react-mathjax";
 import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
 import { authFetch } from "@/lib/api";
+import { Callout, RevealBlock, TabGroup, VideoEmbed } from "@/components/content/v2/components/display";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -95,19 +96,19 @@ function normalizeInlineSelections(input) {
 function shuffleWithMapping(array, seed) {
   const indices = array.map((_, i) => i);
   const shuffledIndices = [...indices];
-  
+
   for (let i = shuffledIndices.length - 1; i > 0; i--) {
     const j = Math.floor(seededRandom(seed + i) * (i + 1));
     [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
   }
-  
+
   const shuffled = shuffledIndices.map(i => array[i]);
   const shuffledToOriginal = {};
-  
+
   shuffledIndices.forEach((originalIdx, shuffledIdx) => {
     shuffledToOriginal[shuffledIdx] = originalIdx;
   });
-  
+
   return { shuffled, shuffledToOriginal };
 }
 
@@ -119,10 +120,10 @@ function parseTableCells(rowContent) {
   let current = '';
   let inBacktick = false;
   let i = 0;
-  
+
   while (i < rowContent.length) {
     const char = rowContent[i];
-    
+
     // Track backtick state for inline code
     if (char === '`') {
       inBacktick = !inBacktick;
@@ -130,14 +131,14 @@ function parseTableCells(rowContent) {
       i++;
       continue;
     }
-    
+
     // Handle escaped pipe
     if (char === '\\' && i + 1 < rowContent.length && rowContent[i + 1] === '|') {
       current += '|';
       i += 2;
       continue;
     }
-    
+
     // Handle cell delimiter (only when not inside backticks)
     if (char === '|' && !inBacktick) {
       cells.push(current.trim());
@@ -145,17 +146,235 @@ function parseTableCells(rowContent) {
       i++;
       continue;
     }
-    
+
     current += char;
     i++;
   }
-  
+
   // Don't forget the last cell
   if (current.length > 0 || cells.length > 0) {
     cells.push(current.trim());
   }
-  
+
   return cells;
+}
+
+function parseImageBlock(lines, startIdx) {
+  let i = startIdx + 1;
+  const fields = {};
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
+    if (/^:::/i.test(line)) {
+      i++;
+      break;
+    }
+
+    const match = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+    if (match) {
+      fields[match[1].toLowerCase()] = match[2].trim();
+    }
+    i++;
+  }
+
+  if (!fields.url) {
+    return null;
+  }
+
+  return {
+    type: "image",
+    url: fields.url,
+    fullUrl: fields.full_url || fields.fullurl,
+    caption: fields.caption || "",
+    alt: fields.alt || "",
+    author: fields.author || "",
+    license: fields.license || "",
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a video block in the format:
+ * :::video
+ * url: https://youtube.com/...
+ * title: Video Title
+ * caption: Video caption
+ * :::
+ */
+function parseVideoBlock(lines, startIdx) {
+  let i = startIdx + 1;
+  const fields = {};
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
+    if (/^:::/.test(line)) {
+      i++;
+      break;
+    }
+
+    const match = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+    if (match) {
+      fields[match[1].toLowerCase()] = match[2].trim();
+    }
+    i++;
+  }
+
+  if (!fields.url) {
+    return null;
+  }
+
+  return {
+    type: "embedded_video",
+    url: fields.url,
+    title: fields.title || "",
+    caption: fields.caption || "",
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a callout block in the format:
+ * :::callout{type="info"}
+ * Content goes here
+ * :::
+ */
+function parseCalloutBlock(lines, startIdx, attrs) {
+  let i = startIdx + 1;
+  const contentLines = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  // Parse attributes: type="info", title="My Title", collapsible
+  const typeMatch = attrs.match(/type\s*=\s*["']([^"']+)["']/i);
+  const titleMatch = attrs.match(/title\s*=\s*["']([^"']+)["']/i);
+  const collapsible = /collapsible/i.test(attrs);
+
+  return {
+    type: "callout",
+    calloutType: typeMatch?.[1] || "info",
+    title: titleMatch?.[1] || "",
+    content: contentLines.join("\n").trim(),
+    collapsible,
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a reveal block in the format:
+ * :::reveal{label="Show Solution"}
+ * Hidden content goes here
+ * :::
+ */
+function parseRevealBlock(lines, startIdx, attrs) {
+  let i = startIdx + 1;
+  const contentLines = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  // Parse attributes: label="Show Hint"
+  const labelMatch = attrs.match(/label\s*=\s*["']([^"']+)["']/i);
+
+  return {
+    type: "reveal",
+    label: labelMatch?.[1] || "Show",
+    content: contentLines.join("\n").trim(),
+    endIdx: i,
+  };
+}
+
+/**
+ * Parse a tab group in the format:
+ * :::tabs
+ * :::tab{label="Tab 1"}
+ * Tab 1 content
+ * :::tab{label="Tab 2"}
+ * Tab 2 content
+ * :::
+ */
+function parseTabGroup(lines, startIdx) {
+  let i = startIdx + 1;
+  const tabs = [];
+  let currentTab = null;
+  let currentContent = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // End of entire tab group
+    if (/^:::$/.test(trimmed) || (/^:::/.test(trimmed) && !/^:::tab/i.test(trimmed))) {
+      // Save last tab if any
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      i++;
+      break;
+    }
+
+    // Start of a new tab
+    const tabMatch = trimmed.match(/^:::tab\s*\{([^}]*)\}/i);
+    if (tabMatch) {
+      // Save previous tab if any
+      if (currentTab) {
+        tabs.push({
+          ...currentTab,
+          content: currentContent.join("\n").trim(),
+        });
+      }
+      // Parse tab attributes: label="Tab Label"
+      const labelMatch = tabMatch[1].match(/label\s*=\s*["']([^"']+)["']/i);
+      currentTab = {
+        id: `tab-${tabs.length}`,
+        label: labelMatch?.[1] || `Tab ${tabs.length + 1}`,
+      };
+      currentContent = [];
+      i++;
+      continue;
+    }
+
+    // Add line to current tab content
+    if (currentTab) {
+      currentContent.push(line);
+    }
+    i++;
+  }
+
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  return {
+    type: "tab_group",
+    tabs,
+    endIdx: i,
+  };
 }
 
 /**
@@ -164,35 +383,35 @@ function parseTableCells(rowContent) {
  */
 function parseContent(content) {
   if (!content) return [];
-  
+
   console.log('ReadingRenderer raw content:', content.slice(0, 200));
 
   // Content should already have proper newlines from JSON parsing
   // Only normalize Windows line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
+
   // Normalize double-escaped backslashes from JSON and decode HTML entities
   // This handles cases where content has \\( instead of \( for inline math
   // We use normalizeText for this now, which handles both HTML entities and LaTeX
   normalizedContent = normalizeText(normalizedContent);
-  
+
   // Ensure code block closing markers are on their own line
   // This handles cases like "```\n**Check Your Understanding**" where there's no blank line
   normalizedContent = normalizedContent.replace(/(```)\s*(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
-  
+
   // Handle Check Your Understanding blocks that are concatenated to previous text
   // Insert a newline before **Check Your Understanding** if it's not at the start of a line
   normalizedContent = normalizedContent.replace(/([^\n])(\*\*Check Your Understanding\*\*)/gi, '$1\n\n$2');
-  
+
   // Also ensure there's a blank line after code blocks before Check Your Understanding
   // Handles: ```\nsome content\n```\n**Check -> need blank line before **Check
   normalizedContent = normalizedContent.replace(/(```\n)(\*\*Check Your Understanding\*\*)/gi, '$1\n$2');
-  
+
   const blocks = [];
   const lines = normalizedContent.split("\n");
-  
+
   let i = 0;
-  
+
   // Helper to consume lines for multi-line blocks
   const consumeUntil = (startIdx, endCondition) => {
     const collected = [];
@@ -203,17 +422,68 @@ function parseContent(content) {
     }
     return { collected, endIdx: j };
   };
-  
+
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
-    
+
     // Empty line
     if (!trimmed) {
       i++;
       continue;
     }
-    
+
+    if (/^:::\s*image/i.test(trimmed)) {
+      const imageBlock = parseImageBlock(lines, i);
+      if (imageBlock) {
+        blocks.push(imageBlock);
+        i = imageBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Video block (:::video)
+    if (/^:::\s*video/i.test(trimmed)) {
+      const videoBlock = parseVideoBlock(lines, i);
+      if (videoBlock) {
+        blocks.push(videoBlock);
+        i = videoBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Callout block (:::callout{type="info"})
+    const calloutMatch = trimmed.match(/^:::\s*callout\s*\{([^}]*)\}/i);
+    if (calloutMatch) {
+      const calloutBlock = parseCalloutBlock(lines, i, calloutMatch[1]);
+      if (calloutBlock) {
+        blocks.push(calloutBlock);
+        i = calloutBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Reveal block (:::reveal{label="Show"})
+    const revealMatch = trimmed.match(/^:::\s*reveal\s*\{([^}]*)\}/i);
+    if (revealMatch) {
+      const revealBlock = parseRevealBlock(lines, i, revealMatch[1]);
+      if (revealBlock) {
+        blocks.push(revealBlock);
+        i = revealBlock.endIdx;
+        continue;
+      }
+    }
+
+    // Tab group (:::tabs)
+    if (/^:::\s*tabs/i.test(trimmed)) {
+      const tabGroupBlock = parseTabGroup(lines, i);
+      if (tabGroupBlock) {
+        blocks.push(tabGroupBlock);
+        i = tabGroupBlock.endIdx;
+        continue;
+      }
+    }
+
     // Question block (starts with "Question:" or "**Question:**" or "**Check Your Understanding**")
     if (/^(\*\*)?Question:?\*?\*?/i.test(trimmed) || /^\*\*Check Your Understanding\*\*/i.test(trimmed)) {
       console.log('[ReadingRenderer] Detected Check Your Understanding block:', lines.slice(i, i + 20).join('\n'));
@@ -224,7 +494,7 @@ function parseContent(content) {
         continue;
       }
     }
-    
+
     // Headings
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
@@ -236,7 +506,7 @@ function parseContent(content) {
       i++;
       continue;
     }
-    
+
     // Bold headings (like **The Binary System (Base 2)**)
     const boldHeadingMatch = trimmed.match(/^\*\*([^*]+)\*\*$/);
     if (boldHeadingMatch && !trimmed.includes(":")) {
@@ -248,7 +518,7 @@ function parseContent(content) {
       i++;
       continue;
     }
-    
+
     // Blockquote / Callout (starts with >)
     if (trimmed.startsWith(">")) {
       const quoteLines = [];
@@ -270,7 +540,7 @@ function parseContent(content) {
       });
       continue;
     }
-    
+
     // Table (starts with |)
     if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
       const tableRows = [];
@@ -301,7 +571,7 @@ function parseContent(content) {
       }
       continue;
     }
-    
+
     // Code blocks
     if (trimmed.startsWith("```")) {
       const lang = trimmed.slice(3).trim();
@@ -311,25 +581,25 @@ function parseContent(content) {
         const t = l.trim();
         return t.startsWith("```") || /^\*\*Check Your Understanding\*\*/i.test(t);
       });
-      
+
       // Check if we stopped at Check Your Understanding (means no closing ```)
       const stoppedAtQuestion = endIdx < lines.length && /^\*\*Check Your Understanding\*\*/i.test(lines[endIdx].trim());
-      
+
       blocks.push({
         type: "code",
         language: lang,
         content: collected.join("\n"),
       });
-      
+
       // If we stopped at ```, skip past it; if at question, don't skip (let it be parsed)
       i = stoppedAtQuestion ? endIdx : endIdx + 1;
       continue;
     }
-    
+
     // Block math ($$...$$ or \[...\])
     const isDollarBlock = trimmed.startsWith("$$");
     const isBracketBlock = trimmed.startsWith("\\[");
-    
+
     if (isDollarBlock || isBracketBlock) {
       const startMarker = isDollarBlock ? "$$" : "\\[";
       const endMarker = isDollarBlock ? "$$" : "\\]";
@@ -360,14 +630,14 @@ function parseContent(content) {
         continue;
       }
     }
-    
+
     // Lists (unordered and ordered)
     if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
       const isOrdered = /^\d+\./.test(trimmed);
       const listItems = [];
       while (i < lines.length) {
         const currentLine = lines[i].trim();
-        const itemMatch = isOrdered 
+        const itemMatch = isOrdered
           ? currentLine.match(/^\d+\.\s+(.+)$/)
           : currentLine.match(/^[-*]\s+(.+)$/);
         if (itemMatch) {
@@ -387,19 +657,19 @@ function parseContent(content) {
       });
       continue;
     }
-    
+
     // Horizontal rule
     if (/^[-*_]{3,}$/.test(trimmed)) {
       blocks.push({ type: "hr" });
       i++;
       continue;
     }
-    
+
     // Details/Summary (collapsible)
     if (trimmed.startsWith("<details>") || trimmed === "▶") {
       // Skip HTML details for now, treat as paragraph
     }
-    
+
     // Default: paragraph (may contain inline elements)
     // Collect consecutive non-empty, non-special lines
     const paragraphLines = [line];
@@ -423,13 +693,13 @@ function parseContent(content) {
       paragraphLines.push(nextLine);
       i++;
     }
-    
+
     blocks.push({
       type: "paragraph",
       content: paragraphLines.join(" "),
     });
   }
-  
+
   return blocks;
 }
 
@@ -438,7 +708,7 @@ function parseContent(content) {
  * Supports formats:
  * 1. "Question: ..." with options A., B., C., D.
  * 2. "**Check Your Understanding**" followed by question text and options
- * 
+ *
  * New format with per-option explanations:
  * **Check Your Understanding**
  * [Question Text]
@@ -458,10 +728,10 @@ function parseQuestionBlock(lines, startIdx) {
   const firstLine = lines[startIdx];
   let questionText = "";
   let i = startIdx;
-  
+
   // Check if this is the "Check Your Understanding" format
   const isCheckFormat = /^\*\*Check Your Understanding\*\*/i.test(firstLine.trim());
-  
+
   if (isCheckFormat) {
     // Skip the header line
     i++;
@@ -487,7 +757,7 @@ function parseQuestionBlock(lines, startIdx) {
     // Original "Question:" format
     questionText = firstLine.replace(/^(\*\*)?Question:?\*?\*?\s*/i, "").trim();
     i = startIdx + 1;
-    
+
     // Collect question text until we hit options
     while (i < lines.length) {
       const line = lines[i].trim();
@@ -503,13 +773,13 @@ function parseQuestionBlock(lines, startIdx) {
       i++;
     }
   }
-  
+
   const options = [];
   let correctIndex = -1;
   let explanation = "";
   const optionExplanations = {}; // Store per-option explanations
   let inDetailsBlock = false;
-  
+
   // Collect options - format: "- A. Option text" or "A. Option text"
   while (i < lines.length) {
     const line = lines[i].trim();
@@ -517,32 +787,32 @@ function parseQuestionBlock(lines, startIdx) {
       i++;
       continue;
     }
-    
+
     // Check for details block start
     if (/^<details>/i.test(line)) {
       inDetailsBlock = true;
       i++;
       continue;
     }
-    
+
     // Check for details block end
     if (/^<\/details>/i.test(line)) {
       inDetailsBlock = false;
       i++;
       continue;
     }
-    
+
     // Skip summary tags
     if (/^<\/?summary>/i.test(line) || /Show Answer/i.test(line)) {
       i++;
       continue;
     }
-    
+
     // If we're NOT in the details block, parse options
     if (!inDetailsBlock) {
       // Match options: "- A. text", "A. text", "A) text", "* A. text"
       const optionMatch = line.match(/^[-*]?\s*([A-D])[.)]\s+(.+)$/i);
-      
+
       if (optionMatch) {
         options.push({
           label: optionMatch[1].toUpperCase(),
@@ -552,7 +822,7 @@ function parseQuestionBlock(lines, startIdx) {
         continue;
       }
     }
-    
+
     // Inside details block - look for answer and explanations
     if (inDetailsBlock) {
       // Look for answer line: "**Answer:** B" or "Answer: B"
@@ -560,7 +830,7 @@ function parseQuestionBlock(lines, startIdx) {
       if (answerMatch) {
         const letter = answerMatch[1].toUpperCase();
         correctIndex = options.findIndex(o => o.label === letter);
-        
+
         // Also check for old-style explanation on same line
         const explMatch = line.match(/\*?Explanation:?\*?\s*(.+)$/i);
         if (explMatch) {
@@ -569,11 +839,11 @@ function parseQuestionBlock(lines, startIdx) {
         i++;
         continue;
       }
-      
+
       // Look for per-option explanations: "- **A** explanation" or "- **B** explanation"
       // Handles formats:
       //   - **A** Some explanation text
-      //   - **A.** Some explanation text  
+      //   - **A.** Some explanation text
       //   - **A** ❌ Some explanation text (with optional emoji)
       //   - **A** ✅ Some explanation text
       const optionExplMatch = line.match(/^[-*]\s*\*\*([A-D])\.?\*\*\s*(.+)$/i);
@@ -587,58 +857,58 @@ function parseQuestionBlock(lines, startIdx) {
         continue;
       }
     }
-    
+
     // Check if we hit a new section
     if (line.startsWith("---") || /^#{1,6}\s/.test(line) || /^(\*\*)?Question:?\*?\*?/i.test(line) || /^\*\*Check Your Understanding\*\*/i.test(line)) {
       break;
     }
-    
+
     i++;
   }
-  
+
   // If we still haven't found the answer, do a broader search (backwards compatibility)
   if (correctIndex === -1 && options.length > 0) {
     let searchStart = startIdx;
     let searchLimit = Math.min(startIdx + 30, lines.length);
-    
+
     for (let j = searchStart; j < searchLimit; j++) {
       const line = lines[j].trim();
-      
+
       // Look for answer pattern: "**Answer:** B" or "Answer: B"
       const answerMatch = line.match(/\*?\*?Answer:?\*?\*?\s*([A-D])/i);
       if (answerMatch) {
         const letter = answerMatch[1].toUpperCase();
         correctIndex = options.findIndex(o => o.label === letter);
-        
+
         // Also try to get explanation from same line
         const explMatch = line.match(/\*?Explanation:?\*?\s*(.+)$/i);
         if (explMatch) {
           explanation = explMatch[1].trim();
         }
-        
+
         // Update endIdx to after this line
         i = Math.max(i, j + 1);
         break;
       }
-      
+
       // Stop if we hit a new major section
       if ((line.startsWith("---") || /^#{1,6}\s/.test(line)) && j > startIdx + 5) {
         break;
       }
     }
   }
-  
+
   if (options.length === 0) {
     return null;
   }
-  
+
   // Attach explanations to options
   options.forEach(opt => {
     if (optionExplanations[opt.label]) {
       opt.explanation = optionExplanations[opt.label];
     }
   });
-  
+
   return {
     type: "question",
     question: questionText.trim(),
@@ -655,15 +925,15 @@ function parseQuestionBlock(lines, startIdx) {
 function InlineContent({ text }) {
   const parts = useMemo(() => {
     if (!text) return [];
-    
+
     const result = [];
     // Normalize double-escaped backslashes but keep original math delimiters intact
     let remaining = text
       .replace(/\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
       .replace(/\\(\[|\])/g, '\\$1');  // \\[ -> \[, \\] -> \]
-    
+
     let key = 0;
-    
+
     // Process inline elements
     while (remaining.length > 0) {
       // Inline math: support $...$, \(...\), and \[...\] without converting delimiters
@@ -685,7 +955,7 @@ function InlineContent({ text }) {
       const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
       // Line breaks <br>, <br/>, <br />
       const brMatch = remaining.match(/<br\s*\/?>/i);
-      
+
       // Find earliest match
       const matches = [
         mathMatch && { type: "math", match: mathMatch, idx: mathMatch.index },
@@ -695,19 +965,19 @@ function InlineContent({ text }) {
         linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index },
         brMatch && { type: "br", match: brMatch, idx: brMatch.index },
       ].filter(Boolean);
-      
+
       if (matches.length === 0) {
         result.push({ type: "text", content: remaining, key: key++ });
         break;
       }
-      
+
       const earliest = matches.reduce((a, b) => (a.idx < b.idx ? a : b));
-      
+
       // Add text before match
       if (earliest.idx > 0) {
         result.push({ type: "text", content: remaining.slice(0, earliest.idx), key: key++ });
       }
-      
+
       // Add matched element
       const m = earliest.match;
       switch (earliest.type) {
@@ -731,13 +1001,13 @@ function InlineContent({ text }) {
           result.push({ type: "br", key: key++ });
           break;
       }
-      
+
       remaining = remaining.slice(earliest.idx + m[0].length);
     }
-    
+
     return result;
   }, [text]);
-  
+
   return (
     <>
       {parts.map((part) => {
@@ -788,13 +1058,13 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
-  
+
   // Create shuffled options with deterministic seed based on question context
   const { shuffledOptions, shuffledToOriginal, originalCorrectInShuffled } = useMemo(() => {
     const seedString = `reading-q${questionIndex}-${courseId || ''}-${lessonId || ''}`;
     const seed = stringToSeed(seedString);
     const { shuffled, shuffledToOriginal } = shuffleWithMapping(options, seed);
-    
+
     // Find where the original correct answer ended up in shuffled array
     let originalCorrectInShuffled = -1;
     Object.entries(shuffledToOriginal).forEach(([shuffledIdx, originalIdx]) => {
@@ -802,16 +1072,16 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
         originalCorrectInShuffled = parseInt(shuffledIdx, 10);
       }
     });
-    
+
     // Reassign labels (A, B, C, D) to shuffled options
     const shuffledWithLabels = shuffled.map((opt, idx) => ({
       ...opt,
       label: String.fromCharCode("A".charCodeAt(0) + idx),
     }));
-    
+
     return { shuffledOptions: shuffledWithLabels, shuffledToOriginal, originalCorrectInShuffled };
   }, [options, correctIndex, questionIndex, courseId, lessonId]);
-  
+
   // Load saved answer state from backend initial data (passed via props)
   useEffect(() => {
     if (initialAnswer !== undefined && initialAnswer !== null) {
@@ -826,19 +1096,19 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       setSubmitted(true);
     }
   }, [initialAnswer, shuffledToOriginal]);
-  
+
   const handleSelect = useCallback((idx) => {
     if (!submitted) {
       setSelectedIdx(idx);
     }
   }, [submitted]);
-  
+
   const handleSubmit = useCallback(async () => {
     if (selectedIdx !== null && !submitted) {
       setSubmitted(true);
       // Get the original option index for the backend
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
-      
+
       // Submit to backend API
       if (courseId && lessonId && userId && questionIndex !== undefined) {
         try {
@@ -853,12 +1123,12 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
               }]
             }),
           });
-          
+
           if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Failed to save inline question answer: ${response.status} ${errorText}`);
           }
-          
+
           const data = await response.json();
           if (onAnswered) {
             onAnswered({
@@ -878,7 +1148,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
   const isIncorrect = submitted && selectedIdx !== originalCorrectInShuffled;
-  
+
   return (
     <div className="my-8 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
       {/* Question header */}
@@ -897,7 +1167,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           </MathJax>
         </div>
       </div>
-      
+
       {/* Options */}
       <div className="p-4 space-y-2">
         {shuffledOptions.map((option, idx) => {
@@ -906,9 +1176,9 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           const showAsCorrect = submitted && isCorrectOption;
           const showAsIncorrect = submitted && isSelected && !isCorrectOption;
           const isStruckThrough = strikethroughOptions[idx] && !submitted;
-          
+
           let optionClass = "group flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 ";
-          
+
           if (!submitted) {
             optionClass += "cursor-pointer ";
             if (isSelected) {
@@ -926,9 +1196,9 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
               optionClass += "bg-[var(--surface-1)] border-[var(--border)] opacity-60 ";
             }
           }
-          
+
           let badgeClass = "flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-sm font-semibold transition-colors ";
-          
+
           if (showAsCorrect) {
             badgeClass += "bg-emerald-500 text-white ";
           } else if (showAsIncorrect) {
@@ -938,7 +1208,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           } else {
             badgeClass += "bg-[var(--surface-2)] text-[var(--muted-foreground)] ";
           }
-          
+
           return (
             <div
               key={idx}
@@ -1004,8 +1274,8 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
                 {/* Show per-option explanation after submission */}
                 {submitted && option.explanation && (
                   <div className={`mt-2 text-sm leading-relaxed ${
-                    isCorrectOption 
-                      ? "text-emerald-400" 
+                    isCorrectOption
+                      ? "text-emerald-400"
                       : "text-[var(--muted-foreground)]"
                   }`}>
                     <MathJax dynamic>
@@ -1024,7 +1294,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           );
         })}
       </div>
-      
+
       {/* Submit button - only show when not submitted and an option is selected */}
       {!submitted && (
         <div className="px-4 pb-4">
@@ -1041,7 +1311,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           </button>
         </div>
       )}
-      
+
       {/* Results section - only show after submission */}
       {submitted && (
         <div className="px-4 pb-4 space-y-3">
@@ -1075,7 +1345,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
 
 /**
  * Main ReadingRenderer component
- * 
+ *
  * @param {string} content - The markdown/text content to render
  * @param {string} courseId - Course ID for tracking
  * @param {string} lessonId - Lesson/node ID for tracking
@@ -1084,14 +1354,14 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
  * @param {boolean} readingCompleted - Whether reading is already completed (from backend)
  * @param {Function} onReadingCompleted - Callback when all inline questions are answered
  */
-export default function ReadingRenderer({ 
-  content, 
-  courseId, 
-  lessonId, 
+export default function ReadingRenderer({
+  content,
+  courseId,
+  lessonId,
   userId,
-  inlineQuestionSelections = {}, 
+  inlineQuestionSelections = {},
   readingCompleted: initialReadingCompleted = false,
-  onReadingCompleted 
+  onReadingCompleted,
 }) {
   const blocks = useMemo(() => parseContent(content), [content]);
   const [inlineSelections, setInlineSelections] = useState(() =>
@@ -1122,10 +1392,8 @@ export default function ReadingRenderer({
 
     (async () => {
       try {
-        const response = await authFetch(
-          `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`,
-          { signal: ac.signal }
-        );
+        const url = `/api/courses/${courseId}/nodes/${lessonId}/inline-questions`;
+        const response = await authFetch(url, { signal: ac.signal });
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`Failed to load inline question status: ${response.status} ${errorText}`);
@@ -1160,7 +1428,7 @@ export default function ReadingRenderer({
       onReadingCompleted();
     }
   }, [readingCompleted, inlineStatusLoaded, onReadingCompleted]);
-  
+
   const handleInlineQuestionUpdate = useCallback((payload) => {
     if (!payload) return;
     if (Array.isArray(payload.results)) {
@@ -1179,10 +1447,10 @@ export default function ReadingRenderer({
       setInlineStatusLoaded(true);
     }
   }, []);
-  
+
   // Track question index for each question block
   let questionIndex = 0;
-  
+
   return (
     <>
       <article className="reading-content max-w-none">
@@ -1204,21 +1472,110 @@ export default function ReadingRenderer({
                     <InlineContent text={block.content} />
                   </HeadingTag>
                 );
-                
+
+              case "image":
+                const credit = [block.author, block.license].filter(Boolean).join(" | ");
+                const imageAlt = block.alt || block.caption || "Reading image";
+                // Use fullUrl (high-res) if available, otherwise fall back to url (may be thumbnail)
+                const imageSrc = block.fullUrl || block.url;
+                const imageElement = (
+                  <img
+                    src={imageSrc}
+                    alt={imageAlt}
+                    loading="lazy"
+                    className="w-full h-auto rounded-xl"
+                  />
+                );
+                return (
+                  <figure key={idx} className="my-6 w-full">
+                    <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+                      {block.fullUrl ? (
+                        <a href={block.fullUrl} target="_blank" rel="noopener noreferrer" className="block w-full">
+                          {imageElement}
+                        </a>
+                      ) : (
+                        imageElement
+                      )}
+                    </div>
+                    {(block.caption || credit) && (
+                      <figcaption className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                        {block.caption && <InlineContent text={block.caption} />}
+                        {credit && (
+                          <span className="block mt-1 text-xs text-[var(--muted-foreground)]">
+                            {credit}
+                          </span>
+                        )}
+                      </figcaption>
+                    )}
+                  </figure>
+                );
+
+              case "embedded_video":
+                return (
+                  <div key={idx} className="my-6">
+                    <VideoEmbed
+                      id={`video-${idx}`}
+                      video_url={block.url}
+                    />
+                    {(block.title || block.caption) && (
+                      <div className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                        {block.title && <span className="font-medium">{block.title}</span>}
+                        {block.title && block.caption && " — "}
+                        {block.caption}
+                      </div>
+                    )}
+                  </div>
+                );
+
+              case "callout":
+                return (
+                  <div key={idx} className="my-6">
+                    <Callout
+                      id={`callout-${idx}`}
+                      type={block.calloutType}
+                      title={block.title || undefined}
+                      content={block.content}
+                      collapsible={block.collapsible}
+                    />
+                  </div>
+                );
+
+              case "reveal":
+                return (
+                  <div key={idx} className="my-6">
+                    <RevealBlock
+                      id={`reveal-${idx}`}
+                      trigger_label={block.label}
+                      content={block.content}
+                      reveal_type="click"
+                    />
+                  </div>
+                );
+
+              case "tab_group":
+                return (
+                  <div key={idx} className="my-6 rounded-xl border border-[var(--border)] overflow-hidden">
+                    <TabGroup
+                      id={`tabs-${idx}`}
+                      tabs={block.tabs}
+                    />
+                  </div>
+                );
+
               case "paragraph":
                 return (
                   <p key={idx} className="my-4 leading-7 text-[var(--foreground)]">
                     <InlineContent text={block.content} />
                   </p>
                 );
-                
+
               case "block-math":
                 return (
                   <div key={idx} className="my-6 py-4 px-4 rounded-xl bg-[var(--surface-2)]/50 overflow-x-auto">
                     <div className="text-center text-lg">{`$$${block.content}$$`}</div>
                   </div>
                 );
-                
+
               case "list":
                 const ListTag = block.ordered ? "ol" : "ul";
                 const listClass = block.ordered
@@ -1233,11 +1590,11 @@ export default function ReadingRenderer({
                     ))}
                   </ListTag>
                 );
-              
+
               case "blockquote":
                 return (
-                  <blockquote 
-                    key={idx} 
+                  <blockquote
+                    key={idx}
                     className="my-6 pl-4 border-l-4 border-[var(--primary)]/50 bg-[var(--primary)]/5 py-3 pr-4 rounded-r-lg"
                   >
                     <div className="flex items-start gap-2">
@@ -1250,7 +1607,7 @@ export default function ReadingRenderer({
                     </div>
                   </blockquote>
                 );
-              
+
               case "table":
                 return (
                   <div key={idx} className="my-6 overflow-x-auto rounded-xl border border-[var(--border)]">
@@ -1259,8 +1616,8 @@ export default function ReadingRenderer({
                         <thead>
                           <tr className="bg-[var(--surface-2)]">
                             {block.rows[0].map((cell, cellIdx) => (
-                              <th 
-                                key={cellIdx} 
+                              <th
+                                key={cellIdx}
                                 className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] border-b border-[var(--border)]"
                               >
                                 <InlineContent text={cell} />
@@ -1271,13 +1628,13 @@ export default function ReadingRenderer({
                       )}
                       <tbody>
                         {(block.hasHeader ? block.rows.slice(1) : block.rows).map((row, rowIdx) => (
-                          <tr 
-                            key={rowIdx} 
+                          <tr
+                            key={rowIdx}
                             className={rowIdx % 2 === 0 ? "bg-[var(--surface-1)]" : "bg-[var(--surface-2)]/30"}
                           >
                             {row.map((cell, cellIdx) => (
-                              <td 
-                                key={cellIdx} 
+                              <td
+                                key={cellIdx}
                                 className="px-4 py-3 text-sm text-[var(--foreground)] border-b border-[var(--border)]/50"
                               >
                                 <InlineContent text={cell} />
@@ -1289,20 +1646,20 @@ export default function ReadingRenderer({
                     </table>
                   </div>
                 );
-                
+
               case "code":
                 // Check if this is a Mermaid diagram
                 const isMermaid = block.language?.toLowerCase() === "mermaid";
-                
+
                 if (isMermaid) {
                   return (
-                    <MermaidDiagram 
-                      key={idx} 
-                      chart={block.content} 
+                    <MermaidDiagram
+                      key={idx}
+                      chart={block.content}
                     />
                   );
                 }
-                
+
                 return (
                   <div key={idx} className="my-6 rounded-xl overflow-hidden border border-[var(--border)]">
                     {block.language && (
@@ -1317,7 +1674,7 @@ export default function ReadingRenderer({
                     </pre>
                   </div>
                 );
-                
+
               case "question":
                 const currentQuestionIndex = questionIndex++;
                 return (
@@ -1335,50 +1692,50 @@ export default function ReadingRenderer({
                     onAnswered={handleInlineQuestionUpdate}
                   />
                 );
-                
+
               case "hr":
                 return (
                   <hr key={idx} className="my-8 border-t border-[var(--border)]" />
                 );
-                
+
               default:
                 return null;
             }
           })}
         </MathJax>
       </article>
-      
+
       <style jsx global>{`
         .reading-content {
           font-size: 1.05rem;
           line-height: 1.75;
         }
-        
+
         .reading-content .inline-math {
           font-size: 1em;
         }
-        
+
         .reading-content .mjx-container {
           display: inline-block;
           margin: 0;
         }
-        
+
         .reading-content .mjx-container svg {
           max-width: 100%;
           height: auto;
         }
-        
+
         .reading-content p + p {
           margin-top: 1.25rem;
         }
-        
+
         /* Better spacing for headings following paragraphs */
         .reading-content p + h2,
         .reading-content p + h3,
         .reading-content p + h4 {
           margin-top: 2rem;
         }
-        
+
         /* Ensure math blocks don't overflow */
         .reading-content [class*="block-math"] .mjx-container {
           display: block;

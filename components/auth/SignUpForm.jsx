@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+const REFERRAL_STORAGE_KEY = "kogno_ref";
+const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
 
-export default function SignUpForm() {
+/**
+ * SignUpForm component
+ * @param {Object} props
+ * @param {"standalone" | "embedded"} props.variant - "standalone" (default) renders with full styling, "embedded" renders a compact version for hero sections
+ */
+export default function SignUpForm({ variant = "standalone" }) {
+  const isEmbedded = variant === "embedded";
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo");
+  const refCode = searchParams.get("ref");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -15,6 +22,20 @@ export default function SignUpForm() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Capture referral code from URL and store in localStorage
+  useEffect(() => {
+    if (refCode) {
+      try {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          code: refCode,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
+  }, [refCode]);
 
   const handleChange = (e) => {
     setFormData({
@@ -30,37 +51,57 @@ export default function SignUpForm() {
     setLoading(true);
     setError("");
 
+    // Validate .edu email
+    if (!formData.email.toLowerCase().endsWith(".edu")) {
+      setError("Use a student email address");
+      setLoading(false);
+      return;
+    }
+
     try {
-      console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.name,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const response = await fetch("/api/auth/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          fullName: formData.name,
+          mode: "signup",
+        }),
       });
 
-      if (error) {
-        setError(error.message);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(payload?.error || "Unable to send verification code.");
         setLoading(false);
         return;
       }
 
-      // If sign up is successful, redirect to target
-      if (data.user) {
-        router.push(redirectTo || "/dashboard");
+      try {
+        localStorage.setItem(OTP_FLOW_STORAGE_KEY, JSON.stringify({
+          email: formData.email,
+          verificationType: payload?.verificationType || "signup",
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.error("Failed to store OTP flow info:", err);
       }
+
+      const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}`;
+      router.push(confirmUrl);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }
   };
 
+  const inputBaseClasses = "w-full px-4 py-3 rounded-xl border text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50";
+  const inputVariantClasses = isEmbedded
+    ? "border-white/20 bg-white/10 backdrop-blur-sm"
+    : "border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50";
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 text-[var(--foreground)]">
+    <form onSubmit={handleSubmit} className={`text-[var(--foreground)] ${isEmbedded ? "space-y-4" : "space-y-5"}`}>
       {error && (
         <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
@@ -68,7 +109,7 @@ export default function SignUpForm() {
       )}
 
       <div>
-        <label htmlFor="name" className="mb-2 block text-sm font-medium text-[var(--muted-foreground)]">
+        <label htmlFor="name" className={`mb-2 block text-sm font-medium ${isEmbedded ? "text-[var(--foreground)]/80" : "text-[var(--muted-foreground)]"}`}>
           Full Name
         </label>
         <input
@@ -79,13 +120,13 @@ export default function SignUpForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          className={`${inputBaseClasses} ${inputVariantClasses}`}
           placeholder="Your name"
         />
       </div>
 
       <div>
-        <label htmlFor="email" className="mb-2 block text-sm font-medium text-[var(--muted-foreground)]">
+        <label htmlFor="email" className={`mb-2 block text-sm font-medium ${isEmbedded ? "text-[var(--foreground)]/80" : "text-[var(--muted-foreground)]"}`}>
           Email
         </label>
         <input
@@ -96,13 +137,14 @@ export default function SignUpForm() {
           onChange={handleChange}
           required
           disabled={loading}
-          className="w-full px-4 py-3 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="you@example.com"
+          className={`${inputBaseClasses} ${inputVariantClasses}`}
+          placeholder="you@university.edu"
         />
+        <p className={`mt-2 text-xs ${isEmbedded ? "text-[var(--foreground)]/60" : "text-[var(--muted-foreground)]/70"}`}>Must be a .edu email address</p>
       </div>
 
       <div>
-        <label htmlFor="password" className="mb-2 block text-sm font-medium text-[var(--muted-foreground)]">
+        <label htmlFor="password" className={`mb-2 block text-sm font-medium ${isEmbedded ? "text-[var(--foreground)]/80" : "text-[var(--muted-foreground)]"}`}>
           Password
         </label>
         <input
@@ -114,16 +156,16 @@ export default function SignUpForm() {
           required
           disabled={loading}
           minLength={6}
-          className="w-full px-4 py-3 rounded-xl border border-white/10 dark:border-white/5 bg-[var(--surface-2)]/50 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          className={`${inputBaseClasses} ${inputVariantClasses}`}
           placeholder="••••••••"
         />
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]/70">Minimum 6 characters</p>
+        <p className={`mt-2 text-xs ${isEmbedded ? "text-[var(--foreground)]/60" : "text-[var(--muted-foreground)]/70"}`}>Minimum 6 characters</p>
       </div>
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full mt-2 px-4 py-3 rounded-xl bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary)]/90 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:ring-offset-2 focus:ring-offset-[var(--background)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[var(--primary)]/20"
+        className={`w-full px-4 py-3 rounded-xl bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary)]/90 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:ring-offset-2 focus:ring-offset-[var(--background)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[var(--primary)]/20 ${isEmbedded ? "mt-2" : "mt-2"}`}
       >
         {loading ? (
           <span className="flex items-center justify-center gap-2">
@@ -133,7 +175,7 @@ export default function SignUpForm() {
             </svg>
             Creating account...
           </span>
-        ) : "Create account"}
+        ) : "Get started"}
       </button>
     </form>
   );

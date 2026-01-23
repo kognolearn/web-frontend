@@ -1,22 +1,39 @@
 import { Nunito } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
+import "@/styles/jsxgraph.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { CodeEditorSettingsProvider } from "@/components/editor/CodeEditorSettingsProvider";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
+import { GuidedTourProvider } from "@/components/tour";
+import { tourConfigs } from "@/components/tour/tourConfigs";
+import TourStep from "@/components/tour/TourStep";
 import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
+import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
+import { Analytics } from "@vercel/analytics/react";
+import { MultiJsonLd } from "@/components/seo/JsonLd";
+import { generateOrganizationSchema, generateSoftwareApplicationSchema } from "@/lib/seo/structured-data";
 
 
 const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kogno.ai";
+
 export const metadata = {
-  title: "Kogno",
-  description: "Learn Smarter, Not Harder",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Kogno",
+    template: "%s | Kogno",
+  },
+  description: "Learn Smarter, Not Harder. AI-powered courses, practice exams, and study materials that adapt to your learning style.",
+  manifest: "/manifest.json",
 };
 
 const mathJaxConfig = {
@@ -25,27 +42,27 @@ const mathJaxConfig = {
     packages: { "[+]": ["html", "ams", "newcommand"] },
     inlineMath: [["$", "$"], ["\\(", "\\)"]],
     displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-    // Process escapes to handle \{ and \} properly
     processEscapes: true,
     macros: {
-      // Signal processing functions
       rect: "\\operatorname{rect}",
       tri: "\\operatorname{tri}",
       sinc: "\\operatorname{sinc}",
       sha: "\\operatorname{sha}",
       sgn: "\\operatorname{sgn}",
-      // Fourier transform notation
       F: "\\mathcal{F}",
       Laplace: "\\mathcal{L}",
-      // Common operators
       real: "\\operatorname{Re}",
       imag: "\\operatorname{Im}",
-      // Probability/stats
       Var: "\\operatorname{Var}",
       Cov: "\\operatorname{Cov}",
       E: "\\operatorname{E}",
       Prob: "\\operatorname{P}",
     }
+  },
+  options: {
+    enableMenu: false,
+    enableExplorer: false,
+    enableAssistiveMml: false,
   }
 };
 
@@ -53,13 +70,26 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className="theme-light">
       <body className={`${nunito.variable} antialiased`}>
+        <MultiJsonLd
+          schemas={[
+            generateOrganizationSchema(),
+            generateSoftwareApplicationSchema(),
+          ]}
+        />
         <MathJaxContext config={mathJaxConfig}>
           <ThemeProvider>
-            <OnboardingProvider>
-              <SupabaseSessionProvider />
-              {children}
-              <FeedbackWidget />
-            </OnboardingProvider>
+            <CodeEditorSettingsProvider>
+              <OnboardingProvider>
+                <GuidedTourProvider tourConfigs={tourConfigs}>
+                  <SupabaseSessionProvider />
+                  <TrialNegotiationGate />
+                  {children}
+                  <TourStep />
+                  <FeedbackWidget />
+                  <Analytics />
+                </GuidedTourProvider>
+              </OnboardingProvider>
+            </CodeEditorSettingsProvider>
           </ThemeProvider>
         </MathJaxContext>
       </body>

@@ -79,7 +79,12 @@ export default function AudioRecorder({
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
+        setAudioUrl((prev) => {
+          if (prev && prev.startsWith("blob:")) {
+            URL.revokeObjectURL(prev);
+          }
+          return url;
+        });
         onChange?.(audioBlob);
 
         // Stop all tracks

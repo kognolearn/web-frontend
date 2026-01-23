@@ -7,3 +7,4 @@ export { default as CodeEditor } from "./CodeEditor";
 export { default as GraphPlotter } from "./GraphPlotter";
 export { default as ChemicalEquation } from "./ChemicalEquation";
 export { default as AudioRecorder } from "./AudioRecorder";
+export { default as DrawingCanvas } from "./DrawingCanvas";

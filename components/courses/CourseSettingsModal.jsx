@@ -11,6 +11,8 @@ export default function CourseSettingsModal({
   onClose, 
   currentSeconds,
   onTimerUpdate,
+  minSeconds = 0,
+  isCourseGenerating = false,
   courseName,
   isTimerPaused,
   onPauseToggle,
@@ -100,6 +102,8 @@ export default function CourseSettingsModal({
                   <TimerControls 
                     currentSeconds={currentSeconds}
                     onTimerUpdate={onTimerUpdate}
+                    minSeconds={minSeconds}
+                    isLocked={isCourseGenerating}
                     isTimerPaused={isTimerPaused}
                     onPauseToggle={onPauseToggle}
                   />

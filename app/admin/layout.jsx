@@ -28,7 +28,7 @@ export default function AdminLayout({ children }) {
                 <nav className="relative border-b border-[var(--border)] bg-[var(--surface-1)]/80 backdrop-blur-xl px-6 py-4">
                     <div className="mx-auto max-w-7xl flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <Link href="/" className="text-2xl font-bold text-[var(--primary)]">
+                            <Link href="/" className="text-xl font-bold text-[var(--primary)] tracking-tight">
                                 Kogno
                             </Link>
                             <span className="badge">Admin</span>

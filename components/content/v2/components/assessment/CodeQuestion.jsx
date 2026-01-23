@@ -1,7 +1,164 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { Copy, Check, RotateCcw, Play } from "lucide-react";
+import React, { useState, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
+import { Copy, Check, RotateCcw, Play, CheckCircle2, XCircle, Circle, Maximize2, Minimize2 } from "lucide-react";
+import { useTheme } from "@/components/theme/ThemeProvider";
+import { useCodeEditorSettings } from "@/components/editor/CodeEditorSettingsProvider";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-10 text-xs text-[var(--muted-foreground)]">
+      Loading editor...
+    </div>
+  ),
+});
+
+const languageMap = {
+  c: "c",
+  cpp: "cpp",
+  "c++": "cpp",
+  "c/c++": "cpp",
+  python: "python",
+  py: "python",
+  javascript: "javascript",
+  js: "javascript",
+  typescript: "typescript",
+  ts: "typescript",
+  java: "java",
+  csharp: "csharp",
+  "c#": "csharp",
+  go: "go",
+  rust: "rust",
+  ruby: "ruby",
+  php: "php",
+  swift: "swift",
+  kotlin: "kotlin",
+  sql: "sql",
+  html: "html",
+  css: "css",
+  json: "json",
+  xml: "xml",
+  yaml: "yaml",
+  markdown: "markdown",
+  shell: "shell",
+  bash: "shell",
+  html_css: "html",
+  latex: "plaintext",
+  tex: "plaintext",
+  text: "plaintext",
+  plaintext: "plaintext",
+};
+
+/**
+ * TestCaseIndicator - Clickable test case result with expandable details
+ */
+function TestCaseIndicator({ index, testCase, testResult, isGraded, isExpanded, onToggle }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const getStatus = () => {
+    if (!isGraded || !testResult) return "pending";
+    return testResult.passed ? "passed" : "failed";
+  };
+
+  const status = getStatus();
+
+  const statusStyles = {
+    pending: "bg-[var(--surface-2)] border-[var(--border)] text-[var(--muted-foreground)]",
+    passed: "bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400",
+    failed: "bg-rose-500/20 border-rose-500 text-rose-600 dark:text-rose-400",
+  };
+
+  const StatusIcon = status === "passed" ? CheckCircle2 : status === "failed" ? XCircle : Circle;
+
+  // Show tooltip on hover (for non-graded) or when expanded (for graded)
+  const showDetails = isExpanded || (!isGraded && isHovered);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={() => isGraded && onToggle?.()}
+        className={`
+          w-8 h-8 rounded-lg border flex items-center justify-center
+          transition-all ${isGraded ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}
+          ${statusStyles[status]}
+          ${isExpanded ? 'ring-2 ring-offset-2 ring-[var(--primary)]' : ''}
+        `}
+      >
+        <StatusIcon className="w-4 h-4" />
+      </button>
+
+      {/* Tooltip/Details */}
+      {showDetails && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[90vw]">
+          <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-xl shadow-xl p-3 space-y-2">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-[var(--foreground)]">
+                {testResult?.description || `Test ${index + 1}`}
+              </span>
+              {isGraded && testResult && (
+                <span className={`text-xs font-medium ${
+                  testResult.passed ? "text-emerald-500" : "text-rose-500"
+                }`}>
+                  {testResult.passed ? "Passed" : "Failed"}
+                </span>
+              )}
+            </div>
+
+            {/* Input */}
+            {testCase?.input && (
+              <div>
+                <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Input</span>
+                <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                  {testCase.input}
+                </pre>
+              </div>
+            )}
+
+            {/* Expected */}
+            <div>
+              <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Expected</span>
+              <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                {testCase?.expected_output || "(empty)"}
+              </pre>
+            </div>
+
+            {/* Actual output - show for both passed and failed when graded */}
+            {isGraded && testResult && (
+              <div>
+                <span className={`text-[10px] uppercase tracking-wide ${
+                  testResult.passed ? "text-emerald-500" : "text-rose-500"
+                }`}>Your Output</span>
+                <pre className={`mt-1 p-2 rounded-lg font-mono text-xs overflow-x-auto max-h-16 overflow-y-auto ${
+                  testResult.passed ? "bg-emerald-500/10" : "bg-rose-500/10"
+                }`}>
+                  {testResult.actual_output || "(no output)"}
+                </pre>
+              </div>
+            )}
+
+            {/* Error */}
+            {isGraded && testResult?.stderr && (
+              <div>
+                <span className="text-[10px] uppercase tracking-wide text-rose-500">Error</span>
+                <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs text-rose-600 dark:text-rose-400 overflow-x-auto max-h-20 overflow-y-auto whitespace-pre-wrap">
+                  {testResult.stderr}
+                </pre>
+              </div>
+            )}
+          </div>
+          {/* Arrow */}
+          <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-[var(--surface-1)] border-r border-b border-[var(--border)] rotate-45" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * CodeQuestion - Code editor with test case display
@@ -32,12 +189,29 @@ export default function CodeQuestion({
 }) {
   const [localValue, setLocalValue] = useState(value || initial_code);
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [expandedTestIndex, setExpandedTestIndex] = useState(null);
+  const { theme: appTheme } = useTheme();
+  const { getMonacoOptions, settings: editorSettings } = useCodeEditorSettings();
 
   const currentValue = value !== undefined ? value : localValue;
+  const rawLanguage = language && language.trim() ? language.trim().toLowerCase() : "plaintext";
+  const resolvedLanguage = languageMap[rawLanguage] || rawLanguage;
+  const editorTheme =
+    editorSettings.theme || (appTheme === "dark" ? "vs-dark" : "vs-light");
 
-  const handleChange = useCallback((e) => {
+  const monacoOptions = useMemo(() => {
+    const userOptions = getMonacoOptions();
+    return {
+      ...userOptions,
+      readOnly: disabled || isGraded,
+      domReadOnly: disabled || isGraded,
+    };
+  }, [getMonacoOptions, disabled, isGraded]);
+
+  const handleChange = useCallback((nextValue) => {
     if (disabled || isGraded) return;
-    const newValue = e.target.value;
+    const newValue = nextValue ?? "";
     setLocalValue(newValue);
     onChange?.(newValue);
   }, [disabled, isGraded, onChange]);
@@ -55,24 +229,6 @@ export default function CodeQuestion({
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
-    }
-  };
-
-  // Handle tab key
-  const handleKeyDown = (e) => {
-    if (disabled || isGraded) return;
-
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const start = e.target.selectionStart;
-      const end = e.target.selectionEnd;
-      const newValue =
-        currentValue.substring(0, start) + "  " + currentValue.substring(end);
-      setLocalValue(newValue);
-      onChange?.(newValue);
-      setTimeout(() => {
-        e.target.selectionStart = e.target.selectionEnd = start + 2;
-      }, 0);
     }
   };
 
@@ -96,7 +252,7 @@ export default function CodeQuestion({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--surface-2)]">
           <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase">
-            {language}
+            {rawLanguage}
           </span>
           <div className="flex items-center gap-2">
             {initial_code && !isGraded && (
@@ -126,121 +282,105 @@ export default function CodeQuestion({
                 </>
               )}
             </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg
+                hover:bg-[var(--surface-1)] transition-colors"
+              title={isExpanded ? "Collapse editor" : "Expand editor"}
+            >
+              {isExpanded ? (
+                <>
+                  <Minimize2 className="w-3 h-3" />
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3 h-3" />
+                  Expand
+                </>
+              )}
+            </button>
           </div>
         </div>
 
         {/* Editor */}
-        <div className={`rounded-b-xl border ${borderClass} overflow-hidden`}>
-          <div className="flex">
-            {/* Line numbers */}
-            <div className="flex-shrink-0 p-3 bg-[var(--surface-2)] text-right select-none min-w-[3rem]">
-              {currentValue.split("\n").map((_, i) => (
-                <div
-                  key={i}
-                  className="text-xs leading-6 font-mono text-[var(--muted-foreground)]"
-                >
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-
-            {/* Code textarea */}
-            <textarea
-              value={currentValue}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              disabled={disabled || isGraded}
-              spellCheck={false}
-              className="flex-1 p-3 font-mono text-sm leading-6
-                bg-[var(--surface-1)] text-[var(--foreground)]
-                focus:outline-none
-                disabled:opacity-50 disabled:cursor-not-allowed
-                resize-none min-h-[200px] overflow-auto whitespace-pre"
-              style={{ tabSize: 2 }}
-            />
-          </div>
+        <div className={`rounded-b-xl border ${borderClass} overflow-hidden bg-[var(--surface-1)]`}>
+          <MonacoEditor
+            value={currentValue}
+            onChange={handleChange}
+            language={resolvedLanguage}
+            height={isExpanded ? 560 : 280}
+            theme={editorTheme}
+            options={monacoOptions}
+          />
         </div>
       </div>
 
-      {/* Test cases */}
-      {visibleTestCases.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
-            Test Cases
-          </h4>
-          <div className="space-y-2">
-            {visibleTestCases.map((testCase, index) => {
+      {/* Execution error display */}
+      {isGraded && grade?.stderr && (
+        <div className="rounded-xl border border-rose-500 bg-rose-500/5 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-rose-600 dark:text-rose-400 uppercase tracking-wide">
+              Execution Error
+            </span>
+          </div>
+          <pre className="p-3 rounded-lg bg-rose-500/10 font-mono text-xs text-rose-700 dark:text-rose-300 overflow-x-auto whitespace-pre-wrap">
+            {grade.stderr}
+          </pre>
+        </div>
+      )}
+
+      {/* Test cases - compact view with hoverable indicators */}
+      {(visibleTestCases.length > 0 || (isGraded && grade?.testResults?.length > 0)) && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
+          {/* Header with count */}
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+              Test Cases
+            </h4>
+            {isGraded && grade?.testResults && (
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${
+                  grade.passed ? "text-emerald-500" : "text-rose-500"
+                }`}>
+                  {grade.passedCount ?? 0}/{grade.totalCount ?? grade.testResults.length}
+                </span>
+                <span className="text-xs text-[var(--muted-foreground)]">passed</span>
+              </div>
+            )}
+          </div>
+
+          {/* Test case indicators */}
+          <div className="flex flex-wrap gap-2">
+            {(grade?.testResults || visibleTestCases).map((item, index) => {
+              const testCase = visibleTestCases[index] || {};
               const testResult = isGraded ? grade?.testResults?.[index] : null;
 
               return (
-                <div
+                <TestCaseIndicator
                   key={index}
-                  className={`
-                    p-3 rounded-xl border
-                    ${
-                      testResult?.passed
-                        ? "border-emerald-500 bg-emerald-500/5"
-                        : testResult?.passed === false
-                        ? "border-rose-500 bg-rose-500/5"
-                        : "border-[var(--border)] bg-[var(--surface-2)]"
-                    }
-                  `}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-[var(--muted-foreground)]">
-                      Test Case {index + 1}
-                    </span>
-                    {testResult && (
-                      <span
-                        className={`text-xs font-medium ${
-                          testResult.passed
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-rose-600 dark:text-rose-400"
-                        }`}
-                      >
-                        {testResult.passed ? "Passed" : "Failed"}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        Input:
-                      </span>
-                      <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-1)] font-mono text-xs overflow-x-auto">
-                        {testCase.input || "(no input)"}
-                      </pre>
-                    </div>
-                    <div>
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        Expected Output:
-                      </span>
-                      <pre className="mt-1 p-2 rounded-lg bg-[var(--surface-1)] font-mono text-xs overflow-x-auto">
-                        {testCase.expected_output}
-                      </pre>
-                    </div>
-                  </div>
-
-                  {/* Actual output if failed */}
-                  {testResult && !testResult.passed && testResult.actual_output && (
-                    <div className="mt-2">
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        Your Output:
-                      </span>
-                      <pre className="mt-1 p-2 rounded-lg bg-rose-500/10 font-mono text-xs overflow-x-auto">
-                        {testResult.actual_output}
-                      </pre>
-                    </div>
-                  )}
-                </div>
+                  index={index}
+                  testCase={testCase}
+                  testResult={testResult}
+                  isGraded={isGraded}
+                  isExpanded={expandedTestIndex === index}
+                  onToggle={() => setExpandedTestIndex(expandedTestIndex === index ? null : index)}
+                />
               );
             })}
           </div>
 
+          {/* Hidden test cases note */}
           {test_cases.length > visibleTestCases.length && (
             <p className="text-xs text-[var(--muted-foreground)]">
-              + {test_cases.length - visibleTestCases.length} hidden test cases
+              + {test_cases.length - visibleTestCases.length} hidden test case{test_cases.length - visibleTestCases.length > 1 ? 's' : ''}
+            </p>
+          )}
+
+          {/* Interaction hint */}
+          {visibleTestCases.length > 0 && (
+            <p className="text-xs text-[var(--muted-foreground)] italic">
+              {isGraded ? "Click on a test to see details" : "Hover over each test to see details"}
             </p>
           )}
         </div>
@@ -248,13 +388,22 @@ export default function CodeQuestion({
 
       {/* Grade feedback */}
       {isGraded && grade?.feedback && (
-        <p className={`text-sm ${
+        <div className={`rounded-xl border p-4 ${
           grade.passed
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-rose-600 dark:text-rose-400"
+            ? "border-emerald-500/30 bg-emerald-500/5"
+            : "border-rose-500/30 bg-rose-500/5"
         }`}>
-          {grade.feedback}
-        </p>
+          <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Feedback
+          </span>
+          <pre className={`mt-2 text-sm whitespace-pre-wrap font-sans ${
+            grade.passed
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-rose-600 dark:text-rose-400"
+          }`}>
+            {grade.feedback}
+          </pre>
+        </div>
       )}
     </div>
   );
