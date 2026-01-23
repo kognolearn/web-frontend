@@ -527,7 +527,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
 
-    const topicsHint = 'You can ask me questions while I generate these.';
+    const topicsHint = 'Feel free to ask any questions or just chat with me in the meantime.';
     generationHistoryRef.current = [{ role: 'assistant', content: topicsHint }];
     enqueueReplyParts('chat', [getTopicsLoadingMessage(), topicsHint]);
 
@@ -931,9 +931,6 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
                 <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--primary)]" />
               </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                Ask questions while I pull together your topics.
-              </p>
             </div>
           )}
           {stage === STAGES.COURSE_GENERATING && (
