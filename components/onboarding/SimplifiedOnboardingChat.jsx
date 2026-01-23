@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '@/lib/api';
-import { generateAnonTopics, getAnonUserId } from '@/lib/onboarding';
+import { generateAnonCourse, generateAnonTopics, getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
 import TopicApprovalSection from '@/components/onboarding/TopicApprovalSection';
@@ -229,6 +229,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [topicsProgress, setTopicsProgress] = useState(0);
   const [topicsProgressMessage, setTopicsProgressMessage] = useState('');
   const [topicsApproved, setTopicsApproved] = useState(false);
+  const [courseProgress, setCourseProgress] = useState(0);
+  const [courseProgressMessage, setCourseProgressMessage] = useState('');
+  const [courseModulesComplete, setCourseModulesComplete] = useState(0);
+  const [courseTotalModules, setCourseTotalModules] = useState(null);
+  const [courseId, setCourseId] = useState(null);
+  const [courseError, setCourseError] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -245,6 +251,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const topicsMessageIdRef = useRef(null);
   const generationHistoryRef = useRef([]);
   const generationIntroSentRef = useRef(false);
+  const courseAccessNotifiedRef = useRef(false);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -318,6 +325,17 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationHistoryRef.current = [...history, { role: 'assistant', content: introMessage }].slice(-12);
     addBotMessage(introMessage);
   }, [stage]);
+
+  useEffect(() => {
+    if (!courseId || courseAccessNotifiedRef.current) return;
+    if (courseModulesComplete < 1) return;
+    courseAccessNotifiedRef.current = true;
+    const readyMessage =
+      'Your course is ready. You can jump in now while I keep building the rest.';
+    const history = generationHistoryRef.current || [];
+    generationHistoryRef.current = [...history, { role: 'assistant', content: readyMessage }].slice(-12);
+    enqueueReplyParts('chat', [readyMessage]);
+  }, [courseId, courseModulesComplete, enqueueReplyParts]);
 
   const handleSignIn = () => {
     router.push('/auth/sign-in');
@@ -524,11 +542,18 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setStage(STAGES.TOPICS_GENERATING);
     setIsThinking(true);
     setTopicError(null);
+    setCourseError(null);
     setIsConfirmingCourse(false);
     setNeedsCourseCorrection(false);
     setTopicsProgress(0);
     setTopicsProgressMessage('');
     setTopicsApproved(false);
+    setCourseProgress(0);
+    setCourseProgressMessage('');
+    setCourseModulesComplete(0);
+    setCourseTotalModules(null);
+    setCourseId(null);
+    courseAccessNotifiedRef.current = false;
     generationIntroSentRef.current = false;
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
@@ -707,11 +732,66 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (topicsApproved) return;
     schedulePersist({ immediate: true });
     setTopicsApproved(true);
+    void startCourseGeneration();
   };
 
   const handleRetryTopics = async () => {
     if (!courseInfo.courseName || !courseInfo.collegeName) return;
     await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
+  };
+
+  const startCourseGeneration = async () => {
+    if (!courseInfo.courseName || !courseInfo.collegeName) return;
+    const topics = topicsPayloadRef.current;
+    if (!topics) return;
+
+    setStage(STAGES.COURSE_GENERATING);
+    setIsThinking(false);
+    setCourseError(null);
+    setCourseProgress(0);
+    setCourseProgressMessage('');
+    setCourseModulesComplete(0);
+    setCourseTotalModules(null);
+    setCourseId(null);
+    courseAccessNotifiedRef.current = false;
+    generationIntroSentRef.current = false;
+    setIsGenerationReplying(false);
+
+    try {
+      const result = await generateAnonCourse({
+        anonUserId: anonUserIdRef.current,
+        courseName: courseInfo.courseName,
+        university: courseInfo.collegeName,
+        studyMode: STUDY_MODE,
+        topicsPayload: topics,
+        familiarityRatings: ratingsRef.current,
+        onProgress: (progressValue, message, meta) => {
+          if (typeof progressValue === 'number') {
+            setCourseProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
+          }
+          if (typeof message === 'string' && message.trim()) {
+            setCourseProgressMessage(message.trim());
+          }
+          if (Number.isFinite(meta?.modulesComplete)) {
+            setCourseModulesComplete(meta.modulesComplete);
+          }
+          if (Number.isFinite(meta?.totalModules)) {
+            setCourseTotalModules(meta.totalModules);
+          }
+          if (meta?.courseId) {
+            setCourseId(meta.courseId);
+          }
+        },
+      });
+      if (result?.courseId) {
+        setCourseId(result.courseId);
+      }
+      setCourseProgress(100);
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Course generation failed:', error);
+      setCourseError('Something went wrong building your course.');
+      enqueueReplyParts('chat', ['Something went wrong building your course. Please try again.']);
+    }
   };
 
   const sendGenerationChat = async (text) => {
@@ -867,6 +947,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const normalizedTopicsProgress = Number.isFinite(topicsProgress)
     ? Math.min(Math.max(topicsProgress, 0), 100)
     : 0;
+  const normalizedCourseProgress = Number.isFinite(courseProgress)
+    ? Math.min(Math.max(courseProgress, 0), 100)
+    : 0;
+  const courseAccessReady = Boolean(courseId) && courseModulesComplete >= 1;
+  const courseModulesLabel =
+    Number.isFinite(courseTotalModules) && courseTotalModules > 0
+      ? `${courseModulesComplete}/${courseTotalModules} modules`
+      : null;
   const showTyping = isThinking || isGenerationReplying;
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
@@ -976,16 +1064,35 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
           )}
           {stage === STAGES.COURSE_GENERATING && (
             <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+              <div className="flex items-center justify-between text-xs font-medium text-[var(--foreground)]">
                 <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
-                Building your course...
+                <span>Building your course...</span>
+                <span className="text-[var(--muted-foreground)]">{normalizedCourseProgress}%</span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--primary)]" />
+                <div
+                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
+                  style={{ width: `${normalizedCourseProgress}%` }}
+                />
               </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                Ask questions while I finish assembling your plan.
-              </p>
+              {(courseModulesLabel || courseProgressMessage) && (
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)]">
+                  <span>{courseProgressMessage || 'Generating modules...'}</span>
+                  {courseModulesLabel && <span>{courseModulesLabel}</span>}
+                </div>
+              )}
+              {courseError && (
+                <p className="mt-2 text-xs text-[var(--danger)]">{courseError}</p>
+              )}
+              {courseAccessReady && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/courses/${courseId}`)}
+                  className="mt-3 w-full rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                >
+                  Access Course
+                </button>
+              )}
             </div>
           )}
           <div className="flex items-end gap-3">
