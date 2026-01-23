@@ -130,9 +130,96 @@ body.kogno-selection-active ::-moz-selection {
 
 .kogno-selection-highlight {
   position: fixed;
-  background-color: rgba(var(--primary-rgb), 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--primary-rgb), 0.18),
+    rgba(var(--primary-rgb), 0.38)
+  );
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
   border-radius: 6px;
   pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  animation: kogno-selection-fade 120ms ease-out;
+}
+
+.kogno-selection-popover {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+  color: var(--foreground);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(6px);
+  animation: kogno-selection-popover-in 140ms ease-out;
+}
+
+.kogno-selection-preview {
+  max-width: 240px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kogno-selection-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.kogno-selection-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-contrast);
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.kogno-selection-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(123, 163, 122, 0.35);
+}
+
+.kogno-selection-action:active {
+  transform: translateY(0);
+  opacity: 0.9;
+}
+
+.kogno-selection-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes kogno-selection-fade {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kogno-selection-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* MathJax - disable focus highlight */
