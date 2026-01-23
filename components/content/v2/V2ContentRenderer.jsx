@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { V2ContentProvider, useV2Content } from "./V2ContentContext";
 import V2SectionRenderer from "./V2SectionRenderer";
 import { useV2Grading } from "./useV2Grading";
+import { mapSectionAnswers, mapSectionResults } from "./sectionUtils";
 
 /**
  * V2ContentRenderer - Main entry point for V2 section-based content
@@ -29,6 +30,9 @@ export default function V2ContentRenderer({
   activeSectionIndex = 0,
   onGradeComplete,
   isAdmin = false,
+  initialAnswers = {},
+  initialGrades = {},
+  initialProgress = {},
 }) {
   // Validate content is v2
   if (!content || content.version !== 2) {
@@ -44,8 +48,78 @@ export default function V2ContentRenderer({
     );
   }
 
+  const sections = content.sections || [];
+  const normalizedInitialAnswers = useMemo(() => {
+    if (!sections.length || !initialAnswers || typeof initialAnswers !== "object") {
+      return {};
+    }
+    const mapped = {};
+    sections.forEach((section) => {
+      const sectionId = section?.id;
+      if (!sectionId) return;
+      const rawAnswers = initialAnswers[sectionId];
+      const sectionMapped = mapSectionAnswers(section, rawAnswers);
+      if (Object.keys(sectionMapped).length > 0) {
+        mapped[sectionId] = sectionMapped;
+      }
+    });
+    return mapped;
+  }, [sections, initialAnswers]);
+
+  const normalizedInitialGrades = useMemo(() => {
+    if (!sections.length || !initialGrades || typeof initialGrades !== "object") {
+      return {};
+    }
+    const mapped = {};
+    sections.forEach((section) => {
+      const sectionId = section?.id;
+      if (!sectionId) return;
+      const rawGrade = initialGrades[sectionId];
+      if (!rawGrade || typeof rawGrade !== "object") return;
+      let rawResults = rawGrade.results || {};
+      if (Array.isArray(rawResults)) {
+        rawResults = rawResults.reduce((acc, entry) => {
+          if (entry?.component_id) {
+            acc[entry.component_id] = entry;
+          }
+          return acc;
+        }, {});
+      }
+      const mappedResults = mapSectionResults(section, rawResults);
+      mapped[sectionId] = {
+        ...rawGrade,
+        results: mappedResults,
+      };
+    });
+    return mapped;
+  }, [sections, initialGrades]);
+
+  const normalizedInitialProgress = useMemo(() => {
+    if (!sections.length) return {};
+    const mapped = {};
+    sections.forEach((section) => {
+      const sectionId = section?.id;
+      if (!sectionId) return;
+      if (initialProgress?.[sectionId]) {
+        mapped[sectionId] = initialProgress[sectionId];
+      } else if (normalizedInitialGrades[sectionId]) {
+        mapped[sectionId] = "graded";
+      } else if (normalizedInitialAnswers[sectionId]) {
+        mapped[sectionId] = "dirty";
+      }
+    });
+    return mapped;
+  }, [sections, initialProgress, normalizedInitialGrades, normalizedInitialAnswers]);
+
+  const storageKey = courseId && nodeId ? `v2_section_state:${courseId}:${nodeId}` : null;
+
   return (
-    <V2ContentProvider initialContent={content}>
+    <V2ContentProvider
+      initialAnswers={normalizedInitialAnswers}
+      initialGrades={normalizedInitialGrades}
+      initialProgress={normalizedInitialProgress}
+      storageKey={storageKey}
+    >
       <V2ContentInner
         content={content}
         courseId={courseId}
@@ -142,6 +216,8 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
         onGrade={handleGradeSection}
         isGrading={isGrading && gradingSection === currentSection.id}
         isAdmin={isAdmin}
+        courseId={courseId}
+        nodeId={nodeId}
       />
     </div>
   );

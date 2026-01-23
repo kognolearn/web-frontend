@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useReducer, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect } from "react";
 
 /**
  * @typedef {import('./types').V2ContentState} V2ContentState
@@ -133,11 +133,62 @@ function reducer(state, action) {
  * @param {React.ReactNode} props.children
  * @param {Object.<string, Object.<string, *>>} [props.initialAnswers] - Pre-filled answers
  */
-export function V2ContentProvider({ children, initialAnswers = {} }) {
-  const [state, dispatch] = useReducer(reducer, {
-    ...initialState,
-    answers: initialAnswers,
-  });
+export function V2ContentProvider({
+  children,
+  initialAnswers = {},
+  initialGrades = {},
+  initialProgress = {},
+  storageKey = null,
+}) {
+  const [state, dispatch] = useReducer(
+    reducer,
+    null,
+    () => {
+      let cached = null;
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          const raw = sessionStorage.getItem(storageKey);
+          cached = raw ? JSON.parse(raw) : null;
+        } catch (error) {
+          console.warn("[V2ContentProvider] Failed to read cached state:", error);
+        }
+      }
+
+      return {
+        ...initialState,
+        answers: {
+          ...initialAnswers,
+          ...(cached?.answers || {}),
+        },
+        sectionGrades: {
+          ...initialGrades,
+          ...(cached?.sectionGrades || {}),
+        },
+        sectionProgress: {
+          ...initialProgress,
+          ...(cached?.sectionProgress || {}),
+        },
+      };
+    }
+  );
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      sessionStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          version: 1,
+          updatedAt: Date.now(),
+          answers: state.answers,
+          sectionGrades: state.sectionGrades,
+          sectionProgress: state.sectionProgress,
+        })
+      );
+    } catch (error) {
+      console.warn("[V2ContentProvider] Failed to cache state:", error);
+    }
+  }, [state.answers, state.sectionGrades, state.sectionProgress, storageKey]);
 
   /**
    * Set answer for a component
