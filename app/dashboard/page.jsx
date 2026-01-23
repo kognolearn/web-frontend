@@ -26,6 +26,7 @@ import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import SeedsDisplay from "@/components/ui/SeedsDisplay";
 import UserAvatar from "@/components/ui/UserAvatar";
+import DashboardSeedCelebration from "@/components/seeds/DashboardSeedCelebration";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -898,6 +899,9 @@ function DashboardClient() {
           setCourses((prev) => prev.filter((c) => c.id !== courseId));
         }}
       />
+
+      {/* Seed celebration for seeds earned since last visit */}
+      <DashboardSeedCelebration courses={courses} />
     </div>
   );
 }

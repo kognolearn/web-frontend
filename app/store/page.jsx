@@ -110,14 +110,6 @@ const REWARDS = [
     category: "gift",
   },
   {
-    id: "feature_vote",
-    name: "Vote on Next Feature",
-    description: "Help decide what we build next",
-    cost: 300,
-    premiumOnly: true,
-    category: "exclusive",
-  },
-  {
     id: "subscription_extension",
     name: "+1 Month Extension",
     description: "Add an extra month to your subscription",
@@ -463,10 +455,10 @@ function CategoryIcon({ category, className = "" }) {
   }
 }
 
-function RewardCard({ reward, seeds, isPremiumUser, onRedeem, onLockedClick }) {
+function RewardCard({ reward, seeds, isPremiumUser, onRedeem, onLockedClick, isRedeeming }) {
   const canAfford = seeds >= reward.cost;
   const isLocked = reward.premiumOnly && !isPremiumUser;
-  const canRedeem = canAfford && !isLocked;
+  const canRedeem = canAfford && !isLocked && !isRedeeming;
   const style = CATEGORY_STYLES[reward.category];
 
   const handleLockedClick = () => {
@@ -573,9 +565,250 @@ function RewardCard({ reward, seeds, isPremiumUser, onRedeem, onLockedClick }) {
                 : "bg-[var(--surface-2)] text-[var(--muted-foreground)] cursor-not-allowed"
             }`}
           >
-            {isLocked ? "Locked" : canAfford ? "Redeem" : "Not enough"}
+            {isRedeeming ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                ...
+              </span>
+            ) : isLocked ? "Locked" : canAfford ? "Redeem" : "Not enough"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Gift Recipient Modal
+function GiftRecipientModal({ isOpen, onClose, reward, onSubmit, isSubmitting }) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!email || !email.includes("@")) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    setError("");
+    onSubmit(email);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+            </svg>
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-center text-[var(--foreground)] mb-2">Gift Premium</h3>
+        <p className="text-center text-[var(--muted-foreground)] mb-6">
+          Enter your friend&apos;s email to send them {reward?.name?.includes("Week") ? "1 week" : "1 month"} of premium access.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="friend@example.com"
+            className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] mb-2"
+          />
+          {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+          <div className="flex gap-3 mt-4">
+            <button type="button" onClick={onClose} className="flex-1 py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={isSubmitting} className="flex-1 py-3 px-4 bg-rose-500 text-white rounded-lg font-medium hover:bg-rose-600 transition-colors disabled:opacity-50">
+              {isSubmitting ? "Sending..." : "Send Gift"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Shipping Address Modal
+function ShippingAddressModal({ isOpen, onClose, reward, onSubmit, isSubmitting }) {
+  const [form, setForm] = useState({ name: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "US" });
+  const [size, setSize] = useState("");
+  const [error, setError] = useState("");
+  const needsSize = reward?.id === "tshirt";
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.name || !form.line1 || !form.city || !form.postalCode) {
+      setError("Please fill in all required fields");
+      return;
+    }
+    if (needsSize && !size) {
+      setError("Please select a size");
+      return;
+    }
+    setError("");
+    onSubmit({ shippingAddress: form, size: needsSize ? size : undefined });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-center text-[var(--foreground)] mb-2">Shipping Address</h3>
+        <p className="text-center text-[var(--muted-foreground)] mb-6">
+          Where should we send your {reward?.name}?
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full Name *" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+          <input type="text" value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} placeholder="Address Line 1 *" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+          <input type="text" value={form.line2} onChange={(e) => setForm({ ...form, line2: e.target.value })} placeholder="Address Line 2 (optional)" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="City *" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+            <input type="text" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="State" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} placeholder="Postal Code *" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+            <input type="text" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} placeholder="Country" className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]" />
+          </div>
+          {needsSize && (
+            <div>
+              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Size *</label>
+              <div className="flex flex-wrap gap-2">
+                {["XS", "S", "M", "L", "XL", "2XL"].map((s) => (
+                  <button key={s} type="button" onClick={() => setSize(s)} className={`px-4 py-2 rounded-lg border font-medium transition-colors ${size === s ? "bg-[var(--primary)] text-white border-[var(--primary)]" : "bg-[var(--surface-2)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--primary)]"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={isSubmitting} className="flex-1 py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50">
+              {isSubmitting ? "Processing..." : "Confirm Order"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Supporters Page Display Name Modal
+function SupportersModal({ isOpen, onClose, onSubmit, isSubmitting }) {
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!displayName.trim() || displayName.trim().length < 2) {
+      setError("Please enter a display name (at least 2 characters)");
+      return;
+    }
+    if (displayName.trim().length > 50) {
+      setError("Display name must be 50 characters or less");
+      return;
+    }
+    setError("");
+    onSubmit(displayName.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-center text-[var(--foreground)] mb-2">Join the Supporters Page</h3>
+        <p className="text-center text-[var(--muted-foreground)] mb-6">
+          How would you like your name to appear on our supporters page?
+        </p>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Your display name"
+            maxLength={50}
+            className="w-full px-4 py-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] mb-2"
+          />
+          {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+          <div className="flex gap-3 mt-4">
+            <button type="button" onClick={onClose} className="flex-1 py-3 px-4 bg-[var(--surface-2)] text-[var(--foreground)] rounded-lg font-medium hover:bg-[var(--surface-3)] transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={isSubmitting} className="flex-1 py-3 px-4 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors disabled:opacity-50">
+              {isSubmitting ? "Saving..." : "Add My Name"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Success Modal
+function SuccessModal({ isOpen, onClose, title, message }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-center text-[var(--foreground)] mb-2">{title}</h3>
+        <p className="text-center text-[var(--muted-foreground)] mb-6">{message}</p>
+        <button onClick={onClose} className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors">
+          Done
+        </button>
       </div>
     </div>
   );
@@ -586,6 +819,12 @@ export default function StorePage() {
   const [isPremiumUser, setIsPremiumUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [upgradeModal, setUpgradeModal] = useState({ isOpen: false, reward: null });
+  const [giftModal, setGiftModal] = useState({ isOpen: false, reward: null });
+  const [shippingModal, setShippingModal] = useState({ isOpen: false, reward: null });
+  const [supportersModal, setSupportersModal] = useState({ isOpen: false, reward: null });
+  const [successModal, setSuccessModal] = useState({ isOpen: false, title: "", message: "" });
+  const [redeeming, setRedeeming] = useState(null);
+  const [redeemError, setRedeemError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -600,7 +839,7 @@ export default function StorePage() {
         if (seedsRes.ok) {
           const data = await seedsRes.json();
           if (!cancelled) {
-            setSeeds(data.seeds?.balance ?? 0);
+            setSeeds(data.seeds?.balance ?? data.balance ?? 0);
           }
         }
 
@@ -626,8 +865,111 @@ export default function StorePage() {
     };
   }, []);
 
+  const executeRedemption = async (itemId, additionalData = {}) => {
+    setRedeeming(itemId);
+    setRedeemError(null);
+
+    try {
+      const res = await authFetch("/api/store/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, ...additionalData }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Redemption failed");
+      }
+
+      // Update local seed balance
+      const reward = REWARDS.find((r) => r.id === itemId);
+      if (reward) {
+        setSeeds((prev) => prev - reward.cost);
+      }
+
+      // Close any open modals
+      setGiftModal({ isOpen: false, reward: null });
+      setShippingModal({ isOpen: false, reward: null });
+      setSupportersModal({ isOpen: false, reward: null });
+
+      // Show success message
+      let successMessage = `You successfully redeemed "${reward?.name || itemId}"!`;
+      if (data.redemption?.premiumUntil) {
+        successMessage += ` Premium active until ${new Date(data.redemption.premiumUntil).toLocaleDateString()}.`;
+      }
+      if (data.redemption?.status === "pending" && data.redemption?.message) {
+        successMessage = data.redemption.message;
+      }
+      if (data.redemption?.orderId) {
+        successMessage += " Your order has been placed and we'll ship it soon!";
+      }
+      if (data.redemption?.newCourseSlots) {
+        successMessage += ` You now have ${data.redemption.newCourseSlots} bonus course slots.`;
+      }
+
+      setSuccessModal({
+        isOpen: true,
+        title: "Redemption Successful!",
+        message: successMessage,
+      });
+
+      return data;
+    } catch (err) {
+      setRedeemError(err.message);
+      throw err;
+    } finally {
+      setRedeeming(null);
+    }
+  };
+
   const handleRedeem = async (reward) => {
-    console.log("Redeeming:", reward);
+    // Check if item needs additional input
+    if (["gift_week", "gift_month"].includes(reward.id)) {
+      setGiftModal({ isOpen: true, reward });
+      return;
+    }
+
+    if (["sticker_pack", "tshirt", "thank_you_note", "plant_tree"].includes(reward.id)) {
+      setShippingModal({ isOpen: true, reward });
+      return;
+    }
+
+    if (reward.id === "supporters_page") {
+      setSupportersModal({ isOpen: true, reward });
+      return;
+    }
+
+    // Direct redemption for other items
+    try {
+      await executeRedemption(reward.id);
+    } catch {
+      // Error already handled in executeRedemption
+    }
+  };
+
+  const handleGiftSubmit = async (recipientEmail) => {
+    try {
+      await executeRedemption(giftModal.reward.id, { recipientEmail });
+    } catch {
+      // Error already handled
+    }
+  };
+
+  const handleShippingSubmit = async ({ shippingAddress, size }) => {
+    try {
+      await executeRedemption(shippingModal.reward.id, { shippingAddress, size });
+    } catch {
+      // Error already handled
+    }
+  };
+
+  const handleSupportersSubmit = async (displayName) => {
+    try {
+      await executeRedemption(supportersModal.reward.id, { displayName });
+    } catch {
+      // Error already handled
+    }
   };
 
   const handleLockedClick = (reward) => {
@@ -776,11 +1118,29 @@ export default function StorePage() {
                 isPremiumUser={isPremiumUser}
                 onRedeem={handleRedeem}
                 onLockedClick={handleLockedClick}
+                isRedeeming={redeeming === reward.id}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Error toast */}
+      {redeemError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {redeemError}
+            <button onClick={() => setRedeemError(null)} className="ml-2 hover:text-white/80">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Premium Upgrade Modal */}
       <PremiumUpgradeModal
@@ -792,6 +1152,40 @@ export default function StorePage() {
             ? `"${upgradeModal.reward.name}" is only available for premium users. Upgrade to unlock all store rewards and exclusive features.`
             : "This reward is only available for premium users."
         }
+      />
+
+      {/* Gift Recipient Modal */}
+      <GiftRecipientModal
+        isOpen={giftModal.isOpen}
+        onClose={() => setGiftModal({ isOpen: false, reward: null })}
+        reward={giftModal.reward}
+        onSubmit={handleGiftSubmit}
+        isSubmitting={redeeming === giftModal.reward?.id}
+      />
+
+      {/* Shipping Address Modal */}
+      <ShippingAddressModal
+        isOpen={shippingModal.isOpen}
+        onClose={() => setShippingModal({ isOpen: false, reward: null })}
+        reward={shippingModal.reward}
+        onSubmit={handleShippingSubmit}
+        isSubmitting={redeeming === shippingModal.reward?.id}
+      />
+
+      {/* Supporters Display Name Modal */}
+      <SupportersModal
+        isOpen={supportersModal.isOpen}
+        onClose={() => setSupportersModal({ isOpen: false, reward: null })}
+        onSubmit={handleSupportersSubmit}
+        isSubmitting={redeeming === supportersModal.reward?.id}
+      />
+
+      {/* Success Modal */}
+      <SuccessModal
+        isOpen={successModal.isOpen}
+        onClose={() => setSuccessModal({ isOpen: false, title: "", message: "" })}
+        title={successModal.title}
+        message={successModal.message}
       />
     </div>
   );
