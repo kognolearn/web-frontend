@@ -828,14 +828,21 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
           Math.max(margin, boundingRect.left)
         );
 
+        const sanitizedText = sanitizeText(text, MAX_SELECTED_TEXT_CHARS);
+        if (!sanitizedText) {
+          clearPendingSelection();
+          return;
+        }
         const nextSelection = {
-          text,
+          text: sanitizedText,
           rects,
           buttonPosition: { top, left },
         };
         pendingSelectionRef.current = nextSelection;
         setPendingSelection(nextSelection);
-        selection.removeAllRanges();
+        if (isOpen) {
+          setSelectedText(sanitizedText);
+        }
       } else {
         clearPendingSelection();
       }
@@ -843,7 +850,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
 
     document.addEventListener('mouseup', handleSelection, true);
     return () => document.removeEventListener('mouseup', handleSelection, true);
-  }, [isActive, clearPendingSelection]);
+  }, [isActive, isOpen, clearPendingSelection]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -871,7 +878,7 @@ const ChatBot = forwardRef(({ pageContext = {}, useContentEditableInput, onWidth
     const handleSelectionChange = () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
-        if (!pendingSelectionRef.current) {
+        if (pendingSelectionRef.current) {
           clearPendingSelection();
         }
       }
@@ -1840,8 +1847,53 @@ Instructions:
     </div>
   );
 
+  const selectionOverlay = pendingSelection && typeof document !== 'undefined'
+    ? createPortal(
+        <div className="fixed inset-0 z-[120] pointer-events-none">
+          {pendingSelection.rects?.map((rect, index) => (
+            <div
+              key={`${index}-${rect.top}-${rect.left}`}
+              className="kogno-selection-highlight"
+              style={{
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height,
+              }}
+            />
+          ))}
+          <div
+            className="pointer-events-auto"
+            style={{
+              position: 'fixed',
+              top: pendingSelection.buttonPosition.top,
+              left: pendingSelection.buttonPosition.left,
+            }}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={handleAskFromSelection}
+              className="flex items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-[var(--primary)]/30 hover:shadow-[var(--primary)]/50 transition-all"
+            >
+              Ask Kogno
+            </button>
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
   if (!isOpen) {
-    return floatingButton;
+    return (
+      <>
+        {selectionOverlay}
+        {floatingButton}
+      </>
+    );
   }
 
   const sidebarListContent = (
@@ -2303,46 +2355,6 @@ Instructions:
       </div>
     </div>
   );
-
-  const selectionOverlay = pendingSelection && typeof document !== 'undefined'
-    ? createPortal(
-        <div className="fixed inset-0 z-[120] pointer-events-none">
-          {pendingSelection.rects?.map((rect, index) => (
-            <div
-              key={`${index}-${rect.top}-${rect.left}`}
-              className="kogno-selection-highlight"
-              style={{
-                top: rect.top,
-                left: rect.left,
-                width: rect.width,
-                height: rect.height,
-              }}
-            />
-          ))}
-          <div
-            className="pointer-events-auto"
-            style={{
-              position: 'fixed',
-              top: pendingSelection.buttonPosition.top,
-              left: pendingSelection.buttonPosition.left,
-            }}
-          >
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={handleAskFromSelection}
-              className="flex items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-[var(--primary)]/30 hover:shadow-[var(--primary)]/50 transition-all"
-            >
-              Ask Kogno
-            </button>
-          </div>
-        </div>,
-        document.body
-      )
-    : null;
 
   const chatContent = (
     <div className="flex h-full flex-col bg-[var(--background)]">
