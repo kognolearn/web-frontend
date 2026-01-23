@@ -24,6 +24,7 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
 import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
+import PointsDisplay from "@/components/ui/PointsDisplay";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -775,9 +776,12 @@ function DashboardClient() {
               <h1 className="text-2xl sm:text-3xl font-bold sm:text-4xl">
                 Welcome back, {displayName}
               </h1>
-              <p className="text-sm sm:text-base text-[var(--muted-foreground)]">
-                {hasActiveCourseCards ? "Continue your learning journey." : "Create your first course to get started."}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm sm:text-base text-[var(--muted-foreground)]">
+                  {hasActiveCourseCards ? "Continue your learning journey." : "Create your first course to get started."}
+                </p>
+                <PointsDisplay />
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <Link
