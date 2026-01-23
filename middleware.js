@@ -65,6 +65,9 @@ function isSignedOutAllowedPath(pathname) {
   if (pathname === '/') return true
   if (pathname.startsWith('/api')) return true
   if (pathname === '/auth/sign-in' || pathname.startsWith('/auth/sign-in/')) return true
+  if (pathname === '/auth/create-account' || pathname.startsWith('/auth/create-account/')) return true
+  if (pathname === '/auth/sign-up' || pathname.startsWith('/auth/sign-up/')) return true
+  if (pathname === '/sign-up' || pathname.startsWith('/sign-up/')) return true
   if (pathname === '/auth/confirm-email' || pathname.startsWith('/auth/confirm-email/')) return true
   if (pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) return true
   return false
