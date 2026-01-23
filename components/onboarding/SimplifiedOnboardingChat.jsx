@@ -23,9 +23,9 @@ import { defaultTopicRating } from '@/app/courses/create/utils';
 const STUDY_MODE = 'cram';
 const STAGES = {
   COLLECTING: 'collecting',
-  GENERATING: 'generating',
-  APPROVAL: 'approval',
-  APPROVED: 'approved',
+  TOPICS_GENERATING: 'topics_generating',
+  TOPICS_APPROVAL: 'topics_approval',
+  COURSE_GENERATING: 'course_generating',
 };
 
 const normalizeOverviewTopics = (rawTopics) => {
@@ -148,6 +148,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [messages, setMessages] = useState([initialMessageRef.current]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [isGenerationReplying, setIsGenerationReplying] = useState(false);
   const [pendingField, setPendingField] = useState(null);
   const [courseInfo, setCourseInfo] = useState({
     courseName: '',
@@ -173,6 +174,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const persistTimerRef = useRef(null);
   const topicsMessageTimerRef = useRef(null);
   const topicsMessageIdRef = useRef(null);
+  const generationHistoryRef = useRef([]);
+  const generationIntroSentRef = useRef(false);
 
   const syncMessages = (next) => {
     messagesRef.current = next;
@@ -229,7 +232,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   useEffect(() => {
     scrollToBottom(scrollContainerRef);
-  }, [messages, isThinking]);
+  }, [messages, isThinking, isGenerationReplying]);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -237,6 +240,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
     }
   }, [input]);
+
+  useEffect(() => {
+    if (stage !== STAGES.COURSE_GENERATING || generationIntroSentRef.current) return;
+    generationIntroSentRef.current = true;
+    const introMessage = "I'm building your course now. Ask me anything while I work.";
+    generationHistoryRef.current = [{ role: 'assistant', content: introMessage }];
+    addBotMessage(introMessage);
+  }, [stage]);
 
   const handleSignIn = () => {
     router.push('/auth/sign-in');
@@ -347,9 +358,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const startTopicGeneration = async (courseName, collegeName) => {
-    setStage(STAGES.GENERATING);
+    setStage(STAGES.TOPICS_GENERATING);
     setIsThinking(true);
     setTopicError(null);
+    generationIntroSentRef.current = false;
+    generationHistoryRef.current = [];
+    setIsGenerationReplying(false);
 
     enqueueReplyParts('chat', [getTopicsLoadingMessage()]);
 
@@ -380,13 +394,13 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         appendTopicsMessage();
       }
 
-      setStage(STAGES.APPROVAL);
+      setStage(STAGES.TOPICS_APPROVAL);
     } catch (error) {
       console.error('[SimplifiedOnboardingChat] Topic generation failed:', error);
       setTopicError('Something went wrong generating topics.');
       enqueueReplyParts('chat', ['Something went wrong generating topics. Please try again.']);
       appendTopicsMessage(getMessageDelayMs('Something went wrong generating topics. Please try again.'));
-      setStage(STAGES.APPROVAL);
+      setStage(STAGES.TOPICS_APPROVAL);
     } finally {
       setIsThinking(false);
     }
@@ -517,9 +531,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const handleApproveTopics = () => {
-    if (stage !== STAGES.APPROVAL) return;
+    if (stage !== STAGES.TOPICS_APPROVAL) return;
     schedulePersist({ immediate: true });
-    setStage(STAGES.APPROVED);
+    setStage(STAGES.COURSE_GENERATING);
   };
 
   const handleRetryTopics = async () => {
@@ -527,9 +541,70 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
   };
 
+  const sendGenerationChat = async (text) => {
+    if (!text) return;
+    setIsGenerationReplying(true);
+
+    const nextHistory = [
+      ...(generationHistoryRef.current || []),
+      { role: 'user', content: text },
+    ].slice(-12);
+    generationHistoryRef.current = nextHistory;
+
+    try {
+      const response = await authFetch('/api/onboarding/generation-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: nextHistory,
+          anonUserId: anonUserIdRef.current,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Failed to generate reply');
+      }
+
+      const replyParts = Array.isArray(result?.replyParts)
+        ? result.replyParts
+        : typeof result?.reply === 'string'
+        ? [result.reply]
+        : [];
+
+      if (replyParts.length === 0) {
+        throw new Error('No reply returned');
+      }
+
+      generationHistoryRef.current = [
+        ...generationHistoryRef.current,
+        ...replyParts.map((part) => ({ role: 'assistant', content: part })),
+      ].slice(-12);
+
+      enqueueReplyParts('chat', replyParts);
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Generation chat error:', error);
+      enqueueReplyParts('chat', [
+        'Sorry - something went wrong while I was responding. Mind trying again?',
+      ]);
+    } finally {
+      setIsGenerationReplying(false);
+    }
+  };
+
   const handleUserSend = async (raw) => {
     const trimmed = raw.trim();
-    if (!trimmed || isThinking || stage !== STAGES.COLLECTING) return;
+    if (!trimmed) return;
+
+    if (stage === STAGES.COURSE_GENERATING) {
+      if (isGenerationReplying) return;
+      setInput('');
+      addUserMessage(trimmed);
+      await sendGenerationChat(trimmed);
+      return;
+    }
+
+    if (isThinking || stage !== STAGES.COLLECTING) return;
     setInput('');
     addUserMessage(trimmed);
 
@@ -544,13 +619,21 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     await parseCourseInfo(trimmed);
   };
 
-  const isInputDisabled = isThinking || stage !== STAGES.COLLECTING;
+  const isInputDisabled =
+    stage === STAGES.COLLECTING
+      ? isThinking
+      : stage === STAGES.COURSE_GENERATING
+      ? isGenerationReplying
+      : true;
   const inputPlaceholder =
-    stage === STAGES.GENERATING
+    stage === STAGES.TOPICS_GENERATING
       ? 'Generating topics...'
-      : stage === STAGES.APPROVAL || stage === STAGES.APPROVED
+      : stage === STAGES.TOPICS_APPROVAL
       ? 'Review topics below...'
+      : stage === STAGES.COURSE_GENERATING
+      ? 'Ask me anything while I build your course...'
       : 'Type your message...';
+  const showTyping = isThinking || isGenerationReplying;
   const containerClassName = isOverlay
     ? "relative h-full w-full min-h-0 rounded-3xl border border-white/10 bg-[var(--background)]/85 text-[var(--foreground)] flex flex-col overflow-hidden shadow-2xl"
     : "relative h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col overflow-hidden";
@@ -602,6 +685,20 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         className="relative z-10 flex-1 overflow-y-auto px-4 sm:px-6"
       >
         <div className="max-w-2xl mx-auto py-8">
+          {stage === STAGES.COURSE_GENERATING && (
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+                <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
+                Building your course...
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--primary)]" />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                Ask questions while I finish assembling your plan.
+              </p>
+            </div>
+          )}
           <AnimatePresence initial={false}>
             {messages.map((message) => {
               if (message.type === 'bot') {
@@ -624,7 +721,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
                       onRetry={topicError ? handleRetryTopics : null}
                       isSaving={isSavingTopics}
                       error={topicError}
-                      isApproved={stage === STAGES.APPROVED}
+                      isApproved={stage === STAGES.COURSE_GENERATING}
                     />
                   </BotMessage>
                 );
@@ -633,7 +730,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
             })}
           </AnimatePresence>
 
-          {isThinking && <TypingIndicator />}
+          {showTyping && <TypingIndicator />}
         </div>
       </div>
 
