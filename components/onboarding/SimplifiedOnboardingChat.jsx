@@ -228,6 +228,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [topicError, setTopicError] = useState(null);
   const [topicsProgress, setTopicsProgress] = useState(0);
   const [topicsProgressMessage, setTopicsProgressMessage] = useState('');
+  const [topicsApproved, setTopicsApproved] = useState(false);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -527,6 +528,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setNeedsCourseCorrection(false);
     setTopicsProgress(0);
     setTopicsProgressMessage('');
+    setTopicsApproved(false);
     generationIntroSentRef.current = false;
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
@@ -702,8 +704,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   const handleApproveTopics = () => {
     if (stage !== STAGES.TOPICS_APPROVAL) return;
+    if (topicsApproved) return;
     schedulePersist({ immediate: true });
-    setStage(STAGES.COURSE_GENERATING);
+    setTopicsApproved(true);
   };
 
   const handleRetryTopics = async () => {
@@ -714,6 +717,16 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const sendGenerationChat = async (text) => {
     if (!text) return;
     setIsGenerationReplying(true);
+
+    const stripSchemaLines = (value) => {
+      if (typeof value !== 'string') return '';
+      const cleaned = value
+        .split('\n')
+        .filter((line) => !/suggestTopic/i.test(line.trim()))
+        .join('\n')
+        .trim();
+      return cleaned;
+    };
 
     const nextHistory = [
       ...(generationHistoryRef.current || []),
@@ -736,11 +749,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         throw new Error(result?.error || 'Failed to generate reply');
       }
 
-      const replyParts = Array.isArray(result?.replyParts)
+      const rawReplyParts = Array.isArray(result?.replyParts)
         ? result.replyParts
         : typeof result?.reply === 'string'
         ? [result.reply]
         : [];
+      const replyParts = rawReplyParts
+        .map(stripSchemaLines)
+        .filter((part) => part && part.trim());
 
       if (replyParts.length === 0) {
         throw new Error('No reply returned');
@@ -914,7 +930,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               if (message.type === 'topics') {
                 return (
                   <BotMessage key={message.id}>
-                    <TopicApprovalSection
+                      <TopicApprovalSection
                       topics={overviewTopics}
                       familiarityRatings={familiarityRatings}
                       onTopicTitleChange={handleTopicTitleChange}
@@ -925,7 +941,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
                       onRetry={topicError ? handleRetryTopics : null}
                       isSaving={isSavingTopics}
                       error={topicError}
-                      isApproved={stage === STAGES.COURSE_GENERATING}
+                      isApproved={topicsApproved}
                     />
                   </BotMessage>
                 );
