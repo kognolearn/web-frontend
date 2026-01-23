@@ -2537,6 +2537,8 @@ export default function CourseTabContent({
                             // Priority background for cram mode
                             const priorityScore = lesson.priority_score ?? 1; // Default to high priority
                             const priorityBgColor = isCramPriorityMode ? getPriorityBgColor(priorityScore) : null;
+                            const showPriorityScore = hasCheckedAdmin && isAdmin && Number.isFinite(priorityScore);
+                            const priorityScoreLabel = showPriorityScore ? priorityScore.toFixed(2) : null;
 
                             // Selected state takes precedence for text color
                             const isSelected = selectedLesson?.id === lesson.id;
@@ -2597,6 +2599,11 @@ export default function CourseTabContent({
                               <span className="flex-1 truncate">
                                 {lesson.title}
                               </span>
+                              {showPriorityScore && (
+                                <span className="shrink-0 text-[10px] font-semibold text-[var(--muted-foreground)]">
+                                  P:{priorityScoreLabel}
+                                </span>
+                              )}
                             </button>
                           );
                         })}
