@@ -28,6 +28,9 @@ const STAGES = {
   COURSE_GENERATING: 'course_generating',
 };
 
+const buildCourseConfirmation = (courseName, collegeName) =>
+  `I have ${courseName} at ${collegeName}. Is that right? Reply "yes" to continue, or send the correction.`;
+
 const normalizeOverviewTopics = (rawTopics) => {
   if (!Array.isArray(rawTopics)) return [];
   return rawTopics.map((module, index) => {
@@ -155,6 +158,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     collegeName: '',
     studyMode: STUDY_MODE,
   });
+  const [isConfirmingCourse, setIsConfirmingCourse] = useState(false);
   const [stage, setStage] = useState(STAGES.COLLECTING);
   const [topicsPayload, setTopicsPayload] = useState(null);
   const [familiarityRatings, setFamiliarityRatings] = useState({});
@@ -245,7 +249,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (stage !== STAGES.COURSE_GENERATING || generationIntroSentRef.current) return;
     generationIntroSentRef.current = true;
     const introMessage = "I'm building your course now. Ask me anything while I work.";
-    generationHistoryRef.current = [{ role: 'assistant', content: introMessage }];
+    const history = generationHistoryRef.current || [];
+    generationHistoryRef.current = [...history, { role: 'assistant', content: introMessage }].slice(-12);
     addBotMessage(introMessage);
   }, [stage]);
 
@@ -361,6 +366,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setStage(STAGES.TOPICS_GENERATING);
     setIsThinking(true);
     setTopicError(null);
+    setIsConfirmingCourse(false);
     generationIntroSentRef.current = false;
     generationHistoryRef.current = [];
     setIsGenerationReplying(false);
@@ -422,7 +428,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     });
     setPendingField(null);
     parseAttemptsRef.current = 0;
-    await startTopicGeneration(courseName, collegeName);
+    setIsConfirmingCourse(true);
+    enqueueReplyParts('chat', [buildCourseConfirmation(courseName, collegeName)]);
   };
 
   const handleParsedResult = async (result) => {
@@ -596,7 +603,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     const trimmed = raw.trim();
     if (!trimmed) return;
 
-    if (stage === STAGES.COURSE_GENERATING) {
+    if (stage === STAGES.TOPICS_GENERATING || stage === STAGES.COURSE_GENERATING) {
       if (isGenerationReplying) return;
       setInput('');
       addUserMessage(trimmed);
@@ -607,6 +614,33 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (isThinking || stage !== STAGES.COLLECTING) return;
     setInput('');
     addUserMessage(trimmed);
+
+    if (isConfirmingCourse) {
+      const normalized = trimmed.toLowerCase();
+      const firstWord = normalized.split(/[^a-z]+/).find(Boolean) || '';
+      const yesValues = new Set(['yes', 'y', 'yep', 'yeah', 'correct', 'right']);
+      const noValues = new Set(['no', 'n', 'nope', 'nah', 'incorrect', 'wrong']);
+
+      if (yesValues.has(firstWord)) {
+        setIsConfirmingCourse(false);
+        if (courseInfo.courseName && courseInfo.collegeName) {
+          await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
+        } else {
+          enqueueReplyParts('chat', ['Please send the course name and college again.']);
+        }
+        return;
+      }
+
+      if (noValues.has(firstWord)) {
+        setIsConfirmingCourse(false);
+        enqueueReplyParts('chat', ['Got it - send the correct course and college.']);
+        return;
+      }
+
+      setIsConfirmingCourse(false);
+      await parseCourseInfo(trimmed);
+      return;
+    }
 
     if (pendingField === 'collegeName') {
       if (courseInfo.courseName) {
@@ -622,12 +656,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const isInputDisabled =
     stage === STAGES.COLLECTING
       ? isThinking
-      : stage === STAGES.COURSE_GENERATING
+      : stage === STAGES.TOPICS_GENERATING || stage === STAGES.COURSE_GENERATING
       ? isGenerationReplying
       : true;
   const inputPlaceholder =
     stage === STAGES.TOPICS_GENERATING
-      ? 'Generating topics...'
+      ? 'Ask me anything while I build your topics...'
       : stage === STAGES.TOPICS_APPROVAL
       ? 'Review topics below...'
       : stage === STAGES.COURSE_GENERATING
@@ -685,20 +719,6 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         className="relative z-10 flex-1 overflow-y-auto px-4 sm:px-6"
       >
         <div className="max-w-2xl mx-auto py-8">
-          {stage === STAGES.COURSE_GENERATING && (
-            <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
-                <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
-                Building your course...
-              </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--primary)]" />
-              </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                Ask questions while I finish assembling your plan.
-              </p>
-            </div>
-          )}
           <AnimatePresence initial={false}>
             {messages.map((message) => {
               if (message.type === 'bot') {
@@ -736,6 +756,20 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
       <div className="relative z-10 border-t border-white/5 bg-[var(--background)]/80 backdrop-blur-xl px-4 sm:px-6 py-4">
         <div className="max-w-2xl mx-auto">
+          {stage === STAGES.COURSE_GENERATING && (
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+                <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
+                Building your course...
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--primary)]" />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                Ask questions while I finish assembling your plan.
+              </p>
+            </div>
+          )}
           <div className="flex items-end gap-3">
             <textarea
               ref={inputRef}
