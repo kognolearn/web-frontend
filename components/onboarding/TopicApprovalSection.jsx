@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import ChatTopicCard from '@/components/onboarding/ChatTopicCard';
 
+const FAMILIARITY_RATINGS = {
+  UNFAMILIAR: 1,
+  LEARNING: 2,
+  CONFIDENT: 3,
+};
+
 export default function TopicApprovalSection({
   topics = [],
   familiarityRatings = {},
@@ -18,6 +24,15 @@ export default function TopicApprovalSection({
 }) {
   const [removedEntry, setRemovedEntry] = useState(null);
   const undoTimerRef = useRef(null);
+
+  const handleMarkAll = (rating) => {
+    if (isApproved || !onRatingChange) return;
+    topics.forEach((topic) => {
+      if (topic?.id) {
+        onRatingChange(topic.id, rating);
+      }
+    });
+  };
 
   useEffect(() => {
     return () => {
@@ -88,6 +103,38 @@ export default function TopicApprovalSection({
                   Retry
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {topics.length > 0 && !isApproved && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[10px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Mark all:</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleMarkAll(FAMILIARITY_RATINGS.UNFAMILIAR)}
+                disabled={Boolean(error)}
+                className="px-2.5 py-1 rounded-md border border-white/10 bg-[var(--surface-1)] text-[10px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Unfamiliar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarkAll(FAMILIARITY_RATINGS.LEARNING)}
+                disabled={Boolean(error)}
+                className="px-2.5 py-1 rounded-md border border-white/10 bg-[var(--surface-1)] text-[10px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Learning
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarkAll(FAMILIARITY_RATINGS.CONFIDENT)}
+                disabled={Boolean(error)}
+                className="px-2.5 py-1 rounded-md border border-white/10 bg-[var(--surface-1)] text-[10px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confident
+              </button>
             </div>
           </div>
         )}
