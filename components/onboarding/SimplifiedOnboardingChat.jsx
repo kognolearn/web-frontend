@@ -1433,39 +1433,21 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
             </div>
           )}
           {stage === STAGES.STUDY_MODE_SELECTION ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleStudyModeSelection(STUDY_MODES.DEEP)}
-                  className="relative flex flex-col items-start rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-all hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                    <span className="text-sm font-semibold text-[var(--foreground)]">Deep Study</span>
-                  </div>
-                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                    Comprehensive understanding with detailed explanations
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleStudyModeSelection(STUDY_MODES.CRAM)}
-                  className="relative flex flex-col items-start rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-all hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span className="text-sm font-semibold text-[var(--foreground)]">Cram Mode</span>
-                  </div>
-                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                    High-yield exam focus with key concepts only
-                  </p>
-                </button>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleStudyModeSelection(STUDY_MODES.DEEP)}
+                className="flex-1 rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--primary)]/90 transition-colors"
+              >
+                Deep Study
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStudyModeSelection(STUDY_MODES.CRAM)}
+                className="flex-1 rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+              >
+                Cram Mode
+              </button>
             </div>
           ) : isConfirmingCourse ? (
             <div className="flex items-center gap-3">
