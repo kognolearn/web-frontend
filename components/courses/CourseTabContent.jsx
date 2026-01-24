@@ -147,7 +147,8 @@ function ItemContent({
   onVideoViewed,
   onTaskComplete,
   moduleQuizTab,
-  isAdmin
+  isAdmin,
+  onAdminComplete,
 }) {
   const normFmt = normalizeFormat(fmt);
   const key = getLessonCacheKey(id, userId, courseId);
@@ -344,7 +345,14 @@ function ItemContent({
       return (
         <div className="space-y-4">
           {isAdmin && (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onAdminComplete?.()}
+                className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 transition-colors"
+              >
+                Admin: Mark Complete
+              </button>
               <button
                 type="button"
                 onClick={() => setShowRawContent((prev) => !prev)}
@@ -452,7 +460,19 @@ function ItemContent({
           : {};
 
         return (
-          <V2ContentRenderer
+          <div className="space-y-4">
+            {isAdmin && (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => onAdminComplete?.()}
+                  className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 transition-colors"
+                >
+                  Admin: Mark Complete
+                </button>
+              </div>
+            )}
+            <V2ContentRenderer
             content={{
               version: 2,
               sections: [{
@@ -476,6 +496,7 @@ function ItemContent({
               }
             }}
           />
+          </div>
         );
       }
       // Fallback to legacy quiz if assessment data is missing
@@ -537,7 +558,14 @@ function ItemContent({
         return (
           <div className="space-y-4">
             {isAdmin && (
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onAdminComplete?.()}
+                  className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 transition-colors"
+                >
+                  Admin: Mark Complete
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowRawContent((prev) => !prev)}
@@ -698,8 +726,8 @@ export default function CourseTabContent({
   const [userName, setUserName] = useState("");
   const [showPriorityInfo, setShowPriorityInfo] = useState(false);
 
-  // Seeds animation hook
-  const { animateSeedsFromCourse, fetchBalance } = useSeeds();
+  // Seeds notification hook - shows toast when seeds are earned in-course
+  const { showSeedNotification, fetchBalance } = useSeeds();
 
   const visibleModules = useMemo(() => {
     if (!studyPlan?.modules) return [];
@@ -1553,19 +1581,19 @@ export default function CourseTabContent({
       // Also update the study plan
       await refetchStudyPlan();
 
-      // Trigger seed animation if seeds were awarded
+      // Show seed notification if seeds were awarded
       if (result?.seedsAwarded) {
         const totalSeeds = (result.seedsAwarded.lessonSeeds?.amount || 0) +
           (result.seedsAwarded.firstLessonMilestone?.amount || 0) +
           (result.seedsAwarded.courseCompleteMilestone?.amount || 0);
         if (totalSeeds > 0) {
-          animateSeedsFromCourse(courseId, totalSeeds, 'Completed a quiz');
-          // Refresh balance after animation
+          showSeedNotification(totalSeeds, 'Completed a quiz', courseId);
+          // Refresh balance after notification
           setTimeout(() => fetchBalance(), 2000);
         }
       }
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, animateSeedsFromCourse, fetchBalance]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
 
   const handleTaskCompleted = useCallback(async () => {
     if (selectedLesson?.id && courseId) {
@@ -1582,14 +1610,14 @@ export default function CourseTabContent({
 
         if (response.ok) {
           const data = await response.json();
-          // Trigger seed animation if seeds were awarded
+          // Show seed notification if seeds were awarded
           if (data.seedsAwarded) {
             const totalSeeds = (data.seedsAwarded.lessonSeeds?.amount || 0) +
               (data.seedsAwarded.firstLessonMilestone?.amount || 0) +
               (data.seedsAwarded.courseCompleteMilestone?.amount || 0);
             if (totalSeeds > 0) {
-              animateSeedsFromCourse(courseId, totalSeeds, 'Completed a task');
-              // Refresh balance after animation
+              showSeedNotification(totalSeeds, 'Completed a task', courseId);
+              // Refresh balance after notification
               setTimeout(() => fetchBalance(), 2000);
             }
           }
@@ -1600,7 +1628,47 @@ export default function CourseTabContent({
       fetchLessonContent(selectedLesson.id, { force: true });
       await refetchStudyPlan();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, animateSeedsFromCourse, fetchBalance]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
+
+  // Admin auto-complete handler - marks the lesson as complete without going through the normal flow
+  const handleAdminComplete = useCallback(async () => {
+    if (!selectedLesson?.id || !courseId) return;
+
+    try {
+      const response = await authFetch(`/api/courses/${courseId}/nodes/${selectedLesson.id}/progress`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mastery_status: 'mastered',
+          familiarity_score: 1.0,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[CourseTabContent] Admin auto-complete successful:', data);
+
+        // Show seed notification if seeds were awarded
+        if (data.seedsAwarded) {
+          const totalSeeds = (data.seedsAwarded.lessonSeeds?.amount || 0) +
+            (data.seedsAwarded.firstLessonMilestone?.amount || 0) +
+            (data.seedsAwarded.courseCompleteMilestone?.amount || 0);
+          if (totalSeeds > 0) {
+            showSeedNotification(totalSeeds, 'Admin completed section', courseId);
+            setTimeout(() => fetchBalance(), 2000);
+          }
+        }
+      } else {
+        console.error('[CourseTabContent] Admin auto-complete failed:', response.status);
+      }
+    } catch (error) {
+      console.error('[CourseTabContent] Admin auto-complete error:', error);
+    }
+
+    // Always refresh content and study plan
+    fetchLessonContent(selectedLesson.id, { force: true });
+    await refetchStudyPlan();
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {
@@ -3588,8 +3656,8 @@ export default function CourseTabContent({
                     </div>
                   </div>
                 ) : (
-                  <ItemContent 
-                    fmt={selectedContentType.type} 
+                  <ItemContent
+                    fmt={selectedContentType.type}
                     id={selectedLesson.id}
                     userId={userId}
                     courseId={courseId}
@@ -3605,6 +3673,7 @@ export default function CourseTabContent({
                     onTaskComplete={handleTaskCompleted}
                     moduleQuizTab={moduleQuizTab}
                     isAdmin={hasCheckedAdmin && isAdmin}
+                    onAdminComplete={handleAdminComplete}
                   />
                 )}
               </section>
