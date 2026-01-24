@@ -22,12 +22,18 @@ import {
 import { interpolateMessage } from '@/components/courses/create/conversationFlow';
 import { defaultTopicRating } from '@/app/courses/create/utils';
 
-const STUDY_MODE = 'cram';
 const STAGES = {
   COLLECTING: 'collecting',
+  STUDY_MODE_SELECTION: 'study_mode_selection',
+  SYLLABUS_COLLECTION: 'syllabus_collection',
   TOPICS_GENERATING: 'topics_generating',
   TOPICS_APPROVAL: 'topics_approval',
   COURSE_GENERATING: 'course_generating',
+};
+
+const STUDY_MODES = {
+  DEEP: 'deep',
+  CRAM: 'cram',
 };
 
 const buildCourseConfirmation = (courseName, collegeName) =>
@@ -272,7 +278,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [courseInfo, setCourseInfo] = useState({
     courseName: '',
     collegeName: '',
-    studyMode: STUDY_MODE,
+    studyMode: '',
+    syllabusText: '',
   });
   const [isConfirmingCourse, setIsConfirmingCourse] = useState(false);
   const [needsCourseCorrection, setNeedsCourseCorrection] = useState(false);
@@ -549,11 +556,11 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       return;
     }
 
-    setCourseInfo({
+    setCourseInfo((prev) => ({
+      ...prev,
       courseName,
       collegeName,
-      studyMode: STUDY_MODE,
-    });
+    }));
     setPendingField(null);
     parseAttemptsRef.current = 0;
     setNeedsCourseCorrection(false);
@@ -669,7 +676,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }, 500);
   };
 
-  const createAnonCourseRecord = async (courseName, collegeName) => {
+  const createAnonCourseRecord = async (courseName, collegeName, studyMode, syllabusText) => {
     const anonUserId = await resolveAnonUserId();
     if (!anonUserId) return null;
     try {
@@ -680,7 +687,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
           anonUserId,
           courseName,
           university: collegeName,
-          studyMode: STUDY_MODE,
+          studyMode: studyMode || STUDY_MODES.DEEP,
+          syllabusText: syllabusText || '',
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -694,7 +702,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   };
 
-  const startTopicGeneration = async (courseName, collegeName) => {
+  const startTopicGeneration = async () => {
+    const { courseName, collegeName, studyMode, syllabusText } = courseInfo;
+    if (!courseName || !collegeName) return;
+
     setStage(STAGES.TOPICS_GENERATING);
     setIsThinking(true);
     setTopicError(null);
@@ -721,7 +732,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     const anonUserId = await resolveAnonUserId();
     if (!anonUserId) return;
 
-    await createAnonCourseRecord(courseName, collegeName);
+    await createAnonCourseRecord(courseName, collegeName, studyMode, syllabusText);
 
     try {
       const result = await generateAnonTopics(
@@ -729,7 +740,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         courseName,
         collegeName,
         {
-          studyMode: STUDY_MODE,
+          studyMode: studyMode || STUDY_MODES.DEEP,
+          syllabusText: syllabusText || '',
           onProgress: (progressValue, message) => {
             if (typeof progressValue === 'number') {
               setTopicsProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
@@ -780,16 +792,61 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       return;
     }
 
-    setCourseInfo({
+    setCourseInfo((prev) => ({
+      ...prev,
       courseName,
       collegeName,
-      studyMode: STUDY_MODE,
-    });
+    }));
     setPendingField(null);
     parseAttemptsRef.current = 0;
     setIsConfirmingCourse(true);
     setNeedsCourseCorrection(false);
     enqueueReplyParts('chat', [buildCourseConfirmation(courseName, collegeName)]);
+  };
+
+  const transitionToStudyModeSelection = () => {
+    setStage(STAGES.STUDY_MODE_SELECTION);
+    setIsConfirmingCourse(false);
+    enqueueReplyParts('chat', [
+      "Great! Now, how do you want to study this course? Are you doing a deep dive for mastery, or are you cramming for an exam?",
+    ]);
+  };
+
+  const handleStudyModeSelection = (mode) => {
+    setCourseInfo((prev) => ({ ...prev, studyMode: mode }));
+    setStage(STAGES.SYLLABUS_COLLECTION);
+
+    if (mode === STUDY_MODES.DEEP) {
+      enqueueReplyParts('chat', [
+        "Deep dive mode - I'll build you a comprehensive course for thorough understanding.",
+        "Do you have a syllabus, course outline, or specific topics you want to cover? Paste them below, or type 'skip' to let me generate topics based on the course name.",
+      ]);
+    } else {
+      enqueueReplyParts('chat', [
+        "Cram mode activated! I'll focus on high-yield exam content.",
+        "To make this as effective as possible, paste your syllabus, study guide, or list of topics you need to know. Or type 'skip' to generate common exam topics.",
+      ]);
+    }
+  };
+
+  const handleSyllabusInput = (text) => {
+    const trimmed = text.trim().toLowerCase();
+    const isSkip = trimmed === 'skip' || trimmed === 'no' || trimmed === 'none';
+
+    if (isSkip) {
+      setCourseInfo((prev) => ({ ...prev, syllabusText: '' }));
+      enqueueReplyParts('chat', [
+        "No problem! I'll generate topics based on the course name.",
+      ]);
+    } else {
+      setCourseInfo((prev) => ({ ...prev, syllabusText: text.trim() }));
+      enqueueReplyParts('chat', [
+        "Got it! I'll use this to build your topics.",
+      ]);
+    }
+
+    // Start topic generation
+    void startTopicGeneration();
   };
 
   const handleParsedResult = async (result) => {
@@ -950,7 +1007,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   const handleRetryTopics = async () => {
     if (!courseInfo.courseName || !courseInfo.collegeName) return;
-    await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
+    await startTopicGeneration();
   };
 
   const startCourseGeneration = async () => {
@@ -977,7 +1034,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         anonUserId,
         courseName: courseInfo.courseName,
         university: courseInfo.collegeName,
-        studyMode: STUDY_MODE,
+        studyMode: courseInfo.studyMode || STUDY_MODES.DEEP,
+        syllabusText: courseInfo.syllabusText || '',
         topicsPayload: topics,
         familiarityRatings: ratingsRef.current,
         onProgress: (progressValue, message, meta) => {
@@ -1086,6 +1144,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       return;
     }
 
+    // Handle syllabus collection stage
+    if (stage === STAGES.SYLLABUS_COLLECTION) {
+      setInput('');
+      addUserMessage(trimmed);
+      handleSyllabusInput(trimmed);
+      return;
+    }
+
     if (isThinking || stage !== STAGES.COLLECTING) return;
     setInput('');
     addUserMessage(trimmed);
@@ -1097,10 +1163,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       const noValues = new Set(['no', 'n', 'nope', 'nah', 'incorrect', 'wrong']);
 
       if (yesValues.has(firstWord)) {
-        setIsConfirmingCourse(false);
         if (courseInfo.courseName && courseInfo.collegeName) {
-          await startTopicGeneration(courseInfo.courseName, courseInfo.collegeName);
+          transitionToStudyModeSelection();
         } else {
+          setIsConfirmingCourse(false);
           enqueueReplyParts('chat', ['Please send the course name and college again.']);
         }
         return;
@@ -1151,11 +1217,19 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const isInputDisabled =
     stage === STAGES.COLLECTING
       ? isThinking || isConfirmingCourse
+      : stage === STAGES.STUDY_MODE_SELECTION
+      ? true // Use buttons for study mode
+      : stage === STAGES.SYLLABUS_COLLECTION
+      ? false
       : stage === STAGES.TOPICS_GENERATING || stage === STAGES.COURSE_GENERATING
       ? isGenerationReplying
       : true;
   const inputPlaceholder =
-    stage === STAGES.TOPICS_GENERATING
+    stage === STAGES.STUDY_MODE_SELECTION
+      ? 'Select a study mode above...'
+      : stage === STAGES.SYLLABUS_COLLECTION
+      ? "Paste your syllabus/topics here, or type 'skip'..."
+      : stage === STAGES.TOPICS_GENERATING
       ? 'Ask me anything while I build your topics...'
       : stage === STAGES.TOPICS_APPROVAL
       ? 'Review topics below...'
@@ -1356,7 +1430,42 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               </div>
             </div>
           )}
-          {isConfirmingCourse ? (
+          {stage === STAGES.STUDY_MODE_SELECTION ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleStudyModeSelection(STUDY_MODES.DEEP)}
+                  className="relative flex flex-col items-start rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-all hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">Deep Study</span>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                    Comprehensive understanding with detailed explanations
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStudyModeSelection(STUDY_MODES.CRAM)}
+                  className="relative flex flex-col items-start rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-all hover:border-[var(--primary)]/50 hover:bg-[var(--surface-2)]/80"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">Cram Mode</span>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                    High-yield exam focus with key concepts only
+                  </p>
+                </button>
+              </div>
+            </div>
+          ) : isConfirmingCourse ? (
             <div className="flex items-center gap-3">
               <button
                 type="button"
