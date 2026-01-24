@@ -808,7 +808,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setStage(STAGES.STUDY_MODE_SELECTION);
     setIsConfirmingCourse(false);
     enqueueReplyParts('chat', [
-      "Great! Now, how do you want to study this course? Are you doing a deep dive for mastery, or are you cramming for an exam?",
+      "Great! How do you want to study this course?",
+      "Deep Study is for intuitive and comprehensive understanding of the subject. I'd use it to follow along with your course week by week.",
+      "Cram Mode is for when you have an exam coming up. It focuses on the subjects that will get you the highest grade with the limited time you have.",
     ]);
   };
 
