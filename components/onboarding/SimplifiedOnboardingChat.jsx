@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '@/lib/api';
-import { generateAnonCourse, generateAnonTopics, getAnonUserId } from '@/lib/onboarding';
+import { ensureAnonUserId, generateAnonCourse, generateAnonTopics, getAnonUserId } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
 import TopicApprovalSection from '@/components/onboarding/TopicApprovalSection';
@@ -253,6 +253,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const generationIntroSentRef = useRef(false);
   const courseAccessNotifiedRef = useRef(false);
 
+  const resolveAnonUserId = async () => {
+    const resolved = await ensureAnonUserId();
+    if (resolved && anonUserIdRef.current !== resolved) {
+      anonUserIdRef.current = resolved;
+    }
+    return resolved || anonUserIdRef.current;
+  };
+
   const syncMessages = (next) => {
     messagesRef.current = next;
     return next;
@@ -285,6 +293,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const { enqueueReplyParts } = messageQueueRef.current;
 
   useEffect(() => {
+    void resolveAnonUserId();
     return () => {
       messageQueueRef.current?.clearMessageQueue();
       if (persistTimerRef.current) {
@@ -342,10 +351,11 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const fetchCourseInfo = async (message) => {
+    const anonUserId = await resolveAnonUserId();
     const response = await authFetch('/api/onboarding/parse-course-info', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, anonUserId: anonUserIdRef.current }),
+      body: JSON.stringify({ message, anonUserId }),
     });
 
     const result = await response.json().catch(() => ({}));
@@ -463,7 +473,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const persistAnonCourse = async ({ nextTopics, nextRatings } = {}) => {
-    const anonUserId = anonUserIdRef.current;
+    const anonUserId = await resolveAnonUserId();
     if (!anonUserId) return;
 
     const topicsToPersist =
@@ -514,7 +524,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const createAnonCourseRecord = async (courseName, collegeName) => {
-    const anonUserId = anonUserIdRef.current;
+    const anonUserId = await resolveAnonUserId();
     if (!anonUserId) return null;
     try {
       const response = await authFetch('/api/onboarding/anon-course', {
@@ -562,11 +572,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationHistoryRef.current = [{ role: 'assistant', content: topicsHint }];
     enqueueReplyParts('chat', [getTopicsLoadingMessage(), topicsHint]);
 
+    const anonUserId = await resolveAnonUserId();
+    if (!anonUserId) return;
+
     await createAnonCourseRecord(courseName, collegeName);
 
     try {
       const result = await generateAnonTopics(
-        anonUserIdRef.current,
+        anonUserId,
         courseName,
         collegeName,
         {
@@ -744,6 +757,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (!courseInfo.courseName || !courseInfo.collegeName) return;
     const topics = topicsPayloadRef.current;
     if (!topics) return;
+    const anonUserId = await resolveAnonUserId();
+    if (!anonUserId) return;
 
     setStage(STAGES.COURSE_GENERATING);
     setIsThinking(false);
@@ -759,7 +774,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
     try {
       const result = await generateAnonCourse({
-        anonUserId: anonUserIdRef.current,
+        anonUserId,
         courseName: courseInfo.courseName,
         university: courseInfo.collegeName,
         studyMode: STUDY_MODE,
@@ -815,12 +830,13 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationHistoryRef.current = nextHistory;
 
     try {
+      const anonUserId = await resolveAnonUserId();
       const response = await authFetch('/api/onboarding/generation-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: nextHistory,
-          anonUserId: anonUserIdRef.current,
+          anonUserId,
         }),
       });
 

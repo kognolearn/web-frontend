@@ -22,6 +22,7 @@ export default function AuthCallbackClient() {
         const isOAuth = urlParams.get("provider") === "google";
         setIsOAuthFlow(isOAuth);
         const redirectTo = urlParams.get("redirectTo");
+        const oauthMode = urlParams.get("mode") || "signin";
 
         // Get the hash fragment from the URL (Supabase sends tokens in the hash)
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -82,10 +83,36 @@ export default function AuthCallbackClient() {
           if (session?.user) {
             const userEmail = session.user.email?.toLowerCase() || "";
             const createdAt = new Date(session.user.created_at).getTime();
-            const isNewUser = Date.now() - createdAt < 60000; // Created within last minute
+            const lastSignInAt = session.user.last_sign_in_at
+              ? new Date(session.user.last_sign_in_at).getTime()
+              : null;
+            const isNewUser = lastSignInAt
+              ? Math.abs(lastSignInAt - createdAt) < 5000
+              : Date.now() - createdAt < 60000; // Fallback if last_sign_in_at missing
+
+            const deleteNewOAuthUser = async () => {
+              try {
+                await fetch("/api/user/delete", {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                });
+              } catch (deleteError) {
+                console.error("[auth/callback] Failed to delete new OAuth user:", deleteError);
+              }
+            };
+
+            if (oauthMode === "signin" && isNewUser) {
+              await deleteNewOAuthUser();
+              await supabase.auth.signOut();
+              router.replace("/?authError=account-not-found");
+              return;
+            }
 
             // Enforce .edu restriction for new OAuth signups
-            if (isNewUser && !userEmail.endsWith(".edu")) {
+            if (oauthMode === "signup" && isNewUser && !userEmail.endsWith(".edu")) {
+              await deleteNewOAuthUser();
               await supabase.auth.signOut();
               setStatus("error");
               setError("Sign up requires a .edu email address. Please use your university Google account.");

@@ -7,8 +7,9 @@ import { useSeeds } from "./SeedsProvider";
 import FlyingSeed from "./FlyingSeed";
 
 /**
- * Component that shows a celebration animation when user returns to dashboard
- * with seeds earned since their last visit
+ * Component that handles seed animations on dashboard:
+ * 1. Welcome back modal (on fresh website open with earned seeds)
+ * 2. Flying animation from course cards (when returning from course with earned seeds)
  */
 export default function DashboardSeedCelebration({ courses = [] }) {
   const {
@@ -18,36 +19,71 @@ export default function DashboardSeedCelebration({ courses = [] }) {
     markBalanceAsSeen,
     getSeedsEarnedSinceLastVisit,
     playSound,
-    fetchBalance,
+    isNewSession,
+    markWelcomeShown,
+    pendingDashboardSeeds,
+    consumePendingDashboardSeeds,
   } = useSeeds();
 
-  const [showCelebration, setShowCelebration] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [seedsEarned, setSeedsEarned] = useState(0);
   const [flyingSeeds, setFlyingSeeds] = useState([]);
   const [seedSources, setSeedSources] = useState([]);
   const [phase, setPhase] = useState("idle"); // idle, showing, animating, done
-  const hasCheckedRef = useRef(false);
+  const hasCheckedWelcomeRef = useRef(false);
+  const hasCheckedPendingRef = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const completedSeedsRef = useRef(new Set());
+  const totalSeedsRef = useRef(0);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Check for earned seeds when balance loads
+  // Check for pending in-session seeds (from course activity) - runs on every dashboard mount
   useEffect(() => {
-    if (loading || balance === null || hasCheckedRef.current) return;
-    hasCheckedRef.current = true;
+    if (!mounted || loading) return;
+
+    // Small delay to ensure course cards are rendered
+    const timer = setTimeout(() => {
+      if (pendingDashboardSeeds.length > 0 && phase === "idle") {
+        const seeds = consumePendingDashboardSeeds();
+        if (seeds.length > 0) {
+          // Group by courseId
+          const grouped = {};
+          for (const seed of seeds) {
+            const key = seed.courseId || "other";
+            if (!grouped[key]) {
+              grouped[key] = { type: seed.courseId ? "course" : "other", courseId: seed.courseId, amount: 0 };
+            }
+            grouped[key].amount += seed.amount;
+          }
+          setSeedSources(Object.values(grouped));
+          setPhase("animating");
+          startAnimationFromSources(Object.values(grouped));
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [mounted, loading, pendingDashboardSeeds, phase]);
+
+  // Check for welcome back seeds (on fresh website open)
+  useEffect(() => {
+    if (loading || balance === null || hasCheckedWelcomeRef.current) return;
+    hasCheckedWelcomeRef.current = true;
 
     const lastSeen = getLastSeenBalance();
     const earned = getSeedsEarnedSinceLastVisit();
 
-    // Only show celebration if:
-    // 1. They've seen the balance before (not first-time user)
-    // 2. They earned something since last visit
-    // 3. Earned at least 5 seeds (avoid noise for tiny amounts)
-    if (lastSeen !== null && earned >= 5) {
+    // Only show welcome modal if:
+    // 1. This is a fresh website open (new session)
+    // 2. They've seen the balance before (not first-time user)
+    // 3. They earned something since last visit
+    // 4. Earned at least 5 seeds (avoid noise for tiny amounts)
+    if (isNewSession && lastSeen !== null && earned >= 5) {
       setSeedsEarned(earned);
-      setShowCelebration(true);
+      setShowWelcomeModal(true);
       setPhase("showing");
 
       // Fetch recent transactions to determine sources
@@ -56,7 +92,7 @@ export default function DashboardSeedCelebration({ courses = [] }) {
       // Mark current balance as seen
       markBalanceAsSeen(balance);
     }
-  }, [loading, balance, getLastSeenBalance, getSeedsEarnedSinceLastVisit, markBalanceAsSeen]);
+  }, [loading, balance, getLastSeenBalance, getSeedsEarnedSinceLastVisit, markBalanceAsSeen, isNewSession]);
 
   const fetchRecentTransactions = async (earnedAmount) => {
     try {
@@ -113,18 +149,21 @@ export default function DashboardSeedCelebration({ courses = [] }) {
     };
   }, []);
 
-  const startAnimation = useCallback(() => {
-    setPhase("animating");
+  const startAnimationFromSources = useCallback((sources) => {
     const targetPos = getCounterPosition();
     const seeds = [];
     let seedIndex = 0;
 
-    // Create flying seeds from each source
-    for (const source of seedSources) {
-      let startX, startY;
-      const seedCount = Math.min(Math.ceil(source.amount / 10), 5); // Scale seeds to amount
+    // Constant interval between seeds for consistent flow rate (100ms between each seed)
+    const SEED_INTERVAL = 100;
 
-      if (source.type === "course") {
+    // Create flying seeds from each source - one visual seed per actual seed earned
+    for (const source of sources) {
+      let startX, startY;
+      // Show exactly the number of seeds earned (cap at 50 for performance)
+      const seedCount = Math.min(source.amount, 50);
+
+      if (source.type === "course" && source.courseId) {
         // Find the course card
         const courseCard = document.querySelector(`[data-course-id="${source.courseId}"]`);
         if (courseCard) {
@@ -144,20 +183,33 @@ export default function DashboardSeedCelebration({ courses = [] }) {
 
       for (let i = 0; i < seedCount; i++) {
         seeds.push({
-          id: `celebration-${seedIndex++}`,
+          id: `celebration-${seedIndex}`,
           startX: startX + (Math.random() - 0.5) * 80,
           startY: startY + (Math.random() - 0.5) * 60,
           endX: targetPos.x,
           endY: targetPos.y,
-          delay: seedIndex * 80, // Staggered
+          delay: seedIndex * SEED_INTERVAL, // Constant rate flow
         });
+        seedIndex++;
       }
     }
 
+    // Reset completion tracking
+    completedSeedsRef.current = new Set();
+    totalSeedsRef.current = seeds.length;
     setFlyingSeeds(seeds);
-  }, [seedSources, getCounterPosition]);
+  }, [getCounterPosition]);
+
+  const startWelcomeAnimation = useCallback(() => {
+    setPhase("animating");
+    startAnimationFromSources(seedSources);
+  }, [seedSources, startAnimationFromSources]);
 
   const handleSeedComplete = useCallback((seedId) => {
+    // Prevent duplicate calls for same seed
+    if (completedSeedsRef.current.has(seedId)) return;
+    completedSeedsRef.current.add(seedId);
+
     playSound();
 
     // Trigger counter pulse
@@ -167,42 +219,44 @@ export default function DashboardSeedCelebration({ courses = [] }) {
       setTimeout(() => counter.classList.remove("seed-counter-pulse"), 200);
     }
 
-    setFlyingSeeds((prev) => {
-      const remaining = prev.filter((s) => s.id !== seedId);
-      if (remaining.length === 0) {
-        // All done - mark balance as seen
-        markBalanceAsSeen();
-        setTimeout(() => {
-          setPhase("done");
-          setShowCelebration(false);
-        }, 300);
+    // Check if all seeds are done (don't update state until the end)
+    if (completedSeedsRef.current.size >= totalSeedsRef.current) {
+      // All done - mark balance as seen and mark welcome as shown for this session
+      markBalanceAsSeen();
+      if (showWelcomeModal) {
+        markWelcomeShown();
       }
-      return remaining;
-    });
-  }, [playSound, markBalanceAsSeen]);
+      setTimeout(() => {
+        setPhase("done");
+        setShowWelcomeModal(false);
+        setFlyingSeeds([]); // Clear only at the very end
+      }, 300);
+    }
+  }, [playSound, markBalanceAsSeen, markWelcomeShown, showWelcomeModal]);
 
   const handleDismiss = useCallback(() => {
     if (phase === "showing") {
-      startAnimation();
+      startWelcomeAnimation();
     }
-  }, [phase, startAnimation]);
+  }, [phase, startWelcomeAnimation]);
 
-  // Auto-start animation after a short delay
+  // Auto-start welcome animation after a short delay
   useEffect(() => {
-    if (phase === "showing" && seedSources.length > 0) {
+    if (phase === "showing" && seedSources.length > 0 && showWelcomeModal) {
       const timer = setTimeout(() => {
-        startAnimation();
+        startWelcomeAnimation();
       }, 2000); // Show message for 2 seconds then animate
       return () => clearTimeout(timer);
     }
-  }, [phase, seedSources, startAnimation]);
+  }, [phase, seedSources, startWelcomeAnimation, showWelcomeModal]);
 
-  if (!mounted || !showCelebration) return null;
+  if (!mounted) return null;
+  if (phase === "idle" || phase === "done") return null;
 
   return createPortal(
     <>
-      {/* Celebration overlay */}
-      {phase === "showing" && (
+      {/* Welcome back modal (only for fresh session) */}
+      {showWelcomeModal && phase === "showing" && (
         <div
           className="fixed inset-0 z-[9997] flex items-center justify-center"
           onClick={handleDismiss}

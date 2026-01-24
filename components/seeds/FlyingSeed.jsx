@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
 
 /**
- * A single flying seed that animates from source to target position
+ * A single flying seed that animates from source to target position.
+ * Uses constant speed (pixels per second) for consistent flow rate.
  */
 export default function FlyingSeed({
   startX,
@@ -12,7 +13,8 @@ export default function FlyingSeed({
   endX,
   endY,
   delay = 0,
-  duration = 600,
+  duration = null, // If null, uses constant speed
+  speed = 800, // Pixels per second for constant rate
   onComplete,
   size = 24,
 }) {
@@ -22,8 +24,22 @@ export default function FlyingSeed({
   const [opacity, setOpacity] = useState(0);
   const animationRef = useRef(null);
   const startTimeRef = useRef(null);
+  const onCompleteRef = useRef(onComplete);
+  const hasCompletedRef = useRef(false);
+
+  // Keep the callback ref updated without triggering effect re-run
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
+    // Calculate distance and duration based on constant speed
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Use provided duration or calculate from constant speed (min 300ms, max 1200ms)
+    const animDuration = duration ?? Math.max(300, Math.min(1200, (distance / speed) * 1000));
+
     // Initial delay before starting
     const delayTimer = setTimeout(() => {
       setPhase("flying");
@@ -33,13 +49,13 @@ export default function FlyingSeed({
 
       const animate = () => {
         const elapsed = Date.now() - startTimeRef.current;
-        const progress = Math.min(elapsed / duration, 1);
+        const progress = Math.min(elapsed / animDuration, 1);
 
-        // Easing function (ease-out cubic)
+        // Easing function (ease-out cubic for smooth deceleration)
         const eased = 1 - Math.pow(1 - progress, 3);
 
         // Calculate position with slight arc
-        const arcHeight = Math.min(100, Math.abs(endY - startY) * 0.3);
+        const arcHeight = Math.min(80, Math.abs(endY - startY) * 0.25);
         const arcProgress = Math.sin(progress * Math.PI);
 
         const x = startX + (endX - startX) * eased;
@@ -57,7 +73,11 @@ export default function FlyingSeed({
         } else {
           setPhase("done");
           setOpacity(0);
-          onComplete?.();
+          // Only call onComplete once
+          if (!hasCompletedRef.current) {
+            hasCompletedRef.current = true;
+            onCompleteRef.current?.();
+          }
         }
       };
 
@@ -70,7 +90,7 @@ export default function FlyingSeed({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [startX, startY, endX, endY, delay, duration, onComplete]);
+  }, [startX, startY, endX, endY, delay, duration, speed]);
 
   if (phase === "done") return null;
 

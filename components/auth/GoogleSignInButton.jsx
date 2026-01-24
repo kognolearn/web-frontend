@@ -21,6 +21,7 @@ export default function GoogleSignInButton({
       if (redirectTo) {
         callbackUrl.searchParams.set("redirectTo", redirectTo);
       }
+      callbackUrl.searchParams.set("mode", mode);
       callbackUrl.searchParams.set("provider", "google");
 
       const { error } = await supabase.auth.signInWithOAuth({
