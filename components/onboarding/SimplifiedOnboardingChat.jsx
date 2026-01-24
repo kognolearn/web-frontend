@@ -200,6 +200,37 @@ const parseCourseInfoLocal = (raw) => {
   return null;
 };
 
+const stripLeadingPhrases = (value, { allowAtPrefix = false } = {}) => {
+  if (typeof value !== 'string') return '';
+  let text = value.trim();
+  if (!text) return '';
+
+  const rules = [
+    /^(it's|it is|its|course is|class is|my course is|the course is)\b[,:;\-\s]*/i,
+    /^(university is|college is|school is)\b[,:;\-\s]*/i,
+  ];
+
+  if (allowAtPrefix) {
+    rules.unshift(/^at\b[,:;\-\s]*/i);
+  }
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 4) {
+    changed = false;
+    for (const pattern of rules) {
+      const next = text.replace(pattern, '').trim();
+      if (next !== text) {
+        text = next;
+        changed = true;
+      }
+    }
+    guard += 1;
+  }
+
+  return text;
+};
+
 const normalizeParsedCourseInfo = (result) => {
   const courseName =
     typeof result?.courseName === 'string'
@@ -217,8 +248,8 @@ const normalizeParsedCourseInfo = (result) => {
       : '';
 
   return {
-    courseName: courseName || '',
-    collegeName: collegeName || '',
+    courseName: stripLeadingPhrases(courseName) || '',
+    collegeName: stripLeadingPhrases(collegeName, { allowAtPrefix: true }) || '',
   };
 };
 
@@ -701,6 +732,60 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   };
 
+  const handlePendingFieldInput = async (field, message) => {
+    setIsThinking(true);
+    try {
+      const result = await fetchCourseInfo(message);
+      const { courseName, collegeName } = normalizeParsedCourseInfo(result);
+      const clarification =
+        typeof result?.clarification === 'string' ? result.clarification.trim() : '';
+
+      if (field === 'collegeName') {
+        const resolvedCourse = courseName || courseInfo.courseName;
+        const resolvedCollege = collegeName || courseInfo.collegeName;
+        if (resolvedCourse && resolvedCollege) {
+          await finalizeCourseInfo(resolvedCourse, resolvedCollege);
+          return;
+        }
+        if (resolvedCourse && !resolvedCollege) {
+          setCourseInfo((prev) => ({ ...prev, courseName: resolvedCourse }));
+          setPendingField('collegeName');
+          parseAttemptsRef.current = 0;
+          enqueueReplyParts('chat', [
+            clarification || getCourseChatCollegeFollowup(resolvedCourse),
+          ]);
+          return;
+        }
+        handleParseFailure(clarification);
+        return;
+      }
+
+      if (field === 'courseName') {
+        const resolvedCourse = courseName || courseInfo.courseName;
+        const resolvedCollege = collegeName || courseInfo.collegeName;
+        if (resolvedCourse && resolvedCollege) {
+          await finalizeCourseInfo(resolvedCourse, resolvedCollege);
+          return;
+        }
+        if (!resolvedCourse && resolvedCollege) {
+          setCourseInfo((prev) => ({ ...prev, collegeName: resolvedCollege }));
+          setPendingField('courseName');
+          parseAttemptsRef.current = 0;
+          enqueueReplyParts('chat', [
+            clarification || `Got it, ${resolvedCollege}! What's the course name?`,
+          ]);
+          return;
+        }
+        handleParseFailure(clarification);
+        return;
+      }
+    } catch (error) {
+      handleParseFailure();
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
   const overviewTopics = topicsPayload?.overviewTopics || [];
 
   const handleTopicTitleChange = (topicId, title) => {
@@ -949,19 +1034,13 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
 
     if (pendingField === 'collegeName') {
-      if (courseInfo.courseName) {
-        await finalizeCourseInfo(courseInfo.courseName, trimmed);
-        return;
-      }
-      setPendingField(null);
+      await handlePendingFieldInput('collegeName', trimmed);
+      return;
     }
 
     if (pendingField === 'courseName') {
-      if (courseInfo.collegeName) {
-        await finalizeCourseInfo(trimmed, courseInfo.collegeName);
-        return;
-      }
-      setPendingField(null);
+      await handlePendingFieldInput('courseName', trimmed);
+      return;
     }
 
     await parseCourseInfo(trimmed);
