@@ -29,7 +29,7 @@ const STAGES = {
 };
 
 const buildCourseConfirmation = (courseName, collegeName) =>
-  `I have ${courseName} at ${collegeName}. Is that right? Reply "yes" to continue, or send the correction.`;
+  `I have ${courseName} at ${collegeName}. Is that right? Choose Yes to continue or No to correct it.`;
 
 const normalizeCorrectionInput = (value) => {
   if (typeof value !== 'string') return '';
@@ -969,7 +969,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
   const isInputDisabled =
     stage === STAGES.COLLECTING
-      ? isThinking
+      ? isThinking || isConfirmingCourse
       : stage === STAGES.TOPICS_GENERATING || stage === STAGES.COURSE_GENERATING
       ? isGenerationReplying
       : true;
@@ -1132,38 +1132,57 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               )}
             </div>
           )}
-          <div className="flex items-end gap-3">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(event) => {
-                setInput(event.target.value);
-                event.target.style.height = 'auto';
-                event.target.style.height = `${Math.min(event.target.scrollHeight, 150)}px`;
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  handleUserSend(input);
-                }
-              }}
-              placeholder={inputPlaceholder}
-              disabled={isInputDisabled}
-              rows={1}
-              className="flex-1 bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-3 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 resize-none overflow-hidden"
-              style={{ maxHeight: '150px' }}
-              autoFocus
-            />
-            <button
-              onClick={() => handleUserSend(input)}
-              disabled={!input.trim() || isInputDisabled}
-              className="p-3 bg-[var(--primary)] text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90 transition-colors flex-shrink-0"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+          {isConfirmingCourse ? (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleUserSend('Yes')}
+                className="flex-1 rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--primary)]/90 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUserSend('No')}
+                className="flex-1 rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-end gap-3">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  event.target.style.height = 'auto';
+                  event.target.style.height = `${Math.min(event.target.scrollHeight, 150)}px`;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleUserSend(input);
+                  }
+                }}
+                placeholder={inputPlaceholder}
+                disabled={isInputDisabled}
+                rows={1}
+                className="flex-1 bg-[var(--surface-1)] border border-white/10 rounded-2xl px-5 py-3 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50 resize-none overflow-hidden"
+                style={{ maxHeight: '150px' }}
+                autoFocus
+              />
+              <button
+                onClick={() => handleUserSend(input)}
+                disabled={!input.trim() || isInputDisabled}
+                className="p-3 bg-[var(--primary)] text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--primary)]/90 transition-colors flex-shrink-0"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
