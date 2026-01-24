@@ -10,6 +10,8 @@ import { ensureAnonUserId, generateAnonCourse, generateAnonTopics, getAnonUserId
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
 import TopicApprovalSection from '@/components/onboarding/TopicApprovalSection';
+import { supabase } from '@/lib/supabase/client';
+import { transferAnonData } from '@/lib/onboarding';
 import {
   getCourseChatCollegeFollowup,
   getCourseChatGreeting,
@@ -288,6 +290,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [courseTotalModules, setCourseTotalModules] = useState(null);
   const [courseId, setCourseId] = useState(null);
   const [courseError, setCourseError] = useState(null);
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -305,6 +310,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const generationHistoryRef = useRef([]);
   const generationIntroSentRef = useRef(false);
   const courseAccessNotifiedRef = useRef(false);
+  const signupPromptSentRef = useRef(false);
 
   const resolveAnonUserId = async () => {
     const resolved = await ensureAnonUserId();
@@ -388,6 +394,63 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     addBotMessage(introMessage);
   }, [stage]);
 
+  // Show signup prompt shortly after course generation starts
+  useEffect(() => {
+    if (stage !== STAGES.COURSE_GENERATING || signupPromptSentRef.current) return;
+
+    // Check if user is already authenticated
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // User is already signed in, no need to show signup prompt
+        return;
+      }
+
+      // Show signup prompt after a short delay
+      const timer = setTimeout(() => {
+        if (!signupPromptSentRef.current) {
+          signupPromptSentRef.current = true;
+          setShowSignupPrompt(true);
+          const signupMessage = "While you're waiting, let's make your account so you can study this course fully. Sign up with Google or just email? Remember to use a school email.";
+          const history = generationHistoryRef.current || [];
+          generationHistoryRef.current = [...history, { role: 'assistant', content: signupMessage }].slice(-12);
+          enqueueReplyParts('chat', [signupMessage]);
+        }
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    };
+
+    checkAuth();
+  }, [stage, enqueueReplyParts]);
+
+  // Listen for auth state changes to handle signup completion
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setShowSignupPrompt(false);
+        setIsAuthenticating(false);
+
+        // Transfer anonymous course data to the new user
+        try {
+          const anonUserId = anonUserIdRef.current;
+          if (anonUserId) {
+            await transferAnonData(anonUserId);
+          }
+
+          // If course is ready, redirect to it
+          if (courseId) {
+            router.push(`/courses/${courseId}`);
+          }
+        } catch (error) {
+          console.error('[SimplifiedOnboardingChat] Failed to transfer anon data:', error);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [courseId, router]);
+
   useEffect(() => {
     if (!courseId || courseAccessNotifiedRef.current) return;
     if (courseModulesComplete < 1) return;
@@ -398,6 +461,45 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationHistoryRef.current = [...history, { role: 'assistant', content: readyMessage }].slice(-12);
     enqueueReplyParts('chat', [readyMessage]);
   }, [courseId, courseModulesComplete, enqueueReplyParts]);
+
+  const handleGoogleSignup = async () => {
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const callbackUrl = new URL('/auth/callback', window.location.origin);
+      callbackUrl.searchParams.set('mode', 'signup');
+      callbackUrl.searchParams.set('provider', 'google');
+      if (courseId) {
+        callbackUrl.searchParams.set('redirectTo', `/courses/${courseId}`);
+      }
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: callbackUrl.toString(),
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message);
+        setIsAuthenticating(false);
+      }
+    } catch (err) {
+      setAuthError('An unexpected error occurred. Please try again.');
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleEmailSignup = () => {
+    // Redirect to the signup page with return URL
+    const returnUrl = courseId ? `/courses/${courseId}` : '/';
+    router.push(`/auth/sign-in?redirectTo=${encodeURIComponent(returnUrl)}`);
+  };
 
   const handleSignIn = () => {
     router.push('/auth/sign-in');
@@ -1209,6 +1311,49 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
                   Access Course
                 </button>
               )}
+            </div>
+          )}
+          {showSignupPrompt && (
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-4">
+              {authError && (
+                <div className="mb-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                  {authError}
+                </div>
+              )}
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignup}
+                  disabled={isAuthenticating}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-white/10 bg-[var(--surface-1)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAuthenticating ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                  )}
+                  <span>{isAuthenticating ? 'Redirecting...' : 'Sign up with Google'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEmailSignup}
+                  disabled={isAuthenticating}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-[var(--surface-1)] text-[var(--foreground)] font-medium hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span>Sign up with Email</span>
+                </button>
+              </div>
             </div>
           )}
           {isConfirmingCourse ? (
