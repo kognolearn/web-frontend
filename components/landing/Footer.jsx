@@ -46,7 +46,7 @@ export default function Footer() {
               <Link href="/auth/sign-in" className="hover:text-[var(--foreground)] transition-colors">
                 Sign in
               </Link>
-              <a href="mailto:support@kogno.ai" className="hover:text-[var(--foreground)] transition-colors">
+              <a href="mailto:team@kognolearn.com" className="hover:text-[var(--foreground)] transition-colors">
                 Contact
               </a>
             </nav>

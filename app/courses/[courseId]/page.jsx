@@ -866,6 +866,15 @@ export default function CoursePage() {
       return null;
     }
 
+    // For discussion and messages tabs, focus existing tab if one exists
+    if (type === 'discussion' || type === 'messages') {
+      const existingTab = tabs.find(tab => tab.type === type);
+      if (existingTab) {
+        setActiveTabId(existingTab.id);
+        return existingTab.id;
+      }
+    }
+
     const newId = options.id || `tab-${Date.now()}`;
     const getDefaultTitle = () => {
       switch (type) {

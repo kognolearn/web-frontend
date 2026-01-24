@@ -22,6 +22,7 @@ export default function DiscussionTab({
   const [highlightPostId, setHighlightPostId] = useState(initialPostId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isBanned, setIsBanned] = useState(false);
   const [sortBy, setSortBy] = useState("recent");
   const [timeRange, setTimeRange] = useState("all");
   const [page, setPage] = useState(1);
@@ -42,7 +43,14 @@ export default function DiscussionTab({
       });
 
       const res = await authFetch(`/api/community/groups/${studyGroupId}/posts?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch posts");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data.error?.toLowerCase().includes('banned')) {
+          setIsBanned(true);
+          return;
+        }
+        throw new Error(data.error || "Failed to fetch posts");
+      }
 
       const data = await res.json();
 
@@ -230,6 +238,31 @@ export default function DiscussionTab({
   };
 
   const isSoloGroup = memberCount <= 1;
+
+  // Banned state UI
+  if (isBanned) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/10 flex items-center justify-center mb-6">
+          <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </div>
+        <h3 className="text-xl font-bold text-[var(--foreground)] mb-3">Access Restricted</h3>
+        <p className="text-[var(--muted-foreground)] max-w-sm mb-6 leading-relaxed">
+          You have been restricted from participating in social features for this study group due to a violation of community guidelines.
+        </p>
+        <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] max-w-sm">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            If you believe this is a mistake, please contact support at{" "}
+            <a href="mailto:team@kognolearn.com" className="text-[var(--primary)] hover:underline">
+              team@kognolearn.com
+            </a>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!studyGroupId || isSoloGroup) {
     return (

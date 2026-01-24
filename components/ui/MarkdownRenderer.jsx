@@ -64,9 +64,34 @@ function parseTabGroup(lines, startIdx) {
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
+    const sanitized = trimmed.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
-    // End of entire tab group
-    if (/^:::$/.test(trimmed) || (/^:::/.test(trimmed) && !/^:::tab/i.test(trimmed))) {
+    // Check if this is a potential end marker (standalone :::)
+    if (/^:::$/.test(sanitized) || (/^:::/.test(sanitized) && !/^:::\s*tab/i.test(sanitized))) {
+      // Look ahead to see if there's another tab following
+      let nextNonEmptyIdx = i + 1;
+      while (nextNonEmptyIdx < lines.length && lines[nextNonEmptyIdx].trim() === '') {
+        nextNonEmptyIdx++;
+      }
+      const nextLine = nextNonEmptyIdx < lines.length ? lines[nextNonEmptyIdx].trim().replace(/[\u200B-\u200D\uFEFF]/g, '') : '';
+      const nextIsTab = /^:::\s*tab/i.test(nextLine);
+
+      if (nextIsTab) {
+        // This ::: just closes the current tab, not the entire group
+        // Save current tab if we have one, then continue to let the next iteration handle the new tab
+        if (currentTab) {
+          tabs.push({
+            ...currentTab,
+            content: currentContent.join("\n").trim(),
+          });
+          currentTab = null;
+          currentContent = [];
+        }
+        i++;
+        continue;
+      }
+
+      // End of entire tab group
       if (currentTab) {
         tabs.push({
           ...currentTab,
@@ -74,10 +99,24 @@ function parseTabGroup(lines, startIdx) {
         });
       }
       i++;
+
+      // If the next non-empty line is also a standalone :::, consume it too
+      // (this handles the case where each tab has its own ::: closer AND there's a final ::: for the container)
+      while (i < lines.length) {
+        const checkLine = lines[i].trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
+        if (checkLine === '') {
+          i++;
+          continue;
+        }
+        if (/^:::$/.test(checkLine)) {
+          i++;
+        }
+        break;
+      }
       break;
     }
 
-    const tabMatch = trimmed.match(/^:::tab\s*\{([^}]*)\}/i);
+    const tabMatch = sanitized.match(/^:::\s*tab\s*\{([^}]*)\}/i);
     if (tabMatch) {
       if (currentTab) {
         tabs.push({
@@ -122,6 +161,9 @@ function parseContent(content) {
   normalizedContent = normalizedContent
     .replace(/\\\\(\(|\))/g, '\\$1')
     .replace(/\\\\(\[|\])/g, '\\$1');
+
+  // Strip zero-width/invisible chars that can break directive parsing
+  normalizedContent = normalizedContent.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
   const lines = normalizedContent.split('\n');
   const blocks = [];

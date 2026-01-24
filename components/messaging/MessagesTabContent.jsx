@@ -134,6 +134,7 @@ export default function MessagesTabContent({
             currentUserId={userId}
             initialConversationId={initialConversationId}
             fullPage
+            isActive={isActive}
           />
         )}
       </div>

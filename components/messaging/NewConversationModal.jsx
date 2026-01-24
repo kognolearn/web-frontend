@@ -9,6 +9,7 @@ export default function NewConversationModal({
   studyGroupId,
   members = [],
   onConversationCreated,
+  blockedUsers = new Set(),
 }) {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [groupName, setGroupName] = useState("");
@@ -115,34 +116,53 @@ export default function NewConversationModal({
             ) : (
               members.map((member) => {
                 const isSelected = selectedMembers.includes(member.userId);
+                const isBlocked = blockedUsers.has(member.userId);
                 return (
                   <button
                     key={member.userId}
                     type="button"
-                    onClick={() => handleToggleMember(member.userId)}
+                    onClick={() => !isBlocked && handleToggleMember(member.userId)}
+                    disabled={isBlocked}
                     className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${
-                      isSelected
+                      isBlocked
+                        ? "opacity-50 cursor-not-allowed bg-red-500/5"
+                        : isSelected
                         ? "bg-[var(--primary)]/10 border border-[var(--primary)]/30"
                         : "hover:bg-[var(--surface-2)]"
                     }`}
                   >
                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                      isSelected
+                      isBlocked
+                        ? "border-red-500/50 bg-red-500/10"
+                        : isSelected
                         ? "bg-[var(--primary)] border-[var(--primary)]"
                         : "border-[var(--muted-foreground)]"
                     }`}>
-                      {isSelected && (
+                      {isBlocked ? (
+                        <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                      ) : isSelected && (
                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-[var(--primary)]/20 flex items-center justify-center text-xs font-semibold text-[var(--primary)]">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                      isBlocked
+                        ? "bg-red-500/10 text-red-500"
+                        : "bg-[var(--primary)]/20 text-[var(--primary)]"
+                    }`}>
                       {member.displayName?.[0]?.toUpperCase() || "?"}
                     </div>
-                    <span className="text-sm text-[var(--foreground)]">
-                      {member.displayName || "Unknown"}
-                    </span>
+                    <div className="flex flex-col items-start">
+                      <span className={`text-sm ${isBlocked ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]"}`}>
+                        {member.displayName || "Unknown"}
+                      </span>
+                      {isBlocked && (
+                        <span className="text-xs text-red-500">Blocked</span>
+                      )}
+                    </div>
                   </button>
                 );
               })
