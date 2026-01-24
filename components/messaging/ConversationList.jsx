@@ -6,6 +6,7 @@ export default function ConversationList({
   selectedId,
   onSelect,
   currentUserId,
+  blockedUsers = new Set(),
 }) {
   if (loading) {
     return (
@@ -71,6 +72,10 @@ export default function ConversationList({
         const lastMessageText = conversation.lastMessage?.content || conversation.lastMessage;
         const lastMessageAt = conversation.lastMessage?.createdAt || conversation.lastMessageAt || conversation.updatedAt;
 
+        // Check if any participant in this conversation is blocked (for 1:1 DMs)
+        const otherParticipants = conversation.participants?.filter(p => p.userId !== currentUserId) || [];
+        const isBlocked = !conversation.isGroupDm && otherParticipants.some(p => blockedUsers.has(p.userId));
+
         return (
           <button
             key={conversation.id}
@@ -103,14 +108,23 @@ export default function ConversationList({
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`text-sm truncate ${hasUnread ? "font-semibold text-[var(--foreground)]" : "font-medium text-[var(--foreground)]"}`}>
+                  <span className={`text-sm truncate flex items-center gap-1.5 ${hasUnread ? "font-semibold text-[var(--foreground)]" : "font-medium text-[var(--foreground)]"} ${isBlocked ? "text-[var(--muted-foreground)]" : ""}`}>
                     {getConversationName(conversation)}
+                    {isBlocked && (
+                      <svg className="w-3.5 h-3.5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Blocked">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                    )}
                   </span>
                   <span className="text-xs text-[var(--muted-foreground)] shrink-0">
                     {formatTime(lastMessageAt)}
                   </span>
                 </div>
-                {lastMessageText && (
+                {isBlocked ? (
+                  <p className="text-xs truncate mt-0.5 text-red-500/70 italic">
+                    User blocked
+                  </p>
+                ) : lastMessageText && (
                   <p className={`text-xs truncate mt-0.5 ${hasUnread ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
                     {lastMessageText}
                   </p>

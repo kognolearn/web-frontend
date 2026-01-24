@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { authFetch } from "@/lib/api";
+import { useMessagingRealtime } from "@/hooks/useMessagingRealtime";
 import MessageComposer from "./MessageComposer";
 
 export default function ConversationThread({
@@ -9,6 +10,8 @@ export default function ConversationThread({
   currentUserId,
   studyGroupId,
   onLeft,
+  blockedUsers: parentBlockedUsers = new Set(),
+  onBlockChange,
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,9 +19,12 @@ export default function ConversationThread({
   const [page, setPage] = useState(1);
   const [canSend, setCanSend] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
-  const [blockedUsers, setBlockedUsers] = useState(new Set());
+  const [localBlockedUsers, setLocalBlockedUsers] = useState(new Set());
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Merge parent and local blocked users
+  const blockedUsers = new Set([...parentBlockedUsers, ...localBlockedUsers]);
 
   const fetchMessages = useCallback(async (pageNum = 1, append = false) => {
     if (!conversation?.id) return;
@@ -52,11 +58,33 @@ export default function ConversationThread({
     }
   }, [conversation?.id]);
 
+  // Initial fetch only - realtime handles new messages
   useEffect(() => {
     fetchMessages(1);
-    const interval = setInterval(() => fetchMessages(1), 5000);
-    return () => clearInterval(interval);
   }, [fetchMessages]);
+
+  // Handle realtime new messages
+  const handleRealtimeNewMessage = useCallback((payload) => {
+    // Only handle messages for this conversation
+    if (payload.conversationId !== conversation?.id) return;
+
+    // Don't add duplicate messages (e.g., if sender is current user and message was already added)
+    setMessages(prev => {
+      const exists = prev.some(m => m.id === payload.message.id);
+      if (exists) return prev;
+      return [...prev, payload.message];
+    });
+
+    // Mark as read since we're viewing this conversation
+    authFetch(`/api/messaging/conversations/${conversation.id}/read`, {
+      method: "PATCH",
+    }).catch(() => {});
+  }, [conversation?.id]);
+
+  // Subscribe to realtime messaging updates
+  useMessagingRealtime(currentUserId, {
+    onNewMessage: handleRealtimeNewMessage,
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -104,12 +132,13 @@ export default function ConversationThread({
   };
 
   const handleBlockUser = async (userId, displayName) => {
-    if (!confirm(`Are you sure you want to block ${displayName}? You won't see their messages.`)) return;
+    if (!confirm(`Are you sure you want to block ${displayName}? You won't be able to message them.`)) return;
 
     try {
       const res = await authFetch(`/api/blocks/${userId}`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to block user");
-      setBlockedUsers(prev => new Set([...prev, userId]));
+      setLocalBlockedUsers(prev => new Set([...prev, userId]));
+      onBlockChange?.(userId, true);
       alert(`${displayName} has been blocked.`);
     } catch (err) {
       console.error("Error blocking user:", err);
@@ -121,11 +150,12 @@ export default function ConversationThread({
     try {
       const res = await authFetch(`/api/blocks/${userId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to unblock user");
-      setBlockedUsers(prev => {
+      setLocalBlockedUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(userId);
         return newSet;
       });
+      onBlockChange?.(userId, false);
       alert(`${displayName} has been unblocked.`);
     } catch (err) {
       console.error("Error unblocking user:", err);
@@ -203,7 +233,11 @@ export default function ConversationThread({
     return diff < 5 * 60 * 1000; // 5 minutes
   };
 
-  const canSendMessage = canSend;
+  // Check if any other participant is blocked (for 1:1 DMs, this blocks messaging)
+  const otherParticipants = getOtherParticipants();
+  const isOtherParticipantBlocked = !conversation.isGroupDm && otherParticipants.some(p => blockedUsers.has(p.userId));
+
+  const canSendMessage = canSend && !isOtherParticipantBlocked;
 
   return (
     <div className="flex flex-col h-full">
@@ -220,9 +254,20 @@ export default function ConversationThread({
             )}
           </div>
           <div>
-            <h3 className="font-semibold text-[var(--foreground)] text-sm">{getConversationName()}</h3>
+            <h3 className="font-semibold text-[var(--foreground)] text-sm flex items-center gap-1.5">
+              {getConversationName()}
+              {isOtherParticipantBlocked && (
+                <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Blocked">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              )}
+            </h3>
             <p className="text-xs text-[var(--muted-foreground)]">
-              {conversation.participants?.length || 0} participant{conversation.participants?.length !== 1 ? 's' : ''}
+              {isOtherParticipantBlocked ? (
+                <span className="text-red-500/70">Blocked</span>
+              ) : (
+                <>{conversation.participants?.length || 0} participant{conversation.participants?.length !== 1 ? 's' : ''}</>
+              )}
             </p>
           </div>
         </div>
@@ -412,7 +457,21 @@ export default function ConversationThread({
       </div>
 
       {/* Composer */}
-      {!canSendMessage ? (
+      {isOtherParticipantBlocked ? (
+        <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-[var(--surface-1)] text-center">
+          <div className="flex items-center justify-center gap-2 text-red-500">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+            <p className="text-sm font-medium">
+              You have blocked this user
+            </p>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+            Unblock them from the menu to send messages.
+          </p>
+        </div>
+      ) : !canSendMessage ? (
         <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-[var(--surface-1)] text-center">
           <p className="text-sm text-[var(--muted-foreground)]">
             Messages are read-only in this conversation.

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
+import { useMessagingRealtime } from "@/hooks/useMessagingRealtime";
 import ConversationList from "./ConversationList";
 import ConversationThread from "./ConversationThread";
 import NewConversationModal from "./NewConversationModal";
@@ -12,13 +13,16 @@ export default function MessagingPanel({
   members: providedMembers = [],
   embedded = false,
   fullPage = false,
-  initialConversationId = null
+  initialConversationId = null,
+  isActive = true
 }) {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [members, setMembers] = useState(providedMembers);
+  const [isBanned, setIsBanned] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState(new Set());
 
   // Auto-select initial conversation if provided
   useEffect(() => {
@@ -35,7 +39,14 @@ export default function MessagingPanel({
 
     try {
       const res = await authFetch(`/api/messaging/conversations?studyGroupId=${studyGroupId}`);
-      if (!res.ok) throw new Error("Failed to fetch conversations");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data.error?.toLowerCase().includes('banned')) {
+          setIsBanned(true);
+          return;
+        }
+        throw new Error(data.error || "Failed to fetch conversations");
+      }
       const data = await res.json();
       setConversations(data.conversations || []);
     } catch (err) {
@@ -45,12 +56,45 @@ export default function MessagingPanel({
     }
   }, [studyGroupId]);
 
+  // Initial fetch only - realtime handles updates
   useEffect(() => {
     fetchConversations();
-    // Poll for new conversations every 10 seconds
-    const interval = setInterval(fetchConversations, 10000);
-    return () => clearInterval(interval);
   }, [fetchConversations]);
+
+  // Handle realtime conversation updates
+  const handleRealtimeConversationCreated = useCallback((payload) => {
+    // Only add if it's for our study group
+    if (payload.studyGroupId !== studyGroupId) return;
+
+    setConversations(prev => {
+      const exists = prev.some(c => c.id === payload.conversationId);
+      if (exists) return prev;
+      // Refetch to get full conversation data with participants
+      fetchConversations();
+      return prev;
+    });
+  }, [studyGroupId, fetchConversations]);
+
+  const handleRealtimeConversationUpdated = useCallback((payload) => {
+    setConversations(prev => prev.map(conv => {
+      if (conv.id !== payload.conversationId) return conv;
+      return {
+        ...conv,
+        lastMessage: payload.lastMessage || conv.lastMessage,
+        updatedAt: payload.updatedAt || conv.updatedAt,
+        // Increment unread count if not the selected conversation
+        unreadCount: selectedConversation?.id === conv.id
+          ? conv.unreadCount
+          : (conv.unreadCount || 0) + 1,
+      };
+    }));
+  }, [selectedConversation?.id]);
+
+  // Subscribe to realtime messaging updates
+  useMessagingRealtime(currentUserId, {
+    onConversationCreated: handleRealtimeConversationCreated,
+    onConversationUpdated: handleRealtimeConversationUpdated,
+  });
 
   const fetchMembers = useCallback(async () => {
     if (!studyGroupId) return;
@@ -64,11 +108,44 @@ export default function MessagingPanel({
     }
   }, [studyGroupId]);
 
+  const fetchBlockedUsers = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/blocks');
+      if (!res.ok) throw new Error("Failed to fetch blocked users");
+      const data = await res.json();
+      // Backend returns { userId, blockedAt, displayName } for each blocked user
+      const blockedIds = (data.blockedUsers || []).map(u => u.userId);
+      setBlockedUsers(new Set(blockedIds));
+    } catch (err) {
+      console.error("Error fetching blocked users:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (studyGroupId) {
       fetchMembers();
+      fetchBlockedUsers();
     }
-  }, [studyGroupId, fetchMembers]);
+  }, [studyGroupId, fetchMembers, fetchBlockedUsers]);
+
+  // Refetch blocked users when tab becomes active (to pick up blocks made from community area)
+  useEffect(() => {
+    if (isActive && studyGroupId) {
+      fetchBlockedUsers();
+    }
+  }, [isActive, studyGroupId, fetchBlockedUsers]);
+
+  const handleBlockChange = useCallback((userId, isBlocked) => {
+    setBlockedUsers(prev => {
+      const newSet = new Set(prev);
+      if (isBlocked) {
+        newSet.add(userId);
+      } else {
+        newSet.delete(userId);
+      }
+      return newSet;
+    });
+  }, []);
 
   const handleConversationCreated = (conversation) => {
     setConversations(prev => {
@@ -100,6 +177,31 @@ export default function MessagingPanel({
       setSelectedConversation(prev => markConversationLeft(prev));
     }
   };
+
+  // Banned state UI
+  if (isBanned) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/10 flex items-center justify-center mb-6">
+          <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </div>
+        <h3 className="text-xl font-bold text-[var(--foreground)] mb-3">Access Restricted</h3>
+        <p className="text-[var(--muted-foreground)] max-w-sm mb-6 leading-relaxed">
+          You have been restricted from participating in social features for this study group due to a violation of community guidelines.
+        </p>
+        <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] max-w-sm">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            If you believe this is a mistake, please contact support at{" "}
+            <a href="mailto:team@kognolearn.com" className="text-[var(--primary)] hover:underline">
+              team@kognolearn.com
+            </a>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!studyGroupId) {
     return (
@@ -144,6 +246,7 @@ export default function MessagingPanel({
           selectedId={selectedConversation?.id}
           onSelect={setSelectedConversation}
           currentUserId={currentUserId}
+          blockedUsers={blockedUsers}
         />
       </div>
 
@@ -155,6 +258,8 @@ export default function MessagingPanel({
             currentUserId={currentUserId}
             studyGroupId={studyGroupId}
             onLeft={() => handleConversationLeft(selectedConversation.id)}
+            blockedUsers={blockedUsers}
+            onBlockChange={handleBlockChange}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
@@ -178,6 +283,7 @@ export default function MessagingPanel({
         studyGroupId={studyGroupId}
         members={members.filter(m => m.userId !== currentUserId)}
         onConversationCreated={handleConversationCreated}
+        blockedUsers={blockedUsers}
       />
     </div>
   );

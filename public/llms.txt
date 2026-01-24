@@ -42,7 +42,7 @@ Kogno supports all academic subjects including:
 
 ## Contact
 Website: https://kogno.ai
-Support: support@kogno.ai
+Support: team@kognolearn.com
 
 ## Technical Information
 - Built with Next.js and React
