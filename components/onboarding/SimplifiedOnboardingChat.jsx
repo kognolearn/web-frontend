@@ -200,6 +200,28 @@ const parseCourseInfoLocal = (raw) => {
   return null;
 };
 
+const normalizeParsedCourseInfo = (result) => {
+  const courseName =
+    typeof result?.courseName === 'string'
+      ? result.courseName.trim()
+      : typeof result?.course === 'string'
+      ? result.course.trim()
+      : '';
+  const collegeName =
+    typeof result?.university === 'string'
+      ? result.university.trim()
+      : typeof result?.collegeName === 'string'
+      ? result.collegeName.trim()
+      : typeof result?.college === 'string'
+      ? result.college.trim()
+      : '';
+
+  return {
+    courseName: courseName || '',
+    collegeName: collegeName || '',
+  };
+};
+
 export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const isOverlay = variant === 'overlay';
   const router = useRouter();
@@ -365,9 +387,11 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     return result;
   };
 
-  const handleParseFailure = () => {
+  const handleParseFailure = (message) => {
     parseAttemptsRef.current += 1;
-    enqueueReplyParts('chat', [getCourseChatRetryMessage(parseAttemptsRef.current)]);
+    const fallback = getCourseChatRetryMessage(parseAttemptsRef.current);
+    const reply = typeof message === 'string' && message.trim() ? message.trim() : fallback;
+    enqueueReplyParts('chat', [reply]);
   };
 
   const applyCourseCorrection = (nextCourseName, nextCollegeName) => {
@@ -415,21 +439,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
 
     const localUpdate = parseCorrectionLocal(cleaned);
-    if (localUpdate?.courseName && localUpdate?.collegeName) {
-      applyCourseCorrection(localUpdate.courseName, localUpdate.collegeName);
-      return;
-    }
-
     setIsThinking(true);
     try {
       const result = await fetchCourseInfo(cleaned);
-      const courseName = typeof result?.courseName === 'string' ? result.courseName.trim() : '';
-      const collegeName =
-        typeof result?.university === 'string'
-          ? result.university.trim()
-          : typeof result?.collegeName === 'string'
-          ? result.collegeName.trim()
-          : '';
+      const { courseName, collegeName } = normalizeParsedCourseInfo(result);
       applyCourseCorrection(
         courseName || localUpdate?.courseName || courseInfo.courseName,
         collegeName || localUpdate?.collegeName || courseInfo.collegeName
@@ -647,13 +660,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const handleParsedResult = async (result) => {
-    const courseName = typeof result?.courseName === 'string' ? result.courseName.trim() : '';
-    const collegeName =
-      typeof result?.university === 'string'
-        ? result.university.trim()
-        : typeof result?.collegeName === 'string'
-        ? result.collegeName.trim()
-        : '';
+    const { courseName, collegeName } = normalizeParsedCourseInfo(result);
+    const clarification =
+      typeof result?.clarification === 'string' ? result.clarification.trim() : '';
     if (courseName && collegeName) {
       await finalizeCourseInfo(courseName, collegeName);
       return;
@@ -663,20 +672,24 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       setCourseInfo((prev) => ({ ...prev, courseName }));
       setPendingField('collegeName');
       parseAttemptsRef.current = 0;
-      enqueueReplyParts('chat', [getCourseChatCollegeFollowup(courseName)]);
+      enqueueReplyParts('chat', [clarification || getCourseChatCollegeFollowup(courseName)]);
       return;
     }
 
-    handleParseFailure();
+    if (!courseName && collegeName) {
+      setCourseInfo((prev) => ({ ...prev, collegeName }));
+      setPendingField('courseName');
+      parseAttemptsRef.current = 0;
+      enqueueReplyParts('chat', [
+        clarification || `Got it, ${collegeName}! What's the course name?`,
+      ]);
+      return;
+    }
+
+    handleParseFailure(clarification);
   };
 
   const parseCourseInfo = async (message) => {
-    const localParsed = parseCourseInfoLocal(message);
-    if (localParsed) {
-      await handleParsedResult(localParsed);
-      return;
-    }
-
     setIsThinking(true);
     try {
       const result = await fetchCourseInfo(message);
@@ -938,6 +951,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     if (pendingField === 'collegeName') {
       if (courseInfo.courseName) {
         await finalizeCourseInfo(courseInfo.courseName, trimmed);
+        return;
+      }
+      setPendingField(null);
+    }
+
+    if (pendingField === 'courseName') {
+      if (courseInfo.collegeName) {
+        await finalizeCourseInfo(trimmed, courseInfo.collegeName);
         return;
       }
       setPendingField(null);
