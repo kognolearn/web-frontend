@@ -25,11 +25,19 @@ import { defaultTopicRating } from '@/app/courses/create/utils';
 const STAGES = {
   COLLECTING: 'collecting',
   STUDY_MODE_SELECTION: 'study_mode_selection',
+  TIME_SELECTION: 'time_selection',
   SYLLABUS_COLLECTION: 'syllabus_collection',
   TOPICS_GENERATING: 'topics_generating',
   TOPICS_APPROVAL: 'topics_approval',
   COURSE_GENERATING: 'course_generating',
 };
+
+const TIME_OPTIONS = [
+  { id: '1day', label: '1 day', days: 1 },
+  { id: '3days', label: '3 days', days: 3 },
+  { id: '1week', label: '1 week', days: 7 },
+  { id: '2weeks', label: '2 weeks', days: 14 },
+];
 
 const STUDY_MODES = {
   DEEP: 'deep',
@@ -315,6 +323,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     courseName: '',
     collegeName: '',
     studyMode: '',
+    timeRemainingDays: null,
     syllabusText: '',
     syllabusFiles: [],
   });
@@ -742,7 +751,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const startTopicGeneration = async () => {
-    const { courseName, collegeName, studyMode, syllabusText, syllabusFiles } = courseInfo;
+    const { courseName, collegeName, studyMode, timeRemainingDays, syllabusText, syllabusFiles } = courseInfo;
     if (!courseName || !collegeName) return;
 
     setStage(STAGES.TOPICS_GENERATING);
@@ -780,6 +789,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         collegeName,
         {
           studyMode: studyMode || STUDY_MODES.DEEP,
+          timeRemainingDays: timeRemainingDays || null,
           syllabusText: syllabusText || '',
           syllabusFiles: syllabusFiles || [],
           onProgress: (progressValue, message) => {
@@ -859,19 +869,34 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     addUserMessage(mode === STUDY_MODES.DEEP ? 'Deep Study' : 'Cram Mode');
 
     setCourseInfo((prev) => ({ ...prev, studyMode: mode }));
-    setStage(STAGES.SYLLABUS_COLLECTION);
 
     if (mode === STUDY_MODES.DEEP) {
+      setStage(STAGES.SYLLABUS_COLLECTION);
       enqueueReplyParts('chat', [
         "Deep dive mode - I'll build you a comprehensive course for thorough understanding.",
         "Do you have a syllabus, course outline, or specific topics you want to cover? Paste them below, or type 'skip' to let me generate topics based on the course name.",
       ]);
     } else {
+      // For cram mode, ask how much time they have
+      setStage(STAGES.TIME_SELECTION);
       enqueueReplyParts('chat', [
         "Cram mode activated! I'll focus on high-yield exam content.",
-        "To make this as effective as possible, paste your syllabus, study guide, or list of topics you need to know. Or type 'skip' to generate common exam topics.",
+        "How much time do you have until your exam?",
       ]);
     }
+  };
+
+  const handleTimeSelection = (timeOption) => {
+    // Add user message showing their selection
+    addUserMessage(timeOption.label);
+
+    setCourseInfo((prev) => ({ ...prev, timeRemainingDays: timeOption.days }));
+    setStage(STAGES.SYLLABUS_COLLECTION);
+
+    enqueueReplyParts('chat', [
+      `Got it - ${timeOption.label} to go. I'll prioritize the highest-yield exam content.`,
+      "Upload a practice exam, past exam, or study guide. You can also paste exam topics or type 'skip' to let me generate common exam topics.",
+    ]);
   };
 
   const handleFileSelect = async (event) => {
@@ -1146,6 +1171,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         courseName: courseInfo.courseName,
         university: courseInfo.collegeName,
         studyMode: courseInfo.studyMode || STUDY_MODES.DEEP,
+        timeRemainingDays: courseInfo.timeRemainingDays || null,
         syllabusText: courseInfo.syllabusText || '',
         syllabusFiles: courseInfo.syllabusFiles || [],
         topicsPayload: topics,
@@ -1331,6 +1357,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       ? isThinking || isConfirmingCourse
       : stage === STAGES.STUDY_MODE_SELECTION
       ? true // Use buttons for study mode
+      : stage === STAGES.TIME_SELECTION
+      ? true // Use buttons for time selection
       : stage === STAGES.SYLLABUS_COLLECTION
       ? false
       : stage === STAGES.TOPICS_GENERATING || stage === STAGES.COURSE_GENERATING
@@ -1339,8 +1367,12 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const inputPlaceholder =
     stage === STAGES.STUDY_MODE_SELECTION
       ? 'Select a study mode above...'
+      : stage === STAGES.TIME_SELECTION
+      ? 'Select how much time you have...'
       : stage === STAGES.SYLLABUS_COLLECTION
-      ? "Paste your syllabus/topics here, or type 'skip'..."
+      ? courseInfo.studyMode === STUDY_MODES.CRAM
+        ? "Paste exam topics or study guide, or type 'skip'..."
+        : "Paste your syllabus/topics here, or type 'skip'..."
       : stage === STAGES.TOPICS_GENERATING
       ? 'Ask me anything while I build your topics...'
       : stage === STAGES.TOPICS_APPROVAL
@@ -1558,6 +1590,19 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               >
                 Cram Mode
               </button>
+            </div>
+          ) : stage === STAGES.TIME_SELECTION ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {TIME_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => handleTimeSelection(option)}
+                  className="flex-1 min-w-[80px] rounded-xl border border-white/10 bg-[var(--surface-1)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--primary)] hover:text-white transition-colors"
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           ) : isConfirmingCourse ? (
             <div className="flex items-center gap-3">
