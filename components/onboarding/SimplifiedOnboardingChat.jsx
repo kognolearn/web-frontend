@@ -300,9 +300,11 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [attachedFiles, setAttachedFiles] = useState([]);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const messagesRef = useRef([initialMessageRef.current]);
   const queueRef = useRef([]);
   const messageQueueTimerRef = useRef(null);
@@ -815,6 +817,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const handleStudyModeSelection = (mode) => {
+    // Add user message showing their selection
+    addUserMessage(mode === STUDY_MODES.DEEP ? 'Deep Study' : 'Cram Mode');
+
     setCourseInfo((prev) => ({ ...prev, studyMode: mode }));
     setStage(STAGES.SYLLABUS_COLLECTION);
 
@@ -829,6 +834,60 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         "To make this as effective as possible, paste your syllabus, study guide, or list of topics you need to know. Or type 'skip' to generate common exam topics.",
       ]);
     }
+  };
+
+  const handleFileSelect = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const acceptedTypes = [
+      'application/pdf',
+      'text/plain',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+
+    const validFiles = files.filter(
+      (file) => acceptedTypes.includes(file.type) || file.name.endsWith('.txt') || file.name.endsWith('.pdf') || file.name.endsWith('.doc') || file.name.endsWith('.docx')
+    );
+
+    if (validFiles.length === 0) {
+      enqueueReplyParts('chat', ['Please upload a PDF, Word doc, or text file.']);
+      return;
+    }
+
+    setAttachedFiles(validFiles);
+
+    // Read file contents for text files
+    const fileContents = await Promise.all(
+      validFiles.map(async (file) => {
+        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+          return await file.text();
+        }
+        // For PDFs and Word docs, just return the filename as placeholder
+        // The backend would need to handle these
+        return `[Attached file: ${file.name}]`;
+      })
+    );
+
+    const combinedContent = fileContents.join('\n\n');
+    const fileNames = validFiles.map((f) => f.name).join(', ');
+
+    addUserMessage(`Attached: ${fileNames}`);
+    setCourseInfo((prev) => ({ ...prev, syllabusText: combinedContent }));
+    setAttachedFiles([]);
+
+    enqueueReplyParts('chat', [
+      `Got it! I'll use ${validFiles.length > 1 ? 'these files' : 'this file'} to build your topics.`,
+    ]);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    // Start topic generation
+    void startTopicGeneration();
   };
 
   const handleSyllabusInput = (text) => {
@@ -1468,6 +1527,28 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
             </div>
           ) : (
             <div className="flex items-end gap-3">
+              {stage === STAGES.SYLLABUS_COLLECTION && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    multiple
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 border border-white/10 bg-[var(--surface-1)] text-[var(--muted-foreground)] rounded-xl hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] transition-colors flex-shrink-0"
+                    title="Attach syllabus file"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+                </>
+              )}
               <textarea
                 ref={inputRef}
                 value={input}
