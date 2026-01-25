@@ -36,6 +36,42 @@ const STUDY_MODES = {
   CRAM: 'cram',
 };
 
+// Convert a File to base64 string
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        const base64 = result.split(',')[1] ?? '';
+        resolve(base64);
+      } else {
+        reject(new Error(`Unable to read ${file.name}`));
+      }
+    };
+    reader.onerror = () => reject(new Error(`Unable to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+};
+
+// Build file payload in OpenRouter format (same as main course creation)
+const buildFilePayload = async (files) => {
+  const payloads = await Promise.all(
+    files.map(async (file) => {
+      const base64 = await fileToBase64(file);
+      const mimeType = file.type || 'application/octet-stream';
+      return {
+        type: 'file',
+        file: {
+          filename: file.name,
+          file_data: `data:${mimeType};base64,${base64}`,
+        },
+      };
+    })
+  );
+  return payloads;
+};
+
 const buildCourseConfirmation = (courseName, collegeName) =>
   `I have ${courseName} at ${collegeName}. Is that right? Choose Yes to continue or No to correct it.`;
 
@@ -280,6 +316,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     collegeName: '',
     studyMode: '',
     syllabusText: '',
+    syllabusFiles: [],
   });
   const [isConfirmingCourse, setIsConfirmingCourse] = useState(false);
   const [needsCourseCorrection, setNeedsCourseCorrection] = useState(false);
@@ -705,7 +742,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const startTopicGeneration = async () => {
-    const { courseName, collegeName, studyMode, syllabusText } = courseInfo;
+    const { courseName, collegeName, studyMode, syllabusText, syllabusFiles } = courseInfo;
     if (!courseName || !collegeName) return;
 
     setStage(STAGES.TOPICS_GENERATING);
@@ -744,6 +781,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         {
           studyMode: studyMode || STUDY_MODES.DEEP,
           syllabusText: syllabusText || '',
+          syllabusFiles: syllabusFiles || [],
           onProgress: (progressValue, message) => {
             if (typeof progressValue === 'number') {
               setTopicsProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
@@ -856,30 +894,42 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       return;
     }
 
-    setAttachedFiles(validFiles);
-
-    // Read file contents for text files
-    const fileContents = await Promise.all(
-      validFiles.map(async (file) => {
-        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-          return await file.text();
-        }
-        // For PDFs and Word docs, just return the filename as placeholder
-        // The backend would need to handle these
-        return `[Attached file: ${file.name}]`;
-      })
-    );
-
-    const combinedContent = fileContents.join('\n\n');
     const fileNames = validFiles.map((f) => f.name).join(', ');
-
     addUserMessage(`Attached: ${fileNames}`);
-    setCourseInfo((prev) => ({ ...prev, syllabusText: combinedContent }));
-    setAttachedFiles([]);
 
+    // Show a loading state while encoding files
     enqueueReplyParts('chat', [
       `Got it! I'll use ${validFiles.length > 1 ? 'these files' : 'this file'} to build your topics.`,
     ]);
+
+    try {
+      // Encode files as base64 in OpenRouter format (same as main course creation)
+      const encodedFiles = await buildFilePayload(validFiles);
+
+      // Also read text content for text files as fallback syllabusText
+      const textContents = await Promise.all(
+        validFiles.map(async (file) => {
+          if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+            return await file.text();
+          }
+          return '';
+        })
+      );
+      const textContent = textContents.filter(Boolean).join('\n\n');
+
+      setCourseInfo((prev) => ({
+        ...prev,
+        syllabusText: textContent,
+        syllabusFiles: encodedFiles,
+      }));
+    } catch (error) {
+      console.error('[SimplifiedOnboardingChat] Failed to encode files:', error);
+      enqueueReplyParts('chat', ['Had trouble reading the files. Please try again or paste the content directly.']);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     // Reset file input
     if (fileInputRef.current) {
