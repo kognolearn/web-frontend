@@ -10,6 +10,7 @@ import { ensureAnonUserId, generateAnonCourse, generateAnonTopics, getAnonUserId
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
 import TopicApprovalSection from '@/components/onboarding/TopicApprovalSection';
+import DurationInput from '@/components/ui/DurationInput';
 import { supabase } from '@/lib/supabase/client';
 import { transferAnonData } from '@/lib/onboarding';
 import {
@@ -32,11 +33,13 @@ const STAGES = {
   COURSE_GENERATING: 'course_generating',
 };
 
-const TIME_OPTIONS = [
-  { id: '1day', label: '1 day', days: 1 },
-  { id: '3days', label: '3 days', days: 3 },
-  { id: '1week', label: '1 week', days: 7 },
-  { id: '2weeks', label: '2 weeks', days: 14 },
+// Quick preset options for duration picker (same as main course creation)
+const DURATION_QUICK_OPTIONS = [
+  { label: '1 hour', minutes: 60 },
+  { label: '3 hours', minutes: 180 },
+  { label: '1 day', minutes: 1440 },
+  { label: '3 days', minutes: 4320 },
+  { label: '1 week', minutes: 10080 },
 ];
 
 const STUDY_MODES = {
@@ -323,7 +326,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     courseName: '',
     collegeName: '',
     studyMode: '',
-    timeRemainingDays: null,
+    studyHours: 24, // Default to 1 day
+    studyMinutes: 0,
     syllabusText: '',
     syllabusFiles: [],
   });
@@ -751,7 +755,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   };
 
   const startTopicGeneration = async () => {
-    const { courseName, collegeName, studyMode, timeRemainingDays, syllabusText, syllabusFiles } = courseInfo;
+    const { courseName, collegeName, studyMode, studyHours, studyMinutes, syllabusText, syllabusFiles } = courseInfo;
     if (!courseName || !collegeName) return;
 
     setStage(STAGES.TOPICS_GENERATING);
@@ -782,6 +786,10 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
 
     await createAnonCourseRecord(courseName, collegeName, studyMode, syllabusText);
 
+    // Calculate finishByDate from studyHours/studyMinutes (same as main course creation)
+    const totalMs = (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000);
+    const finishByDate = totalMs > 0 ? new Date(Date.now() + totalMs).toISOString() : null;
+
     try {
       const result = await generateAnonTopics(
         anonUserId,
@@ -789,7 +797,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         collegeName,
         {
           studyMode: studyMode || STUDY_MODES.DEEP,
-          timeRemainingDays: timeRemainingDays || null,
+          finishByDate,
           syllabusText: syllabusText || '',
           syllabusFiles: syllabusFiles || [],
           onProgress: (progressValue, message) => {
@@ -886,15 +894,23 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   };
 
-  const handleTimeSelection = (timeOption) => {
-    // Add user message showing their selection
-    addUserMessage(timeOption.label);
+  const handleDurationChange = ({ hours, minutes }) => {
+    setCourseInfo((prev) => ({ ...prev, studyHours: hours, studyMinutes: minutes }));
+  };
 
-    setCourseInfo((prev) => ({ ...prev, timeRemainingDays: timeOption.days }));
+  const handleDurationSubmit = () => {
+    const { studyHours, studyMinutes } = courseInfo;
+    // Format duration for display
+    const parts = [];
+    if (studyHours > 0) parts.push(`${studyHours} hour${studyHours !== 1 ? 's' : ''}`);
+    if (studyMinutes > 0) parts.push(`${studyMinutes} minute${studyMinutes !== 1 ? 's' : ''}`);
+    const displayText = parts.join(' ') || '0 minutes';
+
+    addUserMessage(displayText);
     setStage(STAGES.SYLLABUS_COLLECTION);
 
     enqueueReplyParts('chat', [
-      `Got it - ${timeOption.label} to go. I'll prioritize the highest-yield exam content.`,
+      `Got it - ${displayText} to go. I'll prioritize the highest-yield exam content.`,
       "Upload a practice exam, past exam, or study guide. You can also paste exam topics or type 'skip' to let me generate common exam topics.",
     ]);
   };
@@ -1165,13 +1181,17 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     generationIntroSentRef.current = false;
     setIsGenerationReplying(false);
 
+    // Calculate finishByDate from studyHours/studyMinutes (same as main course creation)
+    const totalMs = (courseInfo.studyHours * 60 * 60 * 1000) + (courseInfo.studyMinutes * 60 * 1000);
+    const finishByDate = totalMs > 0 ? new Date(Date.now() + totalMs).toISOString() : null;
+
     try {
       const result = await generateAnonCourse({
         anonUserId,
         courseName: courseInfo.courseName,
         university: courseInfo.collegeName,
         studyMode: courseInfo.studyMode || STUDY_MODES.DEEP,
-        timeRemainingDays: courseInfo.timeRemainingDays || null,
+        finishByDate,
         syllabusText: courseInfo.syllabusText || '',
         syllabusFiles: courseInfo.syllabusFiles || [],
         topicsPayload: topics,
@@ -1592,17 +1612,21 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               </button>
             </div>
           ) : stage === STAGES.TIME_SELECTION ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              {TIME_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => handleTimeSelection(option)}
-                  className="flex-1 min-w-[80px] rounded-xl border border-white/10 bg-[var(--surface-1)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--primary)] hover:text-white transition-colors"
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="space-y-4">
+              <DurationInput
+                hours={courseInfo.studyHours}
+                minutes={courseInfo.studyMinutes}
+                onChange={handleDurationChange}
+                summaryLabel="Time until exam"
+                quickOptions={DURATION_QUICK_OPTIONS}
+              />
+              <button
+                type="button"
+                onClick={handleDurationSubmit}
+                className="w-full rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--primary)]/90 transition-colors"
+              >
+                Continue
+              </button>
             </div>
           ) : isConfirmingCourse ? (
             <div className="flex items-center gap-3">
