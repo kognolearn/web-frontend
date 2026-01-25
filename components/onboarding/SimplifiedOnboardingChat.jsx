@@ -1437,14 +1437,14 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
               <button
                 type="button"
                 onClick={() => handleStudyModeSelection(STUDY_MODES.DEEP)}
-                className="flex-1 rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--primary)]/90 transition-colors"
+                className="flex-1 rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--primary)] hover:text-white transition-colors"
               >
                 Deep Study
               </button>
               <button
                 type="button"
                 onClick={() => handleStudyModeSelection(STUDY_MODES.CRAM)}
-                className="flex-1 rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors"
+                className="flex-1 rounded-xl border border-white/10 bg-[var(--surface-1)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--primary)] hover:text-white transition-colors"
               >
                 Cram Mode
               </button>
