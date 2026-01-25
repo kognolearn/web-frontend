@@ -1147,6 +1147,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         university: courseInfo.collegeName,
         studyMode: courseInfo.studyMode || STUDY_MODES.DEEP,
         syllabusText: courseInfo.syllabusText || '',
+        syllabusFiles: courseInfo.syllabusFiles || [],
         topicsPayload: topics,
         familiarityRatings: ratingsRef.current,
         onProgress: (progressValue, message, meta) => {
