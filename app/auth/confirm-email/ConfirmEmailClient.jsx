@@ -9,11 +9,18 @@ import { transferAnonData } from "@/lib/onboarding";
 
 // Auth constants
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
+const SIGNUP_REDIRECT_STORAGE_KEY = "kogno_signup_redirect";
 const DEFAULT_VERIFICATION_TYPE = "signup";
 const RESEND_COOLDOWN_SECONDS = 30;
 const OTP_LENGTH = 6;
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+const sanitizeRedirect = (value) => {
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/")) return "";
+  return trimmed;
+};
 
 function ConfirmEmailContent() {
   const searchParams = useSearchParams();
@@ -47,6 +54,23 @@ function ConfirmEmailContent() {
     setConfirmed(true);
     void attemptAnonTransfer();
     setTimeout(() => {
+      let storedRedirect = "";
+      try {
+        const raw = localStorage.getItem(SIGNUP_REDIRECT_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          storedRedirect = sanitizeRedirect(parsed?.redirectTo || "");
+          localStorage.removeItem(SIGNUP_REDIRECT_STORAGE_KEY);
+        }
+      } catch (err) {
+        console.error("Failed to read signup redirect:", err);
+      }
+      const queryRedirect = sanitizeRedirect(searchParams.get("redirectTo") || "");
+      const redirectTarget = queryRedirect || storedRedirect;
+      if (redirectTarget) {
+        router.push(redirectTarget);
+        return;
+      }
       const joinRedirect = getJoinRedirectPath();
       if (joinRedirect) {
         clearJoinIntent();
@@ -55,7 +79,7 @@ function ConfirmEmailContent() {
       }
       router.push("/");
     }, 1500);
-  }, [attemptAnonTransfer, router]);
+  }, [attemptAnonTransfer, router, searchParams]);
 
   useEffect(() => {
     if (searchEmail) {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
+import AccountCreationGate from "@/components/auth/AccountCreationGate";
 import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
 import DiscussionTabContent from "@/components/community/DiscussionTabContent";
@@ -20,6 +21,7 @@ import { useRealtimeUpdates, useCourseRealtimeUpdates } from "@/hooks/useRealtim
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
 import { isDownloadRedirectEnabled } from "@/lib/featureFlags";
+import { clearOnboardingGateCourseId, getOnboardingGateCourseId, transferAnonData } from "@/lib/onboarding";
 
 const MAX_DEEP_STUDY_SECONDS = 999 * 60 * 60;
 const COURSE_TABS_STORAGE_PREFIX = 'course_tabs_v1';
@@ -109,6 +111,8 @@ export default function CoursePage() {
   const { userSettings } = useOnboarding();
   const { startTour, isTourActive, currentTour } = useGuidedTour();
   const [userId, setUserId] = useState(null);
+  const [isAnonymousUser, setIsAnonymousUser] = useState(false);
+  const [showAccountGate, setShowAccountGate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
@@ -138,6 +142,8 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
+  const gateTimerRef = useRef(null);
+  const transferAttemptedRef = useRef(false);
   // Focus timer state - lifted from CourseTabContent
   const focusTimerRef = useRef(null);
   const [focusTimerState, setFocusTimerState] = useState({ seconds: 0, isRunning: false, phase: null, isCompleted: false });
@@ -249,6 +255,7 @@ export default function CoursePage() {
 
         if (user) {
           setUserId(user.id);
+          setIsAnonymousUser(Boolean(user.is_anonymous));
           return;
         }
 
@@ -264,6 +271,62 @@ export default function CoursePage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!courseId) return;
+    if (!isAnonymousUser) return;
+    const gateCourseId = getOnboardingGateCourseId();
+    if (!gateCourseId || gateCourseId !== courseId) return;
+    if (gateTimerRef.current) return;
+    gateTimerRef.current = setTimeout(() => {
+      gateTimerRef.current = null;
+      setShowAccountGate(true);
+    }, 1000);
+    return () => {
+      if (gateTimerRef.current) {
+        clearTimeout(gateTimerRef.current);
+        gateTimerRef.current = null;
+      }
+    };
+  }, [courseId, isAnonymousUser]);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const user = session?.user || null;
+        if (!user) return;
+        setUserId(user.id);
+        const anon = Boolean(user.is_anonymous);
+        setIsAnonymousUser(anon);
+        if (!anon) {
+          setShowAccountGate(false);
+          clearOnboardingGateCourseId();
+          if (!transferAttemptedRef.current) {
+            transferAttemptedRef.current = true;
+            try {
+              await transferAnonData();
+            } catch (transferError) {
+              console.error("Failed to transfer anonymous data:", transferError);
+            }
+          }
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!userId || isAnonymousUser) return;
+    if (transferAttemptedRef.current) return;
+    const gateCourseId = getOnboardingGateCourseId();
+    if (!gateCourseId || gateCourseId !== courseId) return;
+    transferAttemptedRef.current = true;
+    clearOnboardingGateCourseId();
+    void transferAnonData().catch((transferError) => {
+      console.error("Failed to transfer anonymous data:", transferError);
+    });
+  }, [userId, isAnonymousUser, courseId]);
 
   // Persist tabs for this course/user
   useEffect(() => {
@@ -1542,6 +1605,8 @@ export default function CoursePage() {
 
       {/* Custom Drag Layer (Portal) - Only for Chat Tabs */}
       {/* Removed since Reorder handles the visual */}
+
+      {showAccountGate && <AccountCreationGate courseId={courseId} />}
     </div>
   );
 }
