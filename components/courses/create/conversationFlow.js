@@ -110,7 +110,7 @@ export const CONVERSATION_FLOW = [
   // Syllabus content - DEEP STUDY ONLY
   {
     id: 'syllabus_content',
-    kognoMessage: "Share any course materials you have - syllabi, outlines, lecture notes, or topic lists. The more detail you provide, the better I can customize your learning experience!",
+    kognoMessage: "Share any course materials you have - things like course calendars, syllabi, outlines, or topic lists work best. You can upload PDFs, paste URLs, or just type in raw text.",
     inputType: 'content_with_attachments',
     field: 'syllabusContent',
     textField: 'syllabusText',

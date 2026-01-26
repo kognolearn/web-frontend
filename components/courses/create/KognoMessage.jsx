@@ -182,6 +182,7 @@ export default function KognoMessage({
   onSkip,
   confirmLabel,
   onConfirm,
+  confirmDisabled = false,
   showTopicEditor = false,
   showConfidenceEditor = false,
   showPlanSummary = false,
@@ -290,8 +291,9 @@ export default function KognoMessage({
                   <button
                     type="button"
                     onClick={onConfirm}
+                    disabled={confirmDisabled}
                     data-tour={tourTarget || undefined}
-                    className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+                    className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                   >
                     {confirmLabel}
                   </button>

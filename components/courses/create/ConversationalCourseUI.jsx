@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useCourseCreationFlow } from "@/hooks/useCourseCreationFlow";
 import { useCourseConversation } from "@/hooks/useCourseConversation";
@@ -14,7 +13,6 @@ import ConfidenceEditorChat from "./ConfidenceEditorChat";
 import PlanSummaryView from "./PlanSummaryView";
 import HighUsageWarning from "./HighUsageWarning";
 import EditMessageModal from "./EditMessageModal";
-import { calculateProgress } from "./conversationFlow";
 
 /**
  * Progress bar component
@@ -99,18 +97,10 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     }
   };
 
-  // Handle branch creation from edit modal
-  const handleCreateBranch = (newResponse, displayText) => {
+  // Handle edit save from modal
+  const handleSaveEdit = (newResponse, displayText) => {
     if (!conversation.editingMessage) return;
-
-    // Find the index of the editing message
-    const messageIndex = conversation.messages.findIndex(
-      (msg) => msg.id === conversation.editingMessage.id
-    );
-
-    if (messageIndex !== -1) {
-      conversation.createBranch(messageIndex, newResponse, displayText);
-    }
+    conversation.applyEdit(conversation.editingMessage.id, newResponse, displayText);
   };
 
   // Render topic editor for current step
@@ -128,6 +118,9 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         onAddTopic={flowState.handleAddTopic}
         onRegenerate={flowState.handleGenerateTopics}
         isLoading={flowState.isTopicsLoading}
+        outdatedMessage={
+          flowState.generatedContentOutdated ? flowState.generatedContentOutdatedReason : ""
+        }
       />
     );
   };
@@ -146,6 +139,9 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         isUpdating={flowState.isPlanUpdating}
         planModifyError={flowState.planModifyError}
         isLoading={flowState.isPlanLoading}
+        outdatedMessage={
+          flowState.generatedContentOutdated ? flowState.generatedContentOutdatedReason : ""
+        }
       />
     );
   };
@@ -430,7 +426,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
       >
-        {conversation.messages.map((message, index) => {
+        {conversation.messages.map((message) => {
           if (message.role === "assistant") {
             const isCurrentlyLoading =
               message.inputType === "loading" ||
@@ -464,6 +460,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                 onSkip={conversation.handleSkip}
                 confirmLabel={message.confirmLabel}
                 onConfirm={conversation.handleConfirm}
+                confirmDisabled={flowState.isTopicsLoading || flowState.isPlanLoading}
                 showTopicEditor={message.showTopicEditor}
                 showConfidenceEditor={message.showConfidenceEditor}
                 showPlanSummary={message.showPlanSummary}
@@ -477,8 +474,6 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             );
           }
 
-          // Get branch info for this message
-          const branchInfo = conversation.getBranchInfo(index);
           const isEditable = conversation.isMessageEditable(message);
 
           return (
@@ -491,8 +486,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
               canEdit={!message.superseded && message.stepId !== conversation.currentStep?.id}
               isEditable={isEditable}
               superseded={message.superseded}
-              branchInfo={branchInfo}
-              onSwitchBranch={conversation.switchBranch}
+              isEdited={message.wasEdited}
             />
           );
         })}
@@ -555,7 +549,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         onClose={conversation.closeEditModal}
         originalMessage={conversation.editingMessage}
         stepConfig={conversation.editingMessage?.stepConfig}
-        onCreateBranch={handleCreateBranch}
+        onSaveEdit={handleSaveEdit}
       />
     </div>
   );

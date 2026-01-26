@@ -368,6 +368,10 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [courseGenerationError, setCourseGenerationError] = useState("");
   const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
 
+  // Generated content freshness (topics / unified plan)
+  const [generatedContentOutdated, setGeneratedContentOutdated] = useState(false);
+  const [generatedContentOutdatedReason, setGeneratedContentOutdatedReason] = useState("");
+
   // Manual topic input (for cram mode)
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicRating, setNewTopicRating] = useState(defaultTopicRating);
@@ -387,6 +391,18 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [planError, setPlanError] = useState(null);
   const [isPlanUpdating, setIsPlanUpdating] = useState(false);
   const [planModifyError, setPlanModifyError] = useState("");
+
+  const markGeneratedContentOutdated = useCallback((reason) => {
+    setGeneratedContentOutdated(true);
+    setGeneratedContentOutdatedReason(
+      reason || "You edited course details. Generated content may be out of date — please regenerate if needed."
+    );
+  }, []);
+
+  const clearGeneratedContentOutdated = useCallback(() => {
+    setGeneratedContentOutdated(false);
+    setGeneratedContentOutdatedReason("");
+  }, []);
 
   const isCramMode = studyMode === "cram";
 
@@ -614,7 +630,44 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setTopicModifyPrompt("");
     setTopicModifyError("");
     setIsModifyingTopics(false);
-  }, []);
+    clearGeneratedContentOutdated();
+  }, [clearGeneratedContentOutdated]);
+
+  const clearPlanState = useCallback(() => {
+    setPlanId(null);
+    setPlanSummary(null);
+    setPlanError(null);
+    setPlanModifyError("");
+    setIsPlanLoading(false);
+    setIsPlanUpdating(false);
+    clearGeneratedContentOutdated();
+  }, [clearGeneratedContentOutdated]);
+
+  const resetDownstreamForModeChange = useCallback(() => {
+    setSyllabusText("");
+    setSyllabusFiles([]);
+    setExamNotes("");
+    setExamFiles([]);
+    setHasExamMaterials(false);
+    setManualTopicsInput("");
+    setNewTopicTitle("");
+    setNewTopicRating(defaultTopicRating);
+    setCramTopicStrategy("generate");
+    clearTopicsState();
+    clearPlanState();
+  }, [
+    clearPlanState,
+    clearTopicsState,
+    setExamFiles,
+    setExamNotes,
+    setHasExamMaterials,
+    setManualTopicsInput,
+    setNewTopicRating,
+    setNewTopicTitle,
+    setSyllabusFiles,
+    setSyllabusText,
+    setCramTopicStrategy,
+  ]);
 
   // Confidence handlers
   const resolveSubtopicConfidence = useCallback(
@@ -808,6 +861,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setIsTopicsLoading(true);
     setCourseGenerationError("");
     clearTopicsState();
+    clearGeneratedContentOutdated();
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
@@ -976,6 +1030,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setPlanModifyError("");
     setIsPlanLoading(true);
     setCourseGenerationError("");
+    clearGeneratedContentOutdated();
     // Clear existing topics state since we're using unified plan
     setOverviewTopics([]);
     setDeletedSubtopics([]);
@@ -1633,10 +1688,18 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     handleModifyPlan,
     resolveSubtopicConfidence,
     clearTopicsState,
+    clearPlanState,
+    resetDownstreamForModeChange,
     filterAcceptedFiles,
 
     // File types
     syllabusFileTypes,
+
+    // Generated content freshness
+    generatedContentOutdated,
+    generatedContentOutdatedReason,
+    markGeneratedContentOutdated,
+    clearGeneratedContentOutdated,
 
     // Branching support - state snapshots
     getStateSnapshot: useCallback(() => ({
