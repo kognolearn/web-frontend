@@ -25,30 +25,22 @@ export async function POST(request) {
       headers["Authorization"] = authHeader;
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message, savedCollege }),
+    });
 
+    const bodyText = await res.text();
+    let data;
     try {
-      const res = await fetch(url.toString(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ message, savedCollege }),
-        signal: controller.signal,
-      });
-
-      const bodyText = await res.text();
-      let data;
-      try {
-        data = bodyText ? JSON.parse(bodyText) : {};
-      } catch (err) {
-        console.error("Invalid JSON from backend for", url.toString(), "-- response body:", bodyText, "error:", String(err));
-        data = { success: false, error: "Invalid response from server", courseName: null, collegeName: null };
-      }
-
-      return NextResponse.json(data, { status: res.status });
-    } finally {
-      clearTimeout(timeout);
+      data = bodyText ? JSON.parse(bodyText) : {};
+    } catch (err) {
+      console.error("Invalid JSON from backend for", url.toString(), "-- response body:", bodyText, "error:", String(err));
+      data = { success: false, error: "Invalid response from server", courseName: null, collegeName: null };
     }
+
+    return NextResponse.json(data, { status: res.status });
   } catch (err) {
     console.error("Parse chat input API error:", String(err));
     return NextResponse.json({
