@@ -259,6 +259,18 @@ export default function CoursePage() {
           return;
         }
 
+        const gateCourseId = getOnboardingGateCourseId();
+        const expectedCourseId = typeof courseId === "string" ? courseId : null;
+        if (gateCourseId && expectedCourseId && gateCourseId === expectedCourseId) {
+          const { data, error } = await supabase.auth.signInAnonymously();
+          if (!mounted) return;
+          if (!error && data?.user?.id) {
+            setUserId(data.user.id);
+            setIsAnonymousUser(true);
+            return;
+          }
+        }
+
         setError("No user session found.");
         setLoading(false);
       } catch (e) {
@@ -270,7 +282,7 @@ export default function CoursePage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     if (!courseId) return;
