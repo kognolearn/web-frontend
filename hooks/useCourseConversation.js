@@ -28,6 +28,7 @@ const EDITABLE_INPUT_TYPES = new Set([
   'course_chat',
   'text_confirm',
   'options',
+  'content_with_attachments',
 ]);
 
 /**
@@ -622,15 +623,23 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       if (messageIndex === -1) return;
 
       const targetMessage = messages[messageIndex];
-      if (!targetMessage || (targetMessage.files && targetMessage.files.length > 0)) return;
+      if (!targetMessage) return;
 
       const stepConfig = targetMessage.stepId ? getStepById(targetMessage.stepId) : null;
       if (!stepConfig) return;
 
+      // Handle content_with_attachments input type
+      const isContentWithAttachments = stepConfig.inputType === 'content_with_attachments';
+
+      // For content_with_attachments, newResponse is an object { text, files }
+      const responseText = isContentWithAttachments ? (newResponse?.text || '') : newResponse;
+      const responseFiles = isContentWithAttachments ? (newResponse?.files || []) : targetMessage.files;
+
       const updatedMessage = {
         ...targetMessage,
-        content: displayText || newResponse,
-        response: newResponse,
+        content: displayText || responseText,
+        response: responseText,
+        files: responseFiles,
         wasEdited: true,
         editedAt: new Date(),
       };
@@ -661,6 +670,30 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
           flowState.markGeneratedContentOutdated();
         }
       };
+
+      // Handle content_with_attachments - update text and files in flowState
+      if (isContentWithAttachments) {
+        const textField = stepConfig.textField;
+        const filesField = stepConfig.filesField;
+
+        // Update text field
+        if (textField === 'syllabusText') {
+          flowState.setSyllabusText(responseText);
+        } else if (textField === 'examNotes') {
+          flowState.setExamNotes(responseText);
+        }
+
+        // Update files field
+        if (filesField === 'syllabusFiles') {
+          flowState.setSyllabusFiles(responseFiles);
+        } else if (filesField === 'examFiles') {
+          flowState.setExamFiles(responseFiles);
+        }
+
+        markOutdatedIfNeeded();
+        closeEditModal();
+        return;
+      }
 
       if (stepConfig.inputType === "course_chat" || stepConfig.parseHandler === "courseChatParser") {
         setIsParsing(true);
@@ -895,7 +928,6 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   const isMessageEditable = useCallback((message) => {
     if (!message || message.role !== 'user') return false;
     if (message.superseded) return false;
-    if (message.files && message.files.length > 0) return false;
 
     // Don't allow editing the current step's response
     if (message.stepId === currentStep?.id) return false;
@@ -906,6 +938,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     // Check if the input type is editable
     const stepConfig = message.stepId ? getStepById(message.stepId) : null;
     if (!stepConfig) return false;
+
+    // For messages with files, only allow editing if the input type supports attachments
+    if (message.files && message.files.length > 0) {
+      return stepConfig.inputType === 'content_with_attachments';
+    }
 
     return isEditableInputType(stepConfig.inputType);
   }, [currentStep, flowState.isTopicsLoading, flowState.isPlanLoading, flowState.courseGenerating, isParsing]);
