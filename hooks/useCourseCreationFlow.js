@@ -1608,6 +1608,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     syllabusText,
     setSyllabusText,
     syllabusFiles,
+    setSyllabusFiles,
     handleSyllabusFileChange,
     handleRemoveSyllabusFile,
 
@@ -1617,6 +1618,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     examNotes,
     setExamNotes,
     examFiles,
+    setExamFiles,
     handleExamFileChange,
     handleRemoveExamFile,
     examDetailsProvided,
