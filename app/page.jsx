@@ -30,7 +30,7 @@ export const metadata = {
   },
 };
 
-export default async function Home() {
+export default async function Home({ searchParams }) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -52,6 +52,10 @@ export default async function Home() {
   if (!session) {
     return <HomeContent />;
   }
+
+  // Check if user is explicitly requesting the pricing negotiation flow
+  const params = await searchParams;
+  const continueNegotiation = params?.continueNegotiation === '1';
 
   // Authenticated users continue with the existing flow
   // Call backend directly (internal API routes can fail on Vercel Edge)
@@ -110,7 +114,8 @@ export default async function Home() {
     }
   }
 
-  if (hasAccess) {
+  // Redirect to dashboard unless user explicitly wants to continue pricing negotiation
+  if (hasAccess && !continueNegotiation) {
     const { redirect } = await import("next/navigation");
     redirect("/dashboard");
   }

@@ -6,6 +6,7 @@ import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
 import { authFetch } from "@/lib/api";
 import { Callout, RevealBlock, TabGroup, VideoEmbed } from "@/components/content/v2/components/display";
+import { useSeeds } from "@/components/seeds/SeedsProvider";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -1095,7 +1096,7 @@ function InlineContent({ text }) {
 /**
  * Interactive question component with answer reveal
  */
-function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered }) {
+function QuestionBlock({ question, options, correctIndex, explanation, questionIndex, courseId, lessonId, userId, initialAnswer, onAnswered, onSeedsAwarded, onCorrectAnswer, onWrongAnswer }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [strikethroughOptions, setStrikethroughOptions] = useState({});
@@ -1149,6 +1150,15 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
       setSubmitted(true);
       // Get the original option index for the backend
       const originalOptionIndex = shuffledToOriginal[selectedIdx];
+      // Check if the answer is correct (using shuffled index comparison)
+      const isAnswerCorrect = selectedIdx === originalCorrectInShuffled;
+
+      // Play sound immediately based on answer correctness
+      if (isAnswerCorrect) {
+        onCorrectAnswer?.();
+      } else {
+        onWrongAnswer?.();
+      }
 
       // Submit to backend API
       if (courseId && lessonId && userId && questionIndex !== undefined) {
@@ -1161,6 +1171,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
               updates: [{
                 questionIndex,
                 selectedAnswer: originalOptionIndex,
+                isCorrect: isAnswerCorrect,
               }]
             }),
           });
@@ -1171,6 +1182,12 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
           }
 
           const data = await response.json();
+
+          // Handle seeds awarded for first-try correct
+          if (data?.seedsAwarded && onSeedsAwarded) {
+            onSeedsAwarded(data.seedsAwarded, 'Correct on first try!');
+          }
+
           if (onAnswered) {
             onAnswered({
               questionIndex,
@@ -1184,7 +1201,7 @@ function QuestionBlock({ question, options, correctIndex, explanation, questionI
         }
       }
     }
-  }, [selectedIdx, submitted, shuffledToOriginal, courseId, lessonId, userId, questionIndex, onAnswered]);
+  }, [selectedIdx, submitted, shuffledToOriginal, originalCorrectInShuffled, courseId, lessonId, userId, questionIndex, onAnswered, onSeedsAwarded, onCorrectAnswer, onWrongAnswer]);
 
   // Use shuffled correct index for display
   const isCorrect = submitted && selectedIdx === originalCorrectInShuffled;
@@ -1413,6 +1430,25 @@ export default function ReadingRenderer({
   const completionNotifiedRef = useRef(false);
   const lessonKey = `${courseId || ""}:${lessonId || ""}`;
   const lastLessonKeyRef = useRef(lessonKey);
+
+  // Seeds context for first-try correct notifications and sounds
+  const { showSeedNotification, playSeedEarnedSound, playWrongAnswerSound } = useSeeds();
+
+  // Handler for when seeds are awarded from inline questions
+  const handleSeedsAwarded = useCallback((seedsAmount, reason) => {
+    if (seedsAmount > 0 && showSeedNotification) {
+      showSeedNotification(seedsAmount, reason, courseId);
+    }
+  }, [showSeedNotification, courseId]);
+
+  // Sound handlers for correct/wrong answers
+  const handleCorrectAnswer = useCallback(() => {
+    playSeedEarnedSound?.();
+  }, [playSeedEarnedSound]);
+
+  const handleWrongAnswer = useCallback(() => {
+    playWrongAnswerSound?.();
+  }, [playWrongAnswerSound]);
 
   useEffect(() => {
     if (lastLessonKeyRef.current === lessonKey) return;
@@ -1731,6 +1767,9 @@ export default function ReadingRenderer({
                     userId={userId}
                     initialAnswer={inlineSelections?.[currentQuestionIndex]}
                     onAnswered={handleInlineQuestionUpdate}
+                    onSeedsAwarded={handleSeedsAwarded}
+                    onCorrectAnswer={handleCorrectAnswer}
+                    onWrongAnswer={handleWrongAnswer}
                   />
                 );
 

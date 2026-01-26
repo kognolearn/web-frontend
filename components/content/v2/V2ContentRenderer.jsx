@@ -6,6 +6,7 @@ import { V2ContentProvider, useV2Content } from "./V2ContentContext";
 import V2SectionRenderer from "./V2SectionRenderer";
 import { useV2Grading } from "./useV2Grading";
 import { mapSectionAnswers, mapSectionResults } from "./sectionUtils";
+import { useSeeds } from "@/components/seeds/SeedsProvider";
 
 /**
  * V2ContentRenderer - Main entry point for V2 section-based content
@@ -140,6 +141,9 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
   const [gradingSection, setGradingSection] = useState(null);
   const sections = content.sections || [];
 
+  // Seeds context for sounds and notifications
+  const { playSeedEarnedSound, playWrongAnswerSound, showSeedNotification } = useSeeds();
+
   const { gradeSection, isGrading, error } = useV2Grading({
     courseId,
     nodeId,
@@ -170,6 +174,14 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
 
           setSectionGraded(sectionId, gradeData);
           onGradeComplete?.(sectionId, gradeData);
+
+          // Play sound and show notification based on results
+          if (result.seedsAwarded > 0) {
+            playSeedEarnedSound?.();
+            showSeedNotification?.(result.seedsAwarded, 'Correct answers!', courseId);
+          } else if (!gradeData.passed) {
+            playWrongAnswerSound?.();
+          }
         } else {
           // Handle grading error
           console.error("Grading failed:", result.error);
@@ -182,7 +194,7 @@ function V2ContentInner({ content, courseId, nodeId, activeSectionIndex, onGrade
         setGradingSection(null);
       }
     },
-    [gradeSection, setSectionGraded, setSectionProgress, onGradeComplete, sections]
+    [gradeSection, setSectionGraded, setSectionProgress, onGradeComplete, sections, playSeedEarnedSound, playWrongAnswerSound, showSeedNotification, courseId]
   );
 
   const currentSection = sections[activeSectionIndex];

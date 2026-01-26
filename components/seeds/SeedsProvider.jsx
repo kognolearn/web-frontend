@@ -42,9 +42,13 @@ export function SeedsProvider({ children }) {
   const audioPoolIndexRef = useRef(0);
   const AUDIO_POOL_SIZE = 10; // Allow up to 10 overlapping sounds
 
+  // Additional sound refs for answer feedback
+  const seedEarnedAudioRef = useRef(null);
+  const wrongAnswerAudioRef = useRef(null);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Create a pool of audio elements for overlapping playback
+      // Create a pool of audio elements for overlapping playback (seed_collect for counter)
       const pool = [];
       let hasError = false;
 
@@ -66,6 +70,18 @@ export function SeedsProvider({ children }) {
           audioRef.current = pool[0]; // Mark as available
         }
       }, { once: true });
+
+      // Load seed_earned sound for correct answers
+      const seedEarnedAudio = new Audio("/sounds/seed_earned.mp3");
+      seedEarnedAudio.volume = 0.4;
+      seedEarnedAudio.load();
+      seedEarnedAudioRef.current = seedEarnedAudio;
+
+      // Load wrong_answer sound for incorrect answers
+      const wrongAnswerAudio = new Audio("/sounds/wrong_answer.mp3");
+      wrongAnswerAudio.volume = 0.3;
+      wrongAnswerAudio.load();
+      wrongAnswerAudioRef.current = wrongAnswerAudio;
     }
   }, []);
 
@@ -80,6 +96,26 @@ export function SeedsProvider({ children }) {
       // Clone and play for truly independent playback
       audio.currentTime = 0;
       audio.play().catch(() => {
+        // Ignore autoplay errors
+      });
+    }
+  }, []);
+
+  // Play sound for correct answer (seed earned)
+  const playSeedEarnedSound = useCallback(() => {
+    if (seedEarnedAudioRef.current) {
+      seedEarnedAudioRef.current.currentTime = 0;
+      seedEarnedAudioRef.current.play().catch(() => {
+        // Ignore autoplay errors
+      });
+    }
+  }, []);
+
+  // Play sound for wrong answer
+  const playWrongAnswerSound = useCallback(() => {
+    if (wrongAnswerAudioRef.current) {
+      wrongAnswerAudioRef.current.currentTime = 0;
+      wrongAnswerAudioRef.current.play().catch(() => {
         // Ignore autoplay errors
       });
     }
@@ -266,6 +302,8 @@ export function SeedsProvider({ children }) {
     isAnimating,
     incrementBalance,
     playSound,
+    playSeedEarnedSound,
+    playWrongAnswerSound,
     isNewSession,
     markWelcomeShown,
     pendingDashboardSeeds,

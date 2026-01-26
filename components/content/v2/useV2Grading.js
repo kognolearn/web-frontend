@@ -115,6 +115,7 @@ export function useV2Grading({ courseId, nodeId }) {
           results: resultsMap,
           feedback: grade.feedback,
         },
+        seedsAwarded: result.seedsAwarded || 0,
       };
 
     } catch (err) {

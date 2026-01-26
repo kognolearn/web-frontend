@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { Lock } from "lucide-react";
 import { authFetch } from "@/lib/api";
 import PremiumUpgradeModal from "@/components/ui/PremiumUpgradeModal";
+import DashboardSidebar from "@/components/navigation/DashboardSidebar";
+import SeedsDisplay from "@/components/ui/SeedsDisplay";
 
 // Category color schemes
 const CATEGORY_STYLES = {
@@ -981,7 +982,9 @@ export default function StorePage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <DashboardSidebar activePath="/store" />
+
       {/* CSS for floating animation */}
       <style jsx global>{`
         @keyframes float {
@@ -1004,94 +1007,69 @@ export default function StorePage() {
         }
       `}</style>
 
-      {/* Background effects */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl animate-pulse"
-          style={{
-            animationDuration: "8s",
-            background:
-              "radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)",
-          }}
-        />
-        <div
-          className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full blur-3xl animate-pulse"
-          style={{
-            animationDuration: "10s",
-            animationDelay: "2s",
-            background:
-              "radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)",
-          }}
-        />
-        <div
-          className="absolute bottom-20 right-1/4 h-[300px] w-[300px] rounded-full blur-3xl animate-pulse"
-          style={{
-            animationDuration: "12s",
-            animationDelay: "4s",
-            background:
-              "radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 100%)",
-          }}
-        />
-      </div>
+      <div className="flex-1 relative overflow-hidden">
+        {/* Background effects */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl animate-pulse"
+            style={{
+              animationDuration: "8s",
+              background:
+                "radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)",
+            }}
+          />
+          <div
+            className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full blur-3xl animate-pulse"
+            style={{
+              animationDuration: "10s",
+              animationDelay: "2s",
+              background:
+                "radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)",
+            }}
+          />
+          <div
+            className="absolute bottom-20 right-1/4 h-[300px] w-[300px] rounded-full blur-3xl animate-pulse"
+            style={{
+              animationDuration: "12s",
+              animationDelay: "4s",
+              background:
+                "radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 100%)",
+            }}
+          />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-6 sm:gap-8 px-3 sm:px-4 pb-16 pt-6 sm:pt-8 sm:px-6 lg:px-8">
-        {/* Header card */}
-        <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Image
-                src="/images/kogno_logo.png"
-                alt="Kogno Logo"
-                width={32}
-                height={32}
-                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
-                priority
-              />
-              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
-                Kogno
-              </span>
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--primary)]/10 border border-[var(--primary)]/30">
-                <Image
-                  src="/images/seed_icon.png"
-                  alt="Seeds"
-                  width={20}
-                  height={20}
-                  className="w-5 h-5"
-                />
-                <span className="font-bold text-[var(--primary)]">
-                  {loading ? "..." : seeds.toLocaleString()}
-                </span>
-              </div>
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Back
-              </Link>
-            </div>
-          </div>
+          {/* Mesh gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
 
-          <header className="mt-4">
-            <h1 className="text-2xl sm:text-3xl font-bold sm:text-4xl bg-gradient-to-r from-[var(--foreground)] to-[var(--muted-foreground)] bg-clip-text text-transparent">
-              Seed Store
-            </h1>
-            <p className="mt-2 text-sm sm:text-base text-[var(--muted-foreground)]">
-              Spend your seeds on rewards, upgrades, and exclusive items.
-              {!isPremiumUser && !loading && (
-                <span className="ml-2 text-[var(--primary)] font-medium">
-                  Upgrade to premium to unlock all rewards!
-                </span>
-              )}
-            </p>
-          </header>
+          {/* Subtle grid pattern */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+              backgroundSize: '60px 60px'
+            }}
+          />
         </div>
 
-        {/* Rewards grid */}
+        <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8 px-4 pb-16 pt-6 sm:pt-8 sm:px-6 lg:px-8">
+          {/* Top bar */}
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-[var(--foreground)] to-[var(--muted-foreground)] bg-clip-text text-transparent">
+                Seed Store
+              </h1>
+              <p className="mt-1 text-sm sm:text-base text-[var(--muted-foreground)]">
+                Spend your seeds on rewards, upgrades, and exclusive items.
+                {!isPremiumUser && !loading && (
+                  <span className="ml-2 text-[var(--primary)] font-medium">
+                    Upgrade to premium to unlock all rewards!
+                  </span>
+                )}
+              </p>
+            </div>
+            <SeedsDisplay />
+          </div>
+
+          {/* Rewards grid */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -1123,6 +1101,7 @@ export default function StorePage() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* Error toast */}
