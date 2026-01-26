@@ -992,9 +992,9 @@ export default function SettingsPage() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">{getProductLabel(subscription?.productType)}</h3>
+                    <h3 className="text-lg font-semibold">Premium</h3>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      Status: <span className="text-green-500 capitalize">{subscription?.status}</span>
+                      {getProductLabel(subscription?.productType)}
                     </p>
                   </div>
                 </div>
@@ -1035,11 +1035,11 @@ export default function SettingsPage() {
 
                 {subscription?.productType !== "2week_deal" && (
                   <button
-                    onClick={canContinuePriceSelection ? handleContinuePriceSelection : handleManageSubscription}
-                    disabled={portalLoading && !canContinuePriceSelection}
+                    onClick={handleManageSubscription}
+                    disabled={portalLoading}
                     className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {portalLoading && !canContinuePriceSelection ? (
+                    {portalLoading ? (
                       <>
                         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -1050,9 +1050,10 @@ export default function SettingsPage() {
                     ) : (
                       <>
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        {canContinuePriceSelection ? "Continue price selection" : "Manage Billing in Stripe"}
+                        Manage Subscription
                       </>
                     )}
                   </button>
@@ -1067,7 +1068,7 @@ export default function SettingsPage() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Trial Access Active</h3>
+                    <h3 className="text-lg font-semibold">Free Trial</h3>
                     <p className="text-sm text-[var(--muted-foreground)]">
                       Full Pro access until {trialEndsAt ? formatDate(trialEndsAt) : "the end of your trial"}.
                     </p>
@@ -1081,27 +1082,15 @@ export default function SettingsPage() {
                   <p className="text-base font-medium">{getTimeLeftLabel(trialEndsAt)}</p>
                 </div>
 
-                {canContinuePriceSelection ? (
-                  <button
-                    onClick={handleContinuePriceSelection}
-                    className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Continue price selection
-                  </button>
-                ) : (
-                  <Link
-                    href="/?continueNegotiation=1"
-                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Resume Pricing Chat
-                  </Link>
-                )}
+                <button
+                  onClick={handleContinuePriceSelection}
+                  className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {negotiationStatus ? "Continue Pricing Chat" : "Start Pricing Chat"}
+                </button>
               </div>
             ) : (
               <div className="text-center py-4">
@@ -1110,36 +1099,24 @@ export default function SettingsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold mb-1">Free Plan</h3>
+                <h3 className="text-lg font-semibold mb-1">Free Tier</h3>
                 <p className="text-sm text-[var(--muted-foreground)] mb-6">
-                  You're on the free plan with limited access.
+                  You're on the free tier with limited access.
                 </p>
                 <div className="bg-[var(--surface-2)] rounded-xl p-4 mb-6 text-left">
                   <p className="text-sm text-[var(--muted-foreground)]">
-                    Free plan includes: 1 course, 2 midterms, 2 finals, and 1 cheatsheet per course.
+                    Free tier includes: 1 course, 2 midterms, 2 finals, and 1 cheatsheet per course.
                   </p>
                 </div>
-                {canContinuePriceSelection ? (
-                  <button
-                    onClick={handleContinuePriceSelection}
-                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Continue price selection
-                  </button>
-                ) : (
-                  <Link
-                    href="/?continueNegotiation=1"
-                    className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Resume Pricing Chat
-                  </Link>
-                )}
+                <button
+                  onClick={handleContinuePriceSelection}
+                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {negotiationStatus ? "Continue Pricing Chat" : "Upgrade to Premium"}
+                </button>
               </div>
             )}
           </div>
