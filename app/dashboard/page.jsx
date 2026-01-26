@@ -27,6 +27,7 @@ import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import SeedsDisplay from "@/components/ui/SeedsDisplay";
 import UserAvatar from "@/components/ui/UserAvatar";
 import DashboardSeedCelebration from "@/components/seeds/DashboardSeedCelebration";
+import MilestonesTimeline from "@/components/seeds/MilestonesTimeline";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -878,6 +879,9 @@ function DashboardClient() {
               })}
             </div>
           )}
+
+          {/* Milestones Timeline */}
+          <MilestonesTimeline collapsed />
         </main>
       </div>
 

@@ -113,6 +113,29 @@ export function SeedsProvider({ children }) {
     init();
   }, [fetchBalance]);
 
+  // Listen for seed award events (from course creation, etc.)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleSeedAwarded = (event) => {
+      const { amount, reason } = event.detail || {};
+      if (amount > 0) {
+        // Queue for dashboard animation (will show when user arrives at dashboard)
+        setPendingDashboardSeeds((prev) => [...prev, {
+          id: Date.now() + Math.random(),
+          amount,
+          reason,
+          courseId: null,
+        }]);
+        // Also increment balance immediately
+        setBalance((prev) => (prev !== null ? prev + amount : amount));
+      }
+    };
+
+    window.addEventListener("seeds:awarded", handleSeedAwarded);
+    return () => window.removeEventListener("seeds:awarded", handleSeedAwarded);
+  }, []);
+
   // Get the last seen balance from localStorage
   const getLastSeenBalance = useCallback(() => {
     if (typeof window === "undefined") return null;
