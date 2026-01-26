@@ -20,13 +20,6 @@ function generateId() {
 }
 
 /**
- * Generate a unique ID for branches
- */
-function generateBranchId() {
-  return `branch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-/**
  * Input types that are editable via the edit modal
  */
 const EDITABLE_INPUT_TYPES = new Set([
@@ -48,26 +41,14 @@ function isEditableInputType(inputType) {
  * Custom hook that manages the conversation state for chat-based course creation.
  * Works in conjunction with useCourseCreationFlow to provide a conversational interface.
  *
- * Supports branching: editing a past message creates a new branch rather than overwriting.
+ * Supports editing past messages in place without branching.
  *
  * @param {object} flowState - The state object from useCourseCreationFlow
  * @param {object} options - Additional options
  * @param {Function} options.onStepChange - Callback when step changes
  */
 export function useCourseConversation(flowState, { onStepChange } = {}) {
-  // Branch tree state management
-  const [branchTree, setBranchTree] = useState({
-    root: {
-      id: 'root',
-      parentId: null,
-      branchPointIndex: 0,
-      messages: [],
-      flowStateSnapshot: null,
-      children: [],
-      createdAt: Date.now(),
-    }
-  });
-  const [currentBranchId, setCurrentBranchId] = useState('root');
+  const [messages, setMessages] = useState([]);
 
   // Edit modal state
   const [editingMessage, setEditingMessage] = useState(null);
@@ -108,43 +89,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     [flowState, previousResponses]
   );
 
-  // Compute display messages by walking the branch tree from root to current branch
-  const displayMessages = useMemo(() => {
-    const result = [];
-    const branchChain = [];
-
-    // Walk up to root to get branch chain
-    let branchId = currentBranchId;
-    while (branchId) {
-      branchChain.unshift(branchId);
-      branchId = branchTree[branchId]?.parentId;
-    }
-
-    // Collect messages from each branch in the chain
-    for (let i = 0; i < branchChain.length; i++) {
-      const bid = branchChain[i];
-      const branch = branchTree[bid];
-      if (branch) {
-        if (i === 0) {
-          // Root branch: include all messages
-          result.push(...branch.messages);
-        } else {
-          // Child branch: include messages from branchPointIndex onwards
-          // (messages before branchPointIndex come from parent)
-          const parentBranch = branchTree[branch.parentId];
-          if (parentBranch) {
-            // Remove messages after branch point from result (they're from parent)
-            while (result.length > branch.branchPointIndex) {
-              result.pop();
-            }
-          }
-          result.push(...branch.messages);
-        }
-      }
-    }
-
-    return result;
-  }, [branchTree, currentBranchId]);
+  const displayMessages = messages;
 
   // Calculate the current step based on conditions
   const currentStep = useMemo(() => {
@@ -183,21 +128,9 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     return () => clearTimeout(timer);
   }, [flowState.authStatus]);
 
-  // Add a message to the current branch
-  const addMessageToBranch = useCallback((message) => {
-    setBranchTree(prev => {
-      const currentBranch = prev[currentBranchId];
-      if (!currentBranch) return prev;
-
-      return {
-        ...prev,
-        [currentBranchId]: {
-          ...currentBranch,
-          messages: [...currentBranch.messages, message],
-        }
-      };
-    });
-  }, [currentBranchId]);
+  const addMessage = useCallback((message) => {
+    setMessages((prev) => [...prev, message]);
+  }, []);
 
   // Add a Kogno (assistant) message
   const addKognoMessage = useCallback(
@@ -234,12 +167,12 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         tourTarget: stepConfig.tourTarget,
       };
 
-      addMessageToBranch(message);
+      addMessage(message);
       setIsKognoTyping(false);
 
       return message;
     },
-    [state, addMessageToBranch]
+    [state, addMessage]
   );
 
   // Add a user response message
@@ -258,7 +191,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
         superseded: false,
       };
 
-      addMessageToBranch(message);
+      addMessage(message);
 
       // Store the response
       if (stepId) {
@@ -270,7 +203,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
 
       return message;
     },
-    [addMessageToBranch]
+    [addMessage]
   );
 
   // Advance to the next step
@@ -655,260 +588,166 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     setEditingMessage(null);
   }, []);
 
-  // Create a new branch at the given message index with a new response
-  const createBranch = useCallback((atMessageIndex, newResponse, displayText) => {
-    const newBranchId = generateBranchId();
-    const snapshot = flowState.getStateSnapshot();
-
-    // Find the message at this index to get its step info
-    const targetMessage = displayMessages[atMessageIndex];
-    if (!targetMessage) return;
-
-    const stepConfig = targetMessage.stepId ? getStepById(targetMessage.stepId) : null;
-
-    setBranchTree(prev => {
-      const currentBranch = prev[currentBranchId];
-      if (!currentBranch) return prev;
-
-      // Create the new branch
-      const newTree = {
-        ...prev,
-        [newBranchId]: {
-          id: newBranchId,
-          parentId: currentBranchId,
-          branchPointIndex: atMessageIndex,
-          messages: [],
-          flowStateSnapshot: snapshot,
-          children: [],
-          createdAt: Date.now(),
-        },
-        [currentBranchId]: {
-          ...currentBranch,
-          children: [...currentBranch.children, newBranchId],
+  const trimResponsesAfterIndex = useCallback((cutoffIndex, updates = {}) => {
+    setPreviousResponses((prev) => {
+      const next = {};
+      for (const [stepId, value] of Object.entries(prev)) {
+        const step = getStepById(stepId);
+        if (!step || step.index <= cutoffIndex) {
+          next[stepId] = value;
         }
-      };
-
-      return newTree;
-    });
-
-    // Switch to the new branch
-    setCurrentBranchId(newBranchId);
-
-    // Reset to the step of the edited message
-    if (stepConfig) {
-      setCurrentStepIndex(stepConfig.index);
-
-      // Restore state to the snapshot point
-      if (snapshot) {
-        flowState.restoreStateSnapshot(snapshot);
       }
+      return { ...next, ...updates };
+    });
+  }, []);
 
-      // Clear previous responses for steps after this point
-      setPreviousResponses(prev => {
-        const newResponses = {};
-        for (const [stepId, value] of Object.entries(prev)) {
-          const otherStep = getStepById(stepId);
-          if (otherStep && otherStep.index < stepConfig.index) {
-            newResponses[stepId] = value;
-          }
-        }
-        return newResponses;
-      });
+  const advanceFromIndex = useCallback(
+    async (baseIndex, stateOverrides = {}) => {
+      const mergedState = { ...state, ...stateOverrides };
+      const nextStep = getNextStep(baseIndex, mergedState);
+      if (!nextStep) return;
+      setCurrentStepIndex(nextStep.index);
+      if (onStepChange) {
+        onStepChange(nextStep);
+      }
+      const interpolatedMessage = interpolateMessage(nextStep.kognoMessage, mergedState);
+      await addKognoMessage(interpolatedMessage, nextStep, { immediate: true });
+    },
+    [state, addKognoMessage, onStepChange]
+  );
 
-      // Re-add the assistant message for this step
-      const kognoMessage = {
-        id: generateId(),
-        role: "assistant",
-        content: interpolateMessage(stepConfig.kognoMessage, state),
-        timestamp: new Date(),
-        stepId: stepConfig.id,
-        inputType: stepConfig.inputType,
-        options: stepConfig.options,
-        skippable: stepConfig.skippable,
-        skipLabel: stepConfig.skipLabel,
-        confirmLabel: stepConfig.confirmLabel,
-        placeholder: stepConfig.placeholder,
-        field: stepConfig.field,
-        showTopicEditor: stepConfig.showTopicEditor,
-        showConfidenceEditor: stepConfig.showConfidenceEditor,
-        showPlanSummary: stepConfig.showPlanSummary,
-        showProgress: stepConfig.showProgress,
-        action: stepConfig.action,
-        accept: stepConfig.accept,
-      };
+  const applyEdit = useCallback(
+    async (messageId, newResponse, displayText) => {
+      const messageIndex = messages.findIndex((msg) => msg.id === messageId);
+      if (messageIndex === -1) return;
 
-      // Add the new user response
-      const userMessage = {
-        id: generateId(),
-        role: "user",
+      const targetMessage = messages[messageIndex];
+      if (!targetMessage || (targetMessage.files && targetMessage.files.length > 0)) return;
+
+      const stepConfig = targetMessage.stepId ? getStepById(targetMessage.stepId) : null;
+      if (!stepConfig) return;
+
+      const updatedMessage = {
+        ...targetMessage,
         content: displayText || newResponse,
         response: newResponse,
-        timestamp: new Date(),
-        files: [],
-        stepId: stepConfig.id,
-        superseded: false,
+        wasEdited: true,
+        editedAt: new Date(),
       };
 
-      // Add messages to the new branch
-      setBranchTree(prev => ({
-        ...prev,
-        [newBranchId]: {
-          ...prev[newBranchId],
-          messages: [kognoMessage, userMessage],
-        }
-      }));
+      const isStudyModeEdit = stepConfig.field === "studyMode" && newResponse !== targetMessage.response;
 
-      // Store the response
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === messageId);
+        if (index === -1) return prev;
+        const next = [...prev];
+        next[index] = updatedMessage;
+        return isStudyModeEdit ? next.slice(0, index + 1) : next;
+      });
+
       if (stepConfig.id) {
-        setPreviousResponses(prev => ({
-          ...prev,
-          [stepConfig.id]: newResponse,
-        }));
+        if (isStudyModeEdit) {
+          trimResponsesAfterIndex(stepConfig.index, { [stepConfig.id]: newResponse });
+        } else {
+          setPreviousResponses((prev) => ({
+            ...prev,
+            [stepConfig.id]: newResponse,
+          }));
+        }
       }
 
-      // Update flow state based on field
+      const markOutdatedIfNeeded = () => {
+        if ((flowState.overviewTopics?.length || flowState.planSummary) && flowState.markGeneratedContentOutdated) {
+          flowState.markGeneratedContentOutdated();
+        }
+      };
+
+      if (stepConfig.inputType === "course_chat" || stepConfig.parseHandler === "courseChatParser") {
+        setIsParsing(true);
+        try {
+          const response = await authFetch("/api/courses/parse-chat-input", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: newResponse,
+              savedCollege: state.savedCollege || null,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.success && result.courseName) {
+            flowState.setCourseTitle(result.courseName);
+            if (result.collegeName) {
+              flowState.setCollegeName(result.collegeName);
+            }
+            setParseChatAttempts(0);
+            const resolvedCollege = result.collegeName || flowState.collegeName;
+            setPreviousResponses((prev) => {
+              if (!resolvedCollege) {
+                return { ...prev, needsCollege: true };
+              }
+              if (!prev.needsCollege) return prev;
+              const { needsCollege, ...rest } = prev;
+              return rest;
+            });
+            markOutdatedIfNeeded();
+          } else {
+            const newAttempts = parseChatAttempts + 1;
+            setParseChatAttempts(newAttempts);
+            await addKognoMessage(getCourseChatRetryMessage(newAttempts), stepConfig);
+          }
+        } catch (error) {
+          console.error("[useCourseConversation] Parse chat input error:", error);
+          await addKognoMessage(
+            "Something went wrong on my end. Could you try editing that again?",
+            stepConfig
+          );
+        } finally {
+          setIsParsing(false);
+        }
+
+        closeEditModal();
+        return;
+      }
+
       if (stepConfig.field) {
         switch (stepConfig.field) {
           case "courseTitle":
             flowState.setCourseTitle(newResponse);
+            markOutdatedIfNeeded();
             break;
           case "collegeName":
             flowState.setCollegeName(newResponse);
+            markOutdatedIfNeeded();
             break;
           case "studyMode":
             flowState.setStudyMode(newResponse);
+            if (flowState.resetDownstreamForModeChange) {
+              flowState.resetDownstreamForModeChange();
+            }
+            setContentText("");
+            setPendingAction(null);
+            await advanceFromIndex(stepConfig.index, { studyMode: newResponse });
+            break;
+          default:
             break;
         }
       }
 
-      // Advance to the next step
-      setTimeout(() => {
-        advanceToNextStep({ [stepConfig.field]: newResponse });
-      }, 100);
-    }
-
-    // Close the modal
-    closeEditModal();
-  }, [currentBranchId, displayMessages, flowState, state, advanceToNextStep, closeEditModal]);
-
-  // Switch to a different branch
-  const switchBranch = useCallback((targetBranchId) => {
-    const targetBranch = branchTree[targetBranchId];
-    if (!targetBranch) return;
-
-    // Restore flow state from snapshot
-    if (targetBranch.flowStateSnapshot) {
-      flowState.restoreStateSnapshot(targetBranch.flowStateSnapshot);
-    }
-
-    setCurrentBranchId(targetBranchId);
-
-    // Rebuild previousResponses from messages in this branch chain
-    const newResponses = {};
-    const branchChain = [];
-    let bid = targetBranchId;
-    while (bid) {
-      branchChain.unshift(bid);
-      bid = branchTree[bid]?.parentId;
-    }
-
-    for (const chainBid of branchChain) {
-      const branch = branchTree[chainBid];
-      if (branch) {
-        for (const msg of branch.messages) {
-          if (msg.role === 'user' && msg.stepId && msg.response !== undefined) {
-            newResponses[msg.stepId] = msg.response;
-          }
-        }
-      }
-    }
-    setPreviousResponses(newResponses);
-
-    // Recalculate currentStepIndex based on the last message in the branch
-    const branchMessages = targetBranch.messages;
-    const lastMessage = branchMessages[branchMessages.length - 1];
-    if (lastMessage?.stepId) {
-      const step = getStepById(lastMessage.stepId);
-      if (step) {
-        // If the last message was from assistant, we're at that step
-        // If it was from user, we need to advance to next step
-        if (lastMessage.role === 'user') {
-          const nextStep = getNextStep(step.index, { ...state, ...newResponses });
-          if (nextStep) {
-            setCurrentStepIndex(nextStep.index);
-          } else {
-            setCurrentStepIndex(step.index);
-          }
-        } else {
-          setCurrentStepIndex(step.index);
-        }
-      }
-    }
-  }, [branchTree, flowState, state]);
-
-  // Get branch info for a specific message index (for navigation UI)
-  const getBranchInfo = useCallback((messageIndex) => {
-    // Find the message at this index
-    const message = displayMessages[messageIndex];
-    if (!message || message.role !== 'user') return null;
-
-    // Find all branches that fork at this message index from the current branch's parent
-    const currentBranch = branchTree[currentBranchId];
-    if (!currentBranch) return null;
-
-    // Get sibling branches (branches that share the same parent and branch point)
-    let siblingBranches = [];
-
-    if (currentBranch.parentId) {
-      const parentBranch = branchTree[currentBranch.parentId];
-      if (parentBranch) {
-        // Find all children of parent that branch at the same point
-        siblingBranches = parentBranch.children
-          .map(childId => branchTree[childId])
-          .filter(branch => branch && branch.branchPointIndex === messageIndex);
-
-        // Also include the "original" path (staying on parent) if this is where we branched
-        if (currentBranch.branchPointIndex === messageIndex) {
-          // We need to include parent as a "sibling" for navigation
-          siblingBranches = [
-            { ...parentBranch, isParentPath: true },
-            ...siblingBranches
-          ];
-        }
-      }
-    } else {
-      // Current branch is root - find children that branch at this point
-      siblingBranches = currentBranch.children
-        .map(childId => branchTree[childId])
-        .filter(branch => branch && branch.branchPointIndex === messageIndex);
-
-      if (siblingBranches.length > 0) {
-        // Include root as first option
-        siblingBranches = [
-          { ...currentBranch, isParentPath: true },
-          ...siblingBranches
-        ];
-      }
-    }
-
-    if (siblingBranches.length <= 1) return null;
-
-    // Sort by creation time
-    siblingBranches.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-
-    // Find current position in siblings
-    const currentIndex = siblingBranches.findIndex(b =>
-      b.id === currentBranchId || (b.isParentPath && currentBranch.parentId === null)
-    );
-
-    return {
-      siblingCount: siblingBranches.length,
-      currentIndex: Math.max(0, currentIndex),
-      prevBranchId: currentIndex > 0 ? siblingBranches[currentIndex - 1].id : null,
-      nextBranchId: currentIndex < siblingBranches.length - 1 ? siblingBranches[currentIndex + 1].id : null,
-      siblingBranches: siblingBranches.map(b => b.id),
-    };
-  }, [branchTree, currentBranchId, displayMessages]);
+      closeEditModal();
+    },
+    [
+      messages,
+      flowState,
+      trimResponsesAfterIndex,
+      parseChatAttempts,
+      state.savedCollege,
+      addKognoMessage,
+      advanceFromIndex,
+      closeEditModal,
+    ]
+  );
 
   // Go back to a previous step (legacy - for non-branching edit)
   const goBack = useCallback(
@@ -1056,22 +895,23 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
   const isMessageEditable = useCallback((message) => {
     if (!message || message.role !== 'user') return false;
     if (message.superseded) return false;
+    if (message.files && message.files.length > 0) return false;
 
     // Don't allow editing the current step's response
     if (message.stepId === currentStep?.id) return false;
 
     // Check if we're in a loading/generating state
-    if (flowState.isTopicsLoading || flowState.courseGenerating || isParsing) return false;
+    if (flowState.isTopicsLoading || flowState.isPlanLoading || flowState.courseGenerating || isParsing) return false;
 
     // Check if the input type is editable
     const stepConfig = message.stepId ? getStepById(message.stepId) : null;
     if (!stepConfig) return false;
 
     return isEditableInputType(stepConfig.inputType);
-  }, [currentStep, flowState.isTopicsLoading, flowState.courseGenerating, isParsing]);
+  }, [currentStep, flowState.isTopicsLoading, flowState.isPlanLoading, flowState.courseGenerating, isParsing]);
 
   return {
-    // Messages (use displayMessages instead of messages for rendering)
+    // Messages
     messages: displayMessages,
     messagesEndRef,
 
@@ -1088,17 +928,11 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
     startEditing,
     cancelEditing,
 
-    // Edit modal (branching)
+    // Edit modal
     editingMessage,
     openEditModal,
     closeEditModal,
-    createBranch,
-
-    // Branch navigation
-    currentBranchId,
-    branchTree,
-    switchBranch,
-    getBranchInfo,
+    applyEdit,
 
     // Handlers
     handleSubmitResponse,

@@ -198,6 +198,7 @@ export default function PlanSummaryView({
   isUpdating = false,
   planModifyError = "",
   isLoading = false,
+  outdatedMessage = "",
 }) {
   const [expandedModules, setExpandedModules] = useState({});
   const [modifyText, setModifyText] = useState("");
@@ -269,6 +270,26 @@ export default function PlanSummaryView({
 
   return (
     <div className="space-y-4">
+      {outdatedMessage && (
+        <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="flex items-start gap-2 text-sm text-amber-700">
+            <svg
+              className="w-4 h-4 mt-0.5 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 9v4m0 4h.01M12 3l9 16H3L12 3z"
+              />
+            </svg>
+            <span>{outdatedMessage}</span>
+          </div>
+        </div>
+      )}
       {/* Course overview header */}
       <div className="p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
         <h3 className="font-semibold text-base text-[var(--foreground)] mb-2">

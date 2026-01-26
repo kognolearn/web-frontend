@@ -3,49 +3,7 @@
 import { motion } from "framer-motion";
 
 /**
- * Chevron Left Icon
- */
-function ChevronLeftIcon({ className }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 19l-7-7 7-7"
-      />
-    </svg>
-  );
-}
-
-/**
- * Chevron Right Icon
- */
-function ChevronRightIcon({ className }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5l7 7-7 7"
-      />
-    </svg>
-  );
-}
-
-/**
- * User response message bubble with branch navigation support
+ * User response message bubble
  */
 export default function UserResponseBubble({
   content,
@@ -54,9 +12,8 @@ export default function UserResponseBubble({
   onEdit,
   canEdit = true,
   superseded = false,
-  branchInfo = null,
-  onSwitchBranch,
   isEditable = true,
+  isEdited = false,
 }) {
   const messageVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -146,33 +103,6 @@ export default function UserResponseBubble({
         <div className="text-[14px] whitespace-pre-wrap break-words leading-[1.6]">{content}</div>
       </div>
 
-      {/* Branch navigation indicator */}
-      {branchInfo && branchInfo.siblingCount > 1 && (
-        <div className="flex items-center gap-1 mt-1.5">
-          <button
-            type="button"
-            onClick={() => onSwitchBranch?.(branchInfo.prevBranchId)}
-            disabled={!branchInfo.prevBranchId}
-            className="p-0.5 hover:bg-[var(--surface-2)] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Previous branch"
-          >
-            <ChevronLeftIcon className="w-3.5 h-3.5 text-[var(--muted-foreground)]" />
-          </button>
-          <span className="text-[10px] text-[var(--muted-foreground)] font-medium min-w-[24px] text-center">
-            {branchInfo.currentIndex + 1}/{branchInfo.siblingCount}
-          </span>
-          <button
-            type="button"
-            onClick={() => onSwitchBranch?.(branchInfo.nextBranchId)}
-            disabled={!branchInfo.nextBranchId}
-            className="p-0.5 hover:bg-[var(--surface-2)] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Next branch"
-          >
-            <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--muted-foreground)]" />
-          </button>
-        </div>
-      )}
-
       {/* Edit button - shows on hover, only for editable messages */}
       {canEdit && isEditable && onEdit && (
         <button
@@ -182,6 +112,10 @@ export default function UserResponseBubble({
         >
           Edit
         </button>
+      )}
+
+      {isEdited && !superseded && (
+        <span className="text-[10px] text-[var(--muted-foreground)] mt-1">Edited</span>
       )}
 
       {/* Timestamp */}

@@ -5,14 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 
 /**
  * Modal for editing a past message in the conversation.
- * Creating a branch instead of overwriting the original response.
  */
 export default function EditMessageModal({
   isOpen,
   onClose,
   originalMessage,
   stepConfig,
-  onCreateBranch,
+  onSaveEdit,
 }) {
   const [editedContent, setEditedContent] = useState("");
   const [selectedOption, setSelectedOption] = useState(null);
@@ -39,9 +38,9 @@ export default function EditMessageModal({
   const handleSubmit = () => {
     if (isOptionsInput && selectedOption) {
       const option = stepConfig.options?.find((opt) => opt.id === selectedOption);
-      onCreateBranch(selectedOption, option?.label || selectedOption);
+      onSaveEdit(selectedOption, option?.label || selectedOption);
     } else if (isTextInput && editedContent.trim()) {
-      onCreateBranch(editedContent.trim(), editedContent.trim());
+      onSaveEdit(editedContent.trim(), editedContent.trim());
     }
   };
 
@@ -120,8 +119,8 @@ export default function EditMessageModal({
                       />
                     </svg>
                     <p className="text-sm text-amber-600 dark:text-amber-400">
-                      This will create a new branch. You can switch between the
-                      original and new paths at any time.
+                      This will update your response. If this changes course details or study mode,
+                      some downstream steps may need to be regenerated.
                     </p>
                   </div>
                 </div>
@@ -214,7 +213,7 @@ export default function EditMessageModal({
                   disabled={!canSubmit}
                   className="flex-1 py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                 >
-                  Create Branch
+                  Save Changes
                 </button>
               </div>
             </div>

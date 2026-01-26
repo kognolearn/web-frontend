@@ -116,6 +116,7 @@ export default function TopicEditorChat({
   onAddTopic,
   onRegenerate,
   isLoading = false,
+  outdatedMessage = "",
 }) {
   const [openModules, setOpenModules] = useState({});
   const [newTopicTitle, setNewTopicTitle] = useState("");
@@ -166,6 +167,37 @@ export default function TopicEditorChat({
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden">
+      {outdatedMessage && (
+        <div className="px-4 py-3 bg-amber-500/10 border-b border-amber-500/20">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-start gap-2 text-amber-700 text-sm">
+              <svg
+                className="w-4 h-4 mt-0.5 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M12 9v4m0 4h.01M12 3l9 16H3L12 3z"
+                />
+              </svg>
+              <span>{outdatedMessage}</span>
+            </div>
+            {onRegenerate && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                className="text-xs font-medium text-amber-700 hover:text-amber-800"
+              >
+                Regenerate
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-1)]">
         <div className="flex items-center justify-between">
