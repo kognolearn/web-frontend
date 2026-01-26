@@ -112,6 +112,9 @@ export async function middleware(request) {
     data: { session },
   } = await supabase.auth.getSession()
   const pathname = request.nextUrl.pathname
+  const gateCourseId = request.cookies.get('kogno_onboarding_gate_course_id')?.value
+  const isGateCoursePath =
+    gateCourseId && pathname.startsWith(`/courses/${gateCourseId}`)
 
   // Handle admin routes with separate auth flow
   if (pathname.startsWith('/admin')) {
@@ -165,6 +168,9 @@ export async function middleware(request) {
   }
 
   if (!user) {
+    if (isGateCoursePath) {
+      return response
+    }
     if (!isSignedOutAllowedPath(pathname)) {
       const url = request.nextUrl.clone()
       url.pathname = '/'
@@ -174,6 +180,10 @@ export async function middleware(request) {
       }
       return NextResponse.redirect(url)
     }
+    return response
+  }
+
+  if (user?.is_anonymous && isGateCoursePath) {
     return response
   }
 

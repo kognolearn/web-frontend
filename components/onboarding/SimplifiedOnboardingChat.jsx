@@ -491,6 +491,8 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
           router.push(`/courses/${courseId}`);
           return;
         }
+      } else {
+        await ensureAnonUserId();
       }
     } catch (error) {
       console.warn('[SimplifiedOnboardingChat] Failed to check auth session:', error);
