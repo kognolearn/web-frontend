@@ -1463,6 +1463,15 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
         } catch {}
       }
 
+      // Dispatch seed award event if seeds were awarded
+      if (body.seedsAwarded) {
+        try {
+          window.dispatchEvent(new CustomEvent("seeds:awarded", {
+            detail: body.seedsAwarded,
+          }));
+        } catch {}
+      }
+
       redirectToDashboard();
 
       const dispatchRefreshEvent = () => {
