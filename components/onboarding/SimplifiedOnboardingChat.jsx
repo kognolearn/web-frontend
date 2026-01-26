@@ -1197,17 +1197,49 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         topicsPayload: topics,
         familiarityRatings: ratingsRef.current,
         onProgress: (progressValue, message, meta) => {
+          const parseModuleCounts = (text) => {
+            if (typeof text !== 'string') return {};
+            const normalized = text.trim();
+            const patterns = [
+              /module\s+(\d+)\s+of\s+(\d+)/i,
+              /(\d+)\s*\/\s*(\d+)\s*modules?/i,
+              /(\d+)\s+of\s+(\d+)\s+modules?/i,
+            ];
+            for (const pattern of patterns) {
+              const match = normalized.match(pattern);
+              if (!match) continue;
+              const parsedComplete = Number.parseInt(match[1], 10);
+              const parsedTotal = Number.parseInt(match[2], 10);
+              return {
+                modulesComplete: Number.isFinite(parsedComplete) ? parsedComplete : null,
+                totalModules: Number.isFinite(parsedTotal) ? parsedTotal : null,
+              };
+            }
+            return {};
+          };
+          const coercedModulesComplete = Number(meta?.modulesComplete);
+          const coercedTotalModules = Number(meta?.totalModules);
+
           if (typeof progressValue === 'number') {
             setCourseProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
           }
           if (typeof message === 'string' && message.trim()) {
             setCourseProgressMessage(message.trim());
           }
-          if (Number.isFinite(meta?.modulesComplete)) {
-            setCourseModulesComplete(meta.modulesComplete);
+          const parsed = parseModuleCounts(message);
+          const nextModulesComplete = Number.isFinite(coercedModulesComplete)
+            ? coercedModulesComplete
+            : parsed.modulesComplete;
+          const nextTotalModules = Number.isFinite(coercedTotalModules)
+            ? coercedTotalModules
+            : parsed.totalModules;
+          if (Number.isFinite(nextModulesComplete)) {
+            setCourseModulesComplete((prev) => Math.max(prev, nextModulesComplete));
           }
-          if (Number.isFinite(meta?.totalModules)) {
-            setCourseTotalModules(meta.totalModules);
+          if (Number.isFinite(nextTotalModules)) {
+            setCourseTotalModules((prev) =>
+              Number.isFinite(prev) ? Math.max(prev, nextTotalModules) : nextTotalModules
+            );
           }
           if (meta?.courseId) {
             setCourseId(meta.courseId);
