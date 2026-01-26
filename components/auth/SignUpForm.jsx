@@ -12,11 +12,13 @@ const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
  * @param {Object} props
  * @param {"standalone" | "embedded"} props.variant - "standalone" (default) renders with full styling, "embedded" renders a compact version for hero sections
  */
-export default function SignUpForm({ variant = "standalone" }) {
+export default function SignUpForm({ variant = "standalone", redirectTo: redirectOverride = null }) {
   const isEmbedded = variant === "embedded";
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
+  const redirectParam = searchParams.get("redirectTo");
+  const redirectTo = redirectOverride || redirectParam || "";
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -85,11 +87,17 @@ export default function SignUpForm({ variant = "standalone" }) {
           verificationType: payload?.verificationType || "signup",
           timestamp: Date.now(),
         }));
+        if (redirectTo) {
+          localStorage.setItem("kogno_signup_redirect", JSON.stringify({
+            redirectTo,
+            timestamp: Date.now(),
+          }));
+        }
       } catch (err) {
         console.error("Failed to store OTP flow info:", err);
       }
 
-      const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}`;
+      const confirmUrl = `/auth/confirm-email?email=${encodeURIComponent(formData.email)}${redirectTo ? `&redirectTo=${encodeURIComponent(redirectTo)}` : ""}`;
       router.push(confirmUrl);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
@@ -193,6 +201,7 @@ export default function SignUpForm({ variant = "standalone" }) {
 
       <GoogleSignInButton
         mode="signup"
+        redirectTo={redirectTo || null}
         disabled={loading}
       />
 
