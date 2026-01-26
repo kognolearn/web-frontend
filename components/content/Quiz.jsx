@@ -7,6 +7,7 @@ import { hasRichContent, toRichBlock, normalizeLatex } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
+import { useSeeds } from "@/components/seeds/SeedsProvider";
 
 const quizProgressCache = new Map();
 const quizProgressWriteTimers = new Map();
@@ -537,10 +538,10 @@ function normalizeSequenceQuestion(value, index, keyOverride) {
  * surfaces any rich feedback block supplied on the option.
  */
 export default function Quiz({
-  questions, 
-  question, 
-  options = [], 
-  onAnswer, 
+  questions,
+  question,
+  options = [],
+  onAnswer,
   onQuestionChange,
   userId,
   courseId,
@@ -548,6 +549,7 @@ export default function Quiz({
   onQuizCompleted,
 }) {
   const pathname = usePathname();
+  const { playSeedEarnedSound, playWrongAnswerSound, showSeedNotification } = useSeeds();
   const normalizedQuestions = useMemo(() => {
     if (questions && typeof questions === "object" && !Array.isArray(questions)) {
       const sequenceLike = Object.entries(questions)
@@ -894,18 +896,45 @@ export default function Quiz({
           console.error('Question status update failed:', questionStatusResponse.status);
         }
 
-        // Parse response to get seeds info
-        let seedsAwarded = null;
+        // Parse responses to get seeds info from both endpoints
+        let progressSeeds = null;
+        let questionSeeds = null;
+
         try {
           const progressData = await progressResponse.json();
-          seedsAwarded = progressData.seedsAwarded;
+          progressSeeds = progressData.seedsAwarded;
         } catch {
           // Response might have been already consumed or empty
         }
 
+        try {
+          if (questionStatusResponse && questionStatusResponse.ok) {
+            const questionData = await questionStatusResponse.json();
+            questionSeeds = questionData.seedsAwarded;
+          }
+        } catch {
+          // Response might have been already consumed or empty
+        }
+
+        // Combine seeds from progress (lesson/course completion) and questions (first-try correct)
+        const seedsAwarded = {
+          ...(progressSeeds || {}),
+          firstTryCorrectSeeds: questionSeeds || 0,
+        };
+
         // Notify parent that quiz was completed successfully
         if (typeof onQuizCompleted === 'function') {
           await onQuizCompleted({ masteryStatus, familiarityScore, seedsAwarded });
+        }
+
+        // Play sound and show notification based on seeds awarded
+        const totalSeedsAwarded = questionSeeds || 0;
+        if (totalSeedsAwarded > 0) {
+          playSeedEarnedSound();
+          showSeedNotification(totalSeedsAwarded, 'Correct on first try!', courseId);
+        } else if (correctCount === 0 && totalCount > 0) {
+          // Only play wrong sound if they got nothing correct
+          playWrongAnswerSound();
         }
       } catch (error) {
         console.error('Failed to update quiz progress:', error);
@@ -915,6 +944,13 @@ export default function Quiz({
       const allCorrect = totalCount > 0 && correctCount === totalCount;
       const masteryStatus = allCorrect ? 'mastered' : 'needs_review';
       onQuizCompleted({ masteryStatus, familiarityScore });
+
+      // Play sound based on results (no server tracking)
+      if (correctCount > 0) {
+        playSeedEarnedSound();
+      } else if (totalCount > 0) {
+        playWrongAnswerSound();
+      }
     }
 
     // Now reveal answers
@@ -930,7 +966,7 @@ export default function Quiz({
     });
     setCurrentIndex(0);
     setIsSubmitting(false);
-  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted]);
+  }, [isSubmitted, isSubmitting, normalizedQuestions, questionCount, responses, userId, courseId, lessonId, onQuizCompleted, playSeedEarnedSound, playWrongAnswerSound, showSeedNotification]);
 
   const handleNavigate = useCallback(
     (direction) => {

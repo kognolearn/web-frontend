@@ -230,7 +230,9 @@ export async function middleware(request) {
   }
 
   if (hasAccess) {
-    if (pathname === '/' || isAuthPagePath(pathname)) {
+    // Allow users to access pricing chat via continueNegotiation parameter
+    const continueNegotiation = request.nextUrl.searchParams.get('continueNegotiation') === '1'
+    if ((pathname === '/' && !continueNegotiation) || isAuthPagePath(pathname)) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
       return NextResponse.redirect(url)
