@@ -27,7 +27,7 @@ import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import SeedsDisplay from "@/components/ui/SeedsDisplay";
 import UserAvatar from "@/components/ui/UserAvatar";
 import DashboardSeedCelebration from "@/components/seeds/DashboardSeedCelebration";
-import MilestonesTimeline from "@/components/seeds/MilestonesTimeline";
+import DashboardSidebar from "@/components/navigation/DashboardSidebar";
 
 const terminalJobStatuses = new Set([
   "completed",
@@ -133,16 +133,6 @@ function DashboardClient() {
     };
   }, [isProfileMenuOpen]);
 
-
-
-
-
-  // Handle send feedback
-  const handleSendFeedback = () => {
-    setIsProfileMenuOpen(false);
-    window.dispatchEvent(new CustomEvent('open-feedback-widget'));
-  };
-
   useEffect(() => {
     coursesRef.current = courses;
   }, [courses]);
@@ -198,7 +188,7 @@ function DashboardClient() {
 
     // Check if there are any pending courses
     const hasPendingCourses = courseList.some(c => c.status === 'pending');
-    
+
     if (!hasPendingCourses) return;
 
     // Reduced polling frequency - realtime handles most updates now
@@ -532,7 +522,7 @@ function DashboardClient() {
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
-  
+
   // Compute user initials (first and last initial if full name, otherwise first 2 chars)
   const userInitials = (() => {
     const fullName = user?.user_metadata?.full_name;
@@ -548,7 +538,7 @@ function DashboardClient() {
     }
     return "?";
   })();
-  
+
   const hasCourses = courses.length > 0;
   const hasActiveCourseCards = hasCourses;
   const isTourCompleted = userSettings?.tour_completed === true;
@@ -561,67 +551,70 @@ function DashboardClient() {
 
   if (loading || !mounted) {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-        {/* Background effects */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 blur-3xl" />
-          <div className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-[var(--primary)]/10 to-transparent blur-3xl" />
-        </div>
-
-        <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-          {/* Top bar skeleton */}
-          <div className="flex items-center justify-between">
-            <div className="h-8 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
-            <div className="h-9 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+      <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+        <DashboardSidebar activePath="/dashboard" />
+        <div className="flex-1 relative overflow-hidden">
+          {/* Background effects */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 blur-3xl" />
+            <div className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-[var(--primary)]/10 to-transparent blur-3xl" />
           </div>
 
-          {/* Welcome header skeleton */}
-          <header className="space-y-2">
-            <div className="h-9 w-64 sm:w-80 rounded-lg bg-[var(--surface-2)] animate-pulse" />
-            <div className="h-5 w-48 rounded-lg bg-[var(--surface-2)] animate-pulse" />
-          </header>
-
-          {/* Grid skeleton */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {/* Create course card skeleton */}
-            <div className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center animate-pulse">
-              <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] mb-3" />
-              <div className="h-5 w-32 rounded bg-[var(--surface-2)] mb-2" />
-              <div className="h-4 w-28 rounded bg-[var(--surface-2)]" />
+          <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+            {/* Top bar skeleton */}
+            <div className="flex items-center justify-between">
+              <div className="h-8 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+              <div className="h-9 w-24 rounded-lg bg-[var(--surface-2)] animate-pulse" />
             </div>
 
-            {/* Course card skeletons */}
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div 
-                key={i} 
-                className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg animate-pulse"
-                style={{ animationDelay: `${i * 100}ms` }}
-              >
-                {/* Top section */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-[var(--surface-2)]" />
-                  <div className="flex items-center gap-2">
-                    <div className="h-6 w-20 rounded-full bg-[var(--surface-2)]" />
-                    <div className="w-7 h-7 rounded-full bg-[var(--surface-2)]" />
-                  </div>
-                </div>
+            {/* Welcome header skeleton */}
+            <header className="space-y-2">
+              <div className="h-9 w-64 sm:w-80 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+              <div className="h-5 w-48 rounded-lg bg-[var(--surface-2)] animate-pulse" />
+            </header>
 
-                {/* Title */}
-                <div className="flex-1 space-y-2">
-                  <div className="h-5 w-4/5 rounded bg-[var(--surface-2)]" />
-                  <div className="h-4 w-3/5 rounded bg-[var(--surface-2)]" />
-                </div>
-
-                {/* Bottom section */}
-                <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
-                    <div className="h-4 w-12 rounded bg-[var(--surface-2)]" />
-                  </div>
-                  <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
-                </div>
+            {/* Grid skeleton */}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {/* Create course card skeleton */}
+              <div className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)]/50 p-6 h-44 flex flex-col items-center justify-center animate-pulse">
+                <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] mb-3" />
+                <div className="h-5 w-32 rounded bg-[var(--surface-2)] mb-2" />
+                <div className="h-4 w-28 rounded bg-[var(--surface-2)]" />
               </div>
-            ))}
+
+              {/* Course card skeletons */}
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="relative rounded-2xl p-5 h-44 flex flex-col overflow-hidden backdrop-blur-xl bg-[var(--surface-1)] border border-[var(--border)] shadow-lg animate-pulse"
+                  style={{ animationDelay: `${i * 100}ms` }}
+                >
+                  {/* Top section */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--surface-2)]" />
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-20 rounded-full bg-[var(--surface-2)]" />
+                      <div className="w-7 h-7 rounded-full bg-[var(--surface-2)]" />
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 w-4/5 rounded bg-[var(--surface-2)]" />
+                    <div className="h-4 w-3/5 rounded bg-[var(--surface-2)]" />
+                  </div>
+
+                  {/* Bottom section */}
+                  <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
+                      <div className="h-4 w-12 rounded bg-[var(--surface-2)]" />
+                    </div>
+                    <div className="w-4 h-4 rounded bg-[var(--surface-2)]" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -629,76 +622,49 @@ function DashboardClient() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] transition-colors">
-      {/* Enhanced animated background */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* Primary gradient orbs */}
-        <div 
-          className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl animate-pulse" 
-          style={{ animationDuration: '8s', background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)` }} 
-        />
-        <div 
-          className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full blur-3xl animate-pulse" 
-          style={{ animationDuration: '10s', animationDelay: '2s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }} 
-        />
-        <div 
-          className="absolute -bottom-20 right-1/3 h-[350px] w-[350px] rounded-full blur-3xl animate-pulse" 
-          style={{ animationDuration: '12s', animationDelay: '4s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }} 
-        />
+    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <DashboardSidebar activePath="/dashboard" />
 
-        {/* Mesh gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
+      <div className="flex-1 relative overflow-hidden transition-colors">
+        {/* Enhanced animated background */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* Primary gradient orbs */}
+          <div
+            className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-3xl animate-pulse"
+            style={{ animationDuration: '8s', background: `radial-gradient(circle, rgba(var(--primary-rgb), var(--grid-glow-opacity)) 0%, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.25)) 100%)` }}
+          />
+          <div
+            className="absolute top-1/2 -left-40 h-[400px] w-[400px] rounded-full blur-3xl animate-pulse"
+            style={{ animationDuration: '10s', animationDelay: '2s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.75)) 0%, transparent 100%)` }}
+          />
+          <div
+            className="absolute -bottom-20 right-1/3 h-[350px] w-[350px] rounded-full blur-3xl animate-pulse"
+            style={{ animationDuration: '12s', animationDelay: '4s', background: `radial-gradient(circle, rgba(var(--primary-rgb), calc(var(--grid-glow-opacity) * 0.5)) 0%, transparent 100%)` }}
+          />
 
-        {/* Subtle grid pattern - uses theme-aware grid color */}
-        <div 
-          className="absolute inset-0"
-          style={{ 
-            backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
-            backgroundSize: '60px 60px'
-          }}
-        />
-      </div>
+          {/* Mesh gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/50 to-[var(--background)]" />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-6 sm:gap-8 px-3 sm:px-4 pb-16 pt-6 sm:pt-8 sm:px-6 lg:px-8">
-        <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-1)]/60 p-4 sm:p-6 shadow-lg shadow-black/10 backdrop-blur-xl relative z-10">
+          {/* Subtle grid pattern - uses theme-aware grid color */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
+              backgroundSize: '60px 60px'
+            }}
+          />
+        </div>
+
+        <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8 px-4 pb-16 pt-6 sm:pt-8 sm:px-6 lg:px-8">
           {/* Top bar */}
           <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link href="/" className="flex items-center gap-2">
-              <Image 
-                src="/images/kogno_logo.png" 
-                alt="Kogno Logo" 
-                width={32} 
-                height={32} 
-                className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
-                priority
-              />
-              <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--primary)]">
-                Kogno
-              </span>
-            </Link>
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-bold">
+                Welcome back, {displayName}
+              </h1>
+            </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              {hasCheckedAdmin && isAdmin && (
-                <Link
-                  href="/admin"
-                  className="hidden sm:flex items-center gap-2 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 px-4 py-2 text-sm font-semibold text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                  </svg>
-                  Admin
-                </Link>
-              )}
-              {hasCheckedAdmin && isAdmin && (
-                <Link
-                  href="/admin"
-                  className="flex sm:hidden items-center justify-center w-9 h-9 rounded-full border border-[var(--primary)]/50 bg-[var(--primary)]/10 text-[var(--primary)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/20"
-                  title="Admin"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                  </svg>
-                </Link>
-              )}
+              <SeedsDisplay />
               {/* Notifications */}
               <NotificationBell />
               {/* Profile with connected subscription badge */}
@@ -728,46 +694,21 @@ function DashboardClient() {
                     )}
                   </div>
                 </button>
-                
+
                 {/* Profile dropdown menu */}
                 {isProfileMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] shadow-lg backdrop-blur-xl">
                     <div className="p-2">
-                      <Link
-                        href="/settings"
-                        onClick={() => setIsProfileMenuOpen(false)}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Settings
-                      </Link>
                       <button
                         type="button"
-                        onClick={handleSendFeedback}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-colors"
+                        onClick={() => { setIsProfileMenuOpen(false); handleSignOut(); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
-                        Send Feedback
+                        Logout
                       </button>
-                    </div>
-                    <div className="border-t border-[var(--border)]">
-                      <div className="p-2">
-                        <button
-                          type="button"
-                          onClick={() => { setIsProfileMenuOpen(false); handleSignOut(); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                          </svg>
-                          Logout
-                        </button>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -775,137 +716,115 @@ function DashboardClient() {
             </div>
           </div>
 
-          {/* Welcome header */}
-          <header className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-4">
-              <h1 className="text-2xl sm:text-3xl font-bold sm:text-4xl">
-                Welcome back, {displayName}
-              </h1>
-              <SeedsDisplay />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              <Link
-                href="/exams/ad-hoc"
-                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Grade exam
-              </Link>
-            </div>
-          </header>
-        </div>
-        {/* Courses section */}
-        <main className="space-y-6">
-          {!hasActiveCourseCards ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              {shouldShowOnboardingEmptyState ? (
-                <EmptyStateCard
-                  title="Create your first course"
-                  description="Get started by creating a personalized study plan."
-                  ctaText="Create Course"
-                  ctaHref="/courses/create"
-                  onCtaClick={handleCreateCourseClick}
-                  ctaDataTour="dashboard-create-course"
-                />
-              ) : (
-                <Link
-                  href="/courses/create"
-                  onClick={handleCreateCourseClick}
-                  className="btn btn-primary btn-lg"
-                  data-tour="dashboard-create-course"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Create your first course
-                </Link>
-              )}
-            </div>
-          ) : (
-            <div
-              className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-stretch"
-            >
-              {/* Create Course Card - always first */}
-              <OnboardingTooltip
-                id="dashboard-create-course"
-                content="Click here to create a new course! Upload your syllabus, set your study time, and we'll generate a personalized learning plan with readings, flashcards, and quizzes."
-                position="bottom"
-                pointerPosition="center"
-                delay={800}
-                priority={1}
-                className="w-full h-full"
-              >
-                <Link
-                  href="/courses/create"
-                  onClick={handleCreateCourseClick}
-                  data-tour="dashboard-create-course"
-                  className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
-                >
-                  {/* Hover gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
-
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {/* Courses section */}
+          <main className="space-y-6">
+            {!hasActiveCourseCards ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                {shouldShowOnboardingEmptyState ? (
+                  <EmptyStateCard
+                    title="Create your first course"
+                    description="Get started by creating a personalized study plan."
+                    ctaText="Create Course"
+                    ctaHref="/courses/create"
+                    onCtaClick={handleCreateCourseClick}
+                    ctaDataTour="dashboard-create-course"
+                  />
+                ) : (
+                  <Link
+                    href="/courses/create"
+                    onClick={handleCreateCourseClick}
+                    className="btn btn-primary btn-lg"
+                    data-tour="dashboard-create-course"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                  </div>
-                  <span className="relative text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">Create Course</span>
-                </Link>
-              </OnboardingTooltip>
+                    Create your first course
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div
+                className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-stretch"
+              >
+                {/* Create Course Card - always first */}
+                <OnboardingTooltip
+                  id="dashboard-create-course"
+                  content="Click here to create a new course! Upload your syllabus, set your study time, and we'll generate a personalized learning plan with readings, flashcards, and quizzes."
+                  position="bottom"
+                  pointerPosition="center"
+                  delay={800}
+                  priority={1}
+                  className="w-full h-full"
+                >
+                  <Link
+                    href="/courses/create"
+                    onClick={handleCreateCourseClick}
+                    data-tour="dashboard-create-course"
+                    className="group relative flex min-h-[11.5rem] h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-1)] overflow-hidden transition-all duration-300 hover:border-[var(--primary)] hover:shadow-xl hover:shadow-[var(--primary)]/15 hover:-translate-y-0.5"
+                  >
+                    {/* Hover gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/0 via-transparent to-[var(--primary)]/0 group-hover:from-[var(--primary)]/10 group-hover:to-[var(--primary)]/5 transition-all duration-300" />
 
-              {courses.map((course) => {
-                const courseTitle = getCourseTitle(course);
-                // Show as pending/building if course status is pending or generating
-                const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
-                // Use percent_complete from the course object (0-100 range)
-                const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
-                const isSharedWithMe = course.is_shared_with_me === true;
-                return (
-                  <CourseCard
-                    key={course.id}
-                    courseCode={courseTitle}
-                    courseName=""
-                    courseId={course.id}
-                    secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
-                    status={effectiveStatus}
-                    topicsProgress={progress}
-                    canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
-                    onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle, isSharedWithMe })}
-                    isSharedWithMe={isSharedWithMe}
-                  />
-                );
-              })}
-            </div>
-          )}
+                    <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] group-hover:bg-[var(--primary)]/30 transition-colors">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    <span className="relative text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">Create Course</span>
+                  </Link>
+                </OnboardingTooltip>
 
-          {/* Milestones Timeline */}
-          <MilestonesTimeline collapsed />
-        </main>
+                {courses.map((course) => {
+                  const courseTitle = getCourseTitle(course);
+                  // Show as pending/building if course status is pending or generating
+                  const effectiveStatus = (course.status === "pending" || course.status === "generating") ? "pending" : course.status;
+                  // Use percent_complete from the course object (0-100 range)
+                  const progress = course.percent_complete !== undefined ? course.percent_complete / 100 : null;
+                  const isSharedWithMe = course.is_shared_with_me === true;
+                  return (
+                    <CourseCard
+                      key={course.id}
+                      courseCode={courseTitle}
+                      courseName=""
+                      courseId={course.id}
+                      secondsToComplete={course.seconds_to_complete || course.secondsToComplete}
+                      status={effectiveStatus}
+                      topicsProgress={progress}
+                      canOpen={effectiveStatus !== "pending" || Boolean(course.has_ready_modules)}
+                      onDelete={() => setCourseToDelete({ id: course.id, title: courseTitle, isSharedWithMe })}
+                      isSharedWithMe={isSharedWithMe}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+          </main>
+        </div>
+
+        <DeleteCourseModal
+          isOpen={!!courseToDelete}
+          course={courseToDelete}
+          onClose={() => setCourseToDelete(null)}
+          onConfirm={handleDeleteCourse}
+        />
+
+        <CourseLimitModal
+          isOpen={showCourseLimitModal}
+          onClose={() => setShowCourseLimitModal(false)}
+          courses={courses}
+          userId={user?.id}
+          limit={courses.length >= 2 ? 2 : 1}
+          mode={courses.length >= 2 ? "total" : (generatedCourseCount >= 1 ? "generated" : "total")}
+          onCourseDeleted={(courseId) => {
+            setCourses((prev) => prev.filter((c) => c.id !== courseId));
+          }}
+        />
+
+        {/* Seed celebration for seeds earned since last visit */}
+        <DashboardSeedCelebration courses={courses} />
       </div>
-
-      <DeleteCourseModal
-        isOpen={!!courseToDelete}
-        course={courseToDelete}
-        onClose={() => setCourseToDelete(null)}
-        onConfirm={handleDeleteCourse}
-      />
-
-      <CourseLimitModal
-        isOpen={showCourseLimitModal}
-        onClose={() => setShowCourseLimitModal(false)}
-        courses={courses}
-        userId={user?.id}
-        limit={courses.length >= 2 ? 2 : 1}
-        mode={courses.length >= 2 ? "total" : (generatedCourseCount >= 1 ? "generated" : "total")}
-        onCourseDeleted={(courseId) => {
-          setCourses((prev) => prev.filter((c) => c.id !== courseId));
-        }}
-      />
-
-      {/* Seed celebration for seeds earned since last visit */}
-      <DashboardSeedCelebration courses={courses} />
     </div>
   );
 }

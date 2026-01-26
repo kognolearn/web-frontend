@@ -1583,11 +1583,19 @@ export default function CourseTabContent({
 
       // Show seed notification if seeds were awarded
       if (result?.seedsAwarded) {
-        const totalSeeds = (result.seedsAwarded.lessonSeeds?.amount || 0) +
+        // Calculate total from lesson/course completion milestones
+        const milestoneSeeds = (result.seedsAwarded.lessonSeeds?.amount || 0) +
           (result.seedsAwarded.firstLessonMilestone?.amount || 0) +
           (result.seedsAwarded.courseCompleteMilestone?.amount || 0);
+        // Add first-try correct seeds from questions
+        const firstTrySeeds = result.seedsAwarded.firstTryCorrectSeeds || 0;
+        const totalSeeds = milestoneSeeds + firstTrySeeds;
+
         if (totalSeeds > 0) {
-          showSeedNotification(totalSeeds, 'Completed a quiz', courseId);
+          const reason = firstTrySeeds > 0 && milestoneSeeds === 0
+            ? 'Correct on first try!'
+            : 'Completed a quiz';
+          showSeedNotification(totalSeeds, reason, courseId);
           // Refresh balance after notification
           setTimeout(() => fetchBalance(), 2000);
         }

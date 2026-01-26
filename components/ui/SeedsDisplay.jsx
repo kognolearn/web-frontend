@@ -12,7 +12,7 @@ export default function SeedsDisplay({ className = "" }) {
   const prevBalanceRef = useRef(null);
   const animationRef = useRef(null);
 
-  // Animate counter when balance changes
+  // Animate counter when balance changes - increment one at a time
   useEffect(() => {
     if (balance === null) return;
 
@@ -23,38 +23,37 @@ export default function SeedsDisplay({ className = "" }) {
       return;
     }
 
-    // Balance increased - animate the counter
+    // Balance increased - animate the counter one at a time
     if (balance > prevBalanceRef.current) {
       const startValue = displayedBalance ?? prevBalanceRef.current;
       const endValue = balance;
       const diff = endValue - startValue;
-      const duration = Math.min(1500, diff * 50); // Max 1.5s animation
-      const startTime = Date.now();
 
+      // Calculate delay per step - faster for smaller amounts, slower base for larger
+      // Min 50ms per step, max 150ms per step, adjust based on total diff
+      const delayPerStep = Math.max(50, Math.min(150, 1500 / diff));
+
+      let currentValue = startValue;
       setIsIncrementing(true);
 
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        // Ease-out
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const currentValue = Math.round(startValue + diff * eased);
-
+      const stepUp = () => {
+        currentValue += 1;
         setDisplayedBalance(currentValue);
 
-        if (progress < 1) {
-          animationRef.current = requestAnimationFrame(animate);
+        if (currentValue < endValue) {
+          animationRef.current = setTimeout(stepUp, delayPerStep);
         } else {
-          setDisplayedBalance(endValue);
           setIsIncrementing(false);
         }
       };
 
+      // Clear any existing animation
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
       }
-      animationRef.current = requestAnimationFrame(animate);
+
+      // Start stepping
+      animationRef.current = setTimeout(stepUp, delayPerStep);
       prevBalanceRef.current = balance;
     } else {
       // Balance decreased or same - just set it
@@ -64,7 +63,7 @@ export default function SeedsDisplay({ className = "" }) {
 
     return () => {
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
       }
     };
   }, [balance, displayedBalance]);
