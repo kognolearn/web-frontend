@@ -729,6 +729,32 @@ export default function CourseTabContent({
   // Seeds notification hook - shows toast when seeds are earned in-course
   const { showSeedNotification, fetchBalance } = useSeeds();
 
+  const showSeedsToast = useCallback((seedsAwarded, reasonOverride = null) => {
+    if (!seedsAwarded) return false;
+    const milestoneSeeds = (seedsAwarded.lessonSeeds?.amount || 0) +
+      (seedsAwarded.firstLessonMilestone?.amount || 0) +
+      (seedsAwarded.courseCompleteMilestone?.amount || 0);
+    const firstTrySeeds = seedsAwarded.firstTryCorrectSeeds || 0;
+    const totalSeeds = milestoneSeeds + firstTrySeeds;
+
+    if (totalSeeds <= 0) return false;
+
+    let reason = reasonOverride;
+    if (!reason) {
+      if (firstTrySeeds > 0 && milestoneSeeds === 0) {
+        reason = 'Correct on first try!';
+      } else if (milestoneSeeds > 0 && firstTrySeeds === 0) {
+        reason = 'Lesson completed!';
+      } else {
+        reason = 'Seeds earned!';
+      }
+    }
+
+    showSeedNotification(totalSeeds, reason, courseId);
+    setTimeout(() => fetchBalance(), 2000);
+    return true;
+  }, [showSeedNotification, fetchBalance, courseId]);
+
   const visibleModules = useMemo(() => {
     if (!studyPlan?.modules) return [];
     if (!Array.isArray(readyModuleRefs)) return studyPlan.modules;
@@ -1583,25 +1609,17 @@ export default function CourseTabContent({
 
       // Show seed notification if seeds were awarded
       if (result?.seedsAwarded) {
-        // Calculate total from lesson/course completion milestones
         const milestoneSeeds = (result.seedsAwarded.lessonSeeds?.amount || 0) +
           (result.seedsAwarded.firstLessonMilestone?.amount || 0) +
           (result.seedsAwarded.courseCompleteMilestone?.amount || 0);
-        // Add first-try correct seeds from questions
         const firstTrySeeds = result.seedsAwarded.firstTryCorrectSeeds || 0;
-        const totalSeeds = milestoneSeeds + firstTrySeeds;
-
-        if (totalSeeds > 0) {
-          const reason = firstTrySeeds > 0 && milestoneSeeds === 0
-            ? 'Correct on first try!'
-            : 'Completed a quiz';
-          showSeedNotification(totalSeeds, reason, courseId);
-          // Refresh balance after notification
-          setTimeout(() => fetchBalance(), 2000);
-        }
+        const reason = firstTrySeeds > 0 && milestoneSeeds === 0
+          ? 'Correct on first try!'
+          : 'Completed a quiz';
+        showSeedsToast(result.seedsAwarded, reason);
       }
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedsToast]);
 
   const handleTaskCompleted = useCallback(async () => {
     if (selectedLesson?.id && courseId) {
@@ -1620,14 +1638,7 @@ export default function CourseTabContent({
           const data = await response.json();
           // Show seed notification if seeds were awarded
           if (data.seedsAwarded) {
-            const totalSeeds = (data.seedsAwarded.lessonSeeds?.amount || 0) +
-              (data.seedsAwarded.firstLessonMilestone?.amount || 0) +
-              (data.seedsAwarded.courseCompleteMilestone?.amount || 0);
-            if (totalSeeds > 0) {
-              showSeedNotification(totalSeeds, 'Completed a task', courseId);
-              // Refresh balance after notification
-              setTimeout(() => fetchBalance(), 2000);
-            }
+            showSeedsToast(data.seedsAwarded, 'Completed a task');
           }
         }
       } catch (error) {
@@ -1636,7 +1647,7 @@ export default function CourseTabContent({
       fetchLessonContent(selectedLesson.id, { force: true });
       await refetchStudyPlan();
     }
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedsToast]);
 
   // Admin auto-complete handler - marks the lesson as complete without going through the normal flow
   const handleAdminComplete = useCallback(async () => {
@@ -1658,13 +1669,7 @@ export default function CourseTabContent({
 
         // Show seed notification if seeds were awarded
         if (data.seedsAwarded) {
-          const totalSeeds = (data.seedsAwarded.lessonSeeds?.amount || 0) +
-            (data.seedsAwarded.firstLessonMilestone?.amount || 0) +
-            (data.seedsAwarded.courseCompleteMilestone?.amount || 0);
-          if (totalSeeds > 0) {
-            showSeedNotification(totalSeeds, 'Admin completed section', courseId);
-            setTimeout(() => fetchBalance(), 2000);
-          }
+          showSeedsToast(data.seedsAwarded, 'Admin completed section');
         }
       } else {
         console.error('[CourseTabContent] Admin auto-complete failed:', response.status);
@@ -1676,7 +1681,7 @@ export default function CourseTabContent({
     // Always refresh content and study plan
     fetchLessonContent(selectedLesson.id, { force: true });
     await refetchStudyPlan();
-  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedNotification, fetchBalance]);
+  }, [selectedLesson?.id, courseId, fetchLessonContent, refetchStudyPlan, showSeedsToast]);
 
   // Helper to get cached content data for a lesson
   const getLessonContentData = useCallback((lessonId) => {
@@ -2058,6 +2063,14 @@ export default function CourseTabContent({
           });
           
           if (response.ok) {
+            try {
+              const data = await response.json();
+              if (data?.seedsAwarded) {
+                showSeedsToast(data.seedsAwarded, 'Lesson completed!');
+              }
+            } catch (error) {
+              console.error('Failed to parse lesson completion response:', error);
+            }
             // Refresh the study plan to get updated lesson status
             await refetchStudyPlan();
           }
@@ -2066,7 +2079,7 @@ export default function CourseTabContent({
         }
       })();
     }
-  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan]);
+  }, [selectedLesson?.id, selectedLesson?.title, courseId, userId, isLessonContentLoaded, getLessonContentData, calculateQuizScoreFromData, determineMasteryStatus, refetchStudyPlan, showSeedsToast]);
 
   const handleDragOver = (e) => {
     if (e.dataTransfer.types.includes('application/x-chat-tab-id')) {
@@ -2824,9 +2837,6 @@ export default function CourseTabContent({
 
                             // Cram mode priority indicator (only shown when low on time)
                             const cramPriorityStatus = isCramPriorityMode ? getCramPriorityStatus(lesson, hasHiddenContent) : null;
-                            const showPriorityScore = hasCheckedAdmin && isAdmin;
-                            const priorityScore = Number.isFinite(lesson.priority_score) ? lesson.priority_score : null;
-                            const priorityScoreLabel = priorityScore !== null ? priorityScore.toFixed(2) : "—";
 
                             // Selected state takes precedence for text color
                             const isSelected = selectedLesson?.id === lesson.id;
@@ -2886,11 +2896,6 @@ export default function CourseTabContent({
                               <span className="flex-1 truncate">
                                 {lesson.title}
                               </span>
-                              {showPriorityScore && (
-                                <span className="shrink-0 text-[10px] font-semibold text-[var(--muted-foreground)]">
-                                  P:{priorityScoreLabel}
-                                </span>
-                              )}
                             </button>
                           );
                               })}
