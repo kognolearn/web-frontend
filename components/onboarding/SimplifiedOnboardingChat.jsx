@@ -11,7 +11,11 @@ import {
   generateAnonCourse,
   generateAnonTopics,
   getAnonUserId,
+  getOnboardingSession,
+  resumeAnonCourseJob,
+  resumeAnonTopicsJob,
   setOnboardingGateCourseId,
+  setOnboardingSession,
 } from '@/lib/onboarding';
 import { BotMessage, UserMessage, TypingIndicator } from '@/components/chat/ChatMessage';
 import { createMessageQueue, getMessageDelayMs, scrollToBottom } from '@/lib/chatHelpers';
@@ -346,13 +350,16 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const [topicsProgress, setTopicsProgress] = useState(0);
   const [topicsProgressMessage, setTopicsProgressMessage] = useState('');
   const [topicsApproved, setTopicsApproved] = useState(false);
+  const [topicsJobId, setTopicsJobId] = useState(null);
   const [courseProgress, setCourseProgress] = useState(0);
   const [courseProgressMessage, setCourseProgressMessage] = useState('');
   const [courseModulesComplete, setCourseModulesComplete] = useState(0);
   const [courseTotalModules, setCourseTotalModules] = useState(null);
   const [courseId, setCourseId] = useState(null);
+  const [courseJobId, setCourseJobId] = useState(null);
   const [courseError, setCourseError] = useState(null);
   const [attachedFiles, setAttachedFiles] = useState([]);
+  const [isSessionHydrated, setIsSessionHydrated] = useState(false);
 
   const scrollContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -366,6 +373,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
   const topicsPayloadRef = useRef(topicsPayload);
   const ratingsRef = useRef(familiarityRatings);
   const persistTimerRef = useRef(null);
+  const sessionHydratedRef = useRef(false);
+  const resumeTopicsRef = useRef(false);
+  const resumeCourseRef = useRef(false);
   const topicsMessageTimerRef = useRef(null);
   const topicsMessageIdRef = useRef(null);
   const generationHistoryRef = useRef([]);
@@ -445,6 +455,254 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
     }
   }, [input]);
+
+  useEffect(() => {
+    if (sessionHydratedRef.current) return;
+    const stored = getOnboardingSession();
+    if (!stored) {
+      sessionHydratedRef.current = true;
+      setIsSessionHydrated(true);
+      return;
+    }
+
+    const restoredMessages = Array.isArray(stored.messages) ? stored.messages : null;
+    if (restoredMessages && restoredMessages.length > 0) {
+      setMessages(restoredMessages);
+      messagesRef.current = restoredMessages;
+      const topicsMessage = restoredMessages.find((message) => message?.type === 'topics');
+      if (topicsMessage?.id) {
+        topicsMessageIdRef.current = topicsMessage.id;
+      }
+    }
+
+    if (stored.courseInfo && typeof stored.courseInfo === 'object') {
+      setCourseInfo((prev) => ({
+        ...prev,
+        ...stored.courseInfo,
+        syllabusFiles: [],
+      }));
+    }
+
+    if (stored.stage) {
+      setStage(stored.stage);
+    }
+    setPendingField(stored.pendingField ?? null);
+    setIsConfirmingCourse(Boolean(stored.isConfirmingCourse));
+    setNeedsCourseCorrection(Boolean(stored.needsCourseCorrection));
+
+    if (stored.topicsPayload) {
+      const normalizedPayload = normalizeTopicsPayload(stored.topicsPayload);
+      setTopicsPayload(normalizedPayload);
+    }
+    if (stored.familiarityRatings && typeof stored.familiarityRatings === 'object') {
+      setFamiliarityRatings(stored.familiarityRatings);
+    }
+    setTopicsApproved(Boolean(stored.topicsApproved));
+    setTopicsProgress(Number.isFinite(stored.topicsProgress) ? stored.topicsProgress : 0);
+    setTopicsProgressMessage(typeof stored.topicsProgressMessage === 'string' ? stored.topicsProgressMessage : '');
+    setTopicError(typeof stored.topicError === 'string' ? stored.topicError : null);
+    setTopicsJobId(typeof stored.topicsJobId === 'string' ? stored.topicsJobId : null);
+
+    setCourseProgress(Number.isFinite(stored.courseProgress) ? stored.courseProgress : 0);
+    setCourseProgressMessage(typeof stored.courseProgressMessage === 'string' ? stored.courseProgressMessage : '');
+    setCourseModulesComplete(Number.isFinite(stored.courseModulesComplete) ? stored.courseModulesComplete : 0);
+    setCourseTotalModules(Number.isFinite(stored.courseTotalModules) ? stored.courseTotalModules : null);
+    setCourseId(typeof stored.courseId === 'string' ? stored.courseId : null);
+    setCourseJobId(typeof stored.courseJobId === 'string' ? stored.courseJobId : null);
+    setCourseError(typeof stored.courseError === 'string' ? stored.courseError : null);
+
+    if (Array.isArray(stored.generationHistory)) {
+      generationHistoryRef.current = stored.generationHistory;
+    }
+    courseAccessNotifiedRef.current = Boolean(stored.courseAccessNotified);
+    courseCompletionNotifiedRef.current = Boolean(stored.courseCompletionNotified);
+    generationIntroSentRef.current = Boolean(stored.generationIntroSent);
+
+    sessionHydratedRef.current = true;
+    setIsSessionHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isSessionHydrated) return;
+    const payload = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      stage,
+      messages,
+      courseInfo: {
+        ...courseInfo,
+        syllabusFiles: [],
+      },
+      pendingField,
+      isConfirmingCourse,
+      needsCourseCorrection,
+      topicsPayload,
+      familiarityRatings,
+      topicsApproved,
+      topicsProgress,
+      topicsProgressMessage,
+      topicError,
+      topicsJobId,
+      courseProgress,
+      courseProgressMessage,
+      courseModulesComplete,
+      courseTotalModules,
+      courseId,
+      courseJobId,
+      courseError,
+      generationHistory: generationHistoryRef.current || [],
+      generationIntroSent: generationIntroSentRef.current,
+      courseAccessNotified: courseAccessNotifiedRef.current,
+      courseCompletionNotified: courseCompletionNotifiedRef.current,
+    };
+    setOnboardingSession(payload);
+  }, [
+    isSessionHydrated,
+    stage,
+    messages,
+    courseInfo,
+    pendingField,
+    isConfirmingCourse,
+    needsCourseCorrection,
+    topicsPayload,
+    familiarityRatings,
+    topicsApproved,
+    topicsProgress,
+    topicsProgressMessage,
+    topicError,
+    topicsJobId,
+    courseProgress,
+    courseProgressMessage,
+    courseModulesComplete,
+    courseTotalModules,
+    courseId,
+    courseJobId,
+    courseError,
+  ]);
+
+  useEffect(() => {
+    if (!isSessionHydrated) return;
+    if (stage !== STAGES.TOPICS_GENERATING) {
+      resumeTopicsRef.current = false;
+      return;
+    }
+    if (!topicsJobId || resumeTopicsRef.current) return;
+    resumeTopicsRef.current = true;
+
+    const resume = async () => {
+      const anonUserId = await resolveAnonUserId();
+      if (!anonUserId) return;
+      setIsThinking(true);
+      setTopicError(null);
+      try {
+        const result = await resumeAnonTopicsJob(topicsJobId, anonUserId, {
+          onProgress: (progressValue, message) => {
+            if (typeof progressValue === 'number') {
+              setTopicsProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
+            }
+            if (typeof message === 'string' && message.trim()) {
+              setTopicsProgressMessage(message.trim());
+            }
+          },
+        });
+        const alreadyHasTopics = messagesRef.current?.some((msg) => msg?.type === 'topics');
+        applyTopicsResult(result, { announce: !alreadyHasTopics });
+      } catch (error) {
+        console.error('[SimplifiedOnboardingChat] Resume topics failed:', error);
+        setTopicError('Something went wrong generating topics.');
+        setStage(STAGES.TOPICS_APPROVAL);
+      } finally {
+        setIsThinking(false);
+      }
+    };
+
+    void resume();
+  }, [isSessionHydrated, stage, topicsJobId]);
+
+  useEffect(() => {
+    if (!isSessionHydrated) return;
+    if (stage !== STAGES.COURSE_GENERATING) {
+      resumeCourseRef.current = false;
+      return;
+    }
+    if (!courseJobId || resumeCourseRef.current) return;
+    resumeCourseRef.current = true;
+
+    const resume = async () => {
+      const anonUserId = await resolveAnonUserId();
+      if (!anonUserId) return;
+      setCourseError(null);
+      setIsGenerationReplying(false);
+      try {
+        const result = await resumeAnonCourseJob(courseJobId, anonUserId, {
+          meta: { courseId },
+          onProgress: (progressValue, message, meta) => {
+            const parseModuleCounts = (text) => {
+              if (typeof text !== 'string') return {};
+              const normalized = text.trim();
+              const patterns = [
+                /module\s+(\d+)\s+of\s+(\d+)/i,
+                /(\d+)\s*\/\s*(\d+)\s*modules?/i,
+                /(\d+)\s+of\s+(\d+)\s+modules?/i,
+              ];
+              for (const pattern of patterns) {
+                const match = normalized.match(pattern);
+                if (!match) continue;
+                const parsedComplete = Number.parseInt(match[1], 10);
+                const parsedTotal = Number.parseInt(match[2], 10);
+                return {
+                  modulesComplete: Number.isFinite(parsedComplete) ? parsedComplete : null,
+                  totalModules: Number.isFinite(parsedTotal) ? parsedTotal : null,
+                };
+              }
+              return {};
+            };
+            const normalizeCount = (value) => {
+              if (value === null || value === undefined) return null;
+              const parsedValue = Number(value);
+              return Number.isFinite(parsedValue) ? parsedValue : null;
+            };
+            const coercedModulesComplete = normalizeCount(meta?.modulesComplete);
+            const coercedTotalModules = normalizeCount(meta?.totalModules);
+
+            if (typeof progressValue === 'number') {
+              setCourseProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
+            }
+            if (typeof message === 'string' && message.trim()) {
+              setCourseProgressMessage(message.trim());
+            }
+            const parsed = parseModuleCounts(message);
+            const nextModulesComplete = Number.isFinite(coercedModulesComplete)
+              ? coercedModulesComplete
+              : parsed.modulesComplete;
+            const nextTotalModules = Number.isFinite(coercedTotalModules)
+              ? coercedTotalModules
+              : parsed.totalModules;
+            if (Number.isFinite(nextModulesComplete)) {
+              setCourseModulesComplete((prev) => Math.max(prev, nextModulesComplete));
+            }
+            if (Number.isFinite(nextTotalModules)) {
+              setCourseTotalModules((prev) =>
+                Number.isFinite(prev) ? Math.max(prev, nextTotalModules) : nextTotalModules
+              );
+            }
+            if (meta?.courseId) {
+              setCourseId(meta.courseId);
+            }
+          },
+        });
+        if (result?.courseId) {
+          setCourseId(result.courseId);
+        }
+        setCourseProgress(100);
+      } catch (error) {
+        console.error('[SimplifiedOnboardingChat] Resume course failed:', error);
+        setCourseError('Something went wrong building your course.');
+      }
+    };
+
+    void resume();
+  }, [isSessionHydrated, stage, courseJobId, courseId]);
 
   useEffect(() => {
     if (stage !== STAGES.COURSE_GENERATING || generationIntroSentRef.current) return;
@@ -689,10 +947,38 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     }
   };
 
+  const applyTopicsResult = (result, { announce = true } = {}) => {
+    const normalizedPayload = normalizeTopicsPayload(result?.topics || {});
+    const normalizedOverview = normalizedPayload.overviewTopics || [];
+    const initialRatings = buildInitialRatings(normalizedOverview);
+
+    setTopicsPayload(normalizedPayload);
+    setFamiliarityRatings(initialRatings);
+    schedulePersist({ nextTopics: normalizedPayload, nextRatings: initialRatings });
+
+    if (announce) {
+      const topicsMessage = interpolateMessage(getTopicsGeneratedMessage(), {
+        overviewTopics: normalizedOverview,
+      });
+      if (topicsMessage) {
+        enqueueReplyParts('chat', [topicsMessage]);
+        appendTopicsMessage(getMessageDelayMs(topicsMessage));
+      } else {
+        appendTopicsMessage();
+      }
+    } else if (!topicsMessageIdRef.current) {
+      appendTopicsMessage();
+    }
+
+    setTopicsProgress(100);
+    setStage(STAGES.TOPICS_APPROVAL);
+  };
+
   const startTopicGeneration = async () => {
     const { courseName, collegeName, studyMode, studyHours, studyMinutes, syllabusText, syllabusFiles } = courseInfo;
     if (!courseName || !collegeName) return;
 
+    resumeTopicsRef.current = true;
     setStage(STAGES.TOPICS_GENERATING);
     setIsThinking(true);
     setTopicError(null);
@@ -702,11 +988,13 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     setTopicsProgress(0);
     setTopicsProgressMessage('');
     setTopicsApproved(false);
+    setTopicsJobId(null);
     setCourseProgress(0);
     setCourseProgressMessage('');
     setCourseModulesComplete(0);
     setCourseTotalModules(null);
     setCourseId(null);
+    setCourseJobId(null);
     courseAccessNotifiedRef.current = false;
     courseCompletionNotifiedRef.current = false;
     generationIntroSentRef.current = false;
@@ -736,6 +1024,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
           finishByDate,
           syllabusText: syllabusText || '',
           syllabusFiles: syllabusFiles || [],
+          onJobId: (jobId) => setTopicsJobId(jobId),
           onProgress: (progressValue, message) => {
             if (typeof progressValue === 'number') {
               setTopicsProgress((prev) => Math.max(prev, Math.min(progressValue, 100)));
@@ -746,26 +1035,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
           },
         }
       );
-      const normalizedPayload = normalizeTopicsPayload(result?.topics || {});
-      const normalizedOverview = normalizedPayload.overviewTopics || [];
-      const initialRatings = buildInitialRatings(normalizedOverview);
-
-      setTopicsPayload(normalizedPayload);
-      setFamiliarityRatings(initialRatings);
-      schedulePersist({ nextTopics: normalizedPayload, nextRatings: initialRatings });
-
-      const topicsMessage = interpolateMessage(getTopicsGeneratedMessage(), {
-        overviewTopics: normalizedOverview,
-      });
-      if (topicsMessage) {
-        enqueueReplyParts('chat', [topicsMessage]);
-        appendTopicsMessage(getMessageDelayMs(topicsMessage));
-      } else {
-        appendTopicsMessage();
-      }
-
-      setTopicsProgress(100);
-      setStage(STAGES.TOPICS_APPROVAL);
+      applyTopicsResult(result, { announce: true });
     } catch (error) {
       console.error('[SimplifiedOnboardingChat] Topic generation failed:', error);
       setTopicError('Something went wrong generating topics.');
@@ -1105,6 +1375,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
     const anonUserId = await resolveAnonUserId();
     if (!anonUserId) return;
 
+    resumeCourseRef.current = true;
     setStage(STAGES.COURSE_GENERATING);
     setIsThinking(false);
     setCourseError(null);
@@ -1132,6 +1403,7 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         syllabusFiles: courseInfo.syllabusFiles || [],
         topicsPayload: topics,
         familiarityRatings: ratingsRef.current,
+        onJobId: (jobId) => setCourseJobId(jobId),
         onProgress: (progressValue, message, meta) => {
           const parseModuleCounts = (text) => {
             if (typeof text !== 'string') return {};
