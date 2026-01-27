@@ -15,7 +15,8 @@ export const metadata = {
 };
 
 export default async function SignInPage({ searchParams }) {
-  const redirectTo = searchParams?.redirectTo;
+  const params = await searchParams;
+  const redirectTo = params?.redirectTo;
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
