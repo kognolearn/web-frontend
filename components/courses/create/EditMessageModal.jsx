@@ -26,8 +26,13 @@ export default function EditMessageModal({
         // For options, set the selected option
         setSelectedOption(originalMessage.response);
       } else if (stepConfig?.inputType === "content_with_attachments") {
-        // For content with attachments, set both text and files
-        setEditedContent(originalMessage.response || originalMessage.content || "");
+        // For content with attachments, response may be an object { text, fileCount }
+        // or the text might be in content field
+        const response = originalMessage.response;
+        const textContent = typeof response === 'object' && response !== null
+          ? (response.text || "")
+          : (originalMessage.content || "");
+        setEditedContent(textContent);
         setEditedFiles(originalMessage.files || []);
       } else {
         // For text inputs, set the content
@@ -137,7 +142,11 @@ export default function EditMessageModal({
       return selectedOption && selectedOption !== originalMessage.response;
     }
     if (isContentWithAttachments) {
-      const originalText = originalMessage.response || originalMessage.content || "";
+      // response may be an object { text, fileCount } or string
+      const response = originalMessage.response;
+      const originalText = typeof response === 'object' && response !== null
+        ? (response.text || "")
+        : (originalMessage.content || "");
       const originalFiles = originalMessage.files || [];
       const textChanged = editedContent.trim() !== originalText;
       const filesChanged =
