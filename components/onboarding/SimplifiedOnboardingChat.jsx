@@ -1905,6 +1905,15 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
             </div>
           )}
         </div>
+        <div className="absolute bottom-1 left-4 flex items-center gap-3 text-[10px] text-[var(--muted-foreground)]/60">
+          <Link href="/legal/privacy" className="hover:text-[var(--muted-foreground)] transition-colors">
+            Privacy
+          </Link>
+          <span className="text-[var(--muted-foreground)]/30">·</span>
+          <Link href="/legal/terms" className="hover:text-[var(--muted-foreground)] transition-colors">
+            Terms
+          </Link>
+        </div>
       </div>
 
     </div>

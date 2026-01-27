@@ -27,6 +27,7 @@ export default function TokenPurchaseModal({
       setError(null);
 
       const returnUrl = `${window.location.origin}/tokens?purchase=success`;
+      const cancelUrl = `${window.location.origin}/tokens?purchase=cancelled`;
 
       const res = await authFetch("/api/tokens/checkout", {
         method: "POST",
@@ -34,15 +35,21 @@ export default function TokenPurchaseModal({
         body: JSON.stringify({
           packageType: selectedPackage,
           returnUrl,
+          cancelUrl,
+          flow: "hosted",
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create checkout session");
+        const message = [data.error, data.details].filter(Boolean).join(": ");
+        console.error("Token checkout failed", {
+          status: res.status,
+          statusText: res.statusText,
+          data,
+        });
+        throw new Error(message || "Failed to create checkout session");
       }
-
-      const data = await res.json();
 
       // Redirect to Stripe checkout
       if (data.url) {

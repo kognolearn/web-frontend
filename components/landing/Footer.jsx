@@ -49,6 +49,12 @@ export default function Footer() {
               <a href="mailto:team@kognolearn.com" className="hover:text-[var(--foreground)] transition-colors">
                 Contact
               </a>
+              <Link href="/legal/privacy" className="hover:text-[var(--foreground)] transition-colors">
+                Privacy
+              </Link>
+              <Link href="/legal/terms" className="hover:text-[var(--foreground)] transition-colors">
+                Terms
+              </Link>
             </nav>
 
             <p className="text-sm text-[var(--muted-foreground)]">

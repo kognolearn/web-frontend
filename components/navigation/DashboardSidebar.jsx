@@ -60,6 +60,8 @@ export default function DashboardSidebar({ activePath }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPremium, setIsPremium] = useState(true);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [activeIndicatorStyle, setActiveIndicatorStyle] = useState({});
   const navRef = useRef(null);
   const itemRefs = useRef({});
@@ -96,6 +98,26 @@ export default function DashboardSidebar({ activePath }) {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Check if user is premium (hide upgrade CTA when premium).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch("/api/user/plan");
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) {
+          setIsPremium(Boolean(body?.isPremium));
+        }
+      } catch {
+        // Silently fail - default to premium to avoid noisy CTAs on error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Update active indicator position
@@ -136,6 +158,42 @@ export default function DashboardSidebar({ activePath }) {
 
   const toggleTheme = () => {
     setThemeMode(themeMode === "dark" ? "light" : "dark");
+  };
+
+  const navItemCount = NAV_ITEMS.length + (isAdmin ? 1 : 0);
+  const navSpacingCount = Math.max(0, navItemCount - 1);
+  const bottomActionCount = isPremium ? 2 : 3;
+  const bottomSpacingCount = Math.max(0, bottomActionCount - 1);
+
+  const handleUpgrade = async () => {
+    setUpgradeLoading(true);
+    try {
+      const origin = window.location.origin;
+      const successUrl = `${origin}/checkout/success?source=sidebar`;
+      const cancelUrl = `${origin}${pathname || "/dashboard"}?checkout=cancelled`;
+
+      const res = await authFetch("/api/stripe?endpoint=create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productType: "monthly",
+          flow: "hosted",
+          successUrl,
+          cancelUrl,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || "Failed to open checkout");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      console.error("Upgrade checkout error:", err);
+    } finally {
+      setUpgradeLoading(false);
+    }
   };
 
   return (
@@ -181,8 +239,8 @@ export default function DashboardSidebar({ activePath }) {
               : "w-6 top-0 h-full cursor-w-resize"
           }`}
           style={isCollapsed ? {
-            top: 'calc(4rem + 1px + 0.75rem + 5 * 2.5rem + 4 * 0.25rem + 0.75rem)',
-            bottom: 'calc(0.75rem + 2 * 2.5rem + 0.25rem + 0.75rem + 1px)'
+            top: `calc(4rem + 1px + 0.75rem + ${navItemCount} * 2.5rem + ${navSpacingCount} * 0.25rem + 0.75rem)`,
+            bottom: `calc(0.75rem + ${bottomActionCount} * 2.5rem + ${bottomSpacingCount} * 0.25rem + 0.75rem + 1px)`
           } : undefined}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         />
@@ -323,6 +381,38 @@ export default function DashboardSidebar({ activePath }) {
 
         {/* Bottom actions (desktop only) */}
         <div className="hidden lg:block p-3 border-t border-[var(--border)] space-y-1">
+          {!isPremium && (
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              disabled={upgradeLoading}
+              className={`
+                relative flex items-center h-10 w-full px-3 rounded-xl
+                text-white transition-all duration-200
+                bg-gradient-to-r from-violet-600 to-indigo-600
+                hover:from-violet-500 hover:to-indigo-500
+                disabled:opacity-70
+                shadow-[0_8px_20px_-12px_rgba(79,70,229,0.8)]
+              `}
+              title={isCollapsed ? "Upgrade to Premium" : undefined}
+            >
+              <span className="flex-shrink-0 w-5 h-5">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2h14v2H5v-2z" />
+                </svg>
+              </span>
+              <span
+                className={`ml-3 font-semibold text-sm whitespace-nowrap transition-all duration-300 ${
+                  isCollapsed
+                    ? "opacity-0 -translate-x-2 pointer-events-none"
+                    : "opacity-100 translate-x-0"
+                }`}
+              >
+                {upgradeLoading ? "Opening..." : "Upgrade to Premium"}
+              </span>
+            </button>
+          )}
+
           {/* Feedback button */}
           <button
             type="button"
