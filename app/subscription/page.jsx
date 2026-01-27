@@ -12,6 +12,7 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [error, setError] = useState(null);
   const forceDownloadRedirect = isDownloadRedirectEnabled();
@@ -70,6 +71,43 @@ export default function SubscriptionPage() {
       setError(err.message);
     } finally {
       setPortalLoading(false);
+    }
+  }
+
+  async function handleUpgrade() {
+    setCheckoutLoading(true);
+    setError(null);
+
+    try {
+      const origin = window.location.origin;
+      const successUrl = `${origin}/checkout/success?source=subscription`;
+      const cancelUrl = `${origin}/subscription?checkout=cancelled`;
+
+      const res = await authFetch("/api/stripe?endpoint=create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productType: "monthly",
+          flow: "hosted",
+          successUrl,
+          cancelUrl,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create checkout session");
+      }
+
+      if (!data.url) {
+        throw new Error("Checkout link unavailable. Please try again.");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCheckoutLoading(false);
     }
   }
 
@@ -287,12 +325,14 @@ export default function SubscriptionPage() {
                   </p>
                 </div>
 
-                <Link
-                  href="/?continueNegotiation=1"
-                  className="inline-block w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors text-center"
+                <button
+                  type="button"
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
+                  className="inline-flex w-full items-center justify-center py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-60"
                 >
-                  Resume Pricing Chat
-                </Link>
+                  {checkoutLoading ? "Opening Checkout..." : "Upgrade to Premium"}
+                </button>
               </div>
             </>
           ) : (
@@ -327,12 +367,14 @@ export default function SubscriptionPage() {
                   </p>
                 </div>
 
-                <Link
-                  href="/?continueNegotiation=1"
-                  className="inline-block w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors text-center"
+                <button
+                  type="button"
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
+                  className="inline-flex w-full items-center justify-center py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-60"
                 >
-                  Resume Pricing Chat
-                </Link>
+                  {checkoutLoading ? "Opening Checkout..." : "Upgrade to Premium"}
+                </button>
               </div>
             </>
           )}

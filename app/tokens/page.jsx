@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import TokenBalanceDisplay from "@/components/tokens/TokenBalanceDisplay";
 import TokenPurchaseModal from "@/components/tokens/TokenPurchaseModal";
@@ -9,15 +9,34 @@ import { authFetch } from "@/lib/api";
 
 export default function TokensPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [userPlan, setUserPlan] = useState(null);
   const [tokenBalance, setTokenBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const purchaseStatus = searchParams.get("purchase");
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // After a successful Stripe redirect, poll briefly so tokens appear once the webhook processes.
+  useEffect(() => {
+    if (purchaseStatus !== "success") return;
+
+    let attempts = 0;
+    const maxAttempts = 6;
+    const interval = setInterval(() => {
+      attempts += 1;
+      fetchData();
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [purchaseStatus]);
 
   const fetchData = async () => {
     try {

@@ -16,6 +16,7 @@ const WEB_ALLOWED_PATHS = [
   '/api',             // API routes (needed by desktop app)
   '/help',            // Help pages
   '/admin',           // Admin routes (has its own auth flow)
+  '/legal',           // Legal pages (privacy policy, terms of service)
 ]
 
 /**
@@ -70,6 +71,7 @@ function isSignedOutAllowedPath(pathname) {
   if (pathname === '/sign-up' || pathname.startsWith('/sign-up/')) return true
   if (pathname === '/auth/confirm-email' || pathname.startsWith('/auth/confirm-email/')) return true
   if (pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) return true
+  if (pathname.startsWith('/legal')) return true
   return false
 }
 

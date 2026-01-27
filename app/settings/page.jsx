@@ -39,7 +39,6 @@ export default function SettingsPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
-  const [negotiationStatus, setNegotiationStatus] = useState(null);
 
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -87,16 +86,6 @@ export default function SettingsPage() {
         }
       } catch (err) {
         console.error("Failed to fetch subscription status:", err);
-      }
-
-      try {
-        const res = await authFetch("/api/onboarding/negotiation-status");
-        if (res.ok) {
-          const data = await res.json();
-          setNegotiationStatus(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch negotiation status:", err);
       }
 
       // Check admin status
@@ -261,10 +250,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleContinuePriceSelection = () => {
-    router.push("/?continueNegotiation=1");
-  };
-
   const getPasswordStrength = () => {
     if (!newPassword) return { strength: 0, label: "", color: "" };
 
@@ -367,8 +352,6 @@ export default function SettingsPage() {
   const { hasSubscription, subscription, planLevel, trialEndsAt } = subscriptionStatus || {};
   const hasPaidAccess = planLevel === "paid";
   const isTrialAccess = hasPaidAccess && !hasSubscription;
-  const hasConfirmedPrice = typeof negotiationStatus?.confirmedPrice === "number";
-  const canContinuePriceSelection = Boolean(negotiationStatus) && !hasConfirmedPrice;
 
   const handleTogglePlanLevel = async () => {
     setAdminPlanLoading(true);
@@ -1083,13 +1066,27 @@ export default function SettingsPage() {
                 </div>
 
                 <button
-                  onClick={handleContinuePriceSelection}
-                  className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors flex items-center justify-center gap-2"
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                  className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  {negotiationStatus ? "Continue Pricing Chat" : "Start Pricing Chat"}
+                  {portalLoading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Open Billing Portal
+                    </>
+                  )}
                 </button>
               </div>
             ) : (
@@ -1109,13 +1106,27 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={handleContinuePriceSelection}
-                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors"
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  {negotiationStatus ? "Continue Pricing Chat" : "Upgrade to Premium"}
+                  {portalLoading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Open Billing Portal
+                    </>
+                  )}
                 </button>
               </div>
             )}

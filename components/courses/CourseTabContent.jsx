@@ -833,6 +833,9 @@ export default function CourseTabContent({
     });
   }, [studyPlan, readyModuleRefs]);
 
+  // Optimistic UI for newly created practice exam (used in visibleModules below)
+  const [optimisticExam, setOptimisticExam] = useState(null);
+
   // Include optimistic exam in visible modules at the correct position
   const visibleModules = useMemo(() => {
     if (!optimisticExam) return visibleModulesBase;
@@ -884,7 +887,6 @@ export default function CourseTabContent({
   const [isDraggingExam, setIsDraggingExam] = useState(false);
   const [activeDragId, setActiveDragId] = useState(null);
   const [isCreatingExamNode, setIsCreatingExamNode] = useState(false);
-  const [optimisticExam, setOptimisticExam] = useState(null); // Optimistic UI for newly created exam
 
   // DnD sensors for practice exam positioning
   const sensors = useSensors(
