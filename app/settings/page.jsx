@@ -296,7 +296,7 @@ export default function SettingsPage() {
     if (/[^A-Za-z0-9]/.test(newPassword)) strength++;
 
     if (strength <= 2) return { strength: 1, label: "Weak", color: "bg-red-500" };
-    if (strength <= 4) return { strength: 2, label: "Medium", color: "bg-yellow-500" };
+    if (strength <= 4) return { strength: 2, label: "Medium", color: "bg-[var(--muted-foreground)]" };
     return { strength: 3, label: "Strong", color: "bg-green-500" };
   };
 
@@ -660,7 +660,7 @@ export default function SettingsPage() {
                         </div>
                         <p className={`text-xs ${
                           passwordStrength.strength === 1 ? 'text-red-500' :
-                          passwordStrength.strength === 2 ? 'text-yellow-500' : 'text-green-500'
+                          passwordStrength.strength === 2 ? 'text-[var(--muted-foreground)]' : 'text-green-500'
                         }`}>
                           {passwordStrength.label}
                         </p>
@@ -789,8 +789,8 @@ export default function SettingsPage() {
         <section className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] overflow-hidden">
           <div className="px-6 py-5 border-b border-[var(--border)]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
-                <svg className="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
                 </svg>
               </div>
@@ -811,7 +811,7 @@ export default function SettingsPage() {
                 </div>
                 {cosmetics.find(c => c.cosmetic_type === "profile_flair") ? (
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--primary)] text-white text-sm font-semibold">
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                       </svg>
@@ -1042,8 +1042,8 @@ export default function SettingsPage() {
                 </div>
 
                 {subscription?.cancelAtPeriodEnd && (
-                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  <div className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/30 rounded-xl">
+                    <p className="text-sm text-[var(--primary)]">
                       Your subscription will end on {formatDate(subscription?.currentPeriodEnd)}.
                       You can reactivate it from the billing portal below.
                     </p>

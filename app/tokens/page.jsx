@@ -106,8 +106,8 @@ export default function TokensPage() {
         );
       case "refund":
         return (
-          <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 rounded-full bg-[var(--primary)]/15 flex items-center justify-center">
+            <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
             </svg>
           </div>
@@ -115,8 +115,8 @@ export default function TokensPage() {
       case "bonus":
       case "free_grant":
         return (
-          <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 rounded-full bg-[var(--primary)]/15 flex items-center justify-center">
+            <svg className="w-4 h-4 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
             </svg>
           </div>
@@ -184,9 +184,9 @@ export default function TokensPage() {
 
           {/* Premium Banner */}
           {userPlan?.isPremium && (
-            <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 rounded-xl">
+            <div className="mb-6 p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/30 rounded-xl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-[var(--primary)] flex items-center justify-center">
                   <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
@@ -209,11 +209,11 @@ export default function TokensPage() {
                   Your Token Balance
                 </h2>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 rounded-lg">
-                    <svg className="w-6 h-6 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)]/15 rounded-lg">
+                    <svg className="w-6 h-6 text-[var(--primary)]" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/>
                     </svg>
-                    <span className="text-2xl font-bold text-amber-600">
+                    <span className="text-2xl font-bold text-[var(--primary)]">
                       {userPlan?.isPremium ? "∞" : (tokenBalance?.available ?? 0)}
                     </span>
                   </div>
@@ -291,7 +291,7 @@ export default function TokensPage() {
 
           {/* Premium Upsell */}
           {!userPlan?.isPremium && (
-            <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-2xl border border-purple-500/30 p-6 mb-6">
+            <div className="bg-purple-600/10 rounded-2xl border border-purple-500/30 p-6 mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h3 className="font-semibold text-[var(--foreground)] mb-1">
@@ -304,7 +304,7 @@ export default function TokensPage() {
                 <div className="flex flex-col sm:items-end gap-2">
                   <Link
                     href="/subscription"
-                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-indigo-600 transition-all text-center"
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-500 transition-colors text-center"
                   >
                     $14.99/mo
                   </Link>
