@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase/client";
 import CourseCard from "@/components/courses/CourseCard";
 import EmptyStateCard from "@/components/courses/EmptyStateCard";
 import DeleteCourseModal from "@/components/courses/DeleteCourseModal";
-import CourseLimitModal from "@/components/courses/CourseLimitModal";
+import TokenRequiredModal from "@/components/tokens/TokenRequiredModal";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import Tooltip from "@/components/ui/Tooltip";
 import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
@@ -96,7 +96,8 @@ function DashboardClient() {
 
   // Profile menu state
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
+  const [showTokenRequiredModal, setShowTokenRequiredModal] = useState(false);
+  const [tokenBalance, setTokenBalance] = useState(0);
   const profileMenuRef = useRef(null);
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
@@ -476,6 +477,30 @@ function DashboardClient() {
     };
   }, [user]);
 
+  // Fetch token balance for free tier users
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return undefined;
+
+    (async () => {
+      try {
+        const res = await authFetch('/api/tokens/balance');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setTokenBalance(data.tokensAvailable || 0);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch token balance:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const hasPremiumAccess =
     subscriptionStatus?.planLevel === 'paid' || subscriptionStatus?.trialActive;
   const isFreeTier = !hasPremiumAccess;
@@ -502,15 +527,10 @@ function DashboardClient() {
   };
 
   const handleCreateCourseClick = (e) => {
-    // Check if user is on free tier and has hit the course limit
-    const totalLimit = 2;
-    const generatedLimit = 1;
-    const totalCount = courses.length;
-    const generatedCount = courses.filter(c => c.is_generated).length;
-
-    if (isFreeTier && (totalCount >= totalLimit || generatedCount >= generatedLimit)) {
+    // Check if user is on free tier and has no tokens
+    if (isFreeTier && tokenBalance <= 0) {
       e.preventDefault();
-      setShowCourseLimitModal(true);
+      setShowTokenRequiredModal(true);
       return false;
     }
 
@@ -810,16 +830,10 @@ function DashboardClient() {
           onConfirm={handleDeleteCourse}
         />
 
-        <CourseLimitModal
-          isOpen={showCourseLimitModal}
-          onClose={() => setShowCourseLimitModal(false)}
-          courses={courses}
-          userId={user?.id}
-          limit={courses.length >= 2 ? 2 : 1}
-          mode={courses.length >= 2 ? "total" : (generatedCourseCount >= 1 ? "generated" : "total")}
-          onCourseDeleted={(courseId) => {
-            setCourses((prev) => prev.filter((c) => c.id !== courseId));
-          }}
+        <TokenRequiredModal
+          isOpen={showTokenRequiredModal}
+          onClose={() => setShowTokenRequiredModal(false)}
+          tokensAvailable={tokenBalance}
         />
 
         {/* Seed celebration for seeds earned since last visit */}

@@ -7,33 +7,55 @@ export async function POST(request, { params }) {
     const { courseId } = await params;
     const formData = await request.formData();
 
-    const blankExam = formData.get("blank_exam_pdf");
-    const studentSubmission = formData.get("student_submission_pdf");
-    const combined = formData.get("combined_pdf");
+    // Text-based inputs
+    const studentText = formData.get("student_answers");
+    const referenceText = formData.get("solutions_text");
+    const referenceFile = formData.get("solutions_file") || formData.get("reference_file");
 
-    const hasCombined = Boolean(combined);
-    const hasSplit = Boolean(blankExam) && Boolean(studentSubmission);
+    // File-based inputs (support both old and new field names)
+    const submissionFile =
+      formData.get("student_submission_pdf") || formData.get("submission_file");
+    const combinedFile = formData.get("combined_pdf") || formData.get("combined_file");
 
-    if (!hasCombined && !hasSplit) {
+    // Determine input mode
+    const hasTextInput = Boolean(studentText);
+    const hasFileInput = Boolean(submissionFile);
+    const hasCombined = Boolean(combinedFile);
+
+    // Validate: must have at least one input
+    if (!hasTextInput && !hasFileInput && !hasCombined) {
       return NextResponse.json(
-        { error: "Provide either combined_pdf or both blank_exam_pdf and student_submission_pdf" },
+        { error: "Provide student_answers (text), submission_file, or combined_file" },
         { status: 400 }
       );
     }
 
-    if (hasCombined && (blankExam || studentSubmission)) {
-      return NextResponse.json(
-        { error: "Provide either combined_pdf or blank_exam_pdf + student_submission_pdf, not both" },
-        { status: 400 }
-      );
-    }
-
+    // Build FormData for backend
     const backendFormData = new FormData();
-    if (hasCombined) {
-      backendFormData.append("combined_pdf", combined);
-    } else {
-      backendFormData.append("blank_exam_pdf", blankExam);
-      backendFormData.append("student_submission_pdf", studentSubmission);
+
+    if (hasTextInput) {
+      // Text-based mode
+      backendFormData.append("student_answers", studentText);
+
+      if (referenceText) {
+        backendFormData.append("solutions_text", referenceText);
+      }
+      if (referenceFile) {
+        backendFormData.append("reference_file", referenceFile);
+      }
+    } else if (hasCombined) {
+      // Combined file mode
+      backendFormData.append("combined_file", combinedFile);
+    } else if (hasFileInput) {
+      // Submission file mode (with optional reference)
+      backendFormData.append("submission_file", submissionFile);
+
+      if (referenceText) {
+        backendFormData.append("solutions_text", referenceText);
+      }
+      if (referenceFile) {
+        backendFormData.append("reference_file", referenceFile);
+      }
     }
 
     const headers = {};
@@ -42,7 +64,7 @@ export async function POST(request, { params }) {
       headers["Authorization"] = authHeader;
     }
 
-    const res = await fetch(`${BASE_URL}/courses/${courseId}/grade-exam-ad-hoc`, {
+    const res = await fetch(`${BASE_URL}/courses/${courseId}/grade-ad-hoc`, {
       method: "POST",
       headers,
       body: backendFormData,
@@ -51,7 +73,7 @@ export async function POST(request, { params }) {
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
-    console.error("Ad-hoc exam grading error:", err);
+    console.error("Ad-hoc grading error:", err);
     return NextResponse.json(
       { error: "Internal server error", details: String(err) },
       { status: 500 }

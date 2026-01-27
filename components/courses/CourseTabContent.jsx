@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
 import Quiz from "@/components/content/Quiz";
@@ -20,8 +22,10 @@ import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { supabase } from "@/lib/supabase/client";
 import { V2ContentRenderer, isV2Content } from "@/components/content/v2";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useSeeds } from "@/components/seeds/SeedsProvider";
+import PracticeExamCreationModal from "./PracticeExamCreationModal";
+import DropZoneIndicator from "./DropZoneIndicator";
 
 // Module-level tracking to survive React Strict Mode remounts
 const globalExamChecked = new Set();
@@ -676,6 +680,66 @@ function CollapsedRailFeedbackButton() {
   );
 }
 
+// Draggable card component for positioning new practice exams
+function DraggableExamCard({ id, name, onCancel, isDragOverlay = false }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+  });
+
+  // When being used as the DragOverlay, don't use draggable hooks
+  if (isDragOverlay) {
+    return (
+      <div className="p-3 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[var(--primary)]/20 shadow-xl shadow-[var(--primary)]/30 w-64 cursor-grabbing">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/30 text-[var(--primary)]">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-[var(--primary)] truncate">{name}</h3>
+            <p className="text-xs text-[var(--primary)]/70">Release to place here</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={`mb-4 p-3 rounded-xl border-2 border-dashed transition-all cursor-grab active:cursor-grabbing touch-none ${
+        isDragging
+          ? "border-[var(--primary)]/30 bg-[var(--primary)]/5 opacity-50"
+          : "border-[var(--primary)]/50 bg-[var(--primary)]/5 hover:border-[var(--primary)] hover:bg-[var(--primary)]/10"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--primary)]/20 text-[var(--primary)]">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-[var(--primary)]">{name}</h3>
+          <p className="text-xs text-[var(--primary)]/70">Drag to position between modules</p>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onCancel(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="p-1.5 rounded-lg hover:bg-[var(--surface-muted)] text-[var(--muted-foreground)] hover:text-red-500"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CourseTabContent({
   courseId,
   userId,
@@ -697,6 +761,8 @@ export default function CourseTabContent({
   setIsTimerControlsOpen,
   isEditCourseModalOpen,
   setIsEditCourseModalOpen,
+  shouldOpenPracticeExamModal,
+  onPracticeExamModalOpened,
   onOpenChatTab,
   onOpenDiscussionTab,
   onOpenMessagesTab,
@@ -755,16 +821,27 @@ export default function CourseTabContent({
     return true;
   }, [showSeedNotification, fetchBalance, courseId]);
 
-  const visibleModules = useMemo(() => {
+  const visibleModulesBase = useMemo(() => {
     if (!studyPlan?.modules) return [];
     if (!Array.isArray(readyModuleRefs)) return studyPlan.modules;
     const readySet = new Set(readyModuleRefs);
     return studyPlan.modules.filter((module) => {
-      if (module.is_practice_exam_module) return false;
+      // Always show user-created practice exam modules (they're stored as course nodes)
+      if (module.is_practice_exam_module) return true;
       const title = module.title || module.module_ref;
       return readySet.has(title);
     });
   }, [studyPlan, readyModuleRefs]);
+
+  // Include optimistic exam in visible modules at the correct position
+  const visibleModules = useMemo(() => {
+    if (!optimisticExam) return visibleModulesBase;
+
+    const modules = [...visibleModulesBase];
+    const insertIndex = Math.min(optimisticExam.position_index ?? modules.length, modules.length);
+    modules.splice(insertIndex, 0, optimisticExam);
+    return modules;
+  }, [visibleModulesBase, optimisticExam]);
 
   // Fetch user info on mount
   useEffect(() => {
@@ -801,6 +878,24 @@ export default function CourseTabContent({
   const [isCommunityPanelOpen, setIsCommunityPanelOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
+  // Practice exam creation state
+  const [isPracticeExamModalOpen, setIsPracticeExamModalOpen] = useState(false);
+  const [pendingPracticeExam, setPendingPracticeExam] = useState(null); // { name, scheduledAt, ... }
+  const [isDraggingExam, setIsDraggingExam] = useState(false);
+  const [activeDragId, setActiveDragId] = useState(null);
+  const [isCreatingExamNode, setIsCreatingExamNode] = useState(false);
+  const [optimisticExam, setOptimisticExam] = useState(null); // Optimistic UI for newly created exam
+
+  // DnD sensors for practice exam positioning
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  // Handle drag start
+  const handleDragStart = (event) => {
+    setActiveDragId(event.active.id);
+  };
+
   // Close profile menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
@@ -827,7 +922,119 @@ export default function CourseTabContent({
     setIsProfileMenuOpen(false);
     window.dispatchEvent(new CustomEvent('open-feedback-widget'));
   };
-  
+
+  // Open practice exam modal when triggered from EditCourseModal
+  useEffect(() => {
+    if (shouldOpenPracticeExamModal) {
+      setIsPracticeExamModalOpen(true);
+      if (onPracticeExamModalOpened) {
+        onPracticeExamModalOpened();
+      }
+    }
+  }, [shouldOpenPracticeExamModal, onPracticeExamModalOpened]);
+
+  // Handle practice exam creation modal confirmation
+  const handlePracticeExamConfirm = (examData) => {
+    setPendingPracticeExam({
+      id: `pending-exam-${Date.now()}`,
+      ...examData,
+    });
+    setIsPracticeExamModalOpen(false);
+    setIsDraggingExam(true);
+  };
+  // Handle drag end for practice exam positioning
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    setIsDraggingExam(false);
+    setActiveDragId(null);
+
+    if (!over || !pendingPracticeExam) {
+      setPendingPracticeExam(null);
+      return;
+    }
+
+    // Extract position from drop zone ID (format: "drop-zone-{index}")
+    const dropZoneId = over.id;
+    const positionMatch = String(dropZoneId).match(/drop-zone-(\d+)/);
+    if (!positionMatch) {
+      setPendingPracticeExam(null);
+      return;
+    }
+
+    const positionAfterModule = parseInt(positionMatch[1], 10);
+
+    // Calculate preceding lesson IDs based on position (use base modules without optimistic)
+    const modulesBeforePosition = visibleModulesBase.slice(0, positionAfterModule);
+    const precedingLessonIds = modulesBeforePosition
+      .filter(m => !m.is_practice_exam_module)
+      .flatMap(m => (m.lessons || []).map(l => l.id));
+
+    // Create optimistic exam to show immediately in UI
+    const tempId = `temp-exam-${Date.now()}`;
+    const optimisticExamData = {
+      id: tempId,
+      title: pendingPracticeExam.name,
+      type: 'practice_exam',
+      is_practice_exam_module: true,
+      position_index: positionAfterModule,
+      exam: {
+        id: tempId,
+        title: pendingPracticeExam.name,
+        duration: 45,
+        is_locked: false,
+        status: 'pending',
+        preceding_lessons: precedingLessonIds,
+        scheduled_at: pendingPracticeExam.scheduledAt || null,
+        position_index: positionAfterModule,
+      }
+    };
+
+    // Show optimistic UI immediately
+    setOptimisticExam(optimisticExamData);
+    setPendingPracticeExam(null);
+    setIsCreatingExamNode(true);
+
+    try {
+      const response = await authFetch(`/api/courses/${courseId}/practice-exam-nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: pendingPracticeExam.name,
+          position_index: positionAfterModule,
+          scheduled_at: pendingPracticeExam.scheduledAt,
+          supplementary_info: pendingPracticeExam.supplementaryInfo,
+          supplementary_urls: pendingPracticeExam.supplementaryUrls,
+          supplementary_files: pendingPracticeExam.supplementaryFiles,
+          preceding_lesson_ids: precedingLessonIds,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Failed to create practice exam:', data);
+        // Remove optimistic exam on error
+        setOptimisticExam(null);
+      } else {
+        // Refetch study plan to replace optimistic exam with real one
+        if (refetchStudyPlan) {
+          await refetchStudyPlan();
+        }
+        setOptimisticExam(null);
+      }
+    } catch (error) {
+      console.error('Error creating practice exam node:', error);
+      // Keep optimistic exam visible but could show error state
+    } finally {
+      setIsCreatingExamNode(false);
+    }
+  };
+
+  // Cancel practice exam creation
+  const handleCancelExamCreation = () => {
+    setPendingPracticeExam(null);
+    setIsDraggingExam(false);
+  };
+
   // Track the last title we sent to avoid redundant calls
   const lastTitleRef = useRef(null);
 
@@ -2528,7 +2735,7 @@ export default function CourseTabContent({
                 ? sidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
-            style={{ width: isMobile ? '280px' : `${sidebarWidth}px` }}
+            style={{ width: isMobile ? '280px' : isDraggingExam ? `${Math.max(sidebarWidth, 360)}px` : `${sidebarWidth}px` }}
           >
             <div className="p-3 border-b border-[var(--border)] flex items-center justify-between backdrop-blur-sm">
               {/* Dashboard button */}
@@ -2682,8 +2889,37 @@ export default function CourseTabContent({
                   )}
                 </div>
               )}
-              
+
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {/* Pending practice exam - draggable card */}
+                {pendingPracticeExam && isDraggingExam && (
+                  <DraggableExamCard
+                    id={pendingPracticeExam.id}
+                    name={pendingPracticeExam.name}
+                    onCancel={handleCancelExamCreation}
+                  />
+                )}
+
+                {/* Drag overlay - follows cursor smoothly */}
+                <DragOverlay dropAnimation={null}>
+                  {activeDragId && pendingPracticeExam ? (
+                    <DraggableExamCard
+                      id={pendingPracticeExam.id}
+                      name={pendingPracticeExam.name}
+                      isDragOverlay={true}
+                    />
+                  ) : null}
+                </DragOverlay>
+
               <AnimatePresence initial={false}>
+                {/* Drop zone before first module */}
+                <DropZoneIndicator id="drop-zone-0" isActive={isDraggingExam} />
+
                 {visibleModules.map((module, moduleIdx) => {
                   const isPracticeExamModule = module.is_practice_exam_module;
                   const moduleKey = module.title || module.module_ref || `module-${moduleIdx}`;
@@ -2703,8 +2939,8 @@ export default function CourseTabContent({
                     const exam = module.exam;
                     const isSelected = selectedLesson?.id === exam.id;
                     return (
+                      <div key={moduleKey}>
                       <motion.div
-                        key={moduleKey}
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -6 }}
@@ -2746,12 +2982,14 @@ export default function CourseTabContent({
                           )}
                         </button>
                       </motion.div>
+                      <DropZoneIndicator id={`drop-zone-${moduleIdx + 1}`} isActive={isDraggingExam} />
+                      </div>
                     );
                   }
 
                   return (
+                    <div key={moduleKey}>
                     <motion.div
-                      key={moduleKey}
                       initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
@@ -2904,9 +3142,12 @@ export default function CourseTabContent({
                         )}
                       </AnimatePresence>
                     </motion.div>
+                    <DropZoneIndicator id={`drop-zone-${moduleIdx + 1}`} isActive={isDraggingExam} />
+                    </div>
                   );
                 })}
               </AnimatePresence>
+              </DndContext>
 
               {/* Review & Cheatsheet Section - Bottom of Sidebar */}
               <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-between">
@@ -4246,6 +4487,13 @@ export default function CourseTabContent({
         userId={userId}
         onOpenDiscussionTab={onOpenDiscussionTab}
         onOpenMessagesTab={onOpenMessagesTab}
+      />
+
+      {/* Practice Exam Creation Modal */}
+      <PracticeExamCreationModal
+        isOpen={isPracticeExamModalOpen}
+        onClose={() => setIsPracticeExamModalOpen(false)}
+        onConfirm={handlePracticeExamConfirm}
       />
 
     </div>

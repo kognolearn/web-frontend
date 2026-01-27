@@ -5,7 +5,6 @@ import { useRouter, useParams } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
-import CourseLimitModal from "@/components/courses/CourseLimitModal";
 import { getRedirectDestination } from "@/lib/platform";
 import { clearJoinIntent, storeJoinIntent } from "@/lib/join-intent";
 
@@ -20,8 +19,6 @@ export default function JoinCourseClient() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(null);
-  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
-  const [userCourses, setUserCourses] = useState([]);
   const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
@@ -98,17 +95,6 @@ export default function JoinCourseClient() {
       const data = await res.json();
 
       if (!res.ok) {
-        if (res.status === 403 && data?.error?.toLowerCase()?.includes("limit")) {
-          // Assumption: hitting the free-tier limit should offer a leave-or-upgrade choice.
-          setJoining(false);
-          setShowCourseLimitModal(true);
-          const coursesRes = await authFetch("/api/courses");
-          if (coursesRes.ok) {
-            const coursesData = await coursesRes.json();
-            setUserCourses(Array.isArray(coursesData?.courses) ? coursesData.courses : []);
-          }
-          return;
-        }
         throw new Error(data.error || "Failed to join course");
       }
 
@@ -260,15 +246,6 @@ export default function JoinCourseClient() {
         </p>
       </div>
 
-      <CourseLimitModal
-        isOpen={showCourseLimitModal}
-        onClose={() => setShowCourseLimitModal(false)}
-        courses={userCourses}
-        userId={user?.id}
-        onCourseDeleted={(courseId) => {
-          setUserCourses((prev) => prev.filter((c) => c.id !== courseId));
-        }}
-      />
     </div>
   );
 }

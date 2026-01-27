@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import {
     ActiveUsersChart,
@@ -15,10 +16,17 @@ import {
     ModelCallsPieChart,
     EventsChart,
     EventTypePieChart,
+    DurationTrendChart,
+    RetentionD1Chart,
+    RetentionCurveChart,
 } from "@/components/admin/AnalyticsCharts";
 import FeedbackTable from "@/components/admin/FeedbackTable";
 import AdminModerationPanel from "@/components/admin/AdminModerationPanel";
 import ReleasesPanel from "@/components/admin/ReleasesPanel";
+import {
+    DEFAULT_ADMIN_SECTION,
+    isValidAdminSection,
+} from "@/components/admin/adminSections";
 
 // Date range presets
 const DATE_PRESETS = [
@@ -27,20 +35,6 @@ const DATE_PRESETS = [
     { label: "30d", days: 30 },
     { label: "90d", days: 90 },
     { label: "All", days: null },
-];
-
-// Tab configuration
-const TABS = [
-    { id: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-    { id: "users", label: "Users & Engagement", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
-    { id: "userBreakdown", label: "By User", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-    { id: "courseBreakdown", label: "By Course", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
-    { id: "usage", label: "API & Costs", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
-    { id: "feedback", label: "Feedback", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
-    { id: "moderation", label: "Moderation", icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" },
-    { id: "releases", label: "Releases", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" },
-    { id: "exportCourse", label: "Export Course", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" },
-    { id: "settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
 ];
 
 function StatCard({ title, value, subtitle, icon, trend, trendDirection, color = "primary", borderColor }) {
@@ -337,10 +331,16 @@ function CourseExportTab({ usageByCourseData, dateRangeLoading }) {
 }
 
 export default function AdminClient() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const sectionParam = searchParams.get("section");
+    const activeSection = isValidAdminSection(sectionParam)
+        ? sectionParam
+        : DEFAULT_ADMIN_SECTION;
+
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState("overview");
     const [rawUsageData, setRawUsageData] = useState([]);
     const [feedbackData, setFeedbackData] = useState([]);
     const [eventsData, setEventsData] = useState([]);
@@ -348,6 +348,23 @@ export default function AdminClient() {
     const [usageByCourseData, setUsageByCourseData] = useState([]);
     const [studySessionStats, setStudySessionStats] = useState(null);
     const [courseTimeseriesData, setCourseTimeseriesData] = useState([]);
+    const [activeUsersSeries, setActiveUsersSeries] = useState([]);
+    const [activeUsersStats, setActiveUsersStats] = useState({
+        currentDAU: 0,
+        currentWAU: 0,
+        currentMAU: 0,
+        uniqueUsersInRange: 0,
+    });
+    const [failureAnalytics, setFailureAnalytics] = useState(null);
+    const [timingAnalytics, setTimingAnalytics] = useState(null);
+    const [retentionAnalytics, setRetentionAnalytics] = useState(null);
+    const [retentionGrain, setRetentionGrain] = useState("day");
+
+    useEffect(() => {
+        if (!sectionParam || !isValidAdminSection(sectionParam)) {
+            router.replace(`/admin?section=${DEFAULT_ADMIN_SECTION}`, { scroll: false });
+        }
+    }, [sectionParam, router]);
 
     // Course sorting state
     const [courseSortField, setCourseSortField] = useState("totalCost");
@@ -394,6 +411,15 @@ export default function AdminClient() {
             setEndDate(value);
         }
     };
+
+    const adjustEndDateForAnalytics = useCallback((endKey) => {
+        if (!endKey) return endKey;
+        const todayKey = new Date().toISOString().split("T")[0];
+        if (endKey <= todayKey) return endKey;
+        const date = new Date(`${endKey}T00:00:00.000Z`);
+        date.setUTCDate(date.getUTCDate() - 1);
+        return date.toISOString().split("T")[0];
+    }, []);
 
     // Filter and process data based on date range
     const data = useMemo(() => {
@@ -469,89 +495,13 @@ export default function AdminClient() {
             (a, b) => new Date(a.date) - new Date(b.date)
         );
 
-        // Calculate DAU
-        const dauMap = {};
-        filteredRecords.forEach((stat) => {
-            const date = new Date(stat.created_at).toLocaleDateString();
-            if (!dauMap[date]) dauMap[date] = new Set();
-            dauMap[date].add(stat.user_id);
-        });
+        const activeUsersData = Array.isArray(activeUsersSeries)
+            ? [...activeUsersSeries].sort((a, b) => new Date(a.date) - new Date(b.date))
+            : [];
 
-        // Calculate DAU, WAU, MAU for each day (rolling windows)
-        const activeUsersData = [];
-        const sortedDates = Object.keys(dauMap).sort((a, b) => new Date(a) - new Date(b));
-        
-        sortedDates.forEach((dateStr) => {
-            const currentDate = new Date(dateStr);
-            const dau = dauMap[dateStr]?.size || 0;
-            
-            // Calculate WAU (users active in last 7 days)
-            const wauUsers = new Set();
-            const weekAgo = new Date(currentDate);
-            weekAgo.setDate(weekAgo.getDate() - 6);
-            
-            rawUsageData.forEach((stat) => {
-                const statDate = new Date(stat.created_at);
-                if (statDate >= weekAgo && statDate <= currentDate) {
-                    wauUsers.add(stat.user_id);
-                }
-            });
-            
-            // Calculate MAU (users active in last 30 days)
-            const mauUsers = new Set();
-            const monthAgo = new Date(currentDate);
-            monthAgo.setDate(monthAgo.getDate() - 29);
-            
-            rawUsageData.forEach((stat) => {
-                const statDate = new Date(stat.created_at);
-                if (statDate >= monthAgo && statDate <= currentDate) {
-                    mauUsers.add(stat.user_id);
-                }
-            });
-            
-            activeUsersData.push({
-                date: dateStr,
-                dau,
-                wau: wauUsers.size,
-                mau: mauUsers.size,
-            });
-        });
-
-        // Current period DAU/WAU/MAU (for stats cards)
-        const today = new Date();
-        today.setHours(23, 59, 59, 999);
-        
-        const todayUsers = new Set();
-        const weekUsers = new Set();
-        const monthUsers = new Set();
-        
-        const weekStart = new Date(today);
-        weekStart.setDate(weekStart.getDate() - 6);
-        weekStart.setHours(0, 0, 0, 0);
-        
-        const monthStart = new Date(today);
-        monthStart.setDate(monthStart.getDate() - 29);
-        monthStart.setHours(0, 0, 0, 0);
-        
-        const todayStart = new Date(today);
-        todayStart.setHours(0, 0, 0, 0);
-        
-        rawUsageData.forEach((stat) => {
-            const statDate = new Date(stat.created_at);
-            if (statDate >= todayStart && statDate <= today) {
-                todayUsers.add(stat.user_id);
-            }
-            if (statDate >= weekStart && statDate <= today) {
-                weekUsers.add(stat.user_id);
-            }
-            if (statDate >= monthStart && statDate <= today) {
-                monthUsers.add(stat.user_id);
-            }
-        });
-
-        const currentDAU = todayUsers.size;
-        const currentWAU = weekUsers.size;
-        const currentMAU = monthUsers.size;
+        const currentDAU = activeUsersStats?.currentDAU ?? 0;
+        const currentWAU = activeUsersStats?.currentWAU ?? 0;
+        const currentMAU = activeUsersStats?.currentMAU ?? 0;
 
         // Aggregate by source
         const sourceMap = {};
@@ -653,8 +603,11 @@ export default function AdminClient() {
         const eventsByTypeData = Object.values(eventTypeMap).sort((a, b) => b.count - a.count);
 
         const totalCalls = filteredRecords.length;
+        const totalUsers = activeUsersStats?.uniqueUsersInRange > 0
+            ? activeUsersStats.uniqueUsersInRange
+            : uniqueUsers.size;
         const stats = {
-            totalUsers: uniqueUsers.size,
+            totalUsers,
             totalCost,
             totalTokens,
             totalCalls,
@@ -684,7 +637,16 @@ export default function AdminClient() {
             eventsByType: eventsByTypeData,
             stats,
         };
-    }, [rawUsageData, feedbackData, eventsData, studySessionStats, startDate, endDate]);
+    }, [
+        rawUsageData,
+        feedbackData,
+        eventsData,
+        studySessionStats,
+        startDate,
+        endDate,
+        activeUsersSeries,
+        activeUsersStats,
+    ]);
 
     // Separate loading state for date-range data
     const [dateRangeLoading, setDateRangeLoading] = useState(false);
@@ -731,21 +693,62 @@ export default function AdminClient() {
             // Also fetch date-range dependent data on refresh
             if (isRefresh && startDate && endDate) {
                 const dateParams = `startDate=${startDate}&endDate=${endDate}`;
-                const [usageByUserRes, usageByCourseRes, studySessionRes] = await Promise.all([
+                const analyticsEndDate = adjustEndDateForAnalytics(endDate) || endDate;
+                const analyticsDateParams = `startDate=${startDate}&endDate=${analyticsEndDate}`;
+                const [
+                    usageByUserRes,
+                    usageByCourseRes,
+                    studySessionRes,
+                    timeseriesRes,
+                    activeUsersRes,
+                    failuresRes,
+                    timingsRes,
+                    retentionRes,
+                ] = await Promise.all([
                     fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/study-sessions?${dateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/course-generation-timeseries?${dateParams}&groupBy=day`, { headers }),
+                    fetch(`/api/admin/analytics/active-users?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/failures?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/timings?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/retention?${analyticsDateParams}`, { headers }),
                 ]);
 
-                const [usageByUserResult, usageByCourseResult, studySessionResult] = await Promise.all([
+                const [
+                    usageByUserResult,
+                    usageByCourseResult,
+                    studySessionResult,
+                    timeseriesResult,
+                    activeUsersResult,
+                    failuresResult,
+                    timingsResult,
+                    retentionResult,
+                ] = await Promise.all([
                     usageByUserRes.json(),
                     usageByCourseRes.json(),
                     studySessionRes.json(),
+                    timeseriesRes.json(),
+                    activeUsersRes.json(),
+                    failuresRes.json(),
+                    timingsRes.json(),
+                    retentionRes.json(),
                 ]);
 
                 setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
                 setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
                 setStudySessionStats(studySessionResult.success ? studySessionResult : null);
+                setCourseTimeseriesData(timeseriesResult.success ? (timeseriesResult.timeseries || []) : []);
+                setActiveUsersSeries(activeUsersResult.success ? (activeUsersResult.timeseries || []) : []);
+                setActiveUsersStats(activeUsersResult.success ? (activeUsersResult.stats || {}) : {
+                    currentDAU: 0,
+                    currentWAU: 0,
+                    currentMAU: 0,
+                    uniqueUsersInRange: 0,
+                });
+                setFailureAnalytics(failuresResult.success ? failuresResult : null);
+                setTimingAnalytics(timingsResult.success ? timingsResult : null);
+                setRetentionAnalytics(retentionResult.success ? retentionResult : null);
             }
         } catch (err) {
             console.error("Error fetching admin data:", err);
@@ -777,24 +780,62 @@ export default function AdminClient() {
                     : {};
 
                 const dateParams = `startDate=${startDate}&endDate=${endDate}`;
-                const [usageByUserRes, usageByCourseRes, studySessionRes, timeseriesRes] = await Promise.all([
+                const analyticsEndDate = adjustEndDateForAnalytics(endDate) || endDate;
+                const analyticsDateParams = `startDate=${startDate}&endDate=${analyticsEndDate}`;
+                const [
+                    usageByUserRes,
+                    usageByCourseRes,
+                    studySessionRes,
+                    timeseriesRes,
+                    activeUsersRes,
+                    failuresRes,
+                    timingsRes,
+                    retentionRes,
+                ] = await Promise.all([
                     fetch(`/api/admin/analytics/usage-by-user?includeEmail=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/usage-by-course?includeCourseName=true&${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/study-sessions?${dateParams}`, { headers }),
                     fetch(`/api/admin/analytics/course-generation-timeseries?${dateParams}&groupBy=day`, { headers }),
+                    fetch(`/api/admin/analytics/active-users?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/failures?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/timings?${analyticsDateParams}`, { headers }),
+                    fetch(`/api/admin/analytics/retention?${analyticsDateParams}`, { headers }),
                 ]);
 
-                const [usageByUserResult, usageByCourseResult, studySessionResult, timeseriesResult] = await Promise.all([
+                const [
+                    usageByUserResult,
+                    usageByCourseResult,
+                    studySessionResult,
+                    timeseriesResult,
+                    activeUsersResult,
+                    failuresResult,
+                    timingsResult,
+                    retentionResult,
+                ] = await Promise.all([
                     usageByUserRes.json(),
                     usageByCourseRes.json(),
                     studySessionRes.json(),
                     timeseriesRes.json(),
+                    activeUsersRes.json(),
+                    failuresRes.json(),
+                    timingsRes.json(),
+                    retentionRes.json(),
                 ]);
 
                 setUsageByUserData(usageByUserResult.success ? (usageByUserResult.users || usageByUserResult.data || []) : []);
                 setUsageByCourseData(usageByCourseResult.success ? (usageByCourseResult.courses || usageByCourseResult.data || []) : []);
                 setStudySessionStats(studySessionResult.success ? studySessionResult : null);
                 setCourseTimeseriesData(timeseriesResult.success ? (timeseriesResult.timeseries || []) : []);
+                setActiveUsersSeries(activeUsersResult.success ? (activeUsersResult.timeseries || []) : []);
+                setActiveUsersStats(activeUsersResult.success ? (activeUsersResult.stats || {}) : {
+                    currentDAU: 0,
+                    currentWAU: 0,
+                    currentMAU: 0,
+                    uniqueUsersInRange: 0,
+                });
+                setFailureAnalytics(failuresResult.success ? failuresResult : null);
+                setTimingAnalytics(timingsResult.success ? timingsResult : null);
+                setRetentionAnalytics(retentionResult.success ? retentionResult : null);
             } catch (err) {
                 console.error("Error fetching date-range data:", err);
             } finally {
@@ -803,7 +844,17 @@ export default function AdminClient() {
         };
 
         fetchDateRangeData();
-    }, [startDate, endDate]);
+    }, [startDate, endDate, adjustEndDateForAnalytics]);
+
+    useEffect(() => {
+        const grains = retentionAnalytics?.retentionByGrain
+            ? Object.keys(retentionAnalytics.retentionByGrain)
+            : [];
+        if (grains.length === 0) return;
+        if (!retentionAnalytics.retentionByGrain[retentionGrain]) {
+            setRetentionGrain(grains[0]);
+        }
+    }, [retentionAnalytics, retentionGrain]);
 
     const fetchTwoWeekDealStatus = useCallback(async () => {
         try {
@@ -854,10 +905,10 @@ export default function AdminClient() {
     }, [fetchWorkerDrainStatus]);
 
     useEffect(() => {
-        if (activeTab !== "settings") return;
+        if (activeSection !== "settings") return;
         const interval = setInterval(fetchWorkerDrainStatus, 5000);
         return () => clearInterval(interval);
-    }, [activeTab, fetchWorkerDrainStatus]);
+    }, [activeSection, fetchWorkerDrainStatus]);
 
     // Fetch Stripe prices on mount
     useEffect(() => {
@@ -955,6 +1006,105 @@ export default function AdminClient() {
         );
     }
 
+    const reliabilitySummary = failureAnalytics?.summary || {};
+    const reliabilityBreakdowns = failureAnalytics?.breakdowns || {};
+    const reliabilityRecentEvents = failureAnalytics?.recentEvents || [];
+    const reliabilitySuccessRate = reliabilitySummary.successRate;
+    const successRateLabel = reliabilitySuccessRate == null
+        ? "N/A"
+        : `${(reliabilitySuccessRate * 100).toFixed(1)}%`;
+    const displayEndDate = adjustEndDateForAnalytics(endDate) || endDate;
+    const stageItems = Array.isArray(reliabilityBreakdowns.byStage)
+        ? reliabilityBreakdowns.byStage.slice(0, 10)
+        : [];
+    const stageMax = stageItems.reduce((max, item) => Math.max(max, item.count || 0), 0);
+    const issueItems = Array.isArray(reliabilityBreakdowns.byIssueType)
+        ? reliabilityBreakdowns.byIssueType.slice(0, 10)
+        : [];
+    const issueMax = issueItems.reduce((max, item) => Math.max(max, item.count || 0), 0);
+
+    const timingSummary = timingAnalytics?.summary || {};
+    const timingCourses = timingSummary.courses || {};
+    const timingTimeToFirst = timingSummary.timeToFirstModule || {};
+    const timingModules = timingSummary.modules || {};
+    const timingTimeseries = timingAnalytics?.timeseries || {};
+    const timingCourseSeries = Array.isArray(timingTimeseries.courseDuration)
+        ? timingTimeseries.courseDuration
+        : [];
+    const timingFirstModuleSeries = Array.isArray(timingTimeseries.timeToFirstModule)
+        ? timingTimeseries.timeToFirstModule
+        : [];
+    const timingContentTypes = Array.isArray(timingAnalytics?.contentTypeBreakdown)
+        ? timingAnalytics.contentTypeBreakdown
+        : [];
+    const timingContentTypeItems = timingContentTypes.slice(0, 12);
+    const timingContentTypeMax = timingContentTypeItems.reduce(
+        (max, item) => Math.max(max, item?.stats?.avgMs || 0),
+        0
+    );
+
+    const retentionSummary = retentionAnalytics?.summary || {};
+    const retentionByGrain = retentionAnalytics?.retentionByGrain || {};
+    const retentionAvailableGrains = Object.keys(retentionByGrain);
+    const retentionSelected = retentionByGrain[retentionGrain] || null;
+    const retentionCurveData = Array.isArray(retentionSelected?.aggregatedCurve)
+        ? retentionSelected.aggregatedCurve
+            .filter(
+                (point) =>
+                    (point?.eligibleUsers ?? 0) > 0 && point.retentionRate != null
+            )
+            .map((point) => ({
+                ...point,
+                label: point.label ?? String(point.offset ?? ""),
+                retentionPercent: point.retentionRate * 100,
+            }))
+        : [];
+    const d1Summary = retentionSummary.d1 || {};
+    const d1Rate = d1Summary.rate ?? null;
+    const d1TimeseriesRaw = Array.isArray(retentionAnalytics?.d1Timeseries)
+        ? retentionAnalytics.d1Timeseries
+        : [];
+    const d1ChartData = d1TimeseriesRaw
+        .filter((item) => item.eligible && item.rate != null)
+        .map((item) => ({
+            ...item,
+            ratePercent: item.rate * 100,
+        }));
+
+    const formatDuration = (ms) => {
+        if (ms == null || !Number.isFinite(ms)) return "—";
+        if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+        if (ms < 3_600_000) return `${(ms / 60_000).toFixed(1)}m`;
+        return `${(ms / 3_600_000).toFixed(1)}h`;
+    };
+
+    const formatPercent = (value) => {
+        if (value == null || !Number.isFinite(value)) return "—";
+        return `${(value * 100).toFixed(1)}%`;
+    };
+
+    const formatDateTime = (value) => {
+        if (!value) return "—";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString();
+    };
+
+    const severityBadge = (severity) => {
+        const tone = severity || "info";
+        const classes =
+            tone === "error"
+                ? "border-[#EF4444]/40 bg-[#EF4444]/10 text-[#EF4444]"
+                : tone === "warning"
+                    ? "border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#F59E0B]"
+                    : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted-foreground)]";
+        return (
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${classes}`}>
+                {tone}
+            </span>
+        );
+    };
+
     return (
         <div className="space-y-6">
             {/* Page Header with Date Filter */}
@@ -963,7 +1113,7 @@ export default function AdminClient() {
                     <h1 className="text-2xl font-bold">Admin Dashboard</h1>
                     <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
                         {startDate && endDate && (
-                            <span>{new Date(startDate).toLocaleDateString()} – {new Date(endDate).toLocaleDateString()}</span>
+                            <span>{new Date(startDate).toLocaleDateString()} – {new Date(displayEndDate).toLocaleDateString()}</span>
                         )}
                     </p>
                 </div>
@@ -995,30 +1145,8 @@ export default function AdminClient() {
                 </div>
             </div>
 
-            {/* Tab Navigation */}
-            <div className="border-b border-[var(--border)]">
-                <nav className="-mb-px flex space-x-1 overflow-x-auto">
-                    {TABS.map((tab) => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                                activeTab === tab.id
-                                    ? "border-[var(--primary)] text-[var(--primary)]"
-                                    : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"
-                            }`}
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
-                            </svg>
-                            {tab.label}
-                        </button>
-                    ))}
-                </nav>
-            </div>
-
             {/* Tab Content */}
-            {activeTab === "overview" && (
+            {activeSection === "overview" && (
                 <div className="space-y-6">
                     {/* Key Metrics Grid */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1120,7 +1248,320 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "users" && (
+            {activeSection === "reliability" && (
+                <div className="space-y-6">
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="Success Rate"
+                            value={successRateLabel}
+                            subtitle={
+                                (reliabilitySummary.completedRuns ?? 0) > 0
+                                    ? `${reliabilitySummary.readyRuns ?? 0}/${reliabilitySummary.completedRuns ?? 0} ready`
+                                    : "No completed runs"
+                            }
+                            color="green"
+                            borderColor="border-l-[#34D399]"
+                        />
+                        <StatCard
+                            title="Completed Runs"
+                            value={(reliabilitySummary.completedRuns ?? 0).toLocaleString()}
+                            subtitle="In selected range"
+                            color="blue"
+                            borderColor="border-l-[#3B82F6]"
+                        />
+                        <StatCard
+                            title="Course Failures"
+                            value={(reliabilitySummary.courseFailures ?? 0).toLocaleString()}
+                            subtitle="Generation failures"
+                            color="red"
+                            borderColor="border-l-[#EF4444]"
+                        />
+                        <StatCard
+                            title="Course Issues"
+                            value={(reliabilitySummary.courseIssues ?? 0).toLocaleString()}
+                            subtitle="Warnings & skips"
+                            color="orange"
+                            borderColor="border-l-[#F59E0B]"
+                        />
+                        <StatCard
+                            title="Fallbacks"
+                            value={(reliabilitySummary.courseFallbacks ?? 0).toLocaleString()}
+                            subtitle="Repair paths used"
+                            color="purple"
+                            borderColor="border-l-[#8B5CF6]"
+                        />
+                        <StatCard
+                            title="Blocked Runs"
+                            value={(reliabilitySummary.blockedRuns ?? 0).toLocaleString()}
+                            subtitle="Course status blocked"
+                            color="red"
+                            borderColor="border-l-[#EF4444]"
+                        />
+                        <StatCard
+                            title="Avg Course Time"
+                            value={formatDuration(timingCourses.avgMs)}
+                            subtitle={`P95 ${formatDuration(timingCourses.p95Ms)}`}
+                            color="blue"
+                            borderColor="border-l-[#3B82F6]"
+                        />
+                        <StatCard
+                            title="Time To 1st Module"
+                            value={formatDuration(timingTimeToFirst.avgMs)}
+                            subtitle={`P95 ${formatDuration(timingTimeToFirst.p95Ms)}`}
+                            color="purple"
+                            borderColor="border-l-[#8B5CF6]"
+                        />
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-semibold">Failures By Stage</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">
+                                    {(reliabilitySummary.totalEvents ?? 0).toLocaleString()} events
+                                </span>
+                            </div>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading stage data...</p>
+                            ) : (
+                                <div className="mt-4 space-y-3">
+                                    {stageItems.length > 0 ? (
+                                        stageItems.map((item) => {
+                                            const pct = stageMax > 0 ? ((item.count || 0) / stageMax) * 100 : 0;
+                                            return (
+                                                <div key={`stage-${item.key}`} className="space-y-1">
+                                                    <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+                                                        <span className="truncate pr-2 text-[var(--foreground)]">{item.key}</span>
+                                                        <span className="font-medium text-[var(--foreground)]">{item.count}</span>
+                                                    </div>
+                                                    <div className="h-2 rounded-full bg-[var(--surface-2)]">
+                                                        <div
+                                                            className="h-2 rounded-full bg-[var(--primary)]"
+                                                            style={{ width: `${pct}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-[var(--muted-foreground)]">No stage failures found.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card p-6">
+                            <h3 className="font-semibold">Failures By Issue Type</h3>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading issue types...</p>
+                            ) : (
+                                <div className="mt-4 space-y-3">
+                                    {issueItems.length > 0 ? (
+                                        issueItems.map((item) => {
+                                            const pct = issueMax > 0 ? ((item.count || 0) / issueMax) * 100 : 0;
+                                            return (
+                                                <div key={`issue-${item.key}`} className="space-y-1">
+                                                    <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+                                                        <span className="truncate pr-2 text-[var(--foreground)]">{item.key}</span>
+                                                        <span className="font-medium text-[var(--foreground)]">{item.count}</span>
+                                                    </div>
+                                                    <div className="h-2 rounded-full bg-[var(--surface-2)]">
+                                                        <div
+                                                            className="h-2 rounded-full bg-[#8B5CF6]"
+                                                            style={{ width: `${pct}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-[var(--muted-foreground)]">No issue types found.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-semibold">Course Duration Trend</h3>
+                                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        Average time per course run
+                                    </p>
+                                </div>
+                                <div className="text-xs text-[var(--muted-foreground)]">
+                                    {timingCourses.count ?? 0} runs
+                                </div>
+                            </div>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading timing data...</p>
+                            ) : (
+                                <div className="mt-4">
+                                    <DurationTrendChart
+                                        data={timingCourseSeries}
+                                        dataKey="avgMs"
+                                        name="Avg Course Duration"
+                                        color="#3B82F6"
+                                        height={260}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-semibold">Time To First Module</h3>
+                                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        How quickly learners see progress
+                                    </p>
+                                </div>
+                                <div className="text-xs text-[var(--muted-foreground)]">
+                                    {timingTimeToFirst.count ?? 0} runs
+                                </div>
+                            </div>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading timing data...</p>
+                            ) : (
+                                <div className="mt-4">
+                                    <DurationTrendChart
+                                        data={timingFirstModuleSeries}
+                                        dataKey="avgMs"
+                                        name="Avg Time To First Module"
+                                        color="#8B5CF6"
+                                        height={260}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="card p-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-semibold">Content Type Durations</h3>
+                                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                    Average generation time by content type
+                                </p>
+                            </div>
+                            <div className="text-xs text-[var(--muted-foreground)]">
+                                {timingSummary.contentTypeCount ?? 0} events
+                            </div>
+                        </div>
+                        {dateRangeLoading ? (
+                            <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading content timings...</p>
+                        ) : (
+                            <div className="mt-4 space-y-3">
+                                {timingContentTypeItems.length > 0 ? (
+                                    timingContentTypeItems.map((item) => {
+                                        const avgMs = item?.stats?.avgMs || 0;
+                                        const pct = timingContentTypeMax > 0 ? (avgMs / timingContentTypeMax) * 100 : 0;
+                                        return (
+                                            <div key={`content-type-${item.contentType}`} className="space-y-1">
+                                                <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+                                                    <span className="truncate pr-2 text-[var(--foreground)]">
+                                                        {item.contentType}
+                                                    </span>
+                                                    <span className="font-medium text-[var(--foreground)]">
+                                                        {formatDuration(avgMs)}
+                                                    </span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-[var(--surface-2)]">
+                                                    <div
+                                                        className="h-2 rounded-full bg-[#34D399]"
+                                                        style={{ width: `${pct}%` }}
+                                                    />
+                                                </div>
+                                                <div className="text-[11px] text-[var(--muted-foreground)]/80">
+                                                    {item?.stats?.count ?? 0} samples • Avg lessons {item.avgLessonCount?.toFixed?.(1) ?? "—"}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <p className="text-sm text-[var(--muted-foreground)]">No content timing data found.</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="card">
+                        <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
+                            <div>
+                                <h3 className="font-semibold">Recent Reliability Events</h3>
+                                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                    Latest issues, failures, and fallbacks
+                                </p>
+                            </div>
+                            <div className="text-xs text-[var(--muted-foreground)]">
+                                {(reliabilityRecentEvents.length || 0).toLocaleString()} events shown
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Time</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Severity</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Stage</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Issue Type</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Course</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Module</th>
+                                        <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Event</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dateRangeLoading ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
+                                                Loading reliability events...
+                                            </td>
+                                        </tr>
+                                    ) : reliabilityRecentEvents.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
+                                                No reliability events found for this range.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        reliabilityRecentEvents.map((event) => (
+                                            <tr key={event.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] transition-colors">
+                                                <td className="px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                                                    {formatDateTime(event.created_at)}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {severityBadge(event.severity)}
+                                                </td>
+                                                <td className="px-4 py-3 font-medium text-[var(--foreground)]">
+                                                    {event.stage || "unknown"}
+                                                </td>
+                                                <td className="px-4 py-3 text-[var(--muted-foreground)]">
+                                                    {event.issueType || "unspecified"}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="font-mono text-xs text-[var(--muted-foreground)]">
+                                                        {event.courseId || "—"}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-[var(--muted-foreground)]">
+                                                    {event.moduleName || "—"}
+                                                </td>
+                                                <td className="px-4 py-3 text-[var(--muted-foreground)]">
+                                                    {event.event_type}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeSection === "users" && (
                 <div className="space-y-6">
                     {/* User Stats */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1175,6 +1616,111 @@ export default function AdminClient() {
                         <ActiveUsersChart data={data.activeUsers} />
                     </div>
 
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <StatCard
+                            title="D1 Retention"
+                            value={formatPercent(d1Rate)}
+                            subtitle={`${(d1Summary.retainedUsers ?? 0).toLocaleString()} of ${(d1Summary.eligibleUsers ?? 0).toLocaleString()} eligible`}
+                            color="green"
+                            borderColor="border-l-[#34D399]"
+                        />
+                        <StatCard
+                            title="D1 Eligible Users"
+                            value={(d1Summary.eligibleUsers ?? 0).toLocaleString()}
+                            subtitle="Have 1 full day to return"
+                            color="blue"
+                            borderColor="border-l-[#3B82F6]"
+                        />
+                        <StatCard
+                            title="D1 Retained Users"
+                            value={(d1Summary.retainedUsers ?? 0).toLocaleString()}
+                            subtitle="Active on day 1"
+                            color="purple"
+                            borderColor="border-l-[#8B5CF6]"
+                        />
+                        <StatCard
+                            title="Signups"
+                            value={(retentionSummary.totalSignups ?? 0).toLocaleString()}
+                            subtitle="In selected range"
+                            color="primary"
+                            borderColor="border-l-[var(--primary)]"
+                        />
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="card p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-semibold">D1 Retention By Cohort</h3>
+                                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        Day 1 return rate for each signup day
+                                    </p>
+                                </div>
+                                <div className="text-xs text-[var(--muted-foreground)]">
+                                    {d1ChartData.length} cohorts
+                                </div>
+                            </div>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading retention data...</p>
+                            ) : d1ChartData.length === 0 ? (
+                                <p className="mt-6 text-sm text-[var(--muted-foreground)]">
+                                    No eligible D1 cohorts in this range yet.
+                                </p>
+                            ) : (
+                                <div className="mt-4">
+                                    <RetentionD1Chart data={d1ChartData} />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card p-6">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="font-semibold">Retention Curve</h3>
+                                    <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        Aggregate retention over time since signup
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {["day", "week", "month"].map((grain) => {
+                                        const available = retentionAvailableGrains.includes(grain);
+                                        const isActive = retentionGrain === grain;
+                                        return (
+                                            <button
+                                                key={`retention-grain-${grain}`}
+                                                type="button"
+                                                onClick={() => available && setRetentionGrain(grain)}
+                                                disabled={!available}
+                                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                                    isActive
+                                                        ? "bg-[var(--primary)] text-white"
+                                                        : "bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]"
+                                                } ${!available ? "opacity-40 cursor-not-allowed" : ""}`}
+                                            >
+                                                {grain}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            {dateRangeLoading ? (
+                                <p className="mt-4 text-sm text-[var(--muted-foreground)]">Loading retention data...</p>
+                            ) : retentionCurveData.length === 0 ? (
+                                <p className="mt-6 text-sm text-[var(--muted-foreground)]">
+                                    Not enough retention data yet for this grain.
+                                </p>
+                            ) : (
+                                <div className="mt-4">
+                                    <RetentionCurveChart data={retentionCurveData} grain={retentionGrain} />
+                                </div>
+                            )}
+                            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+                                Day-by-day retention will show dips when users skip days. Week and month grains
+                                only track whether a user returned during that period, so they smooth over gaps.
+                            </p>
+                        </div>
+                    </div>
+
                     {/* Events Section */}
                     <div className="grid gap-6 lg:grid-cols-2">
                         <div className="card p-6">
@@ -1194,7 +1740,7 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "userBreakdown" && (
+            {activeSection === "users" && (
                 <div className="space-y-6">
                     {/* Summary Stats */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1313,7 +1859,7 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "courseBreakdown" && (
+            {activeSection === "users" && (
                 <div className="space-y-6">
                     {/* Summary Stats */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1671,7 +2217,7 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "usage" && (
+            {activeSection === "usage" && (
                 <div className="space-y-6">
                     {/* Cost Stats */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
@@ -1756,7 +2302,7 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "feedback" && (
+            {activeSection === "feedback" && (
                 <div className="space-y-6">
                     {/* Feedback Summary */}
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1790,19 +2336,19 @@ export default function AdminClient() {
                 </div>
             )}
 
-            {activeTab === "exportCourse" && (
+            {activeSection === "settings" && (
                 <CourseExportTab usageByCourseData={usageByCourseData} dateRangeLoading={dateRangeLoading} />
             )}
 
-            {activeTab === "moderation" && (
+            {activeSection === "moderation" && (
                 <AdminModerationPanel />
             )}
 
-            {activeTab === "releases" && (
+            {activeSection === "releases" && (
                 <ReleasesPanel />
             )}
 
-            {activeTab === "settings" && (
+            {activeSection === "settings" && (
                 <div className="space-y-6">
                     <div className="card p-6">
                         <div className="flex items-center justify-between mb-4">
