@@ -124,6 +124,7 @@ export default function CoursePage() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isTimerControlsOpen, setIsTimerControlsOpen] = useState(false);
   const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
+  const [shouldOpenPracticeExamModal, setShouldOpenPracticeExamModal] = useState(false);
   const [isTimerExpiredModalOpen, setIsTimerExpiredModalOpen] = useState(false);
   const [isHiddenContentModalOpen, setIsHiddenContentModalOpen] = useState(false);
   const [hasHiddenContent, setHasHiddenContent] = useState(false);
@@ -1460,6 +1461,8 @@ export default function CoursePage() {
                       setIsTimerControlsOpen={setIsTimerControlsOpen}
                       isEditCourseModalOpen={isEditCourseModalOpen}
                       setIsEditCourseModalOpen={setIsEditCourseModalOpen}
+                      shouldOpenPracticeExamModal={shouldOpenPracticeExamModal}
+                      onPracticeExamModalOpened={() => setShouldOpenPracticeExamModal(false)}
                       onOpenChatTab={handleOpenChatTab}
                       onOpenDiscussionTab={() => addTab('discussion')}
                       onOpenMessagesTab={() => addTab('messages')}
@@ -1582,6 +1585,7 @@ export default function CoursePage() {
         courseName={courseName}
         studyPlan={studyPlan}
         onRefetch={refetchStudyPlan}
+        onAddPracticeExam={() => setShouldOpenPracticeExamModal(true)}
       />
 
       <TimerExpiredModal

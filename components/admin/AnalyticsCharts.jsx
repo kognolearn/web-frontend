@@ -70,6 +70,13 @@ function CustomTooltip({ active, payload, label, formatter }) {
     );
 }
 
+function formatDurationShort(ms) {
+    if (ms == null || !Number.isFinite(ms)) return "—";
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3_600_000) return `${(ms / 60_000).toFixed(1)}m`;
+    return `${(ms / 3_600_000).toFixed(1)}h`;
+}
+
 export function DailyActiveUsersChart({ data }) {
     const colors = useChartColors();
     
@@ -576,7 +583,7 @@ export function EventsChart({ data }) {
 
 export function EventTypePieChart({ data }) {
     const colors = useChartColors();
-    
+
     if (!data || data.length === 0) {
         return (
             <div className="h-[300px] w-full flex items-center justify-center text-[var(--muted-foreground)]">
@@ -585,42 +592,125 @@ export function EventTypePieChart({ data }) {
         );
     }
 
-    // Format event type names for display
-    const formattedData = data.map(item => ({
-        ...item,
-        displayType: item.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    }));
+    const OTHER_MAX_PERCENT = 0.1;
+    const OTHER_COLOR = "#94A3B8";
+
+    const safeData = data
+        .filter((item) => item && Number.isFinite(Number(item.count)) && Number(item.count) > 0)
+        .map((item) => ({
+            type: item.type || "unknown",
+            count: Number(item.count) || 0,
+        }));
+
+    const totalCount = safeData.reduce((sum, item) => sum + item.count, 0);
+    if (totalCount <= 0) {
+        return (
+            <div className="h-[300px] w-full flex items-center justify-center text-[var(--muted-foreground)]">
+                No event data available
+            </div>
+        );
+    }
+
+    const sorted = [...safeData].sort((a, b) => b.count - a.count);
+    const otherMaxCount = totalCount * OTHER_MAX_PERCENT;
+
+    let remainingCount = totalCount;
+    let keepCount = 0;
+    while (keepCount < sorted.length && remainingCount > otherMaxCount) {
+        remainingCount -= sorted[keepCount].count;
+        keepCount += 1;
+    }
+
+    const keptItems = sorted.slice(0, keepCount);
+    const otherItems = sorted.slice(keepCount);
+    const otherCount = otherItems.reduce((sum, item) => sum + item.count, 0);
+
+    const formatType = (type) =>
+        String(type)
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+    const withDisplay = (item) => {
+        const percent = totalCount > 0 ? item.count / totalCount : 0;
+        const percentLabel = `${(percent * 100).toFixed(1)}%`;
+        const displayType = formatType(item.type);
+        return {
+            ...item,
+            percent,
+            percentLabel,
+            displayType,
+            legendLabel: `${displayType} (${percentLabel})`,
+        };
+    };
+
+    const consolidatedData = [
+        ...keptItems.map(withDisplay),
+        ...(otherCount > 0
+            ? [
+                {
+                    type: "other",
+                    count: otherCount,
+                    percent: otherCount / totalCount,
+                    percentLabel: `${((otherCount / totalCount) * 100).toFixed(1)}%`,
+                    displayType: "Other",
+                    legendLabel: `Other (${((otherCount / totalCount) * 100).toFixed(1)}%)`,
+                    __isOther: true,
+                    __otherTypes: otherItems.length,
+                },
+            ]
+            : []),
+    ];
 
     return (
-        <div className="h-[300px] w-full">
+        <div className="h-[320px] w-full">
             <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                     <Pie
-                        data={formattedData}
+                        data={consolidatedData}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ displayType, percent }) => percent > 0.05 ? `${displayType} (${(percent * 100).toFixed(0)}%)` : ''}
+                        label={({ displayType, percent }) =>
+                            percent > 0.05
+                                ? `${displayType} (${(percent * 100).toFixed(0)}%)`
+                                : ""
+                        }
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="count"
-                        nameKey="displayType"
+                        nameKey="legendLabel"
                     >
-                        {formattedData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        {consolidatedData.map((entry, index) => (
+                            <Cell
+                                key={`cell-${entry.type}-${index}`}
+                                fill={entry.__isOther ? OTHER_COLOR : COLORS[index % COLORS.length]}
+                            />
                         ))}
                     </Pie>
                     <Tooltip
-                        content={<CustomTooltip formatter={(value) => value.toLocaleString()} />}
+                        content={
+                            <CustomTooltip
+                                formatter={(value) => {
+                                    const count = Number(value) || 0;
+                                    const pct = totalCount > 0 ? (count / totalCount) * 100 : 0;
+                                    return `${count.toLocaleString()} (${pct.toFixed(1)}%)`;
+                                }}
+                            />
+                        }
                     />
-                    <Legend 
-                        wrapperStyle={{ paddingTop: '10px' }}
-                        formatter={(value, entry) => (
-                            <span style={{ color: colors.foreground, fontSize: '12px' }}>{value}</span>
+                    <Legend
+                        wrapperStyle={{ paddingTop: "10px" }}
+                        formatter={(value) => (
+                            <span style={{ color: colors.foreground, fontSize: "12px" }}>{value}</span>
                         )}
                     />
                 </PieChart>
             </ResponsiveContainer>
+            {otherItems.length > 0 && (
+                <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                    Other groups {otherItems.length} low-volume event types (≤10% combined).
+                </p>
+            )}
         </div>
     );
 }
@@ -735,6 +825,160 @@ export function SourceUsageTable({ data }) {
                     ))}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+export function DurationTrendChart({ data, dataKey = "avgMs", name = "Average Duration", color = "#3B82F6", height = 280 }) {
+    const colors = useChartColors();
+    const safeData = Array.isArray(data) ? data : [];
+
+    return (
+        <div className={`w-full`} style={{ height }}>
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                    data={safeData}
+                    margin={{
+                        top: 5,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={colors.border} />
+                    <XAxis
+                        dataKey="date"
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                    />
+                    <YAxis
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={formatDurationShort}
+                    />
+                    <Tooltip
+                        content={<CustomTooltip formatter={(value) => formatDurationShort(value)} />}
+                    />
+                    <Line
+                        type="monotone"
+                        dataKey={dataKey}
+                        name={name}
+                        stroke={color}
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0 }}
+                        connectNulls
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+export function RetentionD1Chart({ data }) {
+    const colors = useChartColors();
+    const safeData = Array.isArray(data) ? data : [];
+
+    return (
+        <div className="h-[260px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                    data={safeData}
+                    margin={{
+                        top: 5,
+                        right: 24,
+                        left: 12,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={colors.border} />
+                    <XAxis
+                        dataKey="date"
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                    />
+                    <YAxis
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[0, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                        content={<CustomTooltip formatter={(value) => `${value.toFixed(1)}%`} />}
+                    />
+                    <Line
+                        type="monotone"
+                        dataKey="ratePercent"
+                        name="D1 Retention"
+                        stroke={colors.primary}
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0 }}
+                        connectNulls
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+export function RetentionCurveChart({ data, grain = "day" }) {
+    const colors = useChartColors();
+    const safeData = Array.isArray(data) ? data : [];
+    const grainLabel = grain === "month" ? "Month" : grain === "week" ? "Week" : "Day";
+
+    return (
+        <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                    data={safeData}
+                    margin={{
+                        top: 5,
+                        right: 24,
+                        left: 12,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={colors.border} />
+                    <XAxis
+                        dataKey="label"
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        label={{ value: `${grainLabel} Offset`, position: "insideBottom", offset: -2, fill: colors.muted, fontSize: 11 }}
+                    />
+                    <YAxis
+                        stroke={colors.muted}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[0, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                        content={<CustomTooltip formatter={(value) => `${value.toFixed(1)}%`} />}
+                    />
+                    <Line
+                        type="monotone"
+                        dataKey="retentionPercent"
+                        name="Retention"
+                        stroke="#8B5CF6"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0 }}
+                        connectNulls
+                    />
+                </LineChart>
+            </ResponsiveContainer>
         </div>
     );
 }

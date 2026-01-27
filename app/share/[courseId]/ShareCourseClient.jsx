@@ -5,7 +5,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
-import CourseLimitModal from "@/components/courses/CourseLimitModal";
 
 export default function ShareCourseClient() {
   const router = useRouter();
@@ -21,8 +20,6 @@ export default function ShareCourseClient() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showCourseLimitModal, setShowCourseLimitModal] = useState(false);
-  const [userCourses, setUserCourses] = useState([]);
 
   const sharePath = `/share/${courseId}`;
   const redirectTarget = searchParams.get("redirectTo") || sharePath;
@@ -102,17 +99,6 @@ export default function ShareCourseClient() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 403 && data?.error?.toLowerCase()?.includes("limit")) {
-          // Assumption: hitting the free-tier limit should offer a leave-or-upgrade choice.
-          setSubmitting(false);
-          setShowCourseLimitModal(true);
-          const coursesRes = await authFetch("/api/courses");
-          if (coursesRes.ok) {
-            const coursesData = await coursesRes.json();
-            setUserCourses(Array.isArray(coursesData?.courses) ? coursesData.courses : []);
-          }
-          return;
-        }
         throw new Error(data.error || data.message || "Failed to load course.");
       }
       setSubmitSuccess("Course loaded. Redirecting…");
@@ -255,15 +241,6 @@ export default function ShareCourseClient() {
           </div>
         </div>
       </div>
-      <CourseLimitModal
-        isOpen={showCourseLimitModal}
-        onClose={() => setShowCourseLimitModal(false)}
-        courses={userCourses}
-        userId={user?.id}
-        onCourseDeleted={(courseId) => {
-          setUserCourses((prev) => prev.filter((c) => c.id !== courseId));
-        }}
-      />
     </div>
   );
 }

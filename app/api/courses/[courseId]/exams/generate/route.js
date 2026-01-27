@@ -13,8 +13,8 @@ export async function POST(request, { params }) {
     if (!lessons || !Array.isArray(lessons) || lessons.length === 0) {
       return NextResponse.json({ error: "lessons array is required" }, { status: 400 });
     }
-    if (!["midterm", "final"].includes(type)) {
-      return NextResponse.json({ error: "type must be 'midterm' or 'final'" }, { status: 400 });
+    if (!["midterm", "final", "custom"].includes(type)) {
+      return NextResponse.json({ error: "type must be 'midterm', 'final', or 'custom'" }, { status: 400 });
     }
 
     const url = new URL(`/courses/${courseId}/exams/generate`, BASE_URL);
