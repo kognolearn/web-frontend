@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import TokenBalanceDisplay from "@/components/tokens/TokenBalanceDisplay";
 import TokenPurchaseModal from "@/components/tokens/TokenPurchaseModal";
 import { authFetch } from "@/lib/api";
+import DashboardSidebar from "@/components/navigation/DashboardSidebar";
 
 export default function TokensPage() {
   const router = useRouter();
@@ -51,15 +51,19 @@ export default function TokensPage() {
         return;
       }
 
-      const [planData, balanceData, transactionsData] = await Promise.all([
+      const [planData, balancePayload, transactionsPayload] = await Promise.all([
         planRes.json(),
         balanceRes.ok ? balanceRes.json() : null,
-        transactionsRes.ok ? transactionsRes.json() : { transactions: [] },
+        transactionsRes.ok ? transactionsRes.json() : null,
       ]);
 
       setUserPlan(planData);
-      setTokenBalance(balanceData);
-      setTransactions(transactionsData.transactions || []);
+      setTokenBalance(balancePayload?.balance ?? null);
+      setTransactions(
+        transactionsPayload?.transactions ||
+        balancePayload?.recentTransactions ||
+        []
+      );
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -154,213 +158,217 @@ export default function TokensPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-4 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Dashboard
-          </Link>
-          <h1 className="text-3xl font-bold text-[var(--foreground)]">
-            Generation Tokens
-          </h1>
-          <p className="text-[var(--muted-foreground)] mt-2">
-            Use tokens to generate new courses. Each token creates one course.
-          </p>
-        </div>
+    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <DashboardSidebar activePath="/tokens" />
 
-        {/* Premium Banner */}
-        {userPlan?.isPremium && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 rounded-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium text-[var(--foreground)]">Premium Active</p>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  You have unlimited course generation with your Premium subscription.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Token Balance Card */}
-        <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1">
-                Your Token Balance
-              </h2>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 rounded-lg">
-                  <svg className="w-6 h-6 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/>
-                  </svg>
-                  <span className="text-2xl font-bold text-amber-600">
-                    {userPlan?.isPremium ? "∞" : (tokenBalance?.tokensAvailable ?? 0)}
-                  </span>
-                </div>
-                {!userPlan?.isPremium && tokenBalance && (
-                  <span className="text-sm text-[var(--muted-foreground)]">
-                    {tokenBalance.tokensUsed} used total
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {!userPlan?.isPremium && (
-              <button
-                onClick={() => setShowPurchaseModal(true)}
-                className="px-6 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors"
-              >
-                Buy More Tokens
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Token Packages Preview */}
-        {!userPlan?.isPremium && (
-          <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6 mb-6">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-              Token Packages
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                { tokens: 1, price: "$2.99", perToken: "$2.99" },
-                { tokens: 2, price: "$3.99", perToken: "$2.00", popular: true },
-                { tokens: 5, price: "$5.99", perToken: "$1.20", bestValue: true },
-              ].map((pkg) => (
-                <div
-                  key={pkg.tokens}
-                  className={`relative p-4 rounded-xl border ${
-                    pkg.bestValue
-                      ? "border-green-500 bg-green-500/5"
-                      : pkg.popular
-                      ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                      : "border-[var(--border)] bg-[var(--surface-2)]"
-                  }`}
-                >
-                  {pkg.bestValue && (
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-green-500 text-white text-xs font-medium rounded-full">
-                      Best Value
-                    </span>
-                  )}
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-[var(--foreground)]">
-                      {pkg.tokens}
-                    </p>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      token{pkg.tokens > 1 ? "s" : ""}
-                    </p>
-                    <p className="text-lg font-semibold text-[var(--foreground)] mt-2">
-                      {pkg.price}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      {pkg.perToken}/token
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowPurchaseModal(true)}
-              className="w-full mt-4 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors"
+      <div className="flex-1 py-8 px-4 lg:px-10">
+        <div className="max-w-3xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-4 transition-colors"
             >
-              Purchase Tokens
-            </button>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Dashboard
+            </Link>
+            <h1 className="text-3xl font-bold text-[var(--foreground)]">
+              Generation Tokens
+            </h1>
+            <p className="text-[var(--muted-foreground)] mt-2">
+              Use tokens to generate new courses. Each token creates one course.
+            </p>
           </div>
-        )}
 
-        {/* Premium Upsell */}
-        {!userPlan?.isPremium && (
-          <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-2xl border border-purple-500/30 p-6 mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h3 className="font-semibold text-[var(--foreground)] mb-1">
-                  Go Premium for Unlimited Tokens
-                </h3>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  Get unlimited course generation plus exams, cheatsheets, and more.
-                </p>
-              </div>
-              <div className="flex flex-col sm:items-end gap-2">
-                <Link
-                  href="/subscription"
-                  className="px-6 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-indigo-600 transition-all text-center"
-                >
-                  $14.99/mo
-                </Link>
-                <Link
-                  href="/discount"
-                  className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                >
-                  Need a discount?
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Transaction History */}
-        <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6">
-          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-            Transaction History
-          </h2>
-
-          {transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--surface-2)] flex items-center justify-center">
-                <svg className="w-6 h-6 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <p className="text-[var(--muted-foreground)]">
-                No transactions yet
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {transactions.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center gap-3 p-3 bg-[var(--surface-2)] rounded-lg"
-                >
-                  {getTransactionIcon(tx.transaction_type)}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[var(--foreground)] truncate">
-                      {getTransactionLabel(tx.transaction_type, tx.metadata)}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      {formatDate(tx.created_at)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-medium ${
-                      tx.amount > 0 ? "text-green-500" : "text-red-500"
-                    }`}>
-                      {tx.amount > 0 ? "+" : ""}{tx.amount}
-                    </p>
-                    {tx.price_cents && (
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        ${(tx.price_cents / 100).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
+          {/* Premium Banner */}
+          {userPlan?.isPremium && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 rounded-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
                 </div>
-              ))}
+                <div>
+                  <p className="font-medium text-[var(--foreground)]">Premium Active</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    You have unlimited course generation with your Premium subscription.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Token Balance Card */}
+          <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1">
+                  Your Token Balance
+                </h2>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 rounded-lg">
+                    <svg className="w-6 h-6 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/>
+                    </svg>
+                    <span className="text-2xl font-bold text-amber-600">
+                      {userPlan?.isPremium ? "∞" : (tokenBalance?.available ?? 0)}
+                    </span>
+                  </div>
+                  {!userPlan?.isPremium && tokenBalance && (
+                    <span className="text-sm text-[var(--muted-foreground)]">
+                      {tokenBalance.used ?? 0} used total
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {!userPlan?.isPremium && (
+                <button
+                  onClick={() => setShowPurchaseModal(true)}
+                  className="px-6 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors"
+                >
+                  Buy More Tokens
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Token Packages Preview */}
+          {!userPlan?.isPremium && (
+            <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6 mb-6">
+              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
+                Token Packages
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { tokens: 1, price: "$2.99", perToken: "$2.99" },
+                  { tokens: 2, price: "$3.99", perToken: "$2.00", popular: true },
+                  { tokens: 5, price: "$5.99", perToken: "$1.20", bestValue: true },
+                ].map((pkg) => (
+                  <div
+                    key={pkg.tokens}
+                    className={`relative p-4 rounded-xl border ${
+                      pkg.bestValue
+                        ? "border-green-500 bg-green-500/5"
+                        : pkg.popular
+                        ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                        : "border-[var(--border)] bg-[var(--surface-2)]"
+                    }`}
+                  >
+                    {pkg.bestValue && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-green-500 text-white text-xs font-medium rounded-full">
+                        Best Value
+                      </span>
+                    )}
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-[var(--foreground)]">
+                        {pkg.tokens}
+                      </p>
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        token{pkg.tokens > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-lg font-semibold text-[var(--foreground)] mt-2">
+                        {pkg.price}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {pkg.perToken}/token
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowPurchaseModal(true)}
+                className="w-full mt-4 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-hover)] transition-colors"
+              >
+                Purchase Tokens
+              </button>
+            </div>
+          )}
+
+          {/* Premium Upsell */}
+          {!userPlan?.isPremium && (
+            <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-2xl border border-purple-500/30 p-6 mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-[var(--foreground)] mb-1">
+                    Go Premium for Unlimited Tokens
+                  </h3>
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    Get unlimited course generation plus exams, cheatsheets, and more.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:items-end gap-2">
+                  <Link
+                    href="/subscription"
+                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-indigo-600 transition-all text-center"
+                  >
+                    $14.99/mo
+                  </Link>
+                  <Link
+                    href="/discount"
+                    className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                  >
+                    Need a discount?
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Transaction History */}
+          <div className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] p-6">
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
+              Transaction History
+            </h2>
+
+            {transactions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--surface-2)] flex items-center justify-center">
+                  <svg className="w-6 h-6 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <p className="text-[var(--muted-foreground)]">
+                  No transactions yet
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {transactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center gap-3 p-3 bg-[var(--surface-2)] rounded-lg"
+                  >
+                    {getTransactionIcon(tx.transaction_type)}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[var(--foreground)] truncate">
+                        {getTransactionLabel(tx.transaction_type, tx.metadata)}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {formatDate(tx.created_at)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-medium ${
+                        tx.amount > 0 ? "text-green-500" : "text-red-500"
+                      }`}>
+                        {tx.amount > 0 ? "+" : ""}{tx.amount}
+                      </p>
+                      {tx.price_cents && (
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          ${(tx.price_cents / 100).toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

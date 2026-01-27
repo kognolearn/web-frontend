@@ -38,6 +38,7 @@ export default function SettingsPage() {
   // Subscription state
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
 
   // Delete account state
@@ -247,6 +248,39 @@ export default function SettingsPage() {
       setSubscriptionError(err.message);
     } finally {
       setPortalLoading(false);
+    }
+  };
+
+  const handleUpgrade = async () => {
+    setCheckoutLoading(true);
+    setSubscriptionError(null);
+
+    try {
+      const origin = window.location.origin;
+      const successUrl = `${origin}/checkout/success?source=settings`;
+      const cancelUrl = `${origin}/settings?checkout=cancelled`;
+
+      const res = await authFetch("/api/stripe?endpoint=create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productType: "monthly",
+          flow: "hosted",
+          successUrl,
+          cancelUrl,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || data?.details || "Failed to open checkout");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      setSubscriptionError(err.message || "Failed to open checkout");
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -1066,25 +1100,24 @@ export default function SettingsPage() {
                 </div>
 
                 <button
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
                   className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {portalLoading ? (
+                  {checkoutLoading ? (
                     <>
                       <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Loading...
+                      Opening Checkout...
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2h14v2H5v-2z" />
                       </svg>
-                      Open Billing Portal
+                      Upgrade to Premium
                     </>
                   )}
                 </button>
@@ -1106,25 +1139,24 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
                   className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                 >
-                  {portalLoading ? (
+                  {checkoutLoading ? (
                     <>
                       <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Loading...
+                      Opening Checkout...
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2h14v2H5v-2z" />
                       </svg>
-                      Open Billing Portal
+                      Upgrade to Premium
                     </>
                   )}
                 </button>
