@@ -55,8 +55,8 @@ Props:
 ### diagram_viewer (DiagramViewer)
 
 Props:
-- diagram_type: 'mermaid' | 'svg' - Type of diagram
-- content: string - Mermaid syntax or SVG markup
+- diagram_type: 'svg' - Type of diagram
+- content: string - SVG markup
 - labels?: Array<{id: string, text: string, x?: number, y?: number}> - Labels to overlay
 - zoomable: boolean - Allow zoom
 

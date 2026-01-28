@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { MathJax } from "better-react-mathjax";
-import MermaidDiagram from "./MermaidDiagram";
 import { normalizeLatex } from "@/utils/richText";
 import { authFetch } from "@/lib/api";
 import { Callout, RevealBlock, TabGroup, VideoEmbed } from "@/components/content/v2/components/display";
@@ -1725,18 +1724,6 @@ export default function ReadingRenderer({
                 );
 
               case "code":
-                // Check if this is a Mermaid diagram
-                const isMermaid = block.language?.toLowerCase() === "mermaid";
-
-                if (isMermaid) {
-                  return (
-                    <MermaidDiagram
-                      key={idx}
-                      chart={block.content}
-                    />
-                  );
-                }
-
                 return (
                   <div key={idx} className="my-6 rounded-xl overflow-hidden border border-[var(--border)]">
                     {block.language && (

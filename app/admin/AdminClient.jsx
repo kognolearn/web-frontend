@@ -24,6 +24,7 @@ import FeedbackTable from "@/components/admin/FeedbackTable";
 import AdminModerationPanel from "@/components/admin/AdminModerationPanel";
 import ReleasesPanel from "@/components/admin/ReleasesPanel";
 import JobsPanel from "@/components/admin/JobsPanel";
+import MediaCohesionTab from "@/components/admin/MediaCohesionTab";
 import {
     DEFAULT_ADMIN_SECTION,
     isValidAdminSection,
@@ -2351,6 +2352,10 @@ export default function AdminClient() {
 
             {activeSection === "releases" && (
                 <ReleasesPanel />
+            )}
+
+            {activeSection === "media-cohesion" && (
+                <MediaCohesionTab />
             )}
 
             {activeSection === "settings" && (
