@@ -291,9 +291,6 @@ export default function JobsPanel() {
                                 <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Queue</th>
                                 <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">State</th>
                                 <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Job Type</th>
-                                <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Created</th>
-                                <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Duration</th>
-                                <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Retries</th>
                                 <th className="px-4 py-3 text-right font-medium text-[var(--muted-foreground)]">Actions</th>
                             </tr>
                         </thead>
@@ -308,15 +305,6 @@ export default function JobsPanel() {
                                     </td>
                                     <td className="px-4 py-3 text-[var(--muted-foreground)]">
                                         {job.jobType || '-'}
-                                    </td>
-                                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                                        {formatTime(job.createdAt)}
-                                    </td>
-                                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                                        {job.state === 'active' ? formatDuration(job.startedAt) : '-'}
-                                    </td>
-                                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                                        {job.retryCount}/{job.retryLimit}
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <button
