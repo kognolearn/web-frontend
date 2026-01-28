@@ -56,6 +56,8 @@ const AUTH_PAGE_PATHS = [
   '/sign-up',
 ]
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function isAuthPagePath(pathname) {
   return AUTH_PAGE_PATHS.some((authPath) =>
     pathname === authPath || pathname.startsWith(`${authPath}/`)
@@ -72,6 +74,22 @@ function isSignedOutAllowedPath(pathname) {
   if (pathname === '/auth/confirm-email' || pathname.startsWith('/auth/confirm-email/')) return true
   if (pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) return true
   if (pathname.startsWith('/legal')) return true
+  return false
+}
+
+function isCourseRootPath(pathname) {
+  if (!pathname.startsWith('/courses/')) return false
+  const parts = pathname.split('/').filter(Boolean)
+  if (parts.length !== 2) return false
+  return UUID_REGEX.test(parts[1])
+}
+
+function isAnonAllowedPath(pathname) {
+  if (pathname === '/') return true
+  if (isCourseRootPath(pathname)) return true
+  if (pathname.startsWith('/auth/confirm-email')) return true
+  if (pathname.startsWith('/auth/callback')) return true
+  if (pathname.startsWith('/api')) return true
   return false
 }
 
@@ -117,6 +135,20 @@ export async function middleware(request) {
   const gateCourseId = request.cookies.get('kogno_onboarding_gate_course_id')?.value
   const isGateCoursePath =
     gateCourseId && pathname.startsWith(`/courses/${gateCourseId}`)
+  const isAnonUser = Boolean(user?.is_anonymous)
+
+  if (isAnonUser) {
+    if (isAnonAllowedPath(pathname)) {
+      return response
+    }
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    if (!url.searchParams.has('redirectTo')) {
+      const redirectPath = `${pathname}${request.nextUrl.search}`
+      url.searchParams.set('redirectTo', redirectPath)
+    }
+    return NextResponse.redirect(url)
+  }
 
   // Handle admin routes with separate auth flow
   if (pathname.startsWith('/admin')) {
