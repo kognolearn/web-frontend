@@ -40,7 +40,7 @@ export default async function SignInPage({ searchParams }) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (session) {
+  if (session && !session.user?.is_anonymous) {
     redirect(getDownloadRedirectPath(redirectTo || "/dashboard"));
   }
 

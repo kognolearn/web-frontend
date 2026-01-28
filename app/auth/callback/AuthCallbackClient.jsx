@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
+import { clearJoinIntent, getJoinRedirectPath, hasJoinIntent } from "@/lib/join-intent";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const REFERRAL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -213,9 +213,10 @@ export default function AuthCallbackClient() {
 
     const handlePostConfirmation = async (user) => {
       try {
-        // Attribute referral if there's a stored code
+        const skipReferral = hasJoinIntent();
+        // Attribute referral if there's a stored code and no join intent
         const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
-        if (storedRefRaw) {
+        if (!skipReferral && storedRefRaw) {
           const storedRef = JSON.parse(storedRefRaw);
           // Check if referral code is still valid (within 30 days)
           if (storedRef?.code && Date.now() - storedRef.timestamp < REFERRAL_EXPIRY_MS) {
@@ -230,6 +231,9 @@ export default function AuthCallbackClient() {
             // Clear the stored referral code after attribution
             localStorage.removeItem(REFERRAL_STORAGE_KEY);
           }
+        }
+        if (skipReferral) {
+          localStorage.removeItem(REFERRAL_STORAGE_KEY);
         }
       } catch (err) {
         // Don't block confirmation for post-processing errors

@@ -49,7 +49,7 @@ export default async function Home({ searchParams }) {
   } = await supabase.auth.getSession();
 
   // Unauthenticated users see the onboarding chat
-  if (!session) {
+  if (!session || session.user?.is_anonymous) {
     return <HomeContent />;
   }
 

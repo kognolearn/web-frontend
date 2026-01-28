@@ -6,6 +6,7 @@ import GoogleSignInButton from "./GoogleSignInButton";
 
 const REFERRAL_STORAGE_KEY = "kogno_ref";
 const OTP_FLOW_STORAGE_KEY = "kogno_otp_flow";
+const REFERRAL_BONUS_SEEDS = 50;
 
 /**
  * SignUpForm component
@@ -23,6 +24,7 @@ export default function SignUpForm({ variant = "standalone", redirectTo: redirec
     name: "",
     email: "",
     password: "",
+    referralCode: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -35,19 +37,53 @@ export default function SignUpForm({ variant = "standalone", redirectTo: redirec
           code: refCode,
           timestamp: Date.now(),
         }));
+        setFormData((prev) => (
+          prev.referralCode ? prev : { ...prev, referralCode: refCode }
+        ));
       } catch (err) {
         console.error("Failed to store referral code:", err);
       }
     }
   }, [refCode]);
 
+  useEffect(() => {
+    try {
+      const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
+      if (!storedRefRaw) return;
+      const storedRef = JSON.parse(storedRefRaw);
+      if (storedRef?.code) {
+        setFormData((prev) => (
+          prev.referralCode ? prev : { ...prev, referralCode: storedRef.code }
+        ));
+      }
+    } catch (err) {
+      console.error("Failed to read referral code:", err);
+    }
+  }, []);
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
     });
     // Clear error when user starts typing
     if (error) setError("");
+    if (name === "referralCode") {
+      try {
+        const trimmed = value.trim();
+        if (trimmed) {
+          localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+            code: trimmed,
+            timestamp: Date.now(),
+          }));
+        } else {
+          localStorage.removeItem(REFERRAL_STORAGE_KEY);
+        }
+      } catch (err) {
+        console.error("Failed to store referral code:", err);
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -170,6 +206,25 @@ export default function SignUpForm({ variant = "standalone", redirectTo: redirec
           placeholder="••••••••"
         />
         <p className={`mt-2 text-xs ${isEmbedded ? "text-[var(--foreground)]/60" : "text-[var(--muted-foreground)]/70"}`}>Minimum 6 characters</p>
+      </div>
+
+      <div>
+        <label htmlFor="referralCode" className={`mb-2 block text-sm font-medium ${isEmbedded ? "text-[var(--foreground)]/80" : "text-[var(--muted-foreground)]"}`}>
+          Referral code (optional)
+        </label>
+        <input
+          type="text"
+          id="referralCode"
+          name="referralCode"
+          value={formData.referralCode}
+          onChange={handleChange}
+          disabled={loading}
+          className={`${inputBaseClasses} ${inputVariantClasses}`}
+          placeholder="ABC123"
+        />
+        <p className={`mt-2 text-xs ${isEmbedded ? "text-[var(--foreground)]/60" : "text-[var(--muted-foreground)]/70"}`}>
+          Get {REFERRAL_BONUS_SEEDS} seeds if someone referred you. You'll also earn seeds by referring others.
+        </p>
       </div>
 
       <button

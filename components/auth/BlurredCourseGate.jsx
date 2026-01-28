@@ -8,6 +8,8 @@ import GoogleSignInButton from './GoogleSignInButton';
 import { clearOnboardingGateCourseId } from '@/lib/onboarding';
 
 const OTP_FLOW_STORAGE_KEY = 'kogno_otp_flow';
+const REFERRAL_STORAGE_KEY = 'kogno_ref';
+const REFERRAL_BONUS_SEEDS = 50;
 
 /**
  * BlurredCourseGate - Shows a blurred course preview with sign-up modal
@@ -28,6 +30,7 @@ export default function BlurredCourseGate({
     name: '',
     email: '',
     password: '',
+    referralCode: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,12 +52,43 @@ export default function BlurredCourseGate({
     return () => subscription.unsubscribe();
   }, [onAuthSuccess]);
 
+  useEffect(() => {
+    try {
+      const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
+      if (!storedRefRaw) return;
+      const storedRef = JSON.parse(storedRefRaw);
+      if (storedRef?.code) {
+        setFormData((prev) => (
+          prev.referralCode ? prev : { ...prev, referralCode: storedRef.code }
+        ));
+      }
+    } catch (err) {
+      console.error('Failed to read referral code:', err);
+    }
+  }, []);
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
     });
     if (error) setError('');
+    if (name === 'referralCode') {
+      try {
+        const trimmed = value.trim();
+        if (trimmed) {
+          localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+            code: trimmed,
+            timestamp: Date.now(),
+          }));
+        } else {
+          localStorage.removeItem(REFERRAL_STORAGE_KEY);
+        }
+      } catch (err) {
+        console.error('Failed to store referral code:', err);
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -324,6 +358,30 @@ export default function BlurredCourseGate({
                 </p>
               )}
             </div>
+
+            {authMode === 'signup' && (
+              <div>
+                <label
+                  htmlFor="referralCode"
+                  className="mb-2 block text-sm font-medium text-[var(--muted-foreground)]"
+                >
+                  Referral code (optional)
+                </label>
+                <input
+                  type="text"
+                  id="referralCode"
+                  name="referralCode"
+                  value={formData.referralCode}
+                  onChange={handleChange}
+                  disabled={loading}
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[var(--surface-1)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="ABC123"
+                />
+                <p className="mt-1.5 text-xs text-[var(--muted-foreground)]/70">
+                  Get {REFERRAL_BONUS_SEEDS} seeds if someone referred you. You'll also earn seeds by referring others.
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"

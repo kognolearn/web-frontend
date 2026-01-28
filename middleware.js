@@ -57,6 +57,7 @@ const AUTH_PAGE_PATHS = [
 ]
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|json|mp3|wav|ogg|mp4|webm|woff2?|ttf|otf|eot)$/i
 
 function isAuthPagePath(pathname) {
   return AUTH_PAGE_PATHS.some((authPath) =>
@@ -84,11 +85,15 @@ function isCourseRootPath(pathname) {
   return UUID_REGEX.test(parts[1])
 }
 
+function isStaticAsset(pathname) {
+  return STATIC_ASSET_REGEX.test(pathname)
+}
+
 function isAnonAllowedPath(pathname) {
   if (pathname === '/') return true
   if (isCourseRootPath(pathname)) return true
-  if (pathname.startsWith('/auth/confirm-email')) return true
-  if (pathname.startsWith('/auth/callback')) return true
+  if (pathname.startsWith('/auth')) return true
+  if (pathname === '/sign-up' || pathname.startsWith('/sign-up/')) return true
   if (pathname.startsWith('/api')) return true
   return false
 }
@@ -100,6 +105,11 @@ export async function middleware(request) {
       headers: request.headers,
     },
   })
+  const pathname = request.nextUrl.pathname
+
+  if (isStaticAsset(pathname)) {
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -131,7 +141,6 @@ export async function middleware(request) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const pathname = request.nextUrl.pathname
   const gateCourseId = request.cookies.get('kogno_onboarding_gate_course_id')?.value
   const isGateCoursePath =
     gateCourseId && pathname.startsWith(`/courses/${gateCourseId}`)

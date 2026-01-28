@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
-import { clearJoinIntent, getJoinRedirectPath } from "@/lib/join-intent";
+import { clearJoinIntent, getJoinRedirectPath, hasJoinIntent } from "@/lib/join-intent";
 import { transferAnonData } from "@/lib/onboarding";
 
 // Auth constants
@@ -173,8 +173,9 @@ function ConfirmEmailContent() {
 
     if (data?.user) {
       try {
+        const skipReferral = hasJoinIntent();
         const storedRefRaw = localStorage.getItem(REFERRAL_STORAGE_KEY);
-        if (storedRefRaw) {
+        if (!skipReferral && storedRefRaw) {
           const storedRef = JSON.parse(storedRefRaw);
           if (storedRef?.code && Date.now() - storedRef.timestamp < REFERRAL_EXPIRY_MS) {
             await fetch("/api/referrals/attribute", {
@@ -187,6 +188,9 @@ function ConfirmEmailContent() {
             });
             localStorage.removeItem(REFERRAL_STORAGE_KEY);
           }
+        }
+        if (skipReferral) {
+          localStorage.removeItem(REFERRAL_STORAGE_KEY);
         }
       } catch (err) {
         console.error("Post-confirmation error:", err);
