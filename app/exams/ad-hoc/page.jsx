@@ -269,7 +269,7 @@ export default function AdHocExamGradingPage() {
 
       const { result } = await resolveAsyncJobResponse(res, {
         signal: abortController.signal,
-        errorLabel: "grade exam",
+        errorLabel: "smart grader",
       });
 
       if (!result) {

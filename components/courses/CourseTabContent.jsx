@@ -1403,7 +1403,7 @@ export default function CourseTabContent({
 
       const gradeData = await resolveAsyncResult(gradeRes, {
         signal: abortController.signal,
-        errorLabel: "grade exam"
+        errorLabel: "smart grader"
       });
       
       // Update the exam in the list with grade data

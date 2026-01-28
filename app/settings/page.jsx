@@ -884,7 +884,9 @@ export default function SettingsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-[var(--muted-foreground)]">Referral code</p>
-                      <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{referralData.code}</p>
+                      <p className="mt-1 inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 font-mono text-sm text-[var(--foreground)]">
+                        {referralData.code}
+                      </p>
                     </div>
                     <button
                       type="button"

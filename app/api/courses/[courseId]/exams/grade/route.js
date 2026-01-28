@@ -146,7 +146,7 @@ export async function POST(request, { params }) {
       clearTimeout(to);
     }
   } catch (err) {
-    console.error("Grade exam error:", err);
+    console.error("Smart grader error:", err);
     return NextResponse.json(
       { error: "Internal server error", details: String(err) },
       { status: 500 }
