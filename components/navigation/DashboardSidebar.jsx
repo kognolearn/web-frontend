@@ -36,7 +36,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-<<<<<<< HEAD
     href: "/tokens",
     label: "Tokens",
     icon: (
@@ -47,8 +46,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-=======
->>>>>>> origin/main
     href: "/exams/ad-hoc",
     label: "Grade Exam",
     icon: (
@@ -368,13 +365,8 @@ export default function DashboardSidebar({ activePath }) {
               className={`
                 relative flex items-center h-10 px-3 rounded-xl transition-colors duration-200
                 ${activePath === "/admin" || pathname === "/admin"
-<<<<<<< HEAD
                   ? "text-[var(--primary)]"
                   : "text-[var(--muted-foreground)] hover:text-[var(--primary)]"
-=======
-                  ? "text-amber-500"
-                  : "text-amber-500/70 hover:text-amber-500"
->>>>>>> origin/main
                 }
               `}
               title={isCollapsed ? "Admin" : undefined}
@@ -407,17 +399,10 @@ export default function DashboardSidebar({ activePath }) {
               className={`
                 relative flex items-center h-10 w-full px-3 rounded-xl
                 text-white transition-all duration-200
-<<<<<<< HEAD
                 bg-purple-600
                 hover:bg-purple-500
                 disabled:opacity-70
                 shadow-[0_8px_20px_-12px_rgba(147,51,234,0.8)]
-=======
-                bg-gradient-to-r from-violet-600 to-indigo-600
-                hover:from-violet-500 hover:to-indigo-500
-                disabled:opacity-70
-                shadow-[0_8px_20px_-12px_rgba(79,70,229,0.8)]
->>>>>>> origin/main
               `}
               title={isCollapsed ? "Upgrade to Premium" : undefined}
             >

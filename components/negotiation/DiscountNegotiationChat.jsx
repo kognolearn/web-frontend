@@ -101,16 +101,10 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
         body: JSON.stringify({ message: userMessage }),
       });
 
-<<<<<<< HEAD
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Failed to send message");
       }
-=======
-      if (!res.ok) throw new Error("Failed to send message");
-
-      const data = await res.json();
->>>>>>> origin/main
 
       // Add assistant response
       setMessages((prev) => [
@@ -154,26 +148,18 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
   const handleFileUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-<<<<<<< HEAD
     if (loading || uploadingFiles) return;
 
     setLoading(true);
-=======
-
->>>>>>> origin/main
     setUploadingFiles(true);
 
     try {
       const formData = new FormData();
-<<<<<<< HEAD
       const fileNames = [];
-=======
->>>>>>> origin/main
       const fileDescriptions = [];
 
       for (const file of files) {
         formData.append("files", file);
-<<<<<<< HEAD
         fileNames.push(file.name);
         fileDescriptions.push(`${file.name} (${file.type || "application/octet-stream"})`);
       }
@@ -181,17 +167,11 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
       // Provide descriptions explicitly; backend will parse JSON strings.
       formData.append("attachmentDescriptions", JSON.stringify(fileDescriptions));
 
-=======
-        fileDescriptions.push(file.name);
-      }
-
->>>>>>> origin/main
       const res = await authFetch("/api/discount-negotiation/upload-proof", {
         method: "POST",
         body: formData,
       });
 
-<<<<<<< HEAD
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Failed to upload files");
@@ -234,25 +214,6 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
           discountedPrice: (14.99 * (1 - data.discountOffered / 100)).toFixed(2),
         });
       }
-=======
-      if (!res.ok) throw new Error("Failed to upload files");
-
-      const data = await res.json();
-
-      // Add system message about upload
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "system",
-          content: `Uploaded ${data.uploadedCount} file(s): ${data.fileDescriptions.join(", ")}`,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-
-      // Now send a message to let the bot know about the upload
-      const uploadMessage = `I've uploaded proof: ${fileDescriptions.join(", ")}`;
-      setInputValue(uploadMessage);
->>>>>>> origin/main
 
       // Clear file input
       if (fileInputRef.current) {
@@ -264,21 +225,14 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
         ...prev,
         {
           role: "system",
-<<<<<<< HEAD
           content: `Failed to upload files: ${err.message}. Please try again.`,
-=======
-          content: "Failed to upload files. Please try again.",
->>>>>>> origin/main
           timestamp: new Date().toISOString(),
           isError: true,
         },
       ]);
     } finally {
       setUploadingFiles(false);
-<<<<<<< HEAD
       setLoading(false);
-=======
->>>>>>> origin/main
     }
   };
 
@@ -483,11 +437,7 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
             disabled={!inputValue.trim() || loading}
             className="p-2.5 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-<<<<<<< HEAD
             <svg className="w-5 h-5 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-=======
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
->>>>>>> origin/main
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>

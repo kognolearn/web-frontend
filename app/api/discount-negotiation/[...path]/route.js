@@ -41,7 +41,6 @@ async function proxyRequest(request, method) {
         const outgoingFormData = new FormData();
 
         for (const [key, value] of incomingFormData.entries()) {
-<<<<<<< HEAD
           const isFileLike =
             value &&
             typeof value === "object" &&
@@ -66,15 +65,6 @@ async function proxyRequest(request, method) {
               : "upload";
           const blob = new Blob([buffer], { type: mimeType });
           outgoingFormData.append(key, blob, filename);
-=======
-          if (value instanceof File) {
-            const buffer = await value.arrayBuffer();
-            const blob = new Blob([buffer], { type: value.type });
-            outgoingFormData.append(key, blob, value.name);
-          } else {
-            outgoingFormData.append(key, value);
-          }
->>>>>>> origin/main
         }
 
         fetchOptions.body = outgoingFormData;
@@ -137,7 +127,3 @@ export async function PATCH(request) {
 export async function DELETE(request) {
   return proxyRequest(request, "DELETE");
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main

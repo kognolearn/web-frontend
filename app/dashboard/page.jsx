@@ -488,15 +488,11 @@ function DashboardClient() {
         if (res.ok) {
           const data = await res.json();
           if (!cancelled) {
-<<<<<<< HEAD
             const available =
               data?.balance?.available ??
               data?.tokensAvailable ??
               0;
             setTokenBalance(available);
-=======
-            setTokenBalance(data.tokensAvailable || 0);
->>>>>>> origin/main
           }
         }
       } catch (err) {
