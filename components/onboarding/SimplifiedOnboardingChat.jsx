@@ -1748,16 +1748,9 @@ export default function SimplifiedOnboardingChat({ variant = 'page' }) {
         <div className="max-w-2xl mx-auto">
           {stage === STAGES.TOPICS_GENERATING && (
             <div className="mb-4 rounded-2xl border border-white/10 bg-[var(--surface-2)] px-4 py-3">
-              <div className="flex items-center justify-between text-xs font-medium text-[var(--foreground)]">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
                 <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--primary)]" />
                 <span>Building your topics...</span>
-                <span className="text-[var(--muted-foreground)]">{normalizedTopicsProgress}%</span>
-              </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                <div
-                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
-                  style={{ width: `${normalizedTopicsProgress}%` }}
-                />
               </div>
               {topicsProgressMessage && (
                 <p className="mt-2 text-xs text-[var(--muted-foreground)]">{topicsProgressMessage}</p>
