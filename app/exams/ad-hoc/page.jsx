@@ -67,6 +67,12 @@ export default function AdHocExamGradingPage() {
         return;
       }
 
+      // Anonymous users should not access exam grading - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
+
       if (cancelled) return;
       try {
         const [coursesRes, subscriptionRes] = await Promise.all([

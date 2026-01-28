@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Lock } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/api";
 import PremiumUpgradeModal from "@/components/ui/PremiumUpgradeModal";
 import DashboardSidebar from "@/components/navigation/DashboardSidebar";
@@ -816,6 +818,7 @@ function SuccessModal({ isOpen, onClose, title, message }) {
 }
 
 export default function StorePage() {
+  const router = useRouter();
   const [seeds, setSeeds] = useState(0);
   const [isPremiumUser, setIsPremiumUser] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -830,7 +833,14 @@ export default function StorePage() {
   useEffect(() => {
     let cancelled = false;
 
-    const fetchData = async () => {
+    const checkAuthAndFetch = async () => {
+      // Check if user is anonymous
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || user.is_anonymous) {
+        router.push("/");
+        return;
+      }
+
       try {
         const [seedsRes, subRes] = await Promise.all([
           authFetch("/api/seeds"),
@@ -859,12 +869,12 @@ export default function StorePage() {
       }
     };
 
-    fetchData();
+    checkAuthAndFetch();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   const executeRedemption = async (itemId, additionalData = {}) => {
     setRedeeming(itemId);

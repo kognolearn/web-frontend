@@ -74,6 +74,11 @@ export default function SettingsPage() {
         router.push("/auth/sign-in?redirect=/settings");
         return;
       }
+      // Anonymous users should not access settings - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
       setUser(user);
       setFullName(user.user_metadata?.full_name || "");
       setSchool(user.user_metadata?.school || "");

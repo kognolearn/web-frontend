@@ -500,6 +500,12 @@ export default function AchievementsPage() {
         return;
       }
 
+      // Anonymous users should not access achievements - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
+
       setUser(user);
 
       try {

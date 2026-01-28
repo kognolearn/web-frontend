@@ -734,6 +734,11 @@ function CreateCoursePageContent() {
           router.replace("/auth/sign-in?redirectTo=/courses/create");
           return;
         }
+        // Anonymous users should not access course creation - redirect to home
+        if (user.is_anonymous) {
+          router.replace("/");
+          return;
+        }
         setUserId(user.id);
         setAuthStatus("ready");
         

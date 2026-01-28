@@ -31,6 +31,13 @@ const resolveSubtopicCount = (topic) => {
   return subtopics.length;
 };
 
+const resolveSubtopics = (topic) => {
+  if (Array.isArray(topic?.subtopics)) return topic.subtopics;
+  if (Array.isArray(topic?.lessons)) return topic.lessons;
+  if (Array.isArray(topic?.topics)) return topic.topics;
+  return [];
+};
+
 export default function ChatTopicCard({
   topic,
   rating,
@@ -61,6 +68,18 @@ export default function ChatTopicCard({
     Number.isFinite(rating) ? rating : topic?.familiarity
   );
   const subtopicCount = resolveSubtopicCount(topic);
+  const subtopics = resolveSubtopics(topic)
+    .map((entry) => ({
+      id: entry?.id || entry?.slug_id || entry?.title || entry?.name,
+      title:
+        (typeof entry?.title === 'string' && entry.title.trim())
+          ? entry.title.trim()
+          : (typeof entry?.name === 'string' && entry.name.trim())
+          ? entry.name.trim()
+          : 'Untitled lesson',
+    }))
+    .filter((entry) => entry.title);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const commitTitle = () => {
     const trimmed = draftTitle.trim();
@@ -155,6 +174,33 @@ export default function ChatTopicCard({
           );
         })}
       </div>
+
+      {subtopicCount > 0 && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          >
+            <span
+              className={`inline-block transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              aria-hidden="true"
+            >
+              ▶
+            </span>
+            <span>{isExpanded ? 'Hide lessons' : `View lessons (${subtopicCount})`}</span>
+          </button>
+          {isExpanded && (
+            <ul className="mt-2 space-y-1 rounded-lg border border-white/10 bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
+              {subtopics.map((entry, idx) => (
+                <li key={entry.id || `${title}-${idx}`} className="leading-relaxed">
+                  {entry.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

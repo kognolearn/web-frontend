@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import TokenPurchaseModal from "@/components/tokens/TokenPurchaseModal";
 import { authFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase/client";
 import DashboardSidebar from "@/components/navigation/DashboardSidebar";
 
 export default function TokensPage() {
@@ -18,8 +19,17 @@ export default function TokensPage() {
   const purchaseStatus = searchParams.get("purchase");
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    async function checkAuthAndFetch() {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Anonymous users should not access tokens page - redirect to home
+      if (!user || user.is_anonymous) {
+        router.push("/");
+        return;
+      }
+      fetchData();
+    }
+    checkAuthAndFetch();
+  }, [router]);
 
   // After a successful Stripe redirect, poll briefly so tokens appear once the webhook processes.
   useEffect(() => {

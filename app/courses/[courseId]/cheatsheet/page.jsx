@@ -78,6 +78,10 @@ export default function CheatsheetPage() {
         router.push("/auth/sign-in");
         return;
       }
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
       setUserId(user.id);
       setLoading(false);
     };
