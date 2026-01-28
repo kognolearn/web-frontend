@@ -41,13 +41,30 @@ async function proxyRequest(request, method) {
         const outgoingFormData = new FormData();
 
         for (const [key, value] of incomingFormData.entries()) {
-          if (value instanceof File) {
-            const buffer = await value.arrayBuffer();
-            const blob = new Blob([buffer], { type: value.type });
-            outgoingFormData.append(key, blob, value.name);
-          } else {
+          const isFileLike =
+            value &&
+            typeof value === "object" &&
+            typeof value.arrayBuffer === "function" &&
+            (value instanceof File ||
+              value instanceof Blob ||
+              typeof value.name === "string");
+
+          if (!isFileLike) {
             outgoingFormData.append(key, value);
+            continue;
           }
+
+          const buffer = await value.arrayBuffer();
+          const mimeType =
+            typeof value.type === "string" && value.type
+              ? value.type
+              : "application/octet-stream";
+          const filename =
+            typeof value.name === "string" && value.name
+              ? value.name
+              : "upload";
+          const blob = new Blob([buffer], { type: mimeType });
+          outgoingFormData.append(key, blob, filename);
         }
 
         fetchOptions.body = outgoingFormData;
@@ -110,4 +127,3 @@ export async function PATCH(request) {
 export async function DELETE(request) {
   return proxyRequest(request, "DELETE");
 }
-

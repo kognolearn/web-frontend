@@ -101,9 +101,10 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
         body: JSON.stringify({ message: userMessage }),
       });
 
-      if (!res.ok) throw new Error("Failed to send message");
-
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send message");
+      }
 
       // Add assistant response
       setMessages((prev) => [
@@ -147,40 +148,72 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
   const handleFileUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    if (loading || uploadingFiles) return;
 
+    setLoading(true);
     setUploadingFiles(true);
 
     try {
       const formData = new FormData();
+      const fileNames = [];
       const fileDescriptions = [];
 
       for (const file of files) {
         formData.append("files", file);
-        fileDescriptions.push(file.name);
+        fileNames.push(file.name);
+        fileDescriptions.push(`${file.name} (${file.type || "application/octet-stream"})`);
       }
+
+      // Provide descriptions explicitly; backend will parse JSON strings.
+      formData.append("attachmentDescriptions", JSON.stringify(fileDescriptions));
 
       const res = await authFetch("/api/discount-negotiation/upload-proof", {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Failed to upload files");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload files");
+      }
 
-      const data = await res.json();
+      const uploadLabel = fileNames.join(", ");
 
-      // Add system message about upload
+      // Add a user message indicating files were uploaded
       setMessages((prev) => [
         ...prev,
         {
-          role: "system",
-          content: `Uploaded ${data.uploadedCount} file(s): ${data.fileDescriptions.join(", ")}`,
+          role: "user",
+          content: `Uploaded proof: ${uploadLabel}`,
           timestamp: new Date().toISOString(),
+          hasAttachments: true,
         },
       ]);
 
-      // Now send a message to let the bot know about the upload
-      const uploadMessage = `I've uploaded proof: ${fileDescriptions.join(", ")}`;
-      setInputValue(uploadMessage);
+      // Add assistant response returned from the backend (model output)
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            data.message ||
+            "Thanks — I received the files. Tell me anything else that might help.",
+          timestamp: new Date().toISOString(),
+          requestProof: data.requestProof,
+          proofHint: data.proofHint,
+          discountOffered: data.discountOffered,
+          referToEmail: data.referToEmail,
+        },
+      ]);
+
+      // Update discount info if offered
+      if (data.discountOffered) {
+        setDiscountInfo({
+          percentage: data.discountOffered,
+          originalPrice: 14.99,
+          discountedPrice: (14.99 * (1 - data.discountOffered / 100)).toFixed(2),
+        });
+      }
 
       // Clear file input
       if (fileInputRef.current) {
@@ -192,13 +225,14 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
         ...prev,
         {
           role: "system",
-          content: "Failed to upload files. Please try again.",
+          content: `Failed to upload files: ${err.message}. Please try again.`,
           timestamp: new Date().toISOString(),
           isError: true,
         },
       ]);
     } finally {
       setUploadingFiles(false);
+      setLoading(false);
     }
   };
 
@@ -403,7 +437,7 @@ export default function DiscountNegotiationChat({ onDiscountAccepted }) {
             disabled={!inputValue.trim() || loading}
             className="p-2.5 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>

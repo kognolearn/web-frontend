@@ -20,6 +20,7 @@ export default function JoinCourseClient() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(null);
   const [redirecting, setRedirecting] = useState(false);
+  const isAuthenticatedUser = user && !user.is_anonymous;
 
   useEffect(() => {
     // Check auth state
@@ -37,20 +38,20 @@ export default function JoinCourseClient() {
 
   useEffect(() => {
     if (!shareToken || authLoading) return;
-    if (!user) {
+    if (!isAuthenticatedUser) {
       storeJoinIntent(shareToken);
       setRedirecting(true);
-      router.replace(`/?redirectTo=${encodeURIComponent(`/join/${shareToken}`)}&joinCourse=1`);
+      router.replace(`/auth/create-account?redirectTo=${encodeURIComponent(`/join/${shareToken}`)}&joinCourse=1`);
       return;
     }
     clearJoinIntent();
     setRedirecting(false);
-  }, [authLoading, router, shareToken, user]);
+  }, [authLoading, isAuthenticatedUser, router, shareToken]);
 
   useEffect(() => {
-    if (!shareToken || authLoading || !user) return;
+    if (!shareToken || authLoading || !isAuthenticatedUser) return;
     fetchShareInfo();
-  }, [authLoading, shareToken, user]);
+  }, [authLoading, isAuthenticatedUser, shareToken]);
 
   const fetchShareInfo = async () => {
     setLoading(true);
@@ -77,9 +78,10 @@ export default function JoinCourseClient() {
   };
 
   const handleJoin = async () => {
-    if (!user) {
+    if (!isAuthenticatedUser) {
       storeJoinIntent(shareToken);
-      router.replace(`/?redirectTo=${encodeURIComponent(`/join/${shareToken}`)}&joinCourse=1`);
+      setRedirecting(true);
+      router.replace(`/auth/create-account?redirectTo=${encodeURIComponent(`/join/${shareToken}`)}&joinCourse=1`);
       return;
     }
 
@@ -198,7 +200,7 @@ export default function JoinCourseClient() {
         )}
 
         <div className="space-y-3">
-          {user ? (
+          {isAuthenticatedUser ? (
             <button
               onClick={handleJoin}
               disabled={joining}
@@ -229,7 +231,7 @@ export default function JoinCourseClient() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
               </svg>
-              Sign In to Join
+              Create Account to Join
             </button>
           )}
 

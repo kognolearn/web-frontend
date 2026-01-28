@@ -1,23 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 export default function AdminGuard({ children }) {
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const router = useRouter();
+    const pathname = usePathname();
+
+    // Skip guard for sign-in page
+    const isSignInPage = pathname === "/admin/sign-in";
 
     useEffect(() => {
+        // Don't check auth on sign-in page
+        if (isSignInPage) {
+            setLoading(false);
+            setIsAdmin(true); // Allow rendering
+            return;
+        }
+
         const checkAdmin = async () => {
             try {
                 const {
                     data: { session },
                 } = await supabase.auth.getSession();
 
+                // Not signed in - redirect to admin sign-in
                 if (!session) {
                     router.push("/admin/sign-in");
+                    return;
+                }
+
+                // Anonymous users - redirect to home
+                if (session.user.is_anonymous) {
+                    router.push("/");
                     return;
                 }
 
@@ -28,8 +46,9 @@ export default function AdminGuard({ children }) {
                     .single();
 
                 if (error || !adminData) {
+                    // Signed in but not an admin - redirect to dashboard
                     console.warn("Access denied: User is not an admin.");
-                    router.push("/admin/sign-in?error=not_admin");
+                    router.push("/dashboard");
                     return;
                 }
 
@@ -43,7 +62,7 @@ export default function AdminGuard({ children }) {
         };
 
         checkAdmin();
-    }, [router]);
+    }, [router, isSignInPage]);
 
     if (loading) {
         return (

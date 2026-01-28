@@ -399,6 +399,12 @@ function DashboardClient() {
         return;
       }
 
+      // Anonymous users should not access the dashboard - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
+
       setUser(user);
       const courseList = await loadCourses(user.id);
 
@@ -488,7 +494,11 @@ function DashboardClient() {
         if (res.ok) {
           const data = await res.json();
           if (!cancelled) {
-            setTokenBalance(data.tokensAvailable || 0);
+            const available =
+              data?.balance?.available ??
+              data?.tokensAvailable ??
+              0;
+            setTokenBalance(available);
           }
         }
       } catch (err) {

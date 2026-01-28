@@ -31,6 +31,11 @@ export default function SubscriptionPage() {
         router.push("/auth/sign-in?redirect=/subscription");
         return;
       }
+      // Anonymous users should not access subscription page - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
+        return;
+      }
       fetchSubscriptionStatus();
     }
     checkAuth();

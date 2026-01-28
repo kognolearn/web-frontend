@@ -38,6 +38,7 @@ export default function SettingsPage() {
   // Subscription state
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
 
   // Delete account state
@@ -71,6 +72,11 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/auth/sign-in?redirect=/settings");
+        return;
+      }
+      // Anonymous users should not access settings - redirect to home
+      if (user.is_anonymous) {
+        router.push("/");
         return;
       }
       setUser(user);
@@ -250,6 +256,39 @@ export default function SettingsPage() {
     }
   };
 
+  const handleUpgrade = async () => {
+    setCheckoutLoading(true);
+    setSubscriptionError(null);
+
+    try {
+      const origin = window.location.origin;
+      const successUrl = `${origin}/checkout/success?source=settings`;
+      const cancelUrl = `${origin}/settings?checkout=cancelled`;
+
+      const res = await authFetch("/api/stripe?endpoint=create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productType: "monthly",
+          flow: "hosted",
+          successUrl,
+          cancelUrl,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || data?.details || "Failed to open checkout");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      setSubscriptionError(err.message || "Failed to open checkout");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const getPasswordStrength = () => {
     if (!newPassword) return { strength: 0, label: "", color: "" };
 
@@ -262,7 +301,7 @@ export default function SettingsPage() {
     if (/[^A-Za-z0-9]/.test(newPassword)) strength++;
 
     if (strength <= 2) return { strength: 1, label: "Weak", color: "bg-red-500" };
-    if (strength <= 4) return { strength: 2, label: "Medium", color: "bg-yellow-500" };
+    if (strength <= 4) return { strength: 2, label: "Medium", color: "bg-[var(--muted-foreground)]" };
     return { strength: 3, label: "Strong", color: "bg-green-500" };
   };
 
@@ -626,7 +665,7 @@ export default function SettingsPage() {
                         </div>
                         <p className={`text-xs ${
                           passwordStrength.strength === 1 ? 'text-red-500' :
-                          passwordStrength.strength === 2 ? 'text-yellow-500' : 'text-green-500'
+                          passwordStrength.strength === 2 ? 'text-[var(--muted-foreground)]' : 'text-green-500'
                         }`}>
                           {passwordStrength.label}
                         </p>
@@ -755,8 +794,8 @@ export default function SettingsPage() {
         <section className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] overflow-hidden">
           <div className="px-6 py-5 border-b border-[var(--border)]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
-                <svg className="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
                 </svg>
               </div>
@@ -777,7 +816,7 @@ export default function SettingsPage() {
                 </div>
                 {cosmetics.find(c => c.cosmetic_type === "profile_flair") ? (
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--primary)] text-white text-sm font-semibold">
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                       </svg>
@@ -1008,8 +1047,8 @@ export default function SettingsPage() {
                 </div>
 
                 {subscription?.cancelAtPeriodEnd && (
-                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  <div className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/30 rounded-xl">
+                    <p className="text-sm text-[var(--primary)]">
                       Your subscription will end on {formatDate(subscription?.currentPeriodEnd)}.
                       You can reactivate it from the billing portal below.
                     </p>
@@ -1066,25 +1105,24 @@ export default function SettingsPage() {
                 </div>
 
                 <button
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
                   className="w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {portalLoading ? (
+                  {checkoutLoading ? (
                     <>
                       <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Loading...
+                      Opening Checkout...
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2h14v2H5v-2z" />
                       </svg>
-                      Open Billing Portal
+                      Upgrade to Premium
                     </>
                   )}
                 </button>
@@ -1106,25 +1144,24 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
+                  onClick={handleUpgrade}
+                  disabled={checkoutLoading}
                   className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[var(--primary)] text-white rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                 >
-                  {portalLoading ? (
+                  {checkoutLoading ? (
                     <>
                       <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Loading...
+                      Opening Checkout...
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2h14v2H5v-2z" />
                       </svg>
-                      Open Billing Portal
+                      Upgrade to Premium
                     </>
                   )}
                 </button>

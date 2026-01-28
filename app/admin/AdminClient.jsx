@@ -23,6 +23,7 @@ import {
 import FeedbackTable from "@/components/admin/FeedbackTable";
 import AdminModerationPanel from "@/components/admin/AdminModerationPanel";
 import ReleasesPanel from "@/components/admin/ReleasesPanel";
+import JobsPanel from "@/components/admin/JobsPanel";
 import {
     DEFAULT_ADMIN_SECTION,
     isValidAdminSection,
@@ -2342,6 +2343,10 @@ export default function AdminClient() {
 
             {activeSection === "moderation" && (
                 <AdminModerationPanel />
+            )}
+
+            {activeSection === "jobs" && (
+                <JobsPanel />
             )}
 
             {activeSection === "releases" && (

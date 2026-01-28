@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { supabase } from "@/lib/supabase/client";
-import AccountCreationGate from "@/components/auth/AccountCreationGate";
+import BlurredCourseGate from "@/components/auth/BlurredCourseGate";
 import CourseTabContent from "@/components/courses/CourseTabContent";
 import ChatTabContent from "@/components/courses/ChatTabContent";
 import DiscussionTabContent from "@/components/community/DiscussionTabContent";
@@ -143,7 +143,6 @@ export default function CoursePage() {
   const sharedChatStateRef = useRef(sharedChatState);
   const initialChatIdRef = useRef(sharedChatState?.currentChatId || sharedChatState?.chats?.[0]?.id || null);
   const dragPreviewRef = useRef(null);
-  const gateTimerRef = useRef(null);
   const transferAttemptedRef = useRef(false);
   // Focus timer state - lifted from CourseTabContent
   const focusTimerRef = useRef(null);
@@ -273,22 +272,14 @@ export default function CoursePage() {
     };
   }, [courseId]);
 
+  // Show blurred course gate immediately when anonymous user accesses course from onboarding
   useEffect(() => {
     if (!courseId) return;
     if (!isAnonymousUser) return;
     const gateCourseId = getOnboardingGateCourseId();
     if (!gateCourseId || gateCourseId !== courseId) return;
-    if (gateTimerRef.current) return;
-    gateTimerRef.current = setTimeout(() => {
-      gateTimerRef.current = null;
-      setShowAccountGate(true);
-    }, 1000);
-    return () => {
-      if (gateTimerRef.current) {
-        clearTimeout(gateTimerRef.current);
-        gateTimerRef.current = null;
-      }
-    };
+    // Show gate immediately for the blurred experience
+    setShowAccountGate(true);
   }, [courseId, isAnonymousUser]);
 
   useEffect(() => {
@@ -1610,7 +1601,15 @@ export default function CoursePage() {
       {/* Custom Drag Layer (Portal) - Only for Chat Tabs */}
       {/* Removed since Reorder handles the visual */}
 
-      {showAccountGate && <AccountCreationGate courseId={courseId} />}
+      {/* Blurred Course Gate - shown when anonymous user accesses course from onboarding */}
+      {showAccountGate && (
+        <BlurredCourseGate
+          courseId={courseId}
+          courseName={courseName}
+          studyPlan={studyPlan}
+          onAuthSuccess={() => setShowAccountGate(false)}
+        />
+      )}
     </div>
   );
 }
