@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -41,6 +41,17 @@ export default function SettingsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
 
+  // Referral state
+  const [referralData, setReferralData] = useState(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState(null);
+  const [showReferralPopover, setShowReferralPopover] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const referralPopoverTimeoutRef = useRef(null);
+  const referralCopiedTimeoutRef = useRef(null);
+  const codeCopiedTimeoutRef = useRef(null);
+
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -66,6 +77,14 @@ export default function SettingsPage() {
       router.replace('/download');
     }
   }, [forceDownloadRedirect, router]);
+
+  useEffect(() => {
+    return () => {
+      if (referralPopoverTimeoutRef.current) clearTimeout(referralPopoverTimeoutRef.current);
+      if (referralCopiedTimeoutRef.current) clearTimeout(referralCopiedTimeoutRef.current);
+      if (codeCopiedTimeoutRef.current) clearTimeout(codeCopiedTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     async function loadUser() {
@@ -228,6 +247,100 @@ export default function SettingsPage() {
       setPasswordError(e.message || "Failed to update password");
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const copyToClipboard = async (text) => {
+    if (!text) return false;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      // Fall through to manual copy.
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.top = "-1000px";
+      textarea.style.left = "-1000px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const success = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return success;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  const fetchReferralData = async () => {
+    if (referralData?.code && referralData?.fullUrl) return referralData;
+    const res = await authFetch("/api/referrals/code");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || "Failed to generate referral link");
+    }
+    const code = data?.code;
+    if (!code) {
+      throw new Error("Failed to generate referral code");
+    }
+    const fullUrl = data?.fullUrl || `${window.location.origin}/join?ref=${code}`;
+    const next = { code, fullUrl };
+    setReferralData(next);
+    return next;
+  };
+
+  const showReferralPopup = () => {
+    setShowReferralPopover(true);
+    if (referralPopoverTimeoutRef.current) clearTimeout(referralPopoverTimeoutRef.current);
+    referralPopoverTimeoutRef.current = setTimeout(() => {
+      setShowReferralPopover(false);
+    }, 8000);
+  };
+
+  const handleCopyReferralLink = async () => {
+    setReferralError(null);
+    setReferralLoading(true);
+    try {
+      const data = await fetchReferralData();
+      showReferralPopup();
+      const success = await copyToClipboard(data.fullUrl);
+      if (!success) {
+        throw new Error("Unable to copy referral link");
+      }
+      setReferralCopied(true);
+      if (referralCopiedTimeoutRef.current) clearTimeout(referralCopiedTimeoutRef.current);
+      referralCopiedTimeoutRef.current = setTimeout(() => {
+        setReferralCopied(false);
+      }, 2000);
+      showReferralPopup();
+    } catch (err) {
+      setReferralError(err.message || "Failed to generate referral link");
+    } finally {
+      setReferralLoading(false);
+    }
+  };
+
+  const handleCopyReferralCode = async () => {
+    if (!referralData?.code) return;
+    setReferralError(null);
+    try {
+      const success = await copyToClipboard(referralData.code);
+      if (!success) {
+        throw new Error("Unable to copy referral code");
+      }
+      setCodeCopied(true);
+      if (codeCopiedTimeoutRef.current) clearTimeout(codeCopiedTimeoutRef.current);
+      codeCopiedTimeoutRef.current = setTimeout(() => {
+        setCodeCopied(false);
+      }, 2000);
+    } catch (err) {
+      setReferralError(err.message || "Failed to copy referral code");
     }
   };
 
@@ -734,6 +847,74 @@ export default function SettingsPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </section>
+
+        {/* Referrals Section */}
+        <section className="bg-[var(--surface-1)] rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="px-6 py-5 border-b border-[var(--border)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 10-6 0v1H8a4 4 0 00-4 4v1a4 4 0 004 4h1v1a3 3 0 006 0v-1h1a4 4 0 004-4v-1a4 4 0 00-4-4h-1V8z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Referrals</h2>
+                <p className="text-sm text-[var(--muted-foreground)]">Invite friends and earn rewards</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Share your referral link. We'll copy the link and show your code to send as well.
+            </p>
+
+            {referralError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                {referralError}
+              </div>
+            )}
+
+            <div className="relative inline-flex">
+              {showReferralPopover && referralData?.code && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-20 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] shadow-xl p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-[var(--muted-foreground)]">Referral code</p>
+                      <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{referralData.code}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowReferralPopover(false)}
+                      className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      aria-label="Close"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyReferralCode}
+                    className="mt-3 w-full px-3 py-2 rounded-lg text-sm font-medium border border-[var(--border)] hover:bg-[var(--surface-muted)] transition-colors"
+                  >
+                    {codeCopied ? "Code copied" : "Copy code"}
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCopyReferralLink}
+                disabled={referralLoading}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium bg-[var(--primary)] text-white hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {referralLoading ? "Generating..." : referralCopied ? "Link copied" : "Copy referral link"}
+              </button>
             </div>
           </div>
         </section>
