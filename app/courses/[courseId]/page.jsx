@@ -115,6 +115,7 @@ export default function CoursePage() {
   const [showAccountGate, setShowAccountGate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [transferPending, setTransferPending] = useState(false);
   const [courseName, setCourseName] = useState("");
   const [studyPlan, setStudyPlan] = useState(null);
   const [courseMode, setCourseMode] = useState(null);
@@ -292,13 +293,27 @@ export default function CoursePage() {
         setIsAnonymousUser(anon);
         if (!anon) {
           setShowAccountGate(false);
+          const gateCourseId = getOnboardingGateCourseId();
           clearOnboardingGateCourseId();
           if (!transferAttemptedRef.current) {
             transferAttemptedRef.current = true;
+            if (gateCourseId && gateCourseId === courseId) {
+              setTransferPending(true);
+              setLoading(true);
+            }
             try {
               await transferAnonData(null, courseId);
+              setTransferPending(false);
+              if (gateCourseId && gateCourseId === courseId) {
+                await refetchStudyPlan();
+                setLoading(false);
+              }
             } catch (transferError) {
               console.error("Failed to transfer anonymous data:", transferError);
+              setTransferPending(false);
+              if (gateCourseId && gateCourseId === courseId) {
+                setLoading(false);
+              }
             }
           }
         }
@@ -315,9 +330,19 @@ export default function CoursePage() {
     if (!gateCourseId || gateCourseId !== courseId) return;
     transferAttemptedRef.current = true;
     clearOnboardingGateCourseId();
-    void transferAnonData(null, courseId).catch((transferError) => {
-      console.error("Failed to transfer anonymous data:", transferError);
-    });
+    setTransferPending(true);
+    setLoading(true);
+    void transferAnonData(null, courseId)
+      .then(async () => {
+        setTransferPending(false);
+        await refetchStudyPlan();
+        setLoading(false);
+      })
+      .catch((transferError) => {
+        console.error("Failed to transfer anonymous data:", transferError);
+        setTransferPending(false);
+        setLoading(false);
+      });
   }, [userId, isAnonymousUser, courseId]);
 
   // Persist tabs for this course/user
@@ -427,6 +452,7 @@ export default function CoursePage() {
 
   useEffect(() => {
     if (!userId || !courseId) return;
+    if (transferPending) return;
     let aborted = false;
     setLoading(true);
     setError("");
@@ -613,7 +639,7 @@ export default function CoursePage() {
     return () => {
       aborted = true;
     };
-  }, [userId, courseId]);
+  }, [userId, courseId, transferPending]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
