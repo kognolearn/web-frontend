@@ -915,8 +915,35 @@ export default function CourseTabContent({
 
   // Handle logout
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Failed to sign out:", error);
+    }
+
+    try {
+      await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "SIGNED_OUT" }),
+      });
+    } catch (error) {
+      console.warn("Failed to clear auth cookies:", error);
+    }
+
+    try {
+      if (typeof window !== "undefined") {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith("sb-") && key.endsWith("-auth-token")) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn("Failed to clear auth storage:", error);
+    }
+
+    window.location.href = "/";
   };
 
   // Handle send feedback
