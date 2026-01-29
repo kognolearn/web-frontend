@@ -296,7 +296,7 @@ export default function CoursePage() {
           if (!transferAttemptedRef.current) {
             transferAttemptedRef.current = true;
             try {
-              await transferAnonData();
+              await transferAnonData(null, courseId);
             } catch (transferError) {
               console.error("Failed to transfer anonymous data:", transferError);
             }
@@ -315,7 +315,7 @@ export default function CoursePage() {
     if (!gateCourseId || gateCourseId !== courseId) return;
     transferAttemptedRef.current = true;
     clearOnboardingGateCourseId();
-    void transferAnonData().catch((transferError) => {
+    void transferAnonData(null, courseId).catch((transferError) => {
       console.error("Failed to transfer anonymous data:", transferError);
     });
   }, [userId, isAnonymousUser, courseId]);
