@@ -13,7 +13,6 @@ import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import TimerControlsModal from "@/components/courses/TimerControlsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import PersonalTimer from "@/components/courses/PersonalTimer";
 import { useGuidedTour } from "@/components/tour";
@@ -1329,43 +1328,25 @@ export default function CoursePage() {
             
             {/* Add Tab Buttons */}
             <div className="flex items-center gap-1 px-2 flex-shrink-0">
-              <OnboardingTooltip
-                id="tab-add-course"
-                content="Open a new course view to browse different lessons side by side."
-                position="bottom"
-                pointerPosition="right"
-                delay={1000}
-                priority={15}
+              <button
+                onClick={() => addTab('course')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Course Tab"
               >
-                <button
-                  onClick={() => addTab('course')}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                  title="New Course Tab"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </button>
-              </OnboardingTooltip>
-              <OnboardingTooltip
-                id="tab-add-chat"
-                content="Open a new AI chat tab to ask questions while studying."
-                position="bottom"
-                pointerPosition="right"
-                delay={1200}
-                priority={16}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </button>
+              <button
+                onClick={() => addTab('chat')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Chat Tab"
+                data-tour="chat-fab"
               >
-                <button
-                  onClick={() => addTab('chat')}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                  title="New Chat Tab"
-                  data-tour="chat-fab"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </button>
-              </OnboardingTooltip>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
               <div className="w-px h-5 bg-[var(--border)]/50 mx-1" />
               <button
                 onClick={() => addTab('discussion')}

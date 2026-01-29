@@ -558,7 +558,6 @@ export default function SettingsPage() {
       try {
         localStorage.removeItem("kogno_onboarding_session_v1");
         localStorage.removeItem("kogno_anon_user_id");
-        localStorage.removeItem("kogno_onboarding_dismissed");
         localStorage.removeItem("kogno_tour_state");
         sessionStorage.removeItem("kogno_onboarding_tab");
       } catch (e) {

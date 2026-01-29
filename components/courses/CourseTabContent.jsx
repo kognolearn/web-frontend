@@ -12,7 +12,6 @@ import PracticeProblems from "@/components/content/PracticeProblems";
 import TaskRenderer from "@/components/content/TaskRenderer";
 import ReadingRenderer from "@/components/content/ReadingRenderer";
 import VideoBlock from "@/components/content/VideoBlock";
-import OnboardingTooltip, { FloatingOnboardingTooltip } from "@/components/ui/OnboardingTooltip";
 import Tooltip from "@/components/ui/Tooltip";
 import ProfileSettingsModal from "@/components/ui/ProfileSettingsModal";
 import PersonalizationModal from "@/components/ui/PersonalizationModal";
@@ -2561,26 +2560,17 @@ export default function CourseTabContent({
             </button>
           </Tooltip>
 
-          <OnboardingTooltip
-            id="course-settings-button"
-            content={settingsTooltipContent}
-            position="bottom"
-            pointerPosition="right"
-            delay={800}
-            priority={5}
+          <button
+            type="button"
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
+            title="Course Settings"
           >
-            <button
-              type="button"
-              onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center justify-center w-11 h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50"
-              title="Course Settings"
-            >
-              <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </OnboardingTooltip>
+            <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -2797,55 +2787,37 @@ export default function CourseTabContent({
 
             <div className="p-4 border-b border-[var(--border)]">
               <div className="flex items-center justify-between gap-2">
-                <OnboardingTooltip
-                  id="course-sidebar-nav"
-                  content="This is your course navigation. Click on any lesson to view its content. Modules can be collapsed or expanded by clicking on them."
-                  position="right"
-                  pointerPosition="top"
-                  delay={800}
-                  priority={6}
+                <div 
+                  onClick={() => {
+                    if (!studyPlan) return;
+                    const modules = visibleModules;
+                    const firstModule =
+                      modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
+                      modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
+                    if (firstModule && firstModule.lessons[0]) {
+                      navigateToLesson(firstModule.lessons[0]);
+                    }
+                  }}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
                 >
-                  <div 
-                    onClick={() => {
-                      if (!studyPlan) return;
-                      const modules = visibleModules;
-                      const firstModule =
-                        modules.find((m) => !m.is_practice_exam_module && Array.isArray(m.lessons) && m.lessons.length > 0) ||
-                        modules.find((m) => Array.isArray(m.lessons) && m.lessons.length > 0);
-                      if (firstModule && firstModule.lessons[0]) {
-                        navigateToLesson(firstModule.lessons[0]);
-                      }
-                    }}
-                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                  <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
+                    Course
+                  </p>
+                  <h2 className="text-sm font-semibold text-[var(--foreground)] bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text">
+                    {courseName || "Study Plan"}
+                  </h2>
+                </div>
+                <Tooltip content="Edit Course" position="bottom">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditCourseModalOpen(true)}
+                    className="flex-shrink-0 p-2 rounded-lg hover:bg-[var(--surface-muted)] transition-colors group"
                   >
-                    <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-bold mb-1">
-                      Course
-                    </p>
-                    <h2 className="text-sm font-semibold text-[var(--foreground)] bg-gradient-to-r from-[var(--foreground)] to-[var(--primary)] bg-clip-text">
-                      {courseName || "Study Plan"}
-                    </h2>
-                  </div>
-                </OnboardingTooltip>
-                <OnboardingTooltip
-                  id="course-edit-button"
-                  content="Want to modify your course? Click here to request changes — add topics, adjust difficulty, include more examples, or restructure modules using natural language."
-                  position="bottom"
-                  pointerPosition="left"
-                  delay={800}
-                  priority={7}
-                >
-                  <Tooltip content="Edit Course" position="bottom">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditCourseModalOpen(true)}
-                      className="flex-shrink-0 p-2 rounded-lg hover:bg-[var(--surface-muted)] transition-colors group"
-                    >
-                      <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                  </Tooltip>
-                </OnboardingTooltip>
+                    <svg className="w-4.5 h-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
@@ -4037,16 +4009,8 @@ export default function CourseTabContent({
                       </svg>
                     </button>
 
-                    <OnboardingTooltip
-                      id="course-content-types"
-                      content="Each lesson has different content types: Reading for text content, Video for visual learning, and Quiz for practice. Switch between them using these tabs!"
-                      position="top"
-                      pointerPosition="center"
-                      delay={800}
-                      priority={8}
-                    >
-                      {/* Content type buttons */}
-                      <div className={`flex items-center gap-2 ${isMobile ? 'overflow-x-auto mx-2 px-1 scrollbar-hide' : ''}`}>
+                    {/* Content type buttons */}
+                    <div className={`flex items-center gap-2 ${isMobile ? 'overflow-x-auto mx-2 px-1 scrollbar-hide' : ''}`}>
                         {isLessonContentLoading(selectedLesson.id) && !isLessonContentLoaded(selectedLesson.id) ? (
                           <>
                             <div className="w-11 h-11 rounded-2xl bg-[var(--surface-muted)] animate-pulse flex-shrink-0" />
@@ -4161,8 +4125,7 @@ export default function CourseTabContent({
                             );
                           })
                         )}
-                      </div>
-                    </OnboardingTooltip>
+                    </div>
 
                     {/* Next Content Type Button */}
                     <button

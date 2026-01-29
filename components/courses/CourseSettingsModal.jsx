@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import TimerControls from "./TimerControls";
 import { PersonalTimerControls } from "./PersonalTimer";
 
@@ -83,20 +82,10 @@ export default function CourseSettingsModal({
                     <svg className="h-5 w-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <OnboardingTooltip
-                      id="settings-modal-intro"
-                      content={introTooltipContent}
-                      position="bottom"
-                      pointerPosition="left"
-                      delay={300}
-                      priority={9}
-                      showCondition={isOpen}
-                    >
-                      <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                        Study Timer
-                        <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
-                      </h3>
-                    </OnboardingTooltip>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                      Study Timer
+                      <InfoTooltip content="Adjust your remaining study time. Use quick buttons for common adjustments or set a custom time below." position="right" />
+                    </h3>
                   </div>
 
                   <TimerControls 
@@ -117,17 +106,7 @@ export default function CourseSettingsModal({
                       </svg>
                     </div>
                     <div className="space-y-2">
-                      <OnboardingTooltip
-                        id="settings-modal-intro"
-                        content={introTooltipContent}
-                        position="bottom"
-                        pointerPosition="left"
-                        delay={300}
-                        priority={9}
-                        showCondition={isOpen}
-                      >
-                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Unlimited Study Time</h3>
-                      </OnboardingTooltip>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)]">Unlimited Study Time</h3>
                       <p className="text-sm text-[var(--muted-foreground)]">
                         Deep Study courses give you the maximum allotted time automatically. There is no countdown to manage, so you can stay in the flow and focus on learning.
                       </p>
