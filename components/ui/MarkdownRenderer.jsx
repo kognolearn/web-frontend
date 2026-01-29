@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { MathJax } from "better-react-mathjax";
 import TabGroup from "@/components/content/v2/components/display/TabGroup";
+import { normalizeLatex } from "@/utils/richText";
 
 /**
  * Parse content string into structured blocks for rendering
@@ -153,14 +154,9 @@ function parseTabGroup(lines, startIdx) {
 
 function parseContent(content) {
   if (!content) return [];
-  
+
   // Normalize line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
-  // Normalize double-escaped backslashes from JSON
-  normalizedContent = normalizedContent
-    .replace(/\\\\(\(|\))/g, '\\$1')
-    .replace(/\\\\(\[|\])/g, '\\$1');
 
   // Strip zero-width/invisible chars that can break directive parsing
   normalizedContent = normalizedContent.replace(/[\u200B-\u200D\uFEFF]/g, '');
@@ -469,7 +465,8 @@ function InlineContent({ text }) {
           case "text":
             return <span key={part.key}>{part.content}</span>;
           case "math":
-            return <MathJax key={part.key} inline>{part.content}</MathJax>;
+            // Output math text directly - parent MathJax wrapper will typeset it
+            return <span key={part.key}>{part.content}</span>;
           case "bold":
             return <strong key={part.key} className="font-semibold text-[var(--foreground)]">{part.content}</strong>;
           case "italic":
@@ -493,12 +490,15 @@ function InlineContent({ text }) {
 }
 
 export default function MarkdownRenderer({ content, className = "" }) {
-  const blocks = useMemo(() => parseContent(content), [content]);
+  // Normalize LaTeX first, then parse content
+  const normalizedContent = useMemo(() => normalizeLatex(content), [content]);
+  const blocks = useMemo(() => parseContent(normalizedContent), [normalizedContent]);
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      {blocks.map((block, index) => {
-        switch (block.type) {
+    <MathJax dynamic>
+      <div className={`space-y-3 ${className}`}>
+        {blocks.map((block, index) => {
+          switch (block.type) {
           case "heading":
             const HeadingTag = `h${Math.min(block.level + 2, 6)}`; // Shift levels down for chat
             return (
@@ -631,6 +631,7 @@ export default function MarkdownRenderer({ content, className = "" }) {
             return null;
         }
       })}
-    </div>
+      </div>
+    </MathJax>
   );
 }
