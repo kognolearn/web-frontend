@@ -11,11 +11,14 @@ export default function MessagesTabContent({
   userId,
   onClose,
   onOpenDiscussionTab,
-  initialConversationId
+  initialConversationId,
+  showBeginTour = false,
+  onBeginTour
 }) {
   const [studyGroup, setStudyGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const shouldShowBeginTour = Boolean(showBeginTour && onBeginTour);
 
   const fetchStudyGroup = useCallback(async () => {
     if (!courseId) return;
@@ -119,6 +122,29 @@ export default function MessagesTabContent({
           )}
         </div>
       </div>
+
+      {shouldShowBeginTour && (
+        <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/95 px-6 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[var(--foreground)]">Ready for a quick tour?</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Kogno will walk you through the most important course features in a few minutes.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onBeginTour}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[var(--primary)]/25 transition-all hover:translate-y-[-1px] hover:shadow-[var(--primary)]/35"
+            >
+              Begin Tour
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">

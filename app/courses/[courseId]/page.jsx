@@ -766,11 +766,25 @@ export default function CoursePage() {
   }, [isGeneratingCourse]);
 
   useEffect(() => {
-    if (!shouldStartFeaturesTour || !hasTourLessons) return;
+    if (!shouldStartFeaturesTour || !hasTourLessons || isTourActive || hasTourPrompted) {
+      setIsTourPromptActive(false);
+      return;
+    }
+    if (isTourPromptActive) return;
+    const timer = setTimeout(() => {
+      setIsTourPromptActive(true);
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, [shouldStartFeaturesTour, hasTourLessons, isTourActive, hasTourPrompted, isTourPromptActive]);
+
+  const handleBeginTour = useCallback(() => {
+    if (!shouldStartFeaturesTour) return;
+    setIsTourPromptActive(false);
+    setHasTourPrompted(true);
     if (!isTourActive || currentTour !== "course-features") {
       startTour("course-features");
     }
-  }, [shouldStartFeaturesTour, hasTourLessons, isTourActive, currentTour, startTour]);
+  }, [shouldStartFeaturesTour, isTourActive, currentTour, startTour]);
 
 
 
@@ -909,6 +923,28 @@ export default function CoursePage() {
     }
     return courseTabs.filter((tab) => tab.id === effectiveActiveTabId);
   }, [isMobileView, tabs, courseTabs, effectiveActiveTabId]);
+  const activeRenderedTab = useMemo(
+    () => tabs.find((tab) => tab.id === effectiveActiveTabId),
+    [tabs, effectiveActiveTabId]
+  );
+  const activeTabType = activeRenderedTab?.type;
+  const isMessagesTabActive = activeTabType === "messages";
+  const hasMessagesTab = useMemo(
+    () => tabs.some((tab) => tab.type === "messages"),
+    [tabs]
+  );
+  const shouldShowTourPrompt = Boolean(
+    isTourPromptActive && shouldStartFeaturesTour && !isTourActive
+  );
+  const shouldFlashMessagesTab = Boolean(
+    shouldShowTourPrompt && !isMessagesTabActive
+  );
+  const shouldFlashMessagesButton = Boolean(
+    shouldFlashMessagesTab && !hasMessagesTab
+  );
+  const shouldBlurContent = Boolean(
+    shouldShowTourPrompt && !isMessagesTabActive
+  );
 
   const handleSharedChatStateChange = useCallback((state) => {
     if (!state) return;
@@ -1129,6 +1165,8 @@ export default function CoursePage() {
   const [isDraggingToDock, setIsDraggingToDock] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [isExternalChatHovering, setIsExternalChatHovering] = useState(false);
+  const [isTourPromptActive, setIsTourPromptActive] = useState(false);
+  const [hasTourPrompted, setHasTourPrompted] = useState(false);
 
   const handleTabBarDragOver = (e) => {
     handleDragOver(e);
@@ -1256,6 +1294,7 @@ export default function CoursePage() {
                     : "bg-[var(--surface-muted)] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
                   }
                   ${draggingTabId === tab.id ? "shadow-2xl" : ""}
+                  ${tab.type === 'messages' && shouldFlashMessagesTab ? "ring-2 ring-[var(--primary)]/70 shadow-lg shadow-[var(--primary)]/30 animate-pulse" : ""}
                 `}
                 style={activeTabId === tab.id ? {
                   backgroundImage: 'linear-gradient(135deg, rgba(123, 163, 122, 0.95) 0%, rgba(100, 140, 100, 0.85) 50%, rgba(123, 163, 122, 0.9) 100%)',
@@ -1360,7 +1399,11 @@ export default function CoursePage() {
               </button>
               <button
                 onClick={() => addTab('messages')}
-                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  shouldFlashMessagesButton
+                    ? "bg-[var(--primary)]/10 text-[var(--primary)] ring-2 ring-[var(--primary)]/60 shadow-lg shadow-[var(--primary)]/25 animate-pulse"
+                    : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+                }`}
                 title="Messages"
                 data-tour="messages-tab"
               >
@@ -1374,6 +1417,9 @@ export default function CoursePage() {
 
       {/* Tab Content */}
       <div className="flex-1 relative overflow-hidden">
+        {shouldBlurContent && (
+          <div className="absolute inset-0 z-20 pointer-events-none backdrop-blur-sm bg-black/30" />
+        )}
         {/* Dock Zone Indicator - appears when dragging chat tab down */}
         {!isMobileView && (
           <AnimatePresence>
@@ -1514,6 +1560,8 @@ export default function CoursePage() {
                       onClose={() => closeTab(null, tab.id)}
                       onOpenDiscussionTab={() => addTab('discussion')}
                       initialConversationId={tab.conversationId}
+                      showBeginTour={shouldShowTourPrompt}
+                      onBeginTour={handleBeginTour}
                     />
                   );
                 default:
