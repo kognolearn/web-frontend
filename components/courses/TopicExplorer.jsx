@@ -12,7 +12,6 @@ import {
 } from "@/app/courses/create/utils";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 export default function TopicExplorer({
   overviewTopics,
@@ -215,44 +214,27 @@ export default function TopicExplorer({
                         </div>
 
                         {/* Confidence Toggles */}
-                        <OnboardingTooltip
-                            id="topic-confidence-buttons"
-                            content={
-                                <div className="space-y-2">
-                                    <p><strong>Rate your familiarity with each module:</strong></p>
-                                    <p><strong>Unfamiliar</strong> — Never learned this before</p>
-                                    <p><strong>Still Learning</strong> — I know some of this</p>
-                                    <p><strong>Confident</strong> — I know this well already</p>
-                                    <p className="pt-1 text-xs opacity-80">This helps us prioritize what you need to study most!</p>
-                                </div>
-                            }
-                            position="bottom"
-                            pointerPosition="left"
-                            delay={600}
-                            priority={3}
-                        >
-                            <div className="flex flex-wrap gap-2">
-                                {moduleConfidenceOptions.map((option) => {
-                                    const moduleState = moduleConfidenceState[selectedModule.id] || { mode: "somewhat", overrides: {} };
-                                    const isActive = moduleState.mode === option.id;
-                                    return (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            onClick={() => handleModuleModeChange(selectedModule.id, option.id)}
-                                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                                                isActive
-                                                ? option.activeClass
-                                                : `${option.buttonClass} bg-[var(--surface-1)]`
-                                            }`}
-                                        >
-                                            {getConfidenceIcon(option.id)}
-                                            {option.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </OnboardingTooltip>
+                        <div className="flex flex-wrap gap-2">
+                            {moduleConfidenceOptions.map((option) => {
+                                const moduleState = moduleConfidenceState[selectedModule.id] || { mode: "somewhat", overrides: {} };
+                                const isActive = moduleState.mode === option.id;
+                                return (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => handleModuleModeChange(selectedModule.id, option.id)}
+                                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                                            isActive
+                                            ? option.activeClass
+                                            : `${option.buttonClass} bg-[var(--surface-1)]`
+                                        }`}
+                                    >
+                                        {getConfidenceIcon(option.id)}
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Lessons List */}

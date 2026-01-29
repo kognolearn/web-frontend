@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import RichBlock from "@/components/content/RichBlock";
 import { hasRichContent, toRichBlock, normalizeLatex } from "@/utils/richText";
 import Tooltip from "@/components/ui/Tooltip";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
 import { useSeeds } from "@/components/seeds/SeedsProvider";
 
@@ -1126,15 +1125,7 @@ export default function Quiz({
       ) : (
         <>
           {/* Progress bar */}
-          <OnboardingTooltip
-            id="quiz-progress"
-            content="Click on any dot to jump to that question. The bar shows your progress through the quiz. Once you've answered all questions, click 'Submit Quiz' to see your results and explanations!"
-            position="bottom"
-            pointerPosition="center"
-            delay={600}
-            priority={12}
-          >
-            <div className="mb-8">
+          <div className="mb-8">
             <div className="flex flex-col gap-1 mb-3">
               <span className="text-sm font-medium text-[var(--foreground)]">
                 Question {currentIndex + 1} of {questionCount}
@@ -1224,7 +1215,6 @@ export default function Quiz({
               })}
             </div>
           </div>
-          </OnboardingTooltip>
 
           {/* Question */}
           <div className="mb-8">

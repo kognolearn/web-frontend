@@ -6,9 +6,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { CodeEditorSettingsProvider } from "@/components/editor/CodeEditorSettingsProvider";
 import SupabaseSessionProvider from "@/components/auth/SupabaseSessionProvider";
 import { OnboardingProvider } from "@/components/ui/OnboardingProvider";
-import { GuidedTourProvider } from "@/components/tour";
-import { tourConfigs } from "@/components/tour/tourConfigs";
-import TourStep from "@/components/tour/TourStep";
+import { GuidedTourProvider, KognoTour, tourConfigs } from "@/components/tour";
 import { MathJaxContext } from "better-react-mathjax";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import TrialNegotiationGate from "@/components/onboarding/TrialNegotiationGate";
@@ -87,7 +85,7 @@ export default function RootLayout({ children }) {
                     <SupabaseSessionProvider />
                     <TrialNegotiationGate />
                     {children}
-                    <TourStep />
+                    <KognoTour />
                     <FeedbackWidget />
                     <SeedAnimationOrchestrator />
                     <Analytics />

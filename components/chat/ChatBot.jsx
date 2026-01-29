@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
 import { authFetch } from "@/lib/api";
 
@@ -1824,16 +1823,8 @@ Instructions:
       className={`fixed right-4 sm:right-6 ${buttonClassName ?? 'bottom-20 sm:bottom-20'}`}
       style={{ zIndex: floatingButtonZIndex }}
     >
-      <OnboardingTooltip
-        id="chatbot-intro"
-        content="Meet Kogno, your study assistant! Click here to open the chat. Pro tip: You can highlight any text on the page and it will automatically be shared with the chatbot so you can ask questions about it."
-        position="left"
-        pointerPosition="bottom"
-        delay={1500}
-        priority={20}
-      >
-        <button
-          onClick={() => setIsOpen(true)}
+      <button
+        onClick={() => setIsOpen(true)}
         type="button"
         aria-label="Open ChatBot"
         className="btn btn-primary btn-fab"
@@ -1843,7 +1834,6 @@ Instructions:
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
         </svg>
       </button>
-    </OnboardingTooltip>
     </div>
   );
 
@@ -2517,25 +2507,16 @@ Instructions:
           {/* Top Right Controls */}
           <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
             {/* New Chat Button */}
-            <OnboardingTooltip
-              id="chat-new-button"
-              content="Start a new conversation with Kogno."
-              position="bottom"
-              pointerPosition="right"
-              delay={800}
-              priority={5}
+            <button
+              type="button"
+              onClick={createNewChat}
+              className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
+              title="New Chat"
             >
-              <button
-                type="button"
-                onClick={createNewChat}
-                className="flex items-center justify-center w-10 h-10 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)]/90 shadow-lg backdrop-blur-xl transition-all hover:bg-[var(--surface-2)] hover:border-[var(--primary)]/50 text-[var(--foreground)]"
-                title="New Chat"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </OnboardingTooltip>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
 
           </div>
 
