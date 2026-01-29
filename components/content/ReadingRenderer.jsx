@@ -986,25 +986,43 @@ function InlineContent({ text }) {
         if (candidates.length === 0) return null;
         return candidates.reduce((a, b) => (a.index < b.index ? a : b));
       })();
-      // Bold **...**
-      const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
-      // Italic _..._ (using underscore to avoid conflicts with math asterisks)
-      const italicMatch = remaining.match(/_([^_]+)_/);
+      // Bold: **text** or __text__ - use non-greedy match to handle multiple bold sections
+      const boldAsteriskMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const boldUnderscoreMatch = remaining.match(/__(.+?)__/);
+      const boldMatch = (() => {
+        if (boldAsteriskMatch && boldUnderscoreMatch) {
+          return boldAsteriskMatch.index < boldUnderscoreMatch.index ? boldAsteriskMatch : boldUnderscoreMatch;
+        }
+        return boldAsteriskMatch || boldUnderscoreMatch || null;
+      })();
+      // Italic: *text* or _text_ - single asterisk or underscore, non-greedy
+      const italicAsteriskMatch = remaining.match(/\*([^*]+)\*/);
+      const italicUnderscoreMatch = remaining.match(/_([^_]+)_/);
+      const italicMatch = (() => {
+        if (italicAsteriskMatch && italicUnderscoreMatch) {
+          return italicAsteriskMatch.index < italicUnderscoreMatch.index ? italicAsteriskMatch : italicUnderscoreMatch;
+        }
+        return italicAsteriskMatch || italicUnderscoreMatch || null;
+      })();
       // Inline code `...`
       const codeMatch = remaining.match(/`([^`]+)`/);
       // Links [text](url)
       const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
       // Line breaks <br>, <br/>, <br />
       const brMatch = remaining.match(/<br\s*\/?>/i);
+      // Strikethrough: ~~text~~
+      const strikethroughMatch = remaining.match(/~~(.+?)~~/);
 
-      // Find earliest match
+      // Find earliest match with priority (higher = wins tie at same index)
+      // Bold (** or __) should take precedence over italic (* or _)
       const matches = [
-        mathMatch && { type: "math", match: mathMatch, idx: mathMatch.index },
-        boldMatch && { type: "bold", match: boldMatch, idx: boldMatch.index },
-        italicMatch && { type: "italic", match: italicMatch, idx: italicMatch.index },
-        codeMatch && { type: "code", match: codeMatch, idx: codeMatch.index },
-        linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index },
-        brMatch && { type: "br", match: brMatch, idx: brMatch.index },
+        mathMatch && { type: "math", match: mathMatch, idx: mathMatch.index, priority: 3 },
+        boldMatch && { type: "bold", match: boldMatch, idx: boldMatch.index, priority: 2 },
+        italicMatch && { type: "italic", match: italicMatch, idx: italicMatch.index, priority: 1 },
+        codeMatch && { type: "code", match: codeMatch, idx: codeMatch.index, priority: 3 },
+        linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index, priority: 3 },
+        brMatch && { type: "br", match: brMatch, idx: brMatch.index, priority: 3 },
+        strikethroughMatch && { type: "strikethrough", match: strikethroughMatch, idx: strikethroughMatch.index, priority: 2 },
       ].filter(Boolean);
 
       if (matches.length === 0) {
@@ -1012,7 +1030,11 @@ function InlineContent({ text }) {
         break;
       }
 
-      const earliest = matches.reduce((a, b) => (a.idx < b.idx ? a : b));
+      // Pick earliest match; if tied, pick highest priority
+      const earliest = matches.reduce((a, b) => {
+        if (a.idx !== b.idx) return a.idx < b.idx ? a : b;
+        return a.priority > b.priority ? a : b;
+      });
 
       // Add text before match
       if (earliest.idx > 0) {
@@ -1040,6 +1062,9 @@ function InlineContent({ text }) {
           break;
         case "br":
           result.push({ type: "br", key: key++ });
+          break;
+        case "strikethrough":
+          result.push({ type: "strikethrough", content: m[1], key: key++ });
           break;
       }
 
@@ -1084,6 +1109,8 @@ function InlineContent({ text }) {
             );
           case "br":
             return <br key={part.key} />;
+          case "strikethrough":
+            return <del key={part.key} className="line-through">{part.content}</del>;
           default:
             return null;
         }

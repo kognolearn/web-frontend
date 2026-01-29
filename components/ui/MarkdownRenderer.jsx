@@ -403,28 +403,54 @@ function InlineContent({ text }) {
         }
         return mathDollar || mathParen || null;
       })();
-      
-      const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
-      const italicMatch = remaining.match(/_([^_]+)_/);
+
+      // Bold: **text** or __text__ - use non-greedy match to handle multiple bold sections
+      const boldAsteriskMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const boldUnderscoreMatch = remaining.match(/__(.+?)__/);
+      const boldMatch = (() => {
+        if (boldAsteriskMatch && boldUnderscoreMatch) {
+          return boldAsteriskMatch.index < boldUnderscoreMatch.index ? boldAsteriskMatch : boldUnderscoreMatch;
+        }
+        return boldAsteriskMatch || boldUnderscoreMatch || null;
+      })();
+      // Italic: *text* or _text_ - single asterisk or underscore, non-greedy
+      // The italic match should not capture content that starts with another * (which would be bold)
+      const italicAsteriskMatch = remaining.match(/\*([^*]+)\*/);
+      const italicUnderscoreMatch = remaining.match(/_([^_]+)_/);
+      const italicMatch = (() => {
+        if (italicAsteriskMatch && italicUnderscoreMatch) {
+          return italicAsteriskMatch.index < italicUnderscoreMatch.index ? italicAsteriskMatch : italicUnderscoreMatch;
+        }
+        return italicAsteriskMatch || italicUnderscoreMatch || null;
+      })();
       const codeMatch = remaining.match(/`([^`]+)`/);
       const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
       const brMatch = remaining.match(/<br\s*\/?>/i);
-      
+      // Strikethrough: ~~text~~
+      const strikethroughMatch = remaining.match(/~~(.+?)~~/);
+
+      // Priority order: higher number = higher priority when at same index
+      // Bold (** or __) should take precedence over italic (* or _)
       const matches = [
-        mathMatch && { type: "math", match: mathMatch, idx: mathMatch.index },
-        boldMatch && { type: "bold", match: boldMatch, idx: boldMatch.index },
-        italicMatch && { type: "italic", match: italicMatch, idx: italicMatch.index },
-        codeMatch && { type: "code", match: codeMatch, idx: codeMatch.index },
-        linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index },
-        brMatch && { type: "br", match: brMatch, idx: brMatch.index },
+        mathMatch && { type: "math", match: mathMatch, idx: mathMatch.index, priority: 3 },
+        boldMatch && { type: "bold", match: boldMatch, idx: boldMatch.index, priority: 2 },
+        italicMatch && { type: "italic", match: italicMatch, idx: italicMatch.index, priority: 1 },
+        codeMatch && { type: "code", match: codeMatch, idx: codeMatch.index, priority: 3 },
+        linkMatch && { type: "link", match: linkMatch, idx: linkMatch.index, priority: 3 },
+        brMatch && { type: "br", match: brMatch, idx: brMatch.index, priority: 3 },
+        strikethroughMatch && { type: "strikethrough", match: strikethroughMatch, idx: strikethroughMatch.index, priority: 2 },
       ].filter(Boolean);
-      
+
       if (matches.length === 0) {
         result.push({ type: "text", content: remaining, key: key++ });
         break;
       }
-      
-      const earliest = matches.reduce((a, b) => (a.idx < b.idx ? a : b));
+
+      // Pick earliest match; if tied, pick highest priority
+      const earliest = matches.reduce((a, b) => {
+        if (a.idx !== b.idx) return a.idx < b.idx ? a : b;
+        return a.priority > b.priority ? a : b;
+      });
       
       if (earliest.idx > 0) {
         result.push({ type: "text", content: remaining.slice(0, earliest.idx), key: key++ });
@@ -450,8 +476,11 @@ function InlineContent({ text }) {
         case "br":
           result.push({ type: "br", key: key++ });
           break;
+        case "strikethrough":
+          result.push({ type: "strikethrough", content: m[1], key: key++ });
+          break;
       }
-      
+
       remaining = remaining.slice(earliest.idx + m[0].length);
     }
     
@@ -481,6 +510,8 @@ function InlineContent({ text }) {
             );
           case "br":
             return <br key={part.key} />;
+          case "strikethrough":
+            return <del key={part.key} className="line-through">{part.content}</del>;
           default:
             return null;
         }
