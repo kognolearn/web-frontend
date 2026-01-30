@@ -111,10 +111,8 @@ beforeEach(() => {
     if (url === '/api/courses/topics') {
       return {
         ok: true,
-        status: 202,
+        status: 200,
         json: async () => ({
-          jobId: 'job-1',
-          statusUrl: '/api/jobs/job-1',
           browserSession: {
             sessionId: 'sess-1',
             streamUrl: '/api/browser-stream/sess-1',

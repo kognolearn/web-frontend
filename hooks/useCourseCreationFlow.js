@@ -382,6 +382,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabledState] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
+  const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
 
   // Wrap setBrowserAgentEnabled to enforce constraint: browserAgent requires agentSearch
   const setBrowserAgentEnabled = useCallback((enabled) => {
@@ -417,6 +418,25 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setGeneratedContentOutdated(false);
     setGeneratedContentOutdatedReason("");
   }, []);
+
+  const applyTopicsResult = useCallback((result) => {
+    if (!result) {
+      throw new Error("Topic generation completed but no result was returned.");
+    }
+
+    const parsed = parseTopicPayload(result);
+    const maybeCourseId = resolveCourseId(result);
+    if (maybeCourseId && !courseId) {
+      setCourseId(maybeCourseId);
+    }
+
+    if (parsed.ragSessionId) {
+      setRagSessionId(parsed.ragSessionId);
+    }
+
+    setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
+    setOverviewTopics(parsed.hydrated);
+  }, [courseId]);
 
   const isCramMode = studyMode === "cram";
 
@@ -877,6 +897,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     clearTopicsState();
     clearGeneratedContentOutdated();
     setBrowserSession(null); // Clear any existing browser session
+    setPendingBrowserJobSessionId(null);
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
@@ -925,28 +946,17 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
           setBrowserSession(responseData.browserSession);
         }
 
-        // For browser mode, we may need to wait longer and handle differently
+        if (browserAgentEnabled && res.ok && !responseData.jobId) {
+          setPendingBrowserJobSessionId(responseData.browserSession?.sessionId || null);
+          return;
+        }
+
         const { result } = await resolveAsyncJobResponse(
           { ok: res.ok, status: res.status, json: async () => responseData },
-          { errorLabel: "build topics", timeout: browserAgentEnabled ? 15 * 60 * 1000 : undefined }
+          { errorLabel: "build topics" }
         );
 
-        if (!result) {
-          throw new Error("Topic generation completed but no result was returned.");
-        }
-
-        const parsed = parseTopicPayload(result);
-        const maybeCourseId = resolveCourseId(result);
-        if (maybeCourseId && !courseId) {
-          setCourseId(maybeCourseId);
-        }
-
-        if (parsed.ragSessionId) {
-          setRagSessionId(parsed.ragSessionId);
-        }
-
-        setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
-        setOverviewTopics(parsed.hydrated);
+        applyTopicsResult(result);
         setTopicsError(null);
         setIsTopicsLoading(false);
         return;
@@ -980,7 +990,43 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     clearTopicsState,
     agentSearchEnabled,
     browserAgentEnabled,
+    applyTopicsResult,
   ]);
+
+  const handleBrowserJobStarted = useCallback(async ({ jobId, sessionId } = {}) => {
+    if (!jobId) return;
+
+    if (pendingBrowserJobSessionId && sessionId && sessionId !== pendingBrowserJobSessionId) {
+      return;
+    }
+
+    setPendingBrowserJobSessionId(null);
+
+    try {
+      const { result } = await resolveAsyncJobResponse(
+        { ok: true, status: 202, json: async () => ({ jobId }) },
+        { errorLabel: "build topics" }
+      );
+
+      applyTopicsResult(result);
+      setTopicsError(null);
+      setIsTopicsLoading(false);
+    } catch (error) {
+      console.error("Browser job failed:", error);
+      setOverviewTopics([]);
+      setDeletedSubtopics([]);
+      setTopicsError(error?.message || "The model did not return any topics. Please try again.");
+      setIsTopicsLoading(false);
+    }
+  }, [applyTopicsResult, pendingBrowserJobSessionId]);
+
+  const handleBrowserSessionClosed = useCallback(() => {
+    if (pendingBrowserJobSessionId) {
+      setIsTopicsLoading(false);
+      setTopicsError("Browser session closed before topic generation started.");
+    }
+    setPendingBrowserJobSessionId(null);
+  }, [pendingBrowserJobSessionId]);
 
   // Modify topics
   const handleModifyTopics = useCallback(async (prompt) => {
@@ -1701,6 +1747,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setBrowserAgentEnabled,
     browserSession,
     setBrowserSession,
+    pendingBrowserJobSessionId,
+    handleBrowserSessionClosed,
 
     // Computed
     canProceedFromStep1,
@@ -1720,6 +1768,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     handleRestoreAll,
     handleAddTopic,
     handleGenerateTopics,
+    handleBrowserJobStarted,
     handleModifyTopics,
     handleGenerateCourse,
     handleGenerateUnifiedPlan,

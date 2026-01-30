@@ -126,6 +126,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       }
     }
     flowState.setBrowserSession(null);
+    flowState.handleBrowserSessionClosed?.();
   };
 
   const handleClearActiveBrowserSession = async () => {
@@ -135,6 +136,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
       console.warn("[BrowserViewer] Failed to clear active session:", error);
     } finally {
       flowState.setBrowserSession(null);
+      flowState.handleBrowserSessionClosed?.();
     }
   };
 
@@ -595,6 +597,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             userId={flowState.userId}
             authToken={browserAuthToken}
             onClose={handleCloseBrowserViewer}
+            onJobStarted={flowState.handleBrowserJobStarted}
           />
         )}
 

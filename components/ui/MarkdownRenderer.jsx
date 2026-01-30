@@ -48,6 +48,49 @@ function parseImageBlock(lines, startIdx) {
 }
 
 /**
+ * Parse a TeX block in the format:
+ * :::tex
+ * LaTeX content
+ * :::
+ */
+function parseTexBlock(lines, startIdx) {
+  const startLine = lines[startIdx].trim();
+  const match = startLine.match(/^:::\s*tex\b(.*)$/i);
+  const inlineContent = match?.[1]?.trim();
+  const contentLines = [];
+  let i = startIdx + 1;
+
+  if (inlineContent) {
+    contentLines.push(inlineContent);
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^:::\s*$/.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  let content = contentLines.join("\n").trim();
+  if (/^\$\$[\s\S]*\$\$$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  } else if (/^\\\[[\s\S]*\\\]$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  } else if (/^\\\([\s\S]*\\\)$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  }
+
+  return {
+    type: "block-math",
+    content,
+    endIdx: i,
+  };
+}
+
+/**
  * Parse a tab group in the format:
  * :::tabs
  * :::tab{label="Tab 1"}
@@ -66,6 +109,25 @@ function parseTabGroup(lines, startIdx) {
     const line = lines[i];
     const trimmed = line.trim();
     const sanitized = trimmed.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+    // Allow nested :::tex blocks inside tab content
+    if (/^:::\s*tex\b/i.test(sanitized)) {
+      const texLines = [line];
+      i++;
+      while (i < lines.length) {
+        const texLine = lines[i];
+        texLines.push(texLine);
+        if (/^:::\s*$/.test(texLine.trim())) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      if (currentTab) {
+        currentContent.push(...texLines);
+      }
+      continue;
+    }
 
     // Check if this is a potential end marker (standalone :::)
     if (/^:::$/.test(sanitized) || (/^:::/.test(sanitized) && !/^:::\s*tab/i.test(sanitized))) {
@@ -194,6 +256,15 @@ function parseContent(content) {
       if (imageBlock) {
         blocks.push(imageBlock);
         i = imageBlock.endIdx;
+        continue;
+      }
+    }
+
+    if (/^:::\s*tex\b/i.test(trimmed)) {
+      const texBlock = parseTexBlock(lines, i);
+      if (texBlock) {
+        blocks.push(texBlock);
+        i = texBlock.endIdx;
         continue;
       }
     }
@@ -363,7 +434,8 @@ function parseContent(content) {
         /^\d+\.\s+/.test(nextTrimmed) ||
         nextTrimmed.startsWith("```") ||
         nextTrimmed.startsWith("$$") ||
-        nextTrimmed.startsWith("\\[")
+        nextTrimmed.startsWith("\\[") ||
+        nextTrimmed.startsWith(":::")
       ) {
         break;
       }

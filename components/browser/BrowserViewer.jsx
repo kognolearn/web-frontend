@@ -18,6 +18,7 @@ export default function BrowserViewer({
   onResume,
   onClose,
   onUserActionComplete,
+  onJobStarted,
   className = "",
 }) {
   const VIEWPORT_WIDTH = 1280;
@@ -139,6 +140,20 @@ export default function BrowserViewer({
           instructions: data.instructions,
         });
         setIsWaitingForUser(true);
+        break;
+
+      case "job_started":
+        if (data.jobId) {
+          onJobStarted?.({
+            jobId: data.jobId,
+            statusUrl: data.statusUrl,
+            sessionId: data.sessionId,
+          });
+        }
+        break;
+
+      case "job_error":
+        setError(data.message || "Failed to start browser job");
         break;
 
       case "error":
