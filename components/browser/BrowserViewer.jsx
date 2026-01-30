@@ -30,6 +30,8 @@ export default function BrowserViewer({
   const [currentUrl, setCurrentUrl] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [isNavigatingUrl, setIsNavigatingUrl] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState("");
   const [lastAction, setLastAction] = useState("");
   const [agentState, setAgentState] = useState(null);
   const [screenshot, setScreenshot] = useState(null);
@@ -54,6 +56,8 @@ export default function BrowserViewer({
     setAgentState(null);
     setUrlInput("");
     setIsEditingUrl(false);
+    setIsNavigatingUrl(false);
+    setPendingUrl("");
   }, [sessionId, streamUrl]);
 
   useEffect(() => {
@@ -181,6 +185,10 @@ export default function BrowserViewer({
       case "screenshot":
         setScreenshot(data.image);
         if (data.url) setCurrentUrl(data.url);
+        if (data.url && pendingUrl && data.url !== pendingUrl) {
+          setIsNavigatingUrl(false);
+          setPendingUrl("");
+        }
         break;
 
       case "state":
@@ -255,6 +263,16 @@ export default function BrowserViewer({
         if (data.command === "start_job" && data.success === false) {
           setError(data.error || "Unable to start browser agent");
           setJobStartRequested(false);
+        } else if (data.command === "user_navigate") {
+          if (data.success) {
+            if (data.url) {
+              setCurrentUrl(data.url);
+            }
+          } else {
+            setError(data.error || "Failed to navigate");
+          }
+          setIsNavigatingUrl(false);
+          setPendingUrl("");
         }
         break;
 
@@ -308,6 +326,10 @@ export default function BrowserViewer({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "user_navigate", url: target }));
     }
+    setPendingUrl(target);
+    setIsNavigatingUrl(true);
+    setUrlInput(target);
+    setError(null);
     setIsEditingUrl(false);
   }, [isPaused, isWaitingForUser, normalizeUrl, urlInput]);
 
@@ -381,10 +403,10 @@ export default function BrowserViewer({
   }, []);
 
   useEffect(() => {
-    if (!isEditingUrl) {
+    if (!isEditingUrl && !isNavigatingUrl) {
       setUrlInput(currentUrl || "");
     }
-  }, [currentUrl, isEditingUrl]);
+  }, [currentUrl, isEditingUrl, isNavigatingUrl]);
 
   const getViewportPoint = useCallback((event) => {
     if (!viewportRef.current) return;
@@ -690,6 +712,9 @@ export default function BrowserViewer({
                 : "text-[var(--muted-foreground)] cursor-not-allowed"
             }`}
           />
+          {isNavigatingUrl && (
+            <span className="text-[10px] text-[var(--muted-foreground)]">Loading…</span>
+          )}
           <button
             type="button"
             onClick={handleUrlNavigate}
