@@ -15,7 +15,7 @@ import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
 import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import PersonalTimer from "@/components/courses/PersonalTimer";
-import { useGuidedTour } from "@/components/tour/GuidedTourProvider";
+import { useGuidedTour } from "@/components/tour";
 import { useRealtimeUpdates, useCourseRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
