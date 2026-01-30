@@ -118,6 +118,23 @@ function resolveJobStatusUrl(payload) {
   return null;
 }
 
+function resolveAgentContext(payloadCandidates = []) {
+  for (const payload of payloadCandidates) {
+    if (!payload || typeof payload !== "object") continue;
+    const candidate =
+      payload.agent_context ||
+      payload.agentContext ||
+      payload?.data?.agent_context ||
+      payload?.data?.agentContext ||
+      payload?.result?.agent_context ||
+      payload?.result?.agentContext;
+    if (candidate && typeof candidate === "object") {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function toIsoDate(dateString) {
   if (!dateString) return null;
   return `${dateString}T00:00:00.000Z`;
@@ -453,6 +470,7 @@ function parseTopicPayload(payload) {
     hydrated,
     extractedGrokDraft,
     ragSessionId: resolveRagSessionId(payloadCandidates),
+    agentContext: resolveAgentContext(payloadCandidates),
   };
 }
 
@@ -610,9 +628,13 @@ function CreateCoursePageContent() {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [topicAgentContext, setTopicAgentContext] = useState(null);
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false);
+  const [manualUploadEnabled, setManualUploadEnabled] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
+  const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
+  const [browserJobId, setBrowserJobId] = useState(null);
   const [browserAuthToken, setBrowserAuthToken] = useState(null);
 
   const [courseGenerating, setCourseGenerating] = useState(false);
@@ -645,7 +667,13 @@ function CreateCoursePageContent() {
       }
     }
     setBrowserSession(null);
-  }, [browserSession]);
+    if (pendingBrowserJobSessionId) {
+      setIsTopicsLoading(false);
+      setTopicsError("Browser session closed before topic generation started.");
+    }
+    setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
+  }, [browserSession, pendingBrowserJobSessionId]);
 
   const handleClearActiveBrowserSession = useCallback(async () => {
     try {
@@ -654,8 +682,14 @@ function CreateCoursePageContent() {
       console.warn("[BrowserViewer] Failed to clear active session:", error);
     } finally {
       setBrowserSession(null);
+      if (pendingBrowserJobSessionId) {
+        setIsTopicsLoading(false);
+        setTopicsError("Browser session closed before topic generation started.");
+      }
+      setPendingBrowserJobSessionId(null);
+      setBrowserJobId(null);
     }
-  }, []);
+  }, [pendingBrowserJobSessionId]);
 
   const totalSubtopics = useMemo(
     () => overviewTopics.reduce((sum, overview) => sum + overview.subtopics.length, 0),
@@ -678,6 +712,7 @@ function CreateCoursePageContent() {
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
+  const browserSessionActive = Boolean(browserAgentEnabled && browserSession);
   const canModifyTopics = Boolean(
     userId &&
       topicModifyPrompt.trim() &&
@@ -986,6 +1021,7 @@ function CreateCoursePageContent() {
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
     setRagSessionId(null);
+    setTopicAgentContext(null);
     setModuleConfidenceState({});
     setOpenAccordions({});
     setTopicsError(null);
@@ -1078,6 +1114,18 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
 
     try {
+      const contextPayload =
+        topicAgentContext && typeof topicAgentContext === "object"
+          ? {
+              ...topicAgentContext,
+              courseTitle: courseTitle || topicAgentContext.courseTitle,
+              university: collegeName || topicAgentContext.university,
+            }
+          : {
+              courseTitle,
+              university: collegeName,
+            };
+
       // Use the new endpoint that doesn't require courseId (for pre-course topic modification)
       // userId is derived from JWT token in the backend
       const response = await authFetch(`/api/courses/modify-topics`, {
@@ -1086,6 +1134,7 @@ function CreateCoursePageContent() {
         body: JSON.stringify({
           prompt,
           currentModules: buildCurrentModulesPayload(overviewTopics),
+          agentContext: contextPayload,
         }),
       });
 
@@ -1104,6 +1153,11 @@ function CreateCoursePageContent() {
       if (parsed.ragSessionId) {
         setRagSessionId(parsed.ragSessionId);
       }
+      setTopicAgentContext((prev) => ({
+        ...(prev || contextPayload),
+        lastModifyPrompt: prompt,
+        lastModifiedAt: new Date().toISOString(),
+      }));
       setTopicModifyPrompt("");
     } catch (error) {
       console.error("Modify topics failed:", error);
@@ -1111,7 +1165,27 @@ function CreateCoursePageContent() {
     } finally {
       setIsModifyingTopics(false);
     }
-  }, [overviewTopics, topicModifyPrompt, userId]);
+  }, [overviewTopics, topicModifyPrompt, userId, topicAgentContext, courseTitle, collegeName]);
+
+  const applyTopicsResult = useCallback((result) => {
+    if (!result) {
+      throw new Error("Topic generation completed but no result was returned.");
+    }
+
+    const parsed = parseTopicPayload(result);
+    const maybeCourseId = resolveCourseId(result);
+    if (maybeCourseId && !courseId) {
+      setCourseId(maybeCourseId);
+    }
+
+    if (parsed.ragSessionId) {
+      setRagSessionId(parsed.ragSessionId);
+    }
+
+    setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
+    setOverviewTopics(parsed.hydrated);
+    setTopicAgentContext(parsed.agentContext || null);
+  }, [courseId]);
 
   const handleGenerateTopics = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -1135,31 +1209,36 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
     clearTopicsState();
     setBrowserSession(null);
+    setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
     const effectiveAgentSearchEnabled = agentSearchEnabled || browserAgentEnabled;
+    const includeManualInputs = manualUploadEnabled;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
       university: trimmedUniversity || null,
       finishByDate: finishByIso || null,
-      syllabusText: syllabusText.trim() || "Not provided.",
+      syllabusText: includeManualInputs ? (syllabusText.trim() || "Not provided.") : "Not provided.",
       mode: studyMode,
       agentSearchEnabled: effectiveAgentSearchEnabled,
       browserAgentEnabled,
     };
 
-    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
-    if (examFormatDetails) {
-      payload.examFormatDetails = examFormatDetails;
+    if (includeManualInputs) {
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
+      if (examFormatDetails) {
+        payload.examFormatDetails = examFormatDetails;
+      }
     }
 
-    if (syllabusFiles.length > 0) {
+    if (includeManualInputs && syllabusFiles.length > 0) {
       payload.syllabusFiles = await buildFilePayload(syllabusFiles);
     }
 
-    if (examFiles.length > 0) {
+    if (includeManualInputs && examFiles.length > 0) {
       payload.examFiles = await buildFilePayload(examFiles);
     }
 
@@ -1189,31 +1268,21 @@ function CreateCoursePageContent() {
           setBrowserSession(responseData.browserSession);
         }
 
+        if (browserAgentEnabled && res.ok && !responseData.jobId) {
+          setPendingBrowserJobSessionId(responseData.browserSession?.sessionId || null);
+          setIsTopicsLoading(false);
+          return;
+        }
+
         const { result } = await resolveAsyncJobResponse(
           { ok: res.ok, status: res.status, json: async () => responseData },
-          { errorLabel: "build topics", timeout: browserAgentEnabled ? 15 * 60 * 1000 : undefined }
+          { errorLabel: "build topics" }
         );
         console.log(`Attempt ${attempt} - response status: ${res.status}`);
         console.log("Backend response:", JSON.stringify(result, null, 2));
 
-        if (!result) {
-          throw new Error("Topic generation completed but no result was returned.");
-        }
+        applyTopicsResult(result);
 
-        const parsed = parseTopicPayload(result);
-        const maybeCourseId = resolveCourseId(result);
-        if (maybeCourseId && !courseId) {
-          setCourseId(maybeCourseId);
-        }
-
-        if (parsed.ragSessionId) {
-          console.log("Stored rag_session_id:", parsed.ragSessionId);
-          setRagSessionId(parsed.ragSessionId);
-        }
-
-        // Success - update state and exit the retry loop
-        setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
-        setOverviewTopics(parsed.hydrated);
         setTopicsError(null);
         setIsTopicsLoading(false);
         return; // Exit the function on success
@@ -1244,6 +1313,7 @@ function CreateCoursePageContent() {
     hasExamMaterials,
     syllabusFiles,
     syllabusText,
+    manualUploadEnabled,
     userId,
     confirmedNoExamDetails,
     studyMode,
@@ -1253,7 +1323,41 @@ function CreateCoursePageContent() {
     clearTopicsState,
     agentSearchEnabled,
     browserAgentEnabled,
+    applyTopicsResult,
   ]);
+
+  const handleBrowserJobStarted = useCallback(async ({ jobId, sessionId } = {}) => {
+    if (!jobId) return;
+
+    if (browserJobId === jobId) {
+      return;
+    }
+
+    if (pendingBrowserJobSessionId && sessionId && sessionId !== pendingBrowserJobSessionId) {
+      return;
+    }
+
+    setBrowserJobId(jobId);
+    setPendingBrowserJobSessionId(null);
+    setIsTopicsLoading(true);
+
+    try {
+      const { result } = await resolveAsyncJobResponse(
+        { ok: true, status: 202, json: async () => ({ jobId }) },
+        { errorLabel: "build topics" }
+      );
+
+      applyTopicsResult(result);
+      setTopicsError(null);
+      setIsTopicsLoading(false);
+    } catch (error) {
+      console.error("Browser job failed:", error);
+      setOverviewTopics([]);
+      setDeletedSubtopics([]);
+      setTopicsError(error?.message || "The model did not return any topics. Please try again.");
+      setIsTopicsLoading(false);
+    }
+  }, [applyTopicsResult, pendingBrowserJobSessionId, browserJobId]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
     setModuleConfidenceState((prev) => {
@@ -2124,7 +2228,7 @@ function CreateCoursePageContent() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-bold mb-1">Course Materials</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Upload syllabus and exam materials for better course generation</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">Choose how we gather sources and optionally add your materials</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2153,8 +2257,43 @@ function CreateCoursePageContent() {
               </div>
 
               <div className="space-y-5">
-                {/* Syllabus Section */}
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Topic generation options</h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                      Choose how we gather source material before generating your study plan.
+                    </p>
+                  </div>
+                  <TopicSearchOptions
+                    agentSearchEnabled={agentSearchEnabled}
+                    setAgentSearchEnabled={setAgentSearchEnabled}
+                    browserAgentEnabled={browserAgentEnabled}
+                    setBrowserAgentEnabled={setBrowserAgentEnabled}
+                    manualUploadEnabled={manualUploadEnabled}
+                    setManualUploadEnabled={setManualUploadEnabled}
+                    disabled={isTopicsLoading || courseGenerating}
+                  />
+                </div>
+
+                {!manualUploadEnabled && (
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)]/60 p-4 text-sm">
+                    <p className="text-[var(--muted-foreground)]">
+                      Manual uploads are off. We&apos;ll rely on web or browser discovery instead.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setManualUploadEnabled(true)}
+                      className="mt-3 text-xs font-semibold underline"
+                    >
+                      Add syllabus or exam materials
+                    </button>
+                  </div>
+                )}
+
+                {manualUploadEnabled && (
+                  <>
+                    {/* Syllabus Section */}
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
                   <div className="mb-4">
                     <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
                     <p className="text-xs text-[var(--muted-foreground)]">Share course objectives</p>
@@ -2348,6 +2487,8 @@ function CreateCoursePageContent() {
                     </p>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
 
 
@@ -2402,22 +2543,6 @@ function CreateCoursePageContent() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
-                  <div>
-                    <h3 className="text-sm font-semibold">Topic generation options</h3>
-                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                      Choose how we gather source material before generating your study plan.
-                    </p>
-                  </div>
-                  <TopicSearchOptions
-                    agentSearchEnabled={agentSearchEnabled}
-                    setAgentSearchEnabled={setAgentSearchEnabled}
-                    browserAgentEnabled={browserAgentEnabled}
-                    setBrowserAgentEnabled={setBrowserAgentEnabled}
-                    disabled={isTopicsLoading || courseGenerating}
-                  />
-                </div>
-
                 {browserSession && (
                   <BrowserViewer
                     sessionId={browserSession.sessionId}
@@ -2425,6 +2550,7 @@ function CreateCoursePageContent() {
                     userId={userId}
                     authToken={browserAuthToken}
                     onClose={handleCloseBrowserViewer}
+                    onJobStarted={handleBrowserJobStarted}
                   />
                 )}
 
@@ -2520,18 +2646,22 @@ Series & convergence"
                   </div>
                   <h3 className="text-base font-bold mb-1.5">Ready to Build Topics</h3>
                   <p className="text-xs text-[var(--muted-foreground)] mb-5 max-w-md mx-auto">
-                    We'll analyze your course details and create a comprehensive topic list
+                    {browserAgentEnabled
+                      ? browserSessionActive
+                        ? "Browser agent is ready. Add your instructions below and start the agent."
+                        : "We'll open a live browser so you can guide the agent to the right course page."
+                      : "We'll analyze your course details and create a comprehensive topic list"}
                   </p>
                   <button
                     type="button"
                     onClick={handleGenerateTopics}
-                    disabled={!canProceedFromStep1 || isTopicsLoading}
+                    disabled={!canProceedFromStep1 || isTopicsLoading || browserSessionActive}
                     className="btn btn-primary"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Build Topics
+                    {browserAgentEnabled ? "Open Browser Agent" : "Build Topics"}
                   </button>
                 </div>
               )}

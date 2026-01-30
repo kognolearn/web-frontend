@@ -80,6 +80,23 @@ function resolveJobStatusUrl(payload) {
   return null;
 }
 
+function resolveAgentContext(payloadCandidates = []) {
+  for (const payload of payloadCandidates) {
+    if (!payload || typeof payload !== "object") continue;
+    const candidate =
+      payload.agent_context ||
+      payload.agentContext ||
+      payload?.data?.agent_context ||
+      payload?.data?.agentContext ||
+      payload?.result?.agent_context ||
+      payload?.result?.agentContext;
+    if (candidate && typeof candidate === "object") {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function formatExamStructure({ hasExamMaterials, examNotes }) {
   if (!hasExamMaterials && !(examNotes && examNotes.trim())) return undefined;
   const segments = [];
@@ -276,6 +293,7 @@ function parseTopicPayload(result) {
     hydrated,
     extractedGrokDraft,
     ragSessionId: resolveRagSessionId(payloadCandidates),
+    agentContext: resolveAgentContext(payloadCandidates),
   };
 }
 
@@ -360,6 +378,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [topicAgentContext, setTopicAgentContext] = useState(null);
 
   // Loading and error states
   const [isTopicsLoading, setIsTopicsLoading] = useState(false);
@@ -381,7 +400,10 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   // Browser Agent state
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabledState] = useState(false);
+  const [manualUploadEnabled, setManualUploadEnabled] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
+  const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
+  const [browserJobId, setBrowserJobId] = useState(null);
 
   // Wrap setBrowserAgentEnabled to enforce constraint: browserAgent requires agentSearch
   const setBrowserAgentEnabled = useCallback((enabled) => {
@@ -417,6 +439,26 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setGeneratedContentOutdated(false);
     setGeneratedContentOutdatedReason("");
   }, []);
+
+  const applyTopicsResult = useCallback((result) => {
+    if (!result) {
+      throw new Error("Topic generation completed but no result was returned.");
+    }
+
+    const parsed = parseTopicPayload(result);
+    const maybeCourseId = resolveCourseId(result);
+    if (maybeCourseId && !courseId) {
+      setCourseId(maybeCourseId);
+    }
+
+    if (parsed.ragSessionId) {
+      setRagSessionId(parsed.ragSessionId);
+    }
+
+    setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
+    setOverviewTopics(parsed.hydrated);
+    setTopicAgentContext(parsed.agentContext || null);
+  }, [courseId]);
 
   const isCramMode = studyMode === "cram";
 
@@ -466,6 +508,18 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setManualTopicsInput("");
     }
   }, [isCramMode, cramTopicStrategy]);
+
+  useEffect(() => {
+    if (manualUploadEnabled) return;
+    const hasManualInputs =
+      Boolean(syllabusText.trim()) ||
+      syllabusFiles.length > 0 ||
+      Boolean(examNotes.trim()) ||
+      examFiles.length > 0;
+    if (hasManualInputs) {
+      setManualUploadEnabled(true);
+    }
+  }, [manualUploadEnabled, syllabusText, syllabusFiles, examNotes, examFiles]);
 
   useEffect(() => {
     let active = true;
@@ -638,6 +692,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
     setRagSessionId(null);
+    setTopicAgentContext(null);
     setModuleConfidenceState({});
     setOpenAccordions({});
     setTopicsError(null);
@@ -877,30 +932,35 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     clearTopicsState();
     clearGeneratedContentOutdated();
     setBrowserSession(null); // Clear any existing browser session
+    setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
+    const includeManualInputs = manualUploadEnabled;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
       university: trimmedUniversity || null,
       finishByDate: finishByIso || null,
-      syllabusText: syllabusText.trim() || "Not provided.",
+      syllabusText: includeManualInputs ? (syllabusText.trim() || "Not provided.") : "Not provided.",
       mode: studyMode,
       agentSearchEnabled,
       browserAgentEnabled,
     };
 
-    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
-    if (examFormatDetails) {
-      payload.examFormatDetails = examFormatDetails;
+    if (includeManualInputs) {
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
+      if (examFormatDetails) {
+        payload.examFormatDetails = examFormatDetails;
+      }
     }
 
-    if (syllabusFiles.length > 0) {
+    if (includeManualInputs && syllabusFiles.length > 0) {
       payload.syllabusFiles = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
     }
 
-    if (examFiles.length > 0) {
+    if (includeManualInputs && examFiles.length > 0) {
       payload.examFiles = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
     }
 
@@ -925,28 +985,18 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
           setBrowserSession(responseData.browserSession);
         }
 
-        // For browser mode, we may need to wait longer and handle differently
+        if (browserAgentEnabled && res.ok && !responseData.jobId) {
+          setPendingBrowserJobSessionId(responseData.browserSession?.sessionId || null);
+          setIsTopicsLoading(false);
+          return;
+        }
+
         const { result } = await resolveAsyncJobResponse(
           { ok: res.ok, status: res.status, json: async () => responseData },
-          { errorLabel: "build topics", timeout: browserAgentEnabled ? 15 * 60 * 1000 : undefined }
+          { errorLabel: "build topics" }
         );
 
-        if (!result) {
-          throw new Error("Topic generation completed but no result was returned.");
-        }
-
-        const parsed = parseTopicPayload(result);
-        const maybeCourseId = resolveCourseId(result);
-        if (maybeCourseId && !courseId) {
-          setCourseId(maybeCourseId);
-        }
-
-        if (parsed.ragSessionId) {
-          setRagSessionId(parsed.ragSessionId);
-        }
-
-        setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
-        setOverviewTopics(parsed.hydrated);
+        applyTopicsResult(result);
         setTopicsError(null);
         setIsTopicsLoading(false);
         return;
@@ -973,6 +1023,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     examDetailsProvided,
     syllabusFiles,
     syllabusText,
+    manualUploadEnabled,
     userId,
     studyMode,
     studyHours,
@@ -980,7 +1031,50 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     clearTopicsState,
     agentSearchEnabled,
     browserAgentEnabled,
+    applyTopicsResult,
   ]);
+
+  const handleBrowserJobStarted = useCallback(async ({ jobId, sessionId } = {}) => {
+    if (!jobId) return;
+
+    if (browserJobId === jobId) {
+      return;
+    }
+
+    if (pendingBrowserJobSessionId && sessionId && sessionId !== pendingBrowserJobSessionId) {
+      return;
+    }
+
+    setBrowserJobId(jobId);
+    setPendingBrowserJobSessionId(null);
+    setIsTopicsLoading(true);
+
+    try {
+      const { result } = await resolveAsyncJobResponse(
+        { ok: true, status: 202, json: async () => ({ jobId }) },
+        { errorLabel: "build topics" }
+      );
+
+      applyTopicsResult(result);
+      setTopicsError(null);
+      setIsTopicsLoading(false);
+    } catch (error) {
+      console.error("Browser job failed:", error);
+      setOverviewTopics([]);
+      setDeletedSubtopics([]);
+      setTopicsError(error?.message || "The model did not return any topics. Please try again.");
+      setIsTopicsLoading(false);
+    }
+  }, [applyTopicsResult, pendingBrowserJobSessionId, browserJobId]);
+
+  const handleBrowserSessionClosed = useCallback(() => {
+    if (pendingBrowserJobSessionId) {
+      setIsTopicsLoading(false);
+      setTopicsError("Browser session closed before topic generation started.");
+    }
+    setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
+  }, [pendingBrowserJobSessionId]);
 
   // Modify topics
   const handleModifyTopics = useCallback(async (prompt) => {
@@ -1003,12 +1097,25 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setCourseGenerationError("");
 
     try {
+      const contextPayload =
+        topicAgentContext && typeof topicAgentContext === "object"
+          ? {
+              ...topicAgentContext,
+              courseTitle: courseTitle || topicAgentContext.courseTitle,
+              university: collegeName || topicAgentContext.university,
+            }
+          : {
+              courseTitle,
+              university: collegeName,
+            };
+
       const response = await authFetch(`/api/courses/modify-topics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: trimmedPrompt,
           currentModules: buildCurrentModulesPayload(overviewTopics),
+          agentContext: contextPayload,
         }),
       });
 
@@ -1027,6 +1134,11 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       if (parsed.ragSessionId) {
         setRagSessionId(parsed.ragSessionId);
       }
+      setTopicAgentContext((prev) => ({
+        ...(prev || contextPayload),
+        lastModifyPrompt: trimmedPrompt,
+        lastModifiedAt: new Date().toISOString(),
+      }));
       setTopicModifyPrompt("");
     } catch (error) {
       console.error("Modify topics failed:", error);
@@ -1034,7 +1146,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     } finally {
       setIsModifyingTopics(false);
     }
-  }, [overviewTopics, topicModifyPrompt, userId]);
+  }, [overviewTopics, topicModifyPrompt, userId, topicAgentContext, courseTitle, collegeName]);
 
   // ============================================
   // UNIFIED PLAN HANDLERS
@@ -1666,6 +1778,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setTopicModifyPrompt,
     isModifyingTopics,
     topicModifyError,
+    setTopicModifyError,
+    topicAgentContext,
 
     // Loading/error
     isTopicsLoading,
@@ -1699,8 +1813,12 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setAgentSearchEnabled,
     browserAgentEnabled,
     setBrowserAgentEnabled,
+    manualUploadEnabled,
+    setManualUploadEnabled,
     browserSession,
     setBrowserSession,
+    pendingBrowserJobSessionId,
+    handleBrowserSessionClosed,
 
     // Computed
     canProceedFromStep1,
@@ -1720,6 +1838,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     handleRestoreAll,
     handleAddTopic,
     handleGenerateTopics,
+    handleBrowserJobStarted,
     handleModifyTopics,
     handleGenerateCourse,
     handleGenerateUnifiedPlan,
@@ -1748,6 +1867,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       studyHours,
       studyMinutes,
       syllabusText,
+      manualUploadEnabled,
       examNotes,
       overviewTopics,
       moduleConfidenceState,
@@ -1764,6 +1884,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       studyHours,
       studyMinutes,
       syllabusText,
+      manualUploadEnabled,
       examNotes,
       overviewTopics,
       moduleConfidenceState,
@@ -1780,6 +1901,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setStudyHours(snapshot.studyHours ?? 5);
       setStudyMinutes(snapshot.studyMinutes ?? 0);
       setSyllabusText(snapshot.syllabusText ?? '');
+      setManualUploadEnabled(snapshot.manualUploadEnabled ?? false);
       setExamNotes(snapshot.examNotes ?? '');
       setOverviewTopics(snapshot.overviewTopics ?? []);
       setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});

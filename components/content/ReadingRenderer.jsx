@@ -244,6 +244,59 @@ function parseVideoBlock(lines, startIdx) {
 }
 
 /**
+ * Parse a TeX block in the format:
+ * :::tex-block or :::tex
+ * LaTeX content
+ * :::
+ */
+function parseTexBlock(lines, startIdx) {
+  const startLine = lines[startIdx].trim();
+  const match = startLine.match(/^:::\s*(tex-block|tex)\b(.*)$/i);
+  const inlineContent = match?.[2]?.trim();
+  const contentLines = [];
+  let i = startIdx + 1;
+
+  if (inlineContent) {
+    contentLines.push(inlineContent);
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^:::\s*$/.test(line.trim())) {
+      i++;
+      break;
+    }
+    contentLines.push(line);
+    i++;
+  }
+
+  let content = contentLines.join("\n").trim();
+  if (/^\$\$[\s\S]*\$\$$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  } else if (/^\\\[[\s\S]*\\\]$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  } else if (/^\\\([\s\S]*\\\)$/.test(content)) {
+    content = content.slice(2, -2).trim();
+  }
+
+  return {
+    type: "block-math",
+    content,
+    endIdx: i,
+  };
+}
+
+function isTexBlockStart(trimmed) {
+  if (/^:::\s*tex-block\b/i.test(trimmed)) return true;
+  if (/^:::\s*tex\b/i.test(trimmed) && !/^:::\s*tex\s*\[/i.test(trimmed)) return true;
+  return false;
+}
+
+function isTexInlineLine(trimmed) {
+  return /^:::\s*tex\s*\[/i.test(trimmed);
+}
+
+/**
  * Parse a callout block in the format:
  * :::callout{type="info"}
  * Content goes here
@@ -255,7 +308,30 @@ function parseCalloutBlock(lines, startIdx, attrs) {
 
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+    const trimmed = line.trim();
+
+    if (isTexBlockStart(trimmed)) {
+      contentLines.push(line);
+      i++;
+      while (i < lines.length) {
+        const texLine = lines[i];
+        contentLines.push(texLine);
+        if (/^:::\s*$/.test(texLine.trim())) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+
+    if (isTexInlineLine(trimmed)) {
+      contentLines.push(line);
+      i++;
+      continue;
+    }
+
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(trimmed)) {
       i++;
       break;
     }
@@ -290,7 +366,30 @@ function parseRevealBlock(lines, startIdx, attrs) {
 
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(line.trim())) {
+    const trimmed = line.trim();
+
+    if (isTexBlockStart(trimmed)) {
+      contentLines.push(line);
+      i++;
+      while (i < lines.length) {
+        const texLine = lines[i];
+        contentLines.push(texLine);
+        if (/^:::\s*$/.test(texLine.trim())) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+
+    if (isTexInlineLine(trimmed)) {
+      contentLines.push(line);
+      i++;
+      continue;
+    }
+
+    if (/^\s*:::/.test(line) && !/^:::(callout|reveal|tabs|tab|video|image)/i.test(trimmed)) {
       i++;
       break;
     }
@@ -328,6 +427,33 @@ function parseTabGroup(lines, startIdx) {
     const line = lines[i];
     const trimmed = line.trim();
     const sanitized = trimmed.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+    // Allow nested :::tex blocks inside tab content
+    if (isTexBlockStart(sanitized)) {
+      const texLines = [line];
+      i++;
+      while (i < lines.length) {
+        const texLine = lines[i];
+        texLines.push(texLine);
+        if (/^:::\s*$/.test(texLine.trim())) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      if (currentTab) {
+        currentContent.push(...texLines);
+      }
+      continue;
+    }
+
+    if (isTexInlineLine(sanitized)) {
+      if (currentTab) {
+        currentContent.push(line);
+      }
+      i++;
+      continue;
+    }
 
     // Check if this is a potential end marker (standalone :::)
     if (/^:::$/.test(sanitized) || (/^:::/.test(sanitized) && !/^:::\s*tab/i.test(sanitized))) {
@@ -422,8 +548,9 @@ function parseTabGroup(lines, startIdx) {
  * Parse content string into structured blocks for rendering
  * Handles: headings, paragraphs, lists, code blocks, math, questions, emphasis
  */
-function parseContent(content) {
+function parseContent(content, options = {}) {
   if (!content) return [];
+  const { allowBlockquotes = true } = options;
 
   console.log('ReadingRenderer raw content:', content.slice(0, 200));
 
@@ -489,6 +616,16 @@ function parseContent(content) {
       if (videoBlock) {
         blocks.push(videoBlock);
         i = videoBlock.endIdx;
+        continue;
+      }
+    }
+
+    // TeX block (:::tex)
+    if (isTexBlockStart(trimmed)) {
+      const texBlock = parseTexBlock(lines, i);
+      if (texBlock) {
+        blocks.push(texBlock);
+        i = texBlock.endIdx;
         continue;
       }
     }
@@ -561,12 +698,12 @@ function parseContent(content) {
     }
 
     // Blockquote / Callout (starts with >)
-    if (trimmed.startsWith(">")) {
+    if (allowBlockquotes && trimmed.startsWith(">")) {
       const quoteLines = [];
       while (i < lines.length) {
-        const currentLine = lines[i].trim();
-        if (currentLine.startsWith(">")) {
-          quoteLines.push(currentLine.slice(1).trim());
+        const currentLine = lines[i];
+        if (currentLine.trim().startsWith(">")) {
+          quoteLines.push(currentLine.replace(/^\s*>\s?/, ""));
           i++;
         } else if (currentLine === "") {
           i++;
@@ -575,9 +712,12 @@ function parseContent(content) {
           break;
         }
       }
+      const quoteContent = quoteLines.join("\n").trim();
+      const quoteBlocks = parseContent(quoteContent, { allowBlockquotes: false });
       blocks.push({
         type: "blockquote",
-        content: quoteLines.join(" "),
+        content: quoteContent,
+        blocks: quoteBlocks,
       });
       continue;
     }
@@ -726,6 +866,7 @@ function parseContent(content) {
         /^\d+\.\s+/.test(nextTrimmed) ||
         nextTrimmed.startsWith("```") ||
         nextTrimmed.startsWith("$$") ||
+        nextTrimmed.startsWith(":::") ||
         /^(\*\*)?Question:?\*?\*?/i.test(nextTrimmed) ||
         /^\*\*Check Your Understanding\*\*/i.test(nextTrimmed)
       ) {
@@ -970,6 +1111,7 @@ function InlineContent({ text }) {
     const result = [];
     // Normalize double-escaped backslashes but keep original math delimiters intact
     let remaining = text
+      .replace(/:::tex\[([\s\S]*?)\]:::/g, '\\\\($1\\\\)')
       .replace(/\\(\(|\))/g, '\\$1')  // \\( -> \(, \\) -> \)
       .replace(/\\(\[|\])/g, '\\$1');  // \\[ -> \[, \\] -> \]
 
@@ -1554,248 +1696,259 @@ export default function ReadingRenderer({
   // Track question index for each question block
   let questionIndex = 0;
 
+  const renderBlocks = (blockList, keyPrefix = "") =>
+    blockList.map((block, idx) => {
+      const blockKey = `${keyPrefix}${idx}`;
+      const idSuffix = blockKey;
+      switch (block.type) {
+        case "heading":
+          const HeadingTag = `h${Math.min(block.level, 6)}`;
+          const headingClasses = {
+            1: "text-2xl sm:text-3xl font-bold mt-8 mb-4 text-[var(--foreground)]",
+            2: "text-xl sm:text-2xl font-bold mt-8 mb-4 text-[var(--foreground)]",
+            3: "text-lg sm:text-xl font-semibold mt-6 mb-3 text-[var(--foreground)]",
+            4: "text-base sm:text-lg font-semibold mt-5 mb-2 text-[var(--foreground)]",
+            5: "text-base font-medium mt-4 mb-2 text-[var(--foreground)]",
+            6: "text-sm font-medium mt-4 mb-2 text-[var(--muted-foreground)]",
+          };
+          return (
+            <HeadingTag key={blockKey} className={headingClasses[block.level] || headingClasses[3]}>
+              <InlineContent text={block.content} />
+            </HeadingTag>
+          );
+
+        case "image":
+          const credit = [block.author, block.license].filter(Boolean).join(" | ");
+          const imageAlt = block.alt || block.caption || "Reading image";
+          // Use fullUrl (high-res) if available, otherwise fall back to url (may be thumbnail)
+          const imageSrc = block.fullUrl || block.url;
+          const imageElement = (
+            <img
+              src={imageSrc}
+              alt={imageAlt}
+              loading="lazy"
+              className="w-full h-auto rounded-xl"
+            />
+          );
+          return (
+            <figure key={blockKey} className="my-6 w-full">
+              <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+                {block.fullUrl ? (
+                  <a href={block.fullUrl} target="_blank" rel="noopener noreferrer" className="block w-full">
+                    {imageElement}
+                  </a>
+                ) : (
+                  imageElement
+                )}
+              </div>
+              {(block.caption || credit) && (
+                <figcaption className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                  {block.caption && <InlineContent text={block.caption} />}
+                  {credit && (
+                    <span className="block mt-1 text-xs text-[var(--muted-foreground)]">
+                      {credit}
+                    </span>
+                  )}
+                </figcaption>
+              )}
+            </figure>
+          );
+
+        case "embedded_video":
+          return (
+            <div key={blockKey} className="my-6">
+              <VideoEmbed
+                id={`video-${idSuffix}`}
+                video_url={block.url}
+              />
+              {(block.title || block.caption) && (
+                <div className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                  {block.title && <span className="font-medium">{block.title}</span>}
+                  {block.title && block.caption && " — "}
+                  {block.caption}
+                </div>
+              )}
+            </div>
+          );
+
+        case "callout":
+          return (
+            <div key={blockKey} className="my-6">
+              <Callout
+                id={`callout-${idSuffix}`}
+                type={block.calloutType}
+                title={block.title || undefined}
+                content={block.content}
+                collapsible={block.collapsible}
+              />
+            </div>
+          );
+
+        case "reveal":
+          return (
+            <div key={blockKey} className="my-6">
+              <RevealBlock
+                id={`reveal-${idSuffix}`}
+                trigger_label={block.label}
+                content={block.content}
+                reveal_type="click"
+              />
+            </div>
+          );
+
+        case "tab_group":
+          return (
+            <div key={blockKey} className="my-6 rounded-xl border border-[var(--border)] overflow-hidden">
+              <TabGroup
+                id={`tabs-${idSuffix}`}
+                tabs={block.tabs}
+              />
+            </div>
+          );
+
+        case "paragraph":
+          return (
+            <p key={blockKey} className="my-4 leading-7 text-[var(--foreground)]">
+              <InlineContent text={block.content} />
+            </p>
+          );
+
+        case "block-math":
+          return (
+            <div key={blockKey} className="my-6 py-4 px-4 rounded-xl bg-[var(--surface-2)]/50 overflow-x-auto">
+              <div className="text-center text-lg">{`$$${block.content}$$`}</div>
+            </div>
+          );
+
+        case "list":
+          const ListTag = block.ordered ? "ol" : "ul";
+          const listClass = block.ordered
+            ? "my-4 pl-6 list-decimal space-y-2"
+            : "my-4 pl-6 list-disc space-y-2";
+          return (
+            <ListTag key={blockKey} className={listClass}>
+              {block.items.map((item, itemIdx) => (
+                <li key={`${blockKey}-${itemIdx}`} className="text-[var(--foreground)] leading-relaxed pl-1">
+                  <InlineContent text={item} />
+                </li>
+              ))}
+            </ListTag>
+          );
+
+        case "blockquote":
+          return (
+            <blockquote
+              key={blockKey}
+              className="my-6 pl-4 border-l-4 border-[var(--primary)]/50 bg-[var(--primary)]/5 py-3 pr-4 rounded-r-lg"
+            >
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 mt-0.5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {block.blocks?.length ? (
+                  <div className="flex-1 space-y-3 text-[var(--foreground)]">
+                    {renderBlocks(block.blocks, `${blockKey}-`)}
+                  </div>
+                ) : (
+                  <p className="text-[var(--foreground)] leading-relaxed">
+                    <InlineContent text={block.content} />
+                  </p>
+                )}
+              </div>
+            </blockquote>
+          );
+
+        case "table":
+          return (
+            <div key={blockKey} className="my-6 overflow-x-auto rounded-xl border border-[var(--border)]">
+              <table className="w-full border-collapse">
+                {block.hasHeader && block.rows.length > 0 && (
+                  <thead>
+                    <tr className="bg-[var(--surface-2)]">
+                      {block.rows[0].map((cell, cellIdx) => (
+                        <th
+                          key={`${blockKey}-h-${cellIdx}`}
+                          className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] border-b border-[var(--border)]"
+                        >
+                          <InlineContent text={cell} />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {(block.hasHeader ? block.rows.slice(1) : block.rows).map((row, rowIdx) => (
+                    <tr
+                      key={`${blockKey}-r-${rowIdx}`}
+                      className={rowIdx % 2 === 0 ? "bg-[var(--surface-1)]" : "bg-[var(--surface-2)]/30"}
+                    >
+                      {row.map((cell, cellIdx) => (
+                        <td
+                          key={`${blockKey}-c-${rowIdx}-${cellIdx}`}
+                          className="px-4 py-3 text-sm text-[var(--foreground)] border-b border-[var(--border)]/50"
+                        >
+                          <InlineContent text={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+
+        case "code":
+          return (
+            <div key={blockKey} className="my-6 rounded-xl overflow-hidden border border-[var(--border)]">
+              {block.language && (
+                <div className="px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--border)] text-xs font-mono text-[var(--muted-foreground)]">
+                  {block.language}
+                </div>
+              )}
+              <pre className="p-4 bg-[var(--surface-1)] overflow-x-auto">
+                <code className="text-sm font-mono text-[var(--foreground)]">
+                  {block.content}
+                </code>
+              </pre>
+            </div>
+          );
+
+        case "question":
+          const currentQuestionIndex = questionIndex++;
+          return (
+            <QuestionBlock
+              key={blockKey}
+              question={block.question}
+              options={block.options}
+              correctIndex={block.correctIndex}
+              explanation={block.explanation}
+              questionIndex={currentQuestionIndex}
+              courseId={courseId}
+              lessonId={lessonId}
+              userId={userId}
+              initialAnswer={inlineSelections?.[currentQuestionIndex]}
+              onAnswered={handleInlineQuestionUpdate}
+              onSeedsAwarded={handleSeedsAwarded}
+              onCorrectAnswer={handleCorrectAnswer}
+              onWrongAnswer={handleWrongAnswer}
+            />
+          );
+
+        case "hr":
+          return (
+            <hr key={blockKey} className="my-8 border-t border-[var(--border)]" />
+          );
+
+        default:
+          return null;
+      }
+    });
+
   return (
     <>
       <article className="reading-content max-w-none">
         <MathJax dynamic>
-          {blocks.map((block, idx) => {
-            switch (block.type) {
-              case "heading":
-                const HeadingTag = `h${Math.min(block.level, 6)}`;
-                const headingClasses = {
-                  1: "text-2xl sm:text-3xl font-bold mt-8 mb-4 text-[var(--foreground)]",
-                  2: "text-xl sm:text-2xl font-bold mt-8 mb-4 text-[var(--foreground)]",
-                  3: "text-lg sm:text-xl font-semibold mt-6 mb-3 text-[var(--foreground)]",
-                  4: "text-base sm:text-lg font-semibold mt-5 mb-2 text-[var(--foreground)]",
-                  5: "text-base font-medium mt-4 mb-2 text-[var(--foreground)]",
-                  6: "text-sm font-medium mt-4 mb-2 text-[var(--muted-foreground)]",
-                };
-                return (
-                  <HeadingTag key={idx} className={headingClasses[block.level] || headingClasses[3]}>
-                    <InlineContent text={block.content} />
-                  </HeadingTag>
-                );
-
-              case "image":
-                const credit = [block.author, block.license].filter(Boolean).join(" | ");
-                const imageAlt = block.alt || block.caption || "Reading image";
-                // Use fullUrl (high-res) if available, otherwise fall back to url (may be thumbnail)
-                const imageSrc = block.fullUrl || block.url;
-                const imageElement = (
-                  <img
-                    src={imageSrc}
-                    alt={imageAlt}
-                    loading="lazy"
-                    className="w-full h-auto rounded-xl"
-                  />
-                );
-                return (
-                  <figure key={idx} className="my-6 w-full">
-                    <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
-                      {block.fullUrl ? (
-                        <a href={block.fullUrl} target="_blank" rel="noopener noreferrer" className="block w-full">
-                          {imageElement}
-                        </a>
-                      ) : (
-                        imageElement
-                      )}
-                    </div>
-                    {(block.caption || credit) && (
-                      <figcaption className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
-                        {block.caption && <InlineContent text={block.caption} />}
-                        {credit && (
-                          <span className="block mt-1 text-xs text-[var(--muted-foreground)]">
-                            {credit}
-                          </span>
-                        )}
-                      </figcaption>
-                    )}
-                  </figure>
-                );
-
-              case "embedded_video":
-                return (
-                  <div key={idx} className="my-6">
-                    <VideoEmbed
-                      id={`video-${idx}`}
-                      video_url={block.url}
-                    />
-                    {(block.title || block.caption) && (
-                      <div className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
-                        {block.title && <span className="font-medium">{block.title}</span>}
-                        {block.title && block.caption && " — "}
-                        {block.caption}
-                      </div>
-                    )}
-                  </div>
-                );
-
-              case "callout":
-                return (
-                  <div key={idx} className="my-6">
-                    <Callout
-                      id={`callout-${idx}`}
-                      type={block.calloutType}
-                      title={block.title || undefined}
-                      content={block.content}
-                      collapsible={block.collapsible}
-                    />
-                  </div>
-                );
-
-              case "reveal":
-                return (
-                  <div key={idx} className="my-6">
-                    <RevealBlock
-                      id={`reveal-${idx}`}
-                      trigger_label={block.label}
-                      content={block.content}
-                      reveal_type="click"
-                    />
-                  </div>
-                );
-
-              case "tab_group":
-                return (
-                  <div key={idx} className="my-6 rounded-xl border border-[var(--border)] overflow-hidden">
-                    <TabGroup
-                      id={`tabs-${idx}`}
-                      tabs={block.tabs}
-                    />
-                  </div>
-                );
-
-              case "paragraph":
-                return (
-                  <p key={idx} className="my-4 leading-7 text-[var(--foreground)]">
-                    <InlineContent text={block.content} />
-                  </p>
-                );
-
-              case "block-math":
-                return (
-                  <div key={idx} className="my-6 py-4 px-4 rounded-xl bg-[var(--surface-2)]/50 overflow-x-auto">
-                    <div className="text-center text-lg">{`$$${block.content}$$`}</div>
-                  </div>
-                );
-
-              case "list":
-                const ListTag = block.ordered ? "ol" : "ul";
-                const listClass = block.ordered
-                  ? "my-4 pl-6 list-decimal space-y-2"
-                  : "my-4 pl-6 list-disc space-y-2";
-                return (
-                  <ListTag key={idx} className={listClass}>
-                    {block.items.map((item, itemIdx) => (
-                      <li key={itemIdx} className="text-[var(--foreground)] leading-relaxed pl-1">
-                        <InlineContent text={item} />
-                      </li>
-                    ))}
-                  </ListTag>
-                );
-
-              case "blockquote":
-                return (
-                  <blockquote
-                    key={idx}
-                    className="my-6 pl-4 border-l-4 border-[var(--primary)]/50 bg-[var(--primary)]/5 py-3 pr-4 rounded-r-lg"
-                  >
-                    <div className="flex items-start gap-2">
-                      <svg className="w-5 h-5 mt-0.5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="text-[var(--foreground)] leading-relaxed">
-                        <InlineContent text={block.content} />
-                      </p>
-                    </div>
-                  </blockquote>
-                );
-
-              case "table":
-                return (
-                  <div key={idx} className="my-6 overflow-x-auto rounded-xl border border-[var(--border)]">
-                    <table className="w-full border-collapse">
-                      {block.hasHeader && block.rows.length > 0 && (
-                        <thead>
-                          <tr className="bg-[var(--surface-2)]">
-                            {block.rows[0].map((cell, cellIdx) => (
-                              <th
-                                key={cellIdx}
-                                className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] border-b border-[var(--border)]"
-                              >
-                                <InlineContent text={cell} />
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                      )}
-                      <tbody>
-                        {(block.hasHeader ? block.rows.slice(1) : block.rows).map((row, rowIdx) => (
-                          <tr
-                            key={rowIdx}
-                            className={rowIdx % 2 === 0 ? "bg-[var(--surface-1)]" : "bg-[var(--surface-2)]/30"}
-                          >
-                            {row.map((cell, cellIdx) => (
-                              <td
-                                key={cellIdx}
-                                className="px-4 py-3 text-sm text-[var(--foreground)] border-b border-[var(--border)]/50"
-                              >
-                                <InlineContent text={cell} />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-
-              case "code":
-                return (
-                  <div key={idx} className="my-6 rounded-xl overflow-hidden border border-[var(--border)]">
-                    {block.language && (
-                      <div className="px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--border)] text-xs font-mono text-[var(--muted-foreground)]">
-                        {block.language}
-                      </div>
-                    )}
-                    <pre className="p-4 bg-[var(--surface-1)] overflow-x-auto">
-                      <code className="text-sm font-mono text-[var(--foreground)]">
-                        {block.content}
-                      </code>
-                    </pre>
-                  </div>
-                );
-
-              case "question":
-                const currentQuestionIndex = questionIndex++;
-                return (
-                  <QuestionBlock
-                    key={idx}
-                    question={block.question}
-                    options={block.options}
-                    correctIndex={block.correctIndex}
-                    explanation={block.explanation}
-                    questionIndex={currentQuestionIndex}
-                    courseId={courseId}
-                    lessonId={lessonId}
-                    userId={userId}
-                    initialAnswer={inlineSelections?.[currentQuestionIndex]}
-                    onAnswered={handleInlineQuestionUpdate}
-                    onSeedsAwarded={handleSeedsAwarded}
-                    onCorrectAnswer={handleCorrectAnswer}
-                    onWrongAnswer={handleWrongAnswer}
-                  />
-                );
-
-              case "hr":
-                return (
-                  <hr key={idx} className="my-8 border-t border-[var(--border)]" />
-                );
-
-              default:
-                return null;
-            }
-          })}
+          {renderBlocks(blocks)}
         </MathJax>
       </article>
 

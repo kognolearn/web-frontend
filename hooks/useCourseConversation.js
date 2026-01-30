@@ -73,6 +73,7 @@ export function useCourseConversation(flowState, { onStepChange } = {}) {
       studyMode: flowState.studyMode,
       studyHours: flowState.studyHours,
       studyMinutes: flowState.studyMinutes,
+      manualUploadEnabled: flowState.manualUploadEnabled,
       syllabusText: flowState.syllabusText,
       syllabusFiles: flowState.syllabusFiles,
       examNotes: flowState.examNotes,

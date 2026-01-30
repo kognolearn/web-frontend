@@ -47,13 +47,15 @@ vi.mock('@/components/ui/OnboardingProvider', () => ({
   }),
 }));
 
-vi.mock('@/components/tour', () => ({
+vi.mock('@/components/tour/GuidedTourProvider', () => ({
+  GuidedTourProvider: ({ children }) => <>{children}</>,
   useGuidedTour: () => ({
     startTour: vi.fn(),
     isTourActive: false,
     currentTour: null,
     endTour: vi.fn(),
   }),
+  useTourHighlight: () => ({}),
 }));
 
 vi.mock('@/components/browser', async () => {
@@ -76,7 +78,6 @@ vi.mock('@/utils/asyncJobs', async () => {
 
 import { resolveAsyncJobResponse } from '@/utils/asyncJobs';
 import { authFetch, getAccessToken } from '@/lib/api';
-import CreateCoursePage from '@/app/courses/create/page';
 
 beforeAll(() => {
   global.IntersectionObserver = class {
@@ -111,10 +112,8 @@ beforeEach(() => {
     if (url === '/api/courses/topics') {
       return {
         ok: true,
-        status: 202,
+        status: 200,
         json: async () => ({
-          jobId: 'job-1',
-          statusUrl: '/api/jobs/job-1',
           browserSession: {
             sessionId: 'sess-1',
             streamUrl: '/api/browser-stream/sess-1',
@@ -155,6 +154,7 @@ it('shows the browser viewer and sends browser flags when browser agent is enabl
     },
   });
 
+  const { default: CreateCoursePage } = await import('@/app/courses/create/page');
   const user = userEvent.setup();
   render(<CreateCoursePage />);
 
@@ -170,13 +170,13 @@ it('shows the browser viewer and sends browser flags when browser agent is enabl
   );
 
   await screen.findByRole('heading', { name: 'Course Materials' });
+  const switches = screen.getAllByRole('switch');
+  await user.click(switches[1]);
   await user.click(screen.getByRole('button', { name: /Next: Generate Topics/i }));
 
   await screen.findByRole('heading', { name: 'Build Study Topics' });
-  const switches = screen.getAllByRole('switch');
-  await user.click(switches[1]);
 
-  await user.click(screen.getByRole('button', { name: /Build Topics/i }));
+  await user.click(screen.getByRole('button', { name: /Open Browser Agent|Build Topics/i }));
 
   await waitFor(() => {
     expect(screen.getByTestId('browser-viewer')).toHaveTextContent('sess-1');

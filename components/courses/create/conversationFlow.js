@@ -103,6 +103,17 @@ export const CONVERSATION_FLOW = [
     skippable: false,
   },
 
+  // Step 5: Source options (always)
+  {
+    id: 'source_options',
+    kognoMessage:
+      "Before we generate topics, choose how you want me to gather sources. You can enable web search, the live browser agent, and optional manual uploads.",
+    inputType: 'confirm',
+    confirmLabel: 'Continue',
+    skippable: false,
+    tourTarget: 'source-options',
+  },
+
   // ============================================
   // DEEP STUDY MODE STEPS
   // ============================================
@@ -115,7 +126,7 @@ export const CONVERSATION_FLOW = [
     field: 'syllabusContent',
     textField: 'syllabusText',
     filesField: 'syllabusFiles',
-    condition: (state) => state.studyMode === 'deep',
+    condition: (state) => state.studyMode === 'deep' && state.manualUploadEnabled,
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
     placeholder: 'Paste your syllabus, course outline, topic list, or any relevant details...',
     skippable: true,
@@ -131,7 +142,7 @@ export const CONVERSATION_FLOW = [
     field: 'examContent',
     textField: 'examNotes',
     filesField: 'examFiles',
-    condition: (state) => state.studyMode === 'deep',
+    condition: (state) => state.studyMode === 'deep' && state.manualUploadEnabled,
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
     placeholder: 'Paste exam info, topics covered, question types, or upload past exams...',
     skippable: true,
@@ -151,7 +162,7 @@ export const CONVERSATION_FLOW = [
     field: 'cramPracticeExams',
     textField: 'examNotes',
     filesField: 'examFiles',
-    condition: (state) => state.studyMode === 'cram',
+    condition: (state) => state.studyMode === 'cram' && state.manualUploadEnabled,
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
     placeholder: 'Upload practice exams, sample questions, problem sets, or paste exam content...',
     skippable: true,
@@ -167,7 +178,7 @@ export const CONVERSATION_FLOW = [
     field: 'cramExamInfo',
     textField: 'syllabusText',
     filesField: 'syllabusFiles',
-    condition: (state) => state.studyMode === 'cram',
+    condition: (state) => state.studyMode === 'cram' && state.manualUploadEnabled,
     accept: '.pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic',
     placeholder: 'Topics for the exam, professor objectives, course calendar up to exam date...',
     skippable: true,
@@ -182,7 +193,7 @@ export const CONVERSATION_FLOW = [
   // Step 7: Generate Topics Prompt (Legacy)
   {
     id: 'generate_topics_prompt',
-    kognoMessage: "Perfect! I've got everything I need. Ready for me to create your personalized topic list?",
+    kognoMessage: "Ready for me to create your personalized topic list?",
     inputType: 'confirm',
     confirmLabel: 'Generate Topics',
     action: 'generateTopics',
