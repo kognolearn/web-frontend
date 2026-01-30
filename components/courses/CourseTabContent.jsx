@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
+import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import ChatBot from "@/components/chat/ChatBot";
 import FlashcardDeck from "@/components/content/FlashcardDeck";
@@ -2893,7 +2893,7 @@ export default function CourseTabContent({
 
               <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={pointerWithin}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >

@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { useCourseCreationFlow } from "@/hooks/useCourseCreationFlow";
 import { useCourseConversation } from "@/hooks/useCourseConversation";
 import { useQueueStatus } from "@/hooks/useQueueStatus";
+import { authFetch, getAccessToken } from "@/lib/api";
+import { BrowserViewer, TopicSearchOptions } from "@/components/browser";
 import KognoMessage from "./KognoMessage";
 import UserResponseBubble from "./UserResponseBubble";
 import CourseInputRenderer from "./CourseInputRenderer";
@@ -65,6 +67,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
   const chatContainerRef = useRef(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
   const [inputDraft, setInputDraft] = useState("");
+  const [browserAuthToken, setBrowserAuthToken] = useState(null);
 
   // Poll queue status for high usage warnings
   const { isHighUsage, creditUtilization, estimatedWaitMinutes } = useQueueStatus({
@@ -90,10 +93,48 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     setInputDraft("");
   }, [conversation.currentStep?.id]);
 
+  useEffect(() => {
+    if (!flowState.browserSession) {
+      setBrowserAuthToken(null);
+      return;
+    }
+    let isMounted = true;
+    getAccessToken().then((token) => {
+      if (isMounted) {
+        setBrowserAuthToken(token);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [flowState.browserSession]);
+
   // Handle back navigation
   const handleBack = () => {
     if (onBack) {
       onBack();
+    }
+  };
+
+  const handleCloseBrowserViewer = async () => {
+    const sessionId = flowState.browserSession?.sessionId;
+    if (sessionId) {
+      try {
+        await authFetch(`/api/browser-session/${sessionId}`, { method: "DELETE" });
+      } catch (error) {
+        console.warn("[BrowserViewer] Failed to close session:", error);
+      }
+    }
+    flowState.setBrowserSession(null);
+  };
+
+  const handleClearActiveBrowserSession = async () => {
+    try {
+      await authFetch(`/api/browser-session/active`, { method: "DELETE" });
+    } catch (error) {
+      console.warn("[BrowserViewer] Failed to clear active session:", error);
+    } finally {
+      flowState.setBrowserSession(null);
     }
   };
 
@@ -444,6 +485,9 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
               message.inputType !== "content_with_attachments" &&
               message.inputType !== "plan_with_confidence";
 
+            const showTopicSearchOptions =
+              message.stepId === "generate_topics_prompt";
+
             return (
               <KognoMessage
                 key={message.id}
@@ -470,7 +514,19 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                 confidenceEditor={message.showConfidenceEditor ? renderConfidenceEditor() : null}
                 superseded={message.superseded}
                 tourTarget={message.tourTarget}
-              />
+              >
+                {showTopicSearchOptions && (
+                  <div className="mt-4">
+                    <TopicSearchOptions
+                      agentSearchEnabled={flowState.agentSearchEnabled}
+                      setAgentSearchEnabled={flowState.setAgentSearchEnabled}
+                      browserAgentEnabled={flowState.browserAgentEnabled}
+                      setBrowserAgentEnabled={flowState.setBrowserAgentEnabled}
+                      disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+                    />
+                  </div>
+                )}
+              </KognoMessage>
             );
           }
 
@@ -507,6 +563,15 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
             >
               Try again
             </button>
+            {/active browser session/i.test(flowState.topicsError || "") && (
+              <button
+                type="button"
+                onClick={handleClearActiveBrowserSession}
+                className="mt-2 ml-3 text-sm text-red-600 underline"
+              >
+                Clear browser session
+              </button>
+            )}
           </div>
         )}
 
@@ -521,6 +586,16 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
               Try again
             </button>
           </div>
+        )}
+
+        {flowState.browserSession && (
+          <BrowserViewer
+            sessionId={flowState.browserSession.sessionId}
+            streamUrl={flowState.browserSession.streamUrl}
+            userId={flowState.userId}
+            authToken={browserAuthToken}
+            onClose={handleCloseBrowserViewer}
+          />
         )}
 
         {flowState.courseGenerationError && (
