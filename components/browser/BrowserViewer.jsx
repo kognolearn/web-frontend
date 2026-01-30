@@ -31,11 +31,11 @@ export default function BrowserViewer({
   const [lastAction, setLastAction] = useState("");
   const [screenshot, setScreenshot] = useState(null);
   const [userActionRequest, setUserActionRequest] = useState(null);
-  const [userInputText, setUserInputText] = useState("");
   const [error, setError] = useState(null);
   const [jobStarted, setJobStarted] = useState(false);
   const [jobStartRequested, setJobStartRequested] = useState(false);
   const [agentInstructions, setAgentInstructions] = useState("");
+  const [isViewportFocused, setIsViewportFocused] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const viewportRef = useRef(null);
@@ -278,8 +278,13 @@ export default function BrowserViewer({
   }, []);
 
   const handleViewportClick = useCallback((event) => {
-    if (!isPaused && !isWaitingForUser) return;
     if (!viewportRef.current) return;
+
+    if (isPaused || isWaitingForUser) {
+      viewportRef.current.focus();
+    } else {
+      return;
+    }
 
     const rect = viewportRef.current.getBoundingClientRect();
     const containerWidth = rect.width;
@@ -306,12 +311,67 @@ export default function BrowserViewer({
     sendUserClick(Math.round(clickX), Math.round(clickY));
   }, [isPaused, isWaitingForUser, sendUserClick, VIEWPORT_WIDTH, VIEWPORT_HEIGHT]);
 
-  const handleSendText = useCallback(() => {
-    const text = userInputText.trim();
-    if (!text) return;
-    sendUserType(text);
-    setUserInputText("");
-  }, [sendUserType, userInputText]);
+  const handleViewportFocus = useCallback(() => {
+    setIsViewportFocused(true);
+  }, []);
+
+  const handleViewportBlur = useCallback(() => {
+    setIsViewportFocused(false);
+  }, []);
+
+  const handleViewportKeyDown = useCallback(
+    (event) => {
+      if (!isPaused && !isWaitingForUser) return;
+      if (!isViewportFocused) return;
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        viewportRef.current?.blur();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        sendUserType("\n");
+        return;
+      }
+
+      if (event.key === "Tab") {
+        event.preventDefault();
+        sendUserType("\t");
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        sendUserType("\b");
+        return;
+      }
+
+      if (event.key.length === 1) {
+        event.preventDefault();
+        sendUserType(event.key);
+      }
+    },
+    [isPaused, isWaitingForUser, isViewportFocused, sendUserType]
+  );
+
+  const handleViewportPaste = useCallback(
+    (event) => {
+      if (!isPaused && !isWaitingForUser) return;
+      if (!isViewportFocused) return;
+      const text = event.clipboardData?.getData("text");
+      if (text) {
+        event.preventDefault();
+        sendUserType(text);
+      }
+    },
+    [isPaused, isWaitingForUser, isViewportFocused, sendUserType]
+  );
 
   return (
     <div
@@ -338,24 +398,27 @@ export default function BrowserViewer({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!isWaitingForUser && (
-            <>
-              {isPaused ? (
-                <button
-                  onClick={handleResume}
-                  className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  Resume Agent
-                </button>
-              ) : (
-                <button
-                  onClick={handlePause}
-                  className="px-3 py-1.5 bg-amber-500 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  Pause to Interact
-                </button>
-              )}
-            </>
+          {isWaitingForUser ? (
+            <button
+              onClick={handleUserActionComplete}
+              className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+            >
+              I&apos;m done - Resume
+            </button>
+          ) : isPaused ? (
+            <button
+              onClick={handleResume}
+              className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+            >
+              Resume Agent
+            </button>
+          ) : (
+            <button
+              onClick={handlePause}
+              className="px-3 py-1.5 bg-amber-500 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+            >
+              Pause to Interact
+            </button>
           )}
           <button
             onClick={onClose}
@@ -401,6 +464,44 @@ export default function BrowserViewer({
         </div>
       </div>
 
+      {(isPaused || isWaitingForUser) && (
+        <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)]/60">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              {isWaitingForUser ? (
+                <>
+                  <span className="font-semibold text-[var(--foreground)]">
+                    Agent needs your help:
+                  </span>{" "}
+                  {userActionRequest?.instructions || "Complete the requested action in the page."}
+                </>
+              ) : (
+                "Paused. Click inside the browser to focus and type directly. Resume when done."
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  isViewportFocused
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : "bg-[var(--surface-muted)] text-[var(--muted-foreground)]"
+                }`}
+              >
+                {isViewportFocused ? "Keyboard control active" : "Click browser to focus"}
+              </span>
+              {isWaitingForUser && (
+                <button
+                  onClick={handleUserActionComplete}
+                  className="px-3 py-1.5 text-xs bg-[var(--primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Resume Agent
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {!jobStarted && (
         <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)]/70 space-y-2">
           <div>
@@ -445,9 +546,16 @@ export default function BrowserViewer({
       <div
         ref={viewportRef}
         onClick={handleViewportClick}
-        className={`relative aspect-video bg-black min-h-[400px] ${
+        onFocus={handleViewportFocus}
+        onBlur={handleViewportBlur}
+        onKeyDown={handleViewportKeyDown}
+        onPaste={handleViewportPaste}
+        tabIndex={0}
+        role="application"
+        aria-label="Browser view"
+        className={`relative aspect-video bg-black min-h-[400px] outline-none ${
           isPaused || isWaitingForUser ? "cursor-crosshair" : ""
-        }`}
+        } ${isViewportFocused ? "ring-2 ring-[var(--primary)]" : ""}`}
       >
         {screenshot ? (
           <img
@@ -516,93 +624,17 @@ export default function BrowserViewer({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Pause overlay (user-initiated) */}
-        {isPaused && !isWaitingForUser && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <div className="bg-[var(--surface-1)] px-6 py-4 rounded-xl shadow-xl text-center max-w-md">
-              <h3 className="font-semibold text-lg mb-2">Browser Paused</h3>
-              <p className="text-sm text-[var(--muted-foreground)] mb-4">
-                You can now interact with the page (login, solve CAPTCHA,
-                navigate, etc.)
-              </p>
-              <button
-                onClick={handleResume}
-                className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
-              >
-                Resume Agent
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Agent request overlay (agent-initiated) */}
-        {isWaitingForUser && userActionRequest && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <div className="bg-[var(--surface-1)] px-6 py-5 rounded-xl shadow-xl text-center max-w-md mx-4">
-              <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                <svg
-                  className="w-6 h-6 text-blue-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-lg mb-2">Agent needs your help</h3>
-              <p className="text-sm text-[var(--muted-foreground)] mb-4">
-                {userActionRequest.instructions}
-              </p>
-              <button
-                onClick={handleUserActionComplete}
-                className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
-              >
-                I&apos;ve completed this - Resume Agent
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Footer with tips */}
       <div className="px-4 py-2 bg-[var(--surface-muted)] border-t border-[var(--border)]">
         <p className="text-xs text-[var(--muted-foreground)]">
           {isWaitingForUser
-            ? "Complete the action above. Click the browser to focus a field, then type below."
+            ? "Complete the action in the page. Click the browser to focus and type directly."
             : isPaused
-            ? "Click the browser to focus a field, type below, then resume the agent."
-            : "The agent is browsing. Click 'Pause' to interact with the page yourself."}
+            ? "Click the browser to focus and type directly, then resume the agent."
+            : "The agent is browsing. Click 'Pause to Interact' to take control."}
         </p>
-        {(isPaused || isWaitingForUser) && (
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              type="text"
-              value={userInputText}
-              onChange={(event) => setUserInputText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleSendText();
-                }
-              }}
-              placeholder="Type text into focused field"
-              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface-1)]"
-            />
-            <button
-              type="button"
-              onClick={handleSendText}
-              className="px-3 py-1.5 text-xs bg-[var(--primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
-            >
-              Send
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

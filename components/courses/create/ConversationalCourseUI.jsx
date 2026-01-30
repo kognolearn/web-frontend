@@ -146,6 +146,13 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
     conversation.applyEdit(conversation.editingMessage.id, newResponse, displayText);
   };
 
+  const shouldInsertBrowserAboveTopics = Boolean(
+    flowState.browserSession &&
+      conversation.messages.some(
+        (message) => message.role === "assistant" && message.showTopicEditor
+      )
+  );
+
   // Render topic editor for current step
   const renderTopicEditor = () => {
     if (!conversation.currentStep?.showTopicEditor) return null;
@@ -185,6 +192,87 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         outdatedMessage={
           flowState.generatedContentOutdated ? flowState.generatedContentOutdatedReason : ""
         }
+      />
+    );
+  };
+
+  const renderMessage = (message) => {
+    if (message.role === "assistant") {
+      const isCurrentlyLoading =
+        message.inputType === "loading" ||
+        (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
+      // Show animated reasoning only while topics are being generated
+      const showReasoning =
+        message.stepId === "topics_loading" && !flowState.overviewTopics?.length;
+      // Show completed reasoning once topics exist
+      const reasoningCompleted =
+        message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
+
+      // Don't show skip button in message for content_with_attachments (it has its own Done button)
+      const showSkipInMessage =
+        message.skippable &&
+        message.inputType !== "content_with_attachments" &&
+        message.inputType !== "plan_with_confidence";
+
+      const showTopicSearchOptions = message.stepId === "source_options";
+
+      return (
+        <KognoMessage
+          key={message.id}
+          content={message.content}
+          isTyping={false}
+          isLoading={isCurrentlyLoading}
+          showReasoning={showReasoning}
+          reasoningCompleted={reasoningCompleted}
+          options={message.options}
+          onOptionSelect={conversation.handleOptionSelect}
+          selectedOption={conversation.previousResponses[message.stepId]}
+          skippable={showSkipInMessage}
+          skipLabel={message.skipLabel}
+          onSkip={conversation.handleSkip}
+          confirmLabel={message.confirmLabel}
+          onConfirm={conversation.handleConfirm}
+          confirmDisabled={flowState.isTopicsLoading || flowState.isPlanLoading}
+          showTopicEditor={message.showTopicEditor}
+          showConfidenceEditor={message.showConfidenceEditor}
+          showPlanSummary={message.showPlanSummary}
+          showProgress={message.showProgress}
+          topicEditor={message.showTopicEditor ? renderTopicEditor() : null}
+          planSummaryView={message.showPlanSummary ? renderPlanSummary() : null}
+          confidenceEditor={message.showConfidenceEditor ? renderConfidenceEditor() : null}
+          superseded={message.superseded}
+          tourTarget={message.tourTarget}
+        >
+          {showTopicSearchOptions && (
+            <div className="mt-4">
+              <TopicSearchOptions
+                agentSearchEnabled={flowState.agentSearchEnabled}
+                setAgentSearchEnabled={flowState.setAgentSearchEnabled}
+                browserAgentEnabled={flowState.browserAgentEnabled}
+                setBrowserAgentEnabled={flowState.setBrowserAgentEnabled}
+                manualUploadEnabled={flowState.manualUploadEnabled}
+                setManualUploadEnabled={flowState.setManualUploadEnabled}
+                disabled={flowState.isTopicsLoading || flowState.courseGenerating}
+              />
+            </div>
+          )}
+        </KognoMessage>
+      );
+    }
+
+    const isEditable = conversation.isMessageEditable(message);
+
+    return (
+      <UserResponseBubble
+        key={message.id}
+        content={message.content}
+        files={message.files}
+        timestamp={message.timestamp}
+        onEdit={() => conversation.openEditModal(message)}
+        canEdit={!message.superseded && message.stepId !== conversation.currentStep?.id}
+        isEditable={isEditable}
+        superseded={message.superseded}
+        isEdited={message.wasEdited}
       />
     );
   };
@@ -469,87 +557,33 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
       >
-        {conversation.messages.map((message) => {
-          if (message.role === "assistant") {
-            const isCurrentlyLoading =
-              message.inputType === "loading" ||
-              (message.stepId === conversation.currentStep?.id && conversation.pendingAction);
-            // Show animated reasoning only while topics are being generated
-            const showReasoning =
-              message.stepId === "topics_loading" && !flowState.overviewTopics?.length;
-            // Show completed reasoning once topics exist
-            const reasoningCompleted =
-              message.stepId === "topics_loading" && flowState.overviewTopics?.length > 0;
-
-            // Don't show skip button in message for content_with_attachments (it has its own Done button)
-            const showSkipInMessage =
-              message.skippable &&
-              message.inputType !== "content_with_attachments" &&
-              message.inputType !== "plan_with_confidence";
-
-            const showTopicSearchOptions =
-              message.stepId === "generate_topics_prompt";
-
-            return (
-              <KognoMessage
-                key={message.id}
-                content={message.content}
-                isTyping={false}
-                isLoading={isCurrentlyLoading}
-                showReasoning={showReasoning}
-                reasoningCompleted={reasoningCompleted}
-                options={message.options}
-                onOptionSelect={conversation.handleOptionSelect}
-                selectedOption={conversation.previousResponses[message.stepId]}
-                skippable={showSkipInMessage}
-                skipLabel={message.skipLabel}
-                onSkip={conversation.handleSkip}
-                confirmLabel={message.confirmLabel}
-                onConfirm={conversation.handleConfirm}
-                confirmDisabled={flowState.isTopicsLoading || flowState.isPlanLoading}
-                showTopicEditor={message.showTopicEditor}
-                showConfidenceEditor={message.showConfidenceEditor}
-                showPlanSummary={message.showPlanSummary}
-                showProgress={message.showProgress}
-                topicEditor={message.showTopicEditor ? renderTopicEditor() : null}
-                planSummaryView={message.showPlanSummary ? renderPlanSummary() : null}
-                confidenceEditor={message.showConfidenceEditor ? renderConfidenceEditor() : null}
-                superseded={message.superseded}
-                tourTarget={message.tourTarget}
-              >
-                {showTopicSearchOptions && (
-                  <div className="mt-4">
-                    <TopicSearchOptions
-                      agentSearchEnabled={flowState.agentSearchEnabled}
-                      setAgentSearchEnabled={flowState.setAgentSearchEnabled}
-                      browserAgentEnabled={flowState.browserAgentEnabled}
-                      setBrowserAgentEnabled={flowState.setBrowserAgentEnabled}
-                      manualUploadEnabled={flowState.manualUploadEnabled}
-                      setManualUploadEnabled={flowState.setManualUploadEnabled}
-                      disabled={flowState.isTopicsLoading || flowState.courseGenerating}
-                    />
-                  </div>
-                )}
-              </KognoMessage>
-            );
-          }
-
-          const isEditable = conversation.isMessageEditable(message);
-
-          return (
-            <UserResponseBubble
-              key={message.id}
-              content={message.content}
-              files={message.files}
-              timestamp={message.timestamp}
-              onEdit={() => conversation.openEditModal(message)}
-              canEdit={!message.superseded && message.stepId !== conversation.currentStep?.id}
-              isEditable={isEditable}
-              superseded={message.superseded}
-              isEdited={message.wasEdited}
-            />
-          );
-        })}
+        {(() => {
+          let browserInserted = false;
+          return conversation.messages.flatMap((message) => {
+            const items = [];
+            if (
+              shouldInsertBrowserAboveTopics &&
+              !browserInserted &&
+              message.role === "assistant" &&
+              message.showTopicEditor
+            ) {
+              browserInserted = true;
+              items.push(
+                <BrowserViewer
+                  key={`browser-${flowState.browserSession.sessionId}`}
+                  sessionId={flowState.browserSession.sessionId}
+                  streamUrl={flowState.browserSession.streamUrl}
+                  userId={flowState.userId}
+                  authToken={browserAuthToken}
+                  onClose={handleCloseBrowserViewer}
+                  onJobStarted={flowState.handleBrowserJobStarted}
+                />
+              );
+            }
+            items.push(renderMessage(message));
+            return items;
+          });
+        })()}
 
         {/* Typing indicator */}
         {(conversation.isKognoTyping || conversation.isParsing) && (
@@ -592,7 +626,7 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
           </div>
         )}
 
-        {flowState.browserSession && (
+        {flowState.browserSession && !shouldInsertBrowserAboveTopics && (
           <BrowserViewer
             sessionId={flowState.browserSession.sessionId}
             streamUrl={flowState.browserSession.streamUrl}
