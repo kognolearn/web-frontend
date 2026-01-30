@@ -16,6 +16,7 @@ export default function TokensPage() {
   const [tokenBalance, setTokenBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [nextMonthlyTokenDate, setNextMonthlyTokenDate] = useState(null);
   const purchaseStatus = searchParams.get("purchase");
 
   useEffect(() => {
@@ -74,6 +75,10 @@ export default function TokensPage() {
         balancePayload?.recentTransactions ||
         []
       );
+      // Store next monthly token date
+      if (balancePayload?.monthlyToken?.nextDate) {
+        setNextMonthlyTokenDate(balancePayload.monthlyToken.nextDate);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -131,6 +136,14 @@ export default function TokensPage() {
             </svg>
           </div>
         );
+      case "monthly_grant":
+        return (
+          <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+        );
       default:
         return (
           <div className="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center">
@@ -154,6 +167,8 @@ export default function TokensPage() {
         return "Bonus tokens";
       case "free_grant":
         return "Welcome bonus";
+      case "monthly_grant":
+        return "Monthly free token";
       default:
         return type;
     }
@@ -244,6 +259,32 @@ export default function TokensPage() {
                 </button>
               )}
             </div>
+
+            {/* Next Monthly Token Info */}
+            {!userPlan?.isPremium && nextMonthlyTokenDate && (
+              <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">Monthly Free Token</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      Your next free token arrives on{" "}
+                      <span className="font-medium text-green-500">
+                        {new Date(nextMonthlyTokenDate).toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Token Packages Preview */}

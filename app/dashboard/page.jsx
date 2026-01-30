@@ -97,6 +97,7 @@ function DashboardClient() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showTokenRequiredModal, setShowTokenRequiredModal] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(0);
+  const [nextMonthlyTokenDate, setNextMonthlyTokenDate] = useState(null);
   const profileMenuRef = useRef(null);
 
   // Redirect web users to download page (backup guard - middleware handles this primarily)
@@ -498,6 +499,10 @@ function DashboardClient() {
               data?.tokensAvailable ??
               0;
             setTokenBalance(available);
+            // Store next monthly token date
+            if (data?.monthlyToken?.nextDate) {
+              setNextMonthlyTokenDate(data.monthlyToken.nextDate);
+            }
           }
         }
       } catch (err) {
@@ -833,6 +838,7 @@ function DashboardClient() {
           isOpen={showTokenRequiredModal}
           onClose={() => setShowTokenRequiredModal(false)}
           tokensAvailable={tokenBalance}
+          nextMonthlyTokenDate={nextMonthlyTokenDate}
         />
 
         {/* Seed celebration for seeds earned since last visit */}
