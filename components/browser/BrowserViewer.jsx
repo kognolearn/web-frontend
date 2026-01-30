@@ -41,9 +41,41 @@ export default function BrowserViewer({
   useEffect(() => {
     if (!sessionId || !streamUrl || !userId || !authToken) return;
 
-    const connect = () => {
+    const resolveWebSocketUrl = () => {
+      if (!streamUrl) return null;
+
+      // If the stream URL already includes a ws(s) protocol, use it directly.
+      if (/^wss?:\/\//i.test(streamUrl)) {
+        return streamUrl;
+      }
+
+      // If the stream URL is http(s), convert to ws(s).
+      if (/^https?:\/\//i.test(streamUrl)) {
+        const absolute = new URL(streamUrl);
+        absolute.protocol = absolute.protocol === "https:" ? "wss:" : "ws:";
+        return absolute.toString();
+      }
+
+      // Prefer backend base URL when provided (frontend and backend are often different hosts).
+      const backendBase = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+      if (backendBase) {
+        try {
+          const baseUrl = new URL(backendBase);
+          baseUrl.protocol = baseUrl.protocol === "https:" ? "wss:" : "ws:";
+          return new URL(streamUrl, baseUrl).toString();
+        } catch (error) {
+          console.warn("[BrowserViewer] Invalid NEXT_PUBLIC_BACKEND_API_URL:", backendBase);
+        }
+      }
+
+      // Fallback to current origin.
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}${streamUrl}`;
+      return `${protocol}//${window.location.host}${streamUrl}`;
+    };
+
+    const connect = () => {
+      const wsUrl = resolveWebSocketUrl();
+      if (!wsUrl) return;
 
       console.log(`[BrowserViewer] Connecting to ${wsUrl}`);
       const ws = new WebSocket(wsUrl);
