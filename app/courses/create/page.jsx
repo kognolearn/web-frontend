@@ -118,6 +118,23 @@ function resolveJobStatusUrl(payload) {
   return null;
 }
 
+function resolveAgentContext(payloadCandidates = []) {
+  for (const payload of payloadCandidates) {
+    if (!payload || typeof payload !== "object") continue;
+    const candidate =
+      payload.agent_context ||
+      payload.agentContext ||
+      payload?.data?.agent_context ||
+      payload?.data?.agentContext ||
+      payload?.result?.agent_context ||
+      payload?.result?.agentContext;
+    if (candidate && typeof candidate === "object") {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function toIsoDate(dateString) {
   if (!dateString) return null;
   return `${dateString}T00:00:00.000Z`;
@@ -453,6 +470,7 @@ function parseTopicPayload(payload) {
     hydrated,
     extractedGrokDraft,
     ragSessionId: resolveRagSessionId(payloadCandidates),
+    agentContext: resolveAgentContext(payloadCandidates),
   };
 }
 
@@ -610,6 +628,7 @@ function CreateCoursePageContent() {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [topicAgentContext, setTopicAgentContext] = useState(null);
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false);
   const [manualUploadEnabled, setManualUploadEnabled] = useState(false);
@@ -1002,6 +1021,7 @@ function CreateCoursePageContent() {
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
     setRagSessionId(null);
+    setTopicAgentContext(null);
     setModuleConfidenceState({});
     setOpenAccordions({});
     setTopicsError(null);
@@ -1094,6 +1114,18 @@ function CreateCoursePageContent() {
     setCourseGenerationError("");
 
     try {
+      const contextPayload =
+        topicAgentContext && typeof topicAgentContext === "object"
+          ? {
+              ...topicAgentContext,
+              courseTitle: courseTitle || topicAgentContext.courseTitle,
+              university: collegeName || topicAgentContext.university,
+            }
+          : {
+              courseTitle,
+              university: collegeName,
+            };
+
       // Use the new endpoint that doesn't require courseId (for pre-course topic modification)
       // userId is derived from JWT token in the backend
       const response = await authFetch(`/api/courses/modify-topics`, {
@@ -1102,6 +1134,7 @@ function CreateCoursePageContent() {
         body: JSON.stringify({
           prompt,
           currentModules: buildCurrentModulesPayload(overviewTopics),
+          agentContext: contextPayload,
         }),
       });
 
@@ -1120,6 +1153,11 @@ function CreateCoursePageContent() {
       if (parsed.ragSessionId) {
         setRagSessionId(parsed.ragSessionId);
       }
+      setTopicAgentContext((prev) => ({
+        ...(prev || contextPayload),
+        lastModifyPrompt: prompt,
+        lastModifiedAt: new Date().toISOString(),
+      }));
       setTopicModifyPrompt("");
     } catch (error) {
       console.error("Modify topics failed:", error);
@@ -1127,7 +1165,7 @@ function CreateCoursePageContent() {
     } finally {
       setIsModifyingTopics(false);
     }
-  }, [overviewTopics, topicModifyPrompt, userId]);
+  }, [overviewTopics, topicModifyPrompt, userId, topicAgentContext, courseTitle, collegeName]);
 
   const applyTopicsResult = useCallback((result) => {
     if (!result) {
@@ -1146,6 +1184,7 @@ function CreateCoursePageContent() {
 
     setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
     setOverviewTopics(parsed.hydrated);
+    setTopicAgentContext(parsed.agentContext || null);
   }, [courseId]);
 
   const handleGenerateTopics = useCallback(async (event) => {

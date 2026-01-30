@@ -80,6 +80,23 @@ function resolveJobStatusUrl(payload) {
   return null;
 }
 
+function resolveAgentContext(payloadCandidates = []) {
+  for (const payload of payloadCandidates) {
+    if (!payload || typeof payload !== "object") continue;
+    const candidate =
+      payload.agent_context ||
+      payload.agentContext ||
+      payload?.data?.agent_context ||
+      payload?.data?.agentContext ||
+      payload?.result?.agent_context ||
+      payload?.result?.agentContext;
+    if (candidate && typeof candidate === "object") {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function formatExamStructure({ hasExamMaterials, examNotes }) {
   if (!hasExamMaterials && !(examNotes && examNotes.trim())) return undefined;
   const segments = [];
@@ -276,6 +293,7 @@ function parseTopicPayload(result) {
     hydrated,
     extractedGrokDraft,
     ragSessionId: resolveRagSessionId(payloadCandidates),
+    agentContext: resolveAgentContext(payloadCandidates),
   };
 }
 
@@ -360,6 +378,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [topicAgentContext, setTopicAgentContext] = useState(null);
 
   // Loading and error states
   const [isTopicsLoading, setIsTopicsLoading] = useState(false);
@@ -438,6 +457,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
     setOverviewTopics(parsed.hydrated);
+    setTopicAgentContext(parsed.agentContext || null);
   }, [courseId]);
 
   const isCramMode = studyMode === "cram";
@@ -672,6 +692,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
     setRagSessionId(null);
+    setTopicAgentContext(null);
     setModuleConfidenceState({});
     setOpenAccordions({});
     setTopicsError(null);
@@ -1076,12 +1097,25 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setCourseGenerationError("");
 
     try {
+      const contextPayload =
+        topicAgentContext && typeof topicAgentContext === "object"
+          ? {
+              ...topicAgentContext,
+              courseTitle: courseTitle || topicAgentContext.courseTitle,
+              university: collegeName || topicAgentContext.university,
+            }
+          : {
+              courseTitle,
+              university: collegeName,
+            };
+
       const response = await authFetch(`/api/courses/modify-topics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: trimmedPrompt,
           currentModules: buildCurrentModulesPayload(overviewTopics),
+          agentContext: contextPayload,
         }),
       });
 
@@ -1100,6 +1134,11 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       if (parsed.ragSessionId) {
         setRagSessionId(parsed.ragSessionId);
       }
+      setTopicAgentContext((prev) => ({
+        ...(prev || contextPayload),
+        lastModifyPrompt: trimmedPrompt,
+        lastModifiedAt: new Date().toISOString(),
+      }));
       setTopicModifyPrompt("");
     } catch (error) {
       console.error("Modify topics failed:", error);
@@ -1107,7 +1146,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     } finally {
       setIsModifyingTopics(false);
     }
-  }, [overviewTopics, topicModifyPrompt, userId]);
+  }, [overviewTopics, topicModifyPrompt, userId, topicAgentContext, courseTitle, collegeName]);
 
   // ============================================
   // UNIFIED PLAN HANDLERS
@@ -1739,6 +1778,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setTopicModifyPrompt,
     isModifyingTopics,
     topicModifyError,
+    setTopicModifyError,
+    topicAgentContext,
 
     // Loading/error
     isTopicsLoading,

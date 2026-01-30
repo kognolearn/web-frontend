@@ -28,7 +28,10 @@ export default function BrowserViewer({
   const [isPaused, setIsPaused] = useState(false);
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [lastAction, setLastAction] = useState("");
+  const [agentState, setAgentState] = useState(null);
   const [screenshot, setScreenshot] = useState(null);
   const [userActionRequest, setUserActionRequest] = useState(null);
   const [error, setError] = useState(null);
@@ -36,15 +39,28 @@ export default function BrowserViewer({
   const [jobStartRequested, setJobStartRequested] = useState(false);
   const [agentInstructions, setAgentInstructions] = useState("");
   const [isViewportFocused, setIsViewportFocused] = useState(false);
+  const [userActionAnswer, setUserActionAnswer] = useState("");
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const viewportRef = useRef(null);
+  const dragStartRef = useRef(null);
+  const ignoreClickRef = useRef(false);
+  const lastHoverSentRef = useRef(0);
 
   useEffect(() => {
     setJobStarted(false);
     setJobStartRequested(false);
     setAgentInstructions("");
+    setAgentState(null);
+    setUrlInput("");
+    setIsEditingUrl(false);
   }, [sessionId, streamUrl]);
+
+  useEffect(() => {
+    if (userActionRequest?.question) {
+      setUserActionAnswer("");
+    }
+  }, [userActionRequest?.question]);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -154,6 +170,9 @@ export default function BrowserViewer({
         if (data.success) {
           setIsConnected(true);
           setError(null);
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: "get_status" }));
+          }
         } else {
           setError(data.error || "Authentication failed");
         }
@@ -167,6 +186,29 @@ export default function BrowserViewer({
       case "state":
         setIsPaused(data.state === "paused");
         setIsWaitingForUser(data.state === "waiting_for_user");
+        if (data.state === "failed") {
+          setError("Browser session failed. Please restart the session.");
+        } else if (data.state === "expired") {
+          setError("Browser session expired. Please restart the session.");
+        } else if (data.state === "completed") {
+          setError("Browser session completed.");
+        }
+        break;
+
+      case "status":
+        if (data.state) {
+          setIsPaused(data.state === "paused");
+          setIsWaitingForUser(data.state === "waiting_for_user");
+        }
+        if (data.currentUrl) setCurrentUrl(data.currentUrl);
+        if (data.agentState) setAgentState(data.agentState);
+        if (data.userActionRequest) {
+          setUserActionRequest({
+            reason: data.userActionRequest.reason,
+            instructions: data.userActionRequest.instructions,
+            question: data.userActionRequest.question,
+          });
+        }
         break;
 
       case "action":
@@ -175,10 +217,15 @@ export default function BrowserViewer({
         setTimeout(() => setLastAction(""), 3000);
         break;
 
+      case "agent_state":
+        setAgentState(data.agentState || null);
+        break;
+
       case "user_action_request":
         setUserActionRequest({
           reason: data.reason,
           instructions: data.instructions,
+          question: data.question,
         });
         setIsWaitingForUser(true);
         break;
@@ -233,15 +280,53 @@ export default function BrowserViewer({
     onResume?.();
   }, [onResume]);
 
+  const handleBack = useCallback(() => {
+    if (!isPaused && !isWaitingForUser) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_back" }));
+    }
+  }, [isPaused, isWaitingForUser]);
+
+  const handleForward = useCallback(() => {
+    if (!isPaused && !isWaitingForUser) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_forward" }));
+    }
+  }, [isPaused, isWaitingForUser]);
+
+  const normalizeUrl = useCallback((value) => {
+    const trimmed = (value || "").trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  }, []);
+
+  const handleUrlNavigate = useCallback(() => {
+    if (!isPaused && !isWaitingForUser) return;
+    const target = normalizeUrl(urlInput);
+    if (!target) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_navigate", url: target }));
+    }
+    setIsEditingUrl(false);
+  }, [isPaused, isWaitingForUser, normalizeUrl, urlInput]);
+
   // User action complete handler
   const handleUserActionComplete = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "user_action_complete" }));
+      const response = userActionAnswer.trim();
+      wsRef.current.send(
+        JSON.stringify({
+          type: "user_action_complete",
+          response: response || undefined,
+        })
+      );
     }
     setUserActionRequest(null);
     setIsWaitingForUser(false);
+    setUserActionAnswer("");
     onUserActionComplete?.();
-  }, [onUserActionComplete]);
+  }, [onUserActionComplete, userActionAnswer]);
 
   const handleStartJob = useCallback(() => {
     const instructions = agentInstructions.trim();
@@ -271,20 +356,38 @@ export default function BrowserViewer({
     }
   }, []);
 
+  const sendUserHover = useCallback((x, y) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_hover", x, y }));
+    }
+  }, []);
+
+  const sendUserScroll = useCallback((deltaX, deltaY) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_scroll", deltaX, deltaY }));
+    }
+  }, []);
+
+  const sendUserDrag = useCallback((fromX, fromY, toX, toY) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "user_drag", fromX, fromY, toX, toY }));
+    }
+  }, []);
+
   const sendUserType = useCallback((text) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "user_type", text }));
     }
   }, []);
 
-  const handleViewportClick = useCallback((event) => {
-    if (!viewportRef.current) return;
-
-    if (isPaused || isWaitingForUser) {
-      viewportRef.current.focus();
-    } else {
-      return;
+  useEffect(() => {
+    if (!isEditingUrl) {
+      setUrlInput(currentUrl || "");
     }
+  }, [currentUrl, isEditingUrl]);
+
+  const getViewportPoint = useCallback((event) => {
+    if (!viewportRef.current) return;
 
     const rect = viewportRef.current.getBoundingClientRect();
     const containerWidth = rect.width;
@@ -305,11 +408,71 @@ export default function BrowserViewer({
       clickX > VIEWPORT_WIDTH ||
       clickY > VIEWPORT_HEIGHT
     ) {
+      return null;
+    }
+
+    return { x: Math.round(clickX), y: Math.round(clickY) };
+  }, [VIEWPORT_WIDTH, VIEWPORT_HEIGHT]);
+
+  const handleViewportClick = useCallback((event) => {
+    if (ignoreClickRef.current) {
+      ignoreClickRef.current = false;
       return;
     }
 
-    sendUserClick(Math.round(clickX), Math.round(clickY));
-  }, [isPaused, isWaitingForUser, sendUserClick, VIEWPORT_WIDTH, VIEWPORT_HEIGHT]);
+    if (isPaused || isWaitingForUser) {
+      viewportRef.current.focus();
+    } else {
+      return;
+    }
+
+    const point = getViewportPoint(event);
+    if (!point) return;
+
+    sendUserClick(point.x, point.y);
+  }, [isPaused, isWaitingForUser, sendUserClick, getViewportPoint]);
+
+  const handleViewportMouseDown = useCallback((event) => {
+    if (!isPaused && !isWaitingForUser) return;
+    if (event.button !== 0) return;
+    const point = getViewportPoint(event);
+    if (!point) return;
+    dragStartRef.current = point;
+    viewportRef.current?.focus();
+  }, [getViewportPoint, isPaused, isWaitingForUser]);
+
+  const handleViewportMouseUp = useCallback((event) => {
+    if (!isPaused && !isWaitingForUser) return;
+    if (event.button !== 0) return;
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!start) return;
+    const end = getViewportPoint(event);
+    if (!end) return;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance >= 6) {
+      ignoreClickRef.current = true;
+      sendUserDrag(start.x, start.y, end.x, end.y);
+    }
+  }, [getViewportPoint, isPaused, isWaitingForUser, sendUserDrag]);
+
+  const handleViewportMouseMove = useCallback((event) => {
+    if (!isPaused && !isWaitingForUser) return;
+    const point = getViewportPoint(event);
+    if (!point) return;
+    const now = Date.now();
+    if (now - lastHoverSentRef.current < 150) return;
+    lastHoverSentRef.current = now;
+    sendUserHover(point.x, point.y);
+  }, [getViewportPoint, isPaused, isWaitingForUser, sendUserHover]);
+
+  const handleViewportWheel = useCallback((event) => {
+    if (!isPaused && !isWaitingForUser) return;
+    event.preventDefault();
+    sendUserScroll(event.deltaX, event.deltaY);
+  }, [isPaused, isWaitingForUser, sendUserScroll]);
 
   const handleViewportFocus = useCallback(() => {
     setIsViewportFocused(true);
@@ -372,6 +535,17 @@ export default function BrowserViewer({
     },
     [isPaused, isWaitingForUser, isViewportFocused, sendUserType]
   );
+
+  const taskList = agentState?.taskList || [];
+  const strategyText = agentState?.currentStrategy || "";
+  const lastAgentAction = agentState?.lastAction || lastAction || "";
+  const lastAgentActionDetail = agentState?.lastActionDetail || "";
+  const lastAgentActionAt = agentState?.lastActionAt || "";
+  const lastAgentActionTime = lastAgentActionAt ? new Date(lastAgentActionAt) : null;
+  const lastAgentActionTimeLabel =
+    lastAgentActionTime && !Number.isNaN(lastAgentActionTime.getTime())
+      ? lastAgentActionTime.toLocaleTimeString()
+      : "";
 
   return (
     <div
@@ -445,6 +619,40 @@ export default function BrowserViewer({
       {/* URL bar */}
       <div className="px-4 py-2 bg-[var(--surface-1)] border-b border-[var(--border)]">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--surface-muted)] rounded-lg">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={!isPaused && !isWaitingForUser}
+              title="Back (pause to use)"
+              className={`p-1 rounded-md transition-colors ${
+                isPaused || isWaitingForUser
+                  ? "text-[var(--foreground)] hover:bg-[var(--surface-1)]"
+                  : "text-[var(--muted-foreground)] opacity-60 cursor-not-allowed"
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9.707 14.707a1 1 0 01-1.414 0L4.586 11l3.707-3.707a1 1 0 011.414 1.414L7.414 10l2.293 2.293a1 1 0 010 1.414z" />
+                <path d="M5 10a1 1 0 011-1h9a1 1 0 110 2H6a1 1 0 01-1-1z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleForward}
+              disabled={!isPaused && !isWaitingForUser}
+              title="Forward (pause to use)"
+              className={`p-1 rounded-md transition-colors ${
+                isPaused || isWaitingForUser
+                  ? "text-[var(--foreground)] hover:bg-[var(--surface-1)]"
+                  : "text-[var(--muted-foreground)] opacity-60 cursor-not-allowed"
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.293 5.293a1 1 0 011.414 0L15.414 9l-3.707 3.707a1 1 0 01-1.414-1.414L12.586 10l-2.293-2.293a1 1 0 010-1.414z" />
+                <path d="M5 10a1 1 0 011-1h9a1 1 0 110 2H6a1 1 0 01-1-1z" />
+              </svg>
+            </button>
+          </div>
           <svg
             className="w-4 h-4 text-[var(--muted-foreground)] flex-shrink-0"
             fill="none"
@@ -458,11 +666,114 @@ export default function BrowserViewer({
               d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
             />
           </svg>
-          <span className="text-sm text-[var(--muted-foreground)] truncate">
-            {currentUrl || "Waiting for navigation..."}
-          </span>
+          <input
+            type="text"
+            value={urlInput}
+            onChange={(event) => setUrlInput(event.target.value)}
+            onFocus={() => setIsEditingUrl(true)}
+            onBlur={() => setIsEditingUrl(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleUrlNavigate();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setIsEditingUrl(false);
+                setUrlInput(currentUrl || "");
+              }
+            }}
+            placeholder="Enter a URL while paused"
+            disabled={!isPaused && !isWaitingForUser}
+            className={`flex-1 text-sm bg-transparent focus:outline-none ${
+              isPaused || isWaitingForUser
+                ? "text-[var(--foreground)]"
+                : "text-[var(--muted-foreground)] cursor-not-allowed"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={handleUrlNavigate}
+            disabled={!isPaused && !isWaitingForUser}
+            title="Go (pause to use)"
+            className={`p-1 rounded-md transition-colors ${
+              isPaused || isWaitingForUser
+                ? "text-[var(--foreground)] hover:bg-[var(--surface-1)]"
+                : "text-[var(--muted-foreground)] opacity-60 cursor-not-allowed"
+            }`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.293 5.293a1 1 0 011.414 0L15.414 9l-3.707 3.707a1 1 0 01-1.414-1.414L12.586 10l-2.293-2.293a1 1 0 010-1.414z" />
+              <path d="M5 10a1 1 0 011-1h9a1 1 0 110 2H6a1 1 0 01-1-1z" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {(strategyText || taskList.length > 0 || lastAgentAction || lastAgentActionDetail) && (
+        <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)]/50">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                Current Strategy
+              </div>
+              <div className="text-sm text-[var(--foreground)] mt-1">
+                {strategyText || "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                Last Action
+              </div>
+              <div className="text-sm text-[var(--foreground)] mt-1">
+                {lastAgentAction || "—"}
+              </div>
+              {lastAgentActionDetail && (
+                <div className="text-[11px] text-[var(--muted-foreground)] mt-1 truncate">
+                  {lastAgentActionDetail}
+                </div>
+              )}
+              {lastAgentActionTimeLabel && (
+                <div className="text-[10px] text-[var(--muted-foreground)] mt-1">
+                  {lastAgentActionTimeLabel}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                Task List
+              </div>
+              {taskList.length === 0 ? (
+                <div className="text-sm text-[var(--muted-foreground)] mt-1">No tasks yet.</div>
+              ) : (
+                <ul className="mt-2 space-y-1 max-h-28 overflow-auto pr-1">
+                  {taskList.map((task) => (
+                    <li key={task.id || task.text} className="flex items-center gap-2 text-sm">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          task.status === "done"
+                            ? "bg-emerald-500"
+                            : task.status === "doing"
+                            ? "bg-amber-500"
+                            : "bg-[var(--muted-foreground)]"
+                        }`}
+                      />
+                      <span
+                        className={`${
+                          task.status === "done"
+                            ? "line-through text-[var(--muted-foreground)]"
+                            : "text-[var(--foreground)]"
+                        }`}
+                      >
+                        {task.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {(isPaused || isWaitingForUser) && (
         <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)]/60">
@@ -474,6 +785,28 @@ export default function BrowserViewer({
                     Agent needs your help:
                   </span>{" "}
                   {userActionRequest?.instructions || "Complete the requested action in the page."}
+                  {userActionRequest?.question ? (
+                    <>
+                      <span className="block mt-1 text-[var(--foreground)]">
+                        Question: {userActionRequest.question}
+                      </span>
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <input
+                          type="text"
+                          value={userActionAnswer}
+                          onChange={(event) => setUserActionAnswer(event.target.value)}
+                          placeholder="Type your answer here..."
+                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-xs text-[var(--foreground)]"
+                        />
+                        <button
+                          onClick={handleUserActionComplete}
+                          className="px-3 py-1.5 text-xs bg-[var(--primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+                        >
+                          Send & Resume
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
                 </>
               ) : (
                 "Paused. Click inside the browser to focus and type directly. Resume when done."
@@ -546,6 +879,10 @@ export default function BrowserViewer({
       <div
         ref={viewportRef}
         onClick={handleViewportClick}
+        onMouseDown={handleViewportMouseDown}
+        onMouseUp={handleViewportMouseUp}
+        onMouseMove={handleViewportMouseMove}
+        onWheel={handleViewportWheel}
         onFocus={handleViewportFocus}
         onBlur={handleViewportBlur}
         onKeyDown={handleViewportKeyDown}
