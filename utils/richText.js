@@ -78,6 +78,14 @@ export function normalizeLatex(text) {
     codeBlocks.push(fixedCode);
     return placeholder;
   });
+
+  // Step 0.5: Convert :::tex directives to standard delimiters
+  // Inline: :::tex[... ]::: -> \(...\)
+  result = result.replace(/:::tex\[([\s\S]*?)\]:::/g, '\\\\($1\\\\)');
+  // Block: :::tex-block\n...\n::: -> \[...\]
+  result = result.replace(/:::tex-block\s*\n([\s\S]*?)\n\s*:::/g, '\\\\[$1\\\\]');
+  // Edge case: block without trailing newline before :::
+  result = result.replace(/:::tex-block\s*\n([\s\S]*?):::/g, '\\\\[$1\\\\]');
   
   // Step 1: Convert literal \\n to actual newlines
   // Avoid replacing \\n if it's the start of a LaTeX command (e.g., \\neg, \\neq, \\nu)

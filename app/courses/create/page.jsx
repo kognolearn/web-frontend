@@ -614,6 +614,7 @@ function CreateCoursePageContent() {
   const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
   const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
+  const [browserJobId, setBrowserJobId] = useState(null);
   const [browserAuthToken, setBrowserAuthToken] = useState(null);
 
   const [courseGenerating, setCourseGenerating] = useState(false);
@@ -651,6 +652,7 @@ function CreateCoursePageContent() {
       setTopicsError("Browser session closed before topic generation started.");
     }
     setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
   }, [browserSession, pendingBrowserJobSessionId]);
 
   const handleClearActiveBrowserSession = useCallback(async () => {
@@ -665,6 +667,7 @@ function CreateCoursePageContent() {
         setTopicsError("Browser session closed before topic generation started.");
       }
       setPendingBrowserJobSessionId(null);
+      setBrowserJobId(null);
     }
   }, [pendingBrowserJobSessionId]);
 
@@ -1166,6 +1169,7 @@ function CreateCoursePageContent() {
     clearTopicsState();
     setBrowserSession(null);
     setPendingBrowserJobSessionId(null);
+    setBrowserJobId(null);
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
@@ -1279,10 +1283,15 @@ function CreateCoursePageContent() {
   const handleBrowserJobStarted = useCallback(async ({ jobId, sessionId } = {}) => {
     if (!jobId) return;
 
+    if (browserJobId === jobId) {
+      return;
+    }
+
     if (pendingBrowserJobSessionId && sessionId && sessionId !== pendingBrowserJobSessionId) {
       return;
     }
 
+    setBrowserJobId(jobId);
     setPendingBrowserJobSessionId(null);
 
     try {
@@ -1301,7 +1310,7 @@ function CreateCoursePageContent() {
       setTopicsError(error?.message || "The model did not return any topics. Please try again.");
       setIsTopicsLoading(false);
     }
-  }, [applyTopicsResult, pendingBrowserJobSessionId]);
+  }, [applyTopicsResult, pendingBrowserJobSessionId, browserJobId]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
     setModuleConfidenceState((prev) => {

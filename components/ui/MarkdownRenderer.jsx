@@ -49,14 +49,14 @@ function parseImageBlock(lines, startIdx) {
 
 /**
  * Parse a TeX block in the format:
- * :::tex
+ * :::tex-block or :::tex
  * LaTeX content
  * :::
  */
 function parseTexBlock(lines, startIdx) {
   const startLine = lines[startIdx].trim();
-  const match = startLine.match(/^:::\s*tex\b(.*)$/i);
-  const inlineContent = match?.[1]?.trim();
+  const match = startLine.match(/^:::\s*(tex-block|tex)\b(.*)$/i);
+  const inlineContent = match?.[2]?.trim();
   const contentLines = [];
   let i = startIdx + 1;
 
@@ -90,6 +90,16 @@ function parseTexBlock(lines, startIdx) {
   };
 }
 
+function isTexBlockStart(trimmed) {
+  if (/^:::\s*tex-block\b/i.test(trimmed)) return true;
+  if (/^:::\s*tex\b/i.test(trimmed) && !/^:::\s*tex\s*\[/i.test(trimmed)) return true;
+  return false;
+}
+
+function isTexInlineLine(trimmed) {
+  return /^:::\s*tex\s*\[/i.test(trimmed);
+}
+
 /**
  * Parse a tab group in the format:
  * :::tabs
@@ -111,7 +121,7 @@ function parseTabGroup(lines, startIdx) {
     const sanitized = trimmed.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
     // Allow nested :::tex blocks inside tab content
-    if (/^:::\s*tex\b/i.test(sanitized)) {
+    if (isTexBlockStart(sanitized)) {
       const texLines = [line];
       i++;
       while (i < lines.length) {
@@ -126,6 +136,14 @@ function parseTabGroup(lines, startIdx) {
       if (currentTab) {
         currentContent.push(...texLines);
       }
+      continue;
+    }
+
+    if (isTexInlineLine(sanitized)) {
+      if (currentTab) {
+        currentContent.push(line);
+      }
+      i++;
       continue;
     }
 
@@ -214,8 +232,9 @@ function parseTabGroup(lines, startIdx) {
   };
 }
 
-function parseContent(content) {
+function parseContent(content, options = {}) {
   if (!content) return [];
+  const { allowBlockquotes = true } = options;
 
   // Normalize line endings
   let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -260,7 +279,7 @@ function parseContent(content) {
       }
     }
 
-    if (/^:::\s*tex\b/i.test(trimmed)) {
+    if (isTexBlockStart(trimmed)) {
       const texBlock = parseTexBlock(lines, i);
       if (texBlock) {
         blocks.push(texBlock);
@@ -291,12 +310,12 @@ function parseContent(content) {
     }
     
     // Blockquote
-    if (trimmed.startsWith(">")) {
+    if (allowBlockquotes && trimmed.startsWith(">")) {
       const quoteLines = [];
       while (i < lines.length) {
-        const currentLine = lines[i].trim();
-        if (currentLine.startsWith(">")) {
-          quoteLines.push(currentLine.slice(1).trim());
+        const currentLine = lines[i];
+        if (currentLine.trim().startsWith(">")) {
+          quoteLines.push(currentLine.replace(/^\s*>\s?/, ""));
           i++;
         } else if (currentLine === "") {
           i++;
@@ -305,9 +324,12 @@ function parseContent(content) {
           break;
         }
       }
+      const quoteContent = quoteLines.join("\n").trim();
+      const quoteBlocks = parseContent(quoteContent, { allowBlockquotes: false });
       blocks.push({
         type: "blockquote",
-        content: quoteLines.join(" "),
+        content: quoteContent,
+        blocks: quoteBlocks,
       });
       continue;
     }
@@ -461,6 +483,7 @@ function InlineContent({ text }) {
     
     const result = [];
     let remaining = text
+      .replace(/:::tex\[([\s\S]*?)\]:::/g, '\\\\($1\\\\)')
       .replace(/\\(\(|\))/g, '\\$1')
       .replace(/\\(\[|\])/g, '\\$1');
     
@@ -597,143 +620,153 @@ export default function MarkdownRenderer({ content, className = "" }) {
   const normalizedContent = useMemo(() => normalizeLatex(content), [content]);
   const blocks = useMemo(() => parseContent(normalizedContent), [normalizedContent]);
 
+  const renderBlocks = (blockList, keyPrefix = "") =>
+    blockList.map((block, index) => {
+      const blockKey = `${keyPrefix}${index}`;
+      switch (block.type) {
+      case "heading":
+        const HeadingTag = `h${Math.min(block.level + 2, 6)}`; // Shift levels down for chat
+        return (
+          <HeadingTag key={blockKey} className="font-bold text-[var(--foreground)] mt-4 mb-2">
+            <InlineContent text={block.content} />
+          </HeadingTag>
+        );
+
+      case "image":
+        const credit = [block.author, block.license].filter(Boolean).join(" | ");
+        const imageAlt = block.alt || block.caption || "Image";
+        const imageElement = (
+          <img
+            src={block.url}
+            alt={imageAlt}
+            loading="lazy"
+            className="w-full h-auto rounded-lg"
+          />
+        );
+        return (
+          <figure key={blockKey} className="my-3">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
+              {block.fullUrl ? (
+                <a href={block.fullUrl} target="_blank" rel="noopener noreferrer">
+                  {imageElement}
+                </a>
+              ) : (
+                imageElement
+              )}
+            </div>
+            {(block.caption || credit) && (
+              <figcaption className="mt-2 text-xs text-[var(--muted-foreground)] leading-relaxed">
+                {block.caption && <InlineContent text={block.caption} />}
+                {credit && (
+                  <span className="block mt-1 text-[10px] text-[var(--muted-foreground)]">
+                    {credit}
+                  </span>
+                )}
+              </figcaption>
+            )}
+          </figure>
+        );
+        
+      case "paragraph":
+        return (
+          <p key={blockKey} className="leading-relaxed whitespace-pre-wrap">
+            <InlineContent text={block.content} />
+          </p>
+        );
+        
+      case "list":
+        const ListTag = block.ordered ? "ol" : "ul";
+        return (
+          <ListTag key={blockKey} className={`pl-5 space-y-1 ${block.ordered ? "list-decimal" : "list-disc"}`}>
+            {block.items.map((item, i) => (
+              <li key={`${blockKey}-${i}`} className="pl-1">
+                <InlineContent text={item} />
+              </li>
+            ))}
+          </ListTag>
+        );
+        
+      case "code":
+        return (
+          <div key={blockKey} className="my-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
+            {block.language && (
+              <div className="px-3 py-1 text-xs text-[var(--muted-foreground)] border-b border-[var(--border)] bg-[var(--surface-3)]">
+                {block.language}
+              </div>
+            )}
+            <pre className="overflow-x-auto p-3 text-sm font-mono">
+              <code>{block.content}</code>
+            </pre>
+          </div>
+        );
+        
+      case "block-math":
+        return (
+          <div key={blockKey} className="my-3 overflow-x-auto text-center">
+            <MathJax>{`$$${block.content}$$`}</MathJax>
+          </div>
+        );
+        
+      case "blockquote":
+        return (
+          <blockquote key={blockKey} className="border-l-4 border-[var(--primary)] pl-4 italic text-[var(--muted-foreground)] my-2">
+            {block.blocks?.length ? (
+              <div className="space-y-2 text-[var(--foreground)] not-italic">
+                {renderBlocks(block.blocks, `${blockKey}-`)}
+              </div>
+            ) : (
+              <InlineContent text={block.content} />
+            )}
+          </blockquote>
+        );
+        
+      case "table":
+        return (
+          <div key={blockKey} className="my-3 overflow-x-auto rounded-lg border border-[var(--border)]">
+            <table className="w-full text-sm text-left">
+              {block.hasHeader && (
+                <thead className="bg-[var(--surface-2)] text-[var(--foreground)]">
+                  <tr>
+                    {block.rows[0].map((cell, i) => (
+                      <th key={`${blockKey}-h-${i}`} className="px-4 py-2 font-medium border-b border-[var(--border)]">
+                        <InlineContent text={cell} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              <tbody>
+                {block.rows.slice(block.hasHeader ? 1 : 0).map((row, i) => (
+                  <tr key={`${blockKey}-r-${i}`} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/50">
+                    {row.map((cell, j) => (
+                      <td key={`${blockKey}-c-${i}-${j}`} className="px-4 py-2">
+                        <InlineContent text={cell} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        
+      case "hr":
+        return <hr key={blockKey} className="my-4 border-[var(--border)]" />;
+
+      case "tab_group":
+        return (
+          <TabGroup key={blockKey} id={`tabs-${blockKey}`} tabs={block.tabs} />
+        );
+        
+      default:
+        return null;
+    }
+  });
+
   return (
     <MathJax dynamic>
       <div className={`space-y-3 ${className}`}>
-        {blocks.map((block, index) => {
-          switch (block.type) {
-          case "heading":
-            const HeadingTag = `h${Math.min(block.level + 2, 6)}`; // Shift levels down for chat
-            return (
-              <HeadingTag key={index} className="font-bold text-[var(--foreground)] mt-4 mb-2">
-                <InlineContent text={block.content} />
-              </HeadingTag>
-            );
-
-          case "image":
-            const credit = [block.author, block.license].filter(Boolean).join(" | ");
-            const imageAlt = block.alt || block.caption || "Image";
-            const imageElement = (
-              <img
-                src={block.url}
-                alt={imageAlt}
-                loading="lazy"
-                className="w-full h-auto rounded-lg"
-              />
-            );
-            return (
-              <figure key={index} className="my-3">
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] overflow-hidden">
-                  {block.fullUrl ? (
-                    <a href={block.fullUrl} target="_blank" rel="noopener noreferrer">
-                      {imageElement}
-                    </a>
-                  ) : (
-                    imageElement
-                  )}
-                </div>
-                {(block.caption || credit) && (
-                  <figcaption className="mt-2 text-xs text-[var(--muted-foreground)] leading-relaxed">
-                    {block.caption && <InlineContent text={block.caption} />}
-                    {credit && (
-                      <span className="block mt-1 text-[10px] text-[var(--muted-foreground)]">
-                        {credit}
-                      </span>
-                    )}
-                  </figcaption>
-                )}
-              </figure>
-            );
-            
-          case "paragraph":
-            return (
-              <p key={index} className="leading-relaxed whitespace-pre-wrap">
-                <InlineContent text={block.content} />
-              </p>
-            );
-            
-          case "list":
-            const ListTag = block.ordered ? "ol" : "ul";
-            return (
-              <ListTag key={index} className={`pl-5 space-y-1 ${block.ordered ? "list-decimal" : "list-disc"}`}>
-                {block.items.map((item, i) => (
-                  <li key={i} className="pl-1">
-                    <InlineContent text={item} />
-                  </li>
-                ))}
-              </ListTag>
-            );
-            
-          case "code":
-            return (
-              <div key={index} className="my-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
-                {block.language && (
-                  <div className="px-3 py-1 text-xs text-[var(--muted-foreground)] border-b border-[var(--border)] bg-[var(--surface-3)]">
-                    {block.language}
-                  </div>
-                )}
-                <pre className="overflow-x-auto p-3 text-sm font-mono">
-                  <code>{block.content}</code>
-                </pre>
-              </div>
-            );
-            
-          case "block-math":
-            return (
-              <div key={index} className="my-3 overflow-x-auto text-center">
-                <MathJax>{`$$${block.content}$$`}</MathJax>
-              </div>
-            );
-            
-          case "blockquote":
-            return (
-              <blockquote key={index} className="border-l-4 border-[var(--primary)] pl-4 italic text-[var(--muted-foreground)] my-2">
-                <InlineContent text={block.content} />
-              </blockquote>
-            );
-            
-          case "table":
-            return (
-              <div key={index} className="my-3 overflow-x-auto rounded-lg border border-[var(--border)]">
-                <table className="w-full text-sm text-left">
-                  {block.hasHeader && (
-                    <thead className="bg-[var(--surface-2)] text-[var(--foreground)]">
-                      <tr>
-                        {block.rows[0].map((cell, i) => (
-                          <th key={i} className="px-4 py-2 font-medium border-b border-[var(--border)]">
-                            <InlineContent text={cell} />
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                  )}
-                  <tbody>
-                    {block.rows.slice(block.hasHeader ? 1 : 0).map((row, i) => (
-                      <tr key={i} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/50">
-                        {row.map((cell, j) => (
-                          <td key={j} className="px-4 py-2">
-                            <InlineContent text={cell} />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-            
-          case "hr":
-            return <hr key={index} className="my-4 border-[var(--border)]" />;
-
-          case "tab_group":
-            return (
-              <TabGroup key={index} id={`tabs-${index}`} tabs={block.tabs} />
-            );
-            
-          default:
-            return null;
-        }
-      })}
+        {renderBlocks(blocks)}
       </div>
     </MathJax>
   );

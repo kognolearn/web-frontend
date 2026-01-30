@@ -47,13 +47,15 @@ vi.mock('@/components/ui/OnboardingProvider', () => ({
   }),
 }));
 
-vi.mock('@/components/tour', () => ({
+vi.mock('@/components/tour/GuidedTourProvider', () => ({
+  GuidedTourProvider: ({ children }) => <>{children}</>,
   useGuidedTour: () => ({
     startTour: vi.fn(),
     isTourActive: false,
     currentTour: null,
     endTour: vi.fn(),
   }),
+  useTourHighlight: () => ({}),
 }));
 
 vi.mock('@/components/browser', async () => {
@@ -76,7 +78,6 @@ vi.mock('@/utils/asyncJobs', async () => {
 
 import { resolveAsyncJobResponse } from '@/utils/asyncJobs';
 import { authFetch, getAccessToken } from '@/lib/api';
-import CreateCoursePage from '@/app/courses/create/page';
 
 beforeAll(() => {
   global.IntersectionObserver = class {
@@ -153,6 +154,7 @@ it('shows the browser viewer and sends browser flags when browser agent is enabl
     },
   });
 
+  const { default: CreateCoursePage } = await import('@/app/courses/create/page');
   const user = userEvent.setup();
   render(<CreateCoursePage />);
 
