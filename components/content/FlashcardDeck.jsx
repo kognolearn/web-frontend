@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MathJax } from "better-react-mathjax";
 import Tooltip from "@/components/ui/Tooltip";
 import { normalizeLatex } from "@/utils/richText";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 
 /**
  * Decodes HTML entities in text (e.g., &amp; -> &, &gt; -> >, &lt; -> <)
@@ -198,15 +197,7 @@ export default function FlashcardDeck({ data = {}, onCardChange, lessonId, onFla
         </div>
 
         {/* Navigation */}
-        <OnboardingTooltip
-          id="flashcard-navigation"
-          content="Use keyboard shortcuts for faster navigation! Press ← → arrow keys to move between cards, and Space or Enter to flip. Click 'Flip Card' to reveal the answer."
-          position="top"
-          pointerPosition="center"
-          delay={600}
-          priority={11}
-        >
-          <div className="mt-8 flex items-center justify-between w-full max-w-md">
+        <div className="mt-8 flex items-center justify-between w-full max-w-md">
           <Tooltip text="Use ← arrow key to go back" position="bottom">
             <button
               type="button"
@@ -255,7 +246,6 @@ export default function FlashcardDeck({ data = {}, onCardChange, lessonId, onFla
             </button>
           </Tooltip>
         </div>
-        </OnboardingTooltip>
       </div>
     </>
   );

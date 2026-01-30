@@ -13,10 +13,9 @@ import CourseSettingsModal from "@/components/courses/CourseSettingsModal";
 import TimerControlsModal from "@/components/courses/TimerControlsModal";
 import EditCourseModal from "@/components/courses/EditCourseModal";
 import TimerExpiredModal from "@/components/courses/TimerExpiredModal";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import PersonalTimer from "@/components/courses/PersonalTimer";
-import { useGuidedTour } from "@/components/tour";
+import { useGuidedTour } from "@/components/tour/GuidedTourProvider";
 import { useRealtimeUpdates, useCourseRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 import { authFetch } from "@/lib/api";
 import { isDesktopApp } from "@/lib/platform";
@@ -115,6 +114,7 @@ export default function CoursePage() {
   const [showAccountGate, setShowAccountGate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [transferPending, setTransferPending] = useState(false);
   const [courseName, setCourseName] = useState("");
   const [studyPlan, setStudyPlan] = useState(null);
   const [courseMode, setCourseMode] = useState(null);
@@ -292,13 +292,27 @@ export default function CoursePage() {
         setIsAnonymousUser(anon);
         if (!anon) {
           setShowAccountGate(false);
+          const gateCourseId = getOnboardingGateCourseId();
           clearOnboardingGateCourseId();
           if (!transferAttemptedRef.current) {
             transferAttemptedRef.current = true;
+            if (gateCourseId && gateCourseId === courseId) {
+              setTransferPending(true);
+              setLoading(true);
+            }
             try {
-              await transferAnonData();
+              await transferAnonData(null, courseId);
+              setTransferPending(false);
+              if (gateCourseId && gateCourseId === courseId) {
+                await refetchStudyPlan();
+                setLoading(false);
+              }
             } catch (transferError) {
               console.error("Failed to transfer anonymous data:", transferError);
+              setTransferPending(false);
+              if (gateCourseId && gateCourseId === courseId) {
+                setLoading(false);
+              }
             }
           }
         }
@@ -315,9 +329,19 @@ export default function CoursePage() {
     if (!gateCourseId || gateCourseId !== courseId) return;
     transferAttemptedRef.current = true;
     clearOnboardingGateCourseId();
-    void transferAnonData().catch((transferError) => {
-      console.error("Failed to transfer anonymous data:", transferError);
-    });
+    setTransferPending(true);
+    setLoading(true);
+    void transferAnonData(null, courseId)
+      .then(async () => {
+        setTransferPending(false);
+        await refetchStudyPlan();
+        setLoading(false);
+      })
+      .catch((transferError) => {
+        console.error("Failed to transfer anonymous data:", transferError);
+        setTransferPending(false);
+        setLoading(false);
+      });
   }, [userId, isAnonymousUser, courseId]);
 
   // Persist tabs for this course/user
@@ -427,6 +451,7 @@ export default function CoursePage() {
 
   useEffect(() => {
     if (!userId || !courseId) return;
+    if (transferPending) return;
     let aborted = false;
     setLoading(true);
     setError("");
@@ -613,7 +638,7 @@ export default function CoursePage() {
     return () => {
       aborted = true;
     };
-  }, [userId, courseId]);
+  }, [userId, courseId, transferPending]);
 
   const refetchStudyPlan = useCallback(async () => {
     if (!userId || !courseId) return;
@@ -741,11 +766,25 @@ export default function CoursePage() {
   }, [isGeneratingCourse]);
 
   useEffect(() => {
-    if (!shouldStartFeaturesTour || !hasTourLessons) return;
+    if (!shouldStartFeaturesTour || !hasTourLessons || isTourActive || hasTourPrompted) {
+      setIsTourPromptActive(false);
+      return;
+    }
+    if (isTourPromptActive) return;
+    const timer = setTimeout(() => {
+      setIsTourPromptActive(true);
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, [shouldStartFeaturesTour, hasTourLessons, isTourActive, hasTourPrompted, isTourPromptActive]);
+
+  const handleBeginTour = useCallback(() => {
+    if (!shouldStartFeaturesTour) return;
+    setIsTourPromptActive(false);
+    setHasTourPrompted(true);
     if (!isTourActive || currentTour !== "course-features") {
       startTour("course-features");
     }
-  }, [shouldStartFeaturesTour, hasTourLessons, isTourActive, currentTour, startTour]);
+  }, [shouldStartFeaturesTour, isTourActive, currentTour, startTour]);
 
 
 
@@ -884,6 +923,28 @@ export default function CoursePage() {
     }
     return courseTabs.filter((tab) => tab.id === effectiveActiveTabId);
   }, [isMobileView, tabs, courseTabs, effectiveActiveTabId]);
+  const activeRenderedTab = useMemo(
+    () => tabs.find((tab) => tab.id === effectiveActiveTabId),
+    [tabs, effectiveActiveTabId]
+  );
+  const activeTabType = activeRenderedTab?.type;
+  const isMessagesTabActive = activeTabType === "messages";
+  const hasMessagesTab = useMemo(
+    () => tabs.some((tab) => tab.type === "messages"),
+    [tabs]
+  );
+  const shouldShowTourPrompt = Boolean(
+    isTourPromptActive && shouldStartFeaturesTour && !isTourActive
+  );
+  const shouldFlashMessagesTab = Boolean(
+    shouldShowTourPrompt && !isMessagesTabActive
+  );
+  const shouldFlashMessagesButton = Boolean(
+    shouldFlashMessagesTab && !hasMessagesTab
+  );
+  const shouldBlurContent = Boolean(
+    shouldShowTourPrompt && !isMessagesTabActive
+  );
 
   const handleSharedChatStateChange = useCallback((state) => {
     if (!state) return;
@@ -1104,6 +1165,8 @@ export default function CoursePage() {
   const [isDraggingToDock, setIsDraggingToDock] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [isExternalChatHovering, setIsExternalChatHovering] = useState(false);
+  const [isTourPromptActive, setIsTourPromptActive] = useState(false);
+  const [hasTourPrompted, setHasTourPrompted] = useState(false);
 
   const handleTabBarDragOver = (e) => {
     handleDragOver(e);
@@ -1231,6 +1294,7 @@ export default function CoursePage() {
                     : "bg-[var(--surface-muted)] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
                   }
                   ${draggingTabId === tab.id ? "shadow-2xl" : ""}
+                  ${tab.type === 'messages' && shouldFlashMessagesTab ? "ring-2 ring-[var(--primary)]/70 shadow-lg shadow-[var(--primary)]/30 animate-pulse" : ""}
                 `}
                 style={activeTabId === tab.id ? {
                   backgroundImage: 'linear-gradient(135deg, rgba(123, 163, 122, 0.95) 0%, rgba(100, 140, 100, 0.85) 50%, rgba(123, 163, 122, 0.9) 100%)',
@@ -1303,43 +1367,25 @@ export default function CoursePage() {
             
             {/* Add Tab Buttons */}
             <div className="flex items-center gap-1 px-2 flex-shrink-0">
-              <OnboardingTooltip
-                id="tab-add-course"
-                content="Open a new course view to browse different lessons side by side."
-                position="bottom"
-                pointerPosition="right"
-                delay={1000}
-                priority={15}
+              <button
+                onClick={() => addTab('course')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Course Tab"
               >
-                <button
-                  onClick={() => addTab('course')}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                  title="New Course Tab"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </button>
-              </OnboardingTooltip>
-              <OnboardingTooltip
-                id="tab-add-chat"
-                content="Open a new AI chat tab to ask questions while studying."
-                position="bottom"
-                pointerPosition="right"
-                delay={1200}
-                priority={16}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </button>
+              <button
+                onClick={() => addTab('chat')}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                title="New Chat Tab"
+                data-tour="chat-fab"
               >
-                <button
-                  onClick={() => addTab('chat')}
-                  className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
-                  title="New Chat Tab"
-                  data-tour="chat-fab"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </button>
-              </OnboardingTooltip>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
               <div className="w-px h-5 bg-[var(--border)]/50 mx-1" />
               <button
                 onClick={() => addTab('discussion')}
@@ -1353,7 +1399,11 @@ export default function CoursePage() {
               </button>
               <button
                 onClick={() => addTab('messages')}
-                className="p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  shouldFlashMessagesButton
+                    ? "bg-[var(--primary)]/10 text-[var(--primary)] ring-2 ring-[var(--primary)]/60 shadow-lg shadow-[var(--primary)]/25 animate-pulse"
+                    : "hover:bg-[var(--surface-2)] text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+                }`}
                 title="Messages"
                 data-tour="messages-tab"
               >
@@ -1367,6 +1417,9 @@ export default function CoursePage() {
 
       {/* Tab Content */}
       <div className="flex-1 relative overflow-hidden">
+        {shouldBlurContent && (
+          <div className="absolute inset-0 z-20 pointer-events-none backdrop-blur-sm bg-black/30" />
+        )}
         {/* Dock Zone Indicator - appears when dragging chat tab down */}
         {!isMobileView && (
           <AnimatePresence>
@@ -1507,6 +1560,8 @@ export default function CoursePage() {
                       onClose={() => closeTab(null, tab.id)}
                       onOpenDiscussionTab={() => addTab('discussion')}
                       initialConversationId={tab.conversationId}
+                      showBeginTour={shouldShowTourPrompt}
+                      onBeginTour={handleBeginTour}
                     />
                   );
                 default:

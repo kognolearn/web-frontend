@@ -8,8 +8,19 @@ export default function TokenRequiredModal({
   isOpen,
   onClose,
   tokensAvailable = 0,
+  nextMonthlyTokenDate = null,
 }) {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+
+  const formatNextTokenDate = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -81,6 +92,18 @@ export default function TokenRequiredModal({
           <p className="text-xs text-[var(--muted-foreground)]">
             1 token = 1 course generation
           </p>
+          {nextMonthlyTokenDate && tokensAvailable === 0 && (
+            <div className="mt-3 pt-3 border-t border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Your next free token arrives on <span className="font-medium text-[var(--foreground)]">{formatNextTokenDate(nextMonthlyTokenDate)}</span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Premium features */}

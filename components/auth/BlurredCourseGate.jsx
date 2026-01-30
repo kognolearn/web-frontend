@@ -34,6 +34,7 @@ export default function BlurredCourseGate({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const isSignIn = authMode === 'signin';
 
   // Listen for auth state changes
   useEffect(() => {
@@ -171,11 +172,11 @@ export default function BlurredCourseGate({
   const modules = studyPlan?.modules || [];
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-[var(--background)]">
+    <div className="fixed inset-0 z-[200] w-full overflow-hidden bg-[var(--background)]">
       {/* Blurred background course preview */}
-      <div className="absolute inset-0 flex">
+      <div className="absolute inset-0 flex pointer-events-none select-none">
         {/* Sidebar preview - visible but not interactable */}
-        <div className="w-72 flex-shrink-0 border-r border-white/10 bg-[var(--surface-1)] p-4 pointer-events-none select-none">
+        <div className="w-72 flex-shrink-0 border-r border-white/10 bg-[var(--surface-1)]/90 p-4">
           {/* Course title */}
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-[var(--foreground)] truncate">
@@ -255,7 +256,7 @@ export default function BlurredCourseGate({
       </div>
 
       {/* Dark overlay */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
 
       {/* Auth Modal */}
       <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -263,11 +264,13 @@ export default function BlurredCourseGate({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[var(--surface-2)] p-6 shadow-2xl"
+          className={`relative w-full rounded-2xl border border-white/10 bg-[var(--surface-2)] shadow-2xl max-h-[90dvh] overflow-y-auto ${
+            isSignIn ? 'max-w-sm p-5 sm:p-6' : 'max-w-md p-6'
+          }`}
         >
           {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-[var(--foreground)]">
+          <div className={isSignIn ? 'mb-4' : 'mb-6'}>
+            <h2 className={`font-semibold text-[var(--foreground)] ${isSignIn ? 'text-lg' : 'text-xl'}`}>
               {authMode === 'signup' ? 'Create your account' : 'Welcome back'}
             </h2>
             <p className="text-sm text-[var(--muted-foreground)] mt-1">
@@ -285,7 +288,7 @@ export default function BlurredCourseGate({
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className={isSignIn ? 'space-y-3' : 'space-y-4'}>
             {authMode === 'signup' && (
               <div>
                 <label
@@ -403,7 +406,7 @@ export default function BlurredCourseGate({
           </form>
 
           {/* Divider */}
-          <div className="relative my-6">
+          <div className={isSignIn ? 'relative my-5' : 'relative my-6'}>
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-white/10" />
             </div>
@@ -428,7 +431,7 @@ export default function BlurredCourseGate({
           )}
 
           {/* Toggle auth mode */}
-          <div className="mt-6 text-center">
+          <div className={isSignIn ? 'mt-4 text-center' : 'mt-6 text-center'}>
             <button
               type="button"
               onClick={() => {

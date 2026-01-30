@@ -378,6 +378,20 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   const [cramTopicStrategy, setCramTopicStrategy] = useState("generate");
   const [manualTopicsInput, setManualTopicsInput] = useState("");
 
+  // Browser Agent state
+  const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
+  const [browserAgentEnabled, setBrowserAgentEnabledState] = useState(false);
+  const [browserSession, setBrowserSession] = useState(null);
+
+  // Wrap setBrowserAgentEnabled to enforce constraint: browserAgent requires agentSearch
+  const setBrowserAgentEnabled = useCallback((enabled) => {
+    if (enabled && !agentSearchEnabled) {
+      // Auto-enable agent search when browser agent is enabled
+      setAgentSearchEnabled(true);
+    }
+    setBrowserAgentEnabledState(enabled);
+  }, [agentSearchEnabled]);
+
   // Unified Plan state (when ENABLE_UNIFIED_PLANNER feature flag is enabled)
   const [useUnifiedPlanner, setUseUnifiedPlanner] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -862,6 +876,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setCourseGenerationError("");
     clearTopicsState();
     clearGeneratedContentOutdated();
+    setBrowserSession(null); // Clear any existing browser session
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
@@ -872,6 +887,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       finishByDate: finishByIso || null,
       syllabusText: syllabusText.trim() || "Not provided.",
       mode: studyMode,
+      agentSearchEnabled,
+      browserAgentEnabled,
     };
 
     const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
@@ -887,7 +904,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       payload.examFiles = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
     }
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = browserAgentEnabled ? 1 : 3; // No retries for browser mode
     let lastError = null;
     const payloadStr = JSON.stringify(payload);
 
@@ -902,7 +919,17 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
           body: payloadStr,
         });
 
-        const { result } = await resolveAsyncJobResponse(res, { errorLabel: "build topics" });
+        // Check for browser session in response before resolving job
+        const responseData = await res.json();
+        if (responseData.browserSession) {
+          setBrowserSession(responseData.browserSession);
+        }
+
+        // For browser mode, we may need to wait longer and handle differently
+        const { result } = await resolveAsyncJobResponse(
+          { ok: res.ok, status: res.status, json: async () => responseData },
+          { errorLabel: "build topics", timeout: browserAgentEnabled ? 15 * 60 * 1000 : undefined }
+        );
 
         if (!result) {
           throw new Error("Topic generation completed but no result was returned.");
@@ -951,6 +978,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     studyHours,
     studyMinutes,
     clearTopicsState,
+    agentSearchEnabled,
+    browserAgentEnabled,
   ]);
 
   // Modify topics
@@ -1664,6 +1693,14 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setCramTopicStrategy,
     manualTopicsInput,
     setManualTopicsInput,
+
+    // Browser Agent
+    agentSearchEnabled,
+    setAgentSearchEnabled,
+    browserAgentEnabled,
+    setBrowserAgentEnabled,
+    browserSession,
+    setBrowserSession,
 
     // Computed
     canProceedFromStep1,

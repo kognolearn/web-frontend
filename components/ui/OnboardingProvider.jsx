@@ -1,103 +1,16 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { fetchUserSettings, patchUserSettings } from "@/lib/userSettings";
 
-const STORAGE_KEY = "kogno_onboarding_dismissed";
-const MIN_TIME_BETWEEN_TOOLTIPS = 600; // Minimum ms between tooltip transitions
-
 const OnboardingContext = createContext({
-  dismissedTooltips: new Set(),
-  dismissTooltip: () => {},
-  dismissAllTooltips: () => {},
-  resetTooltips: () => {},
-  hasSeenTooltip: () => false,
-  isNewUser: true,
-  activeTooltip: null,
-  requestTooltip: () => {},
-  releaseTooltip: () => {},
   userSettings: null,
-  refreshUserSettings: () => {},
+  refreshUserSettings: () => Promise.resolve(null),
   updateUserSettings: () => Promise.resolve(null),
 });
 
 export function OnboardingProvider({ children }) {
-  const [dismissedTooltips, setDismissedTooltips] = useState(new Set());
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isNewUser, setIsNewUser] = useState(true);
   const [userSettings, setUserSettings] = useState(null);
-  
-  // Queue system for tooltips - only one shows at a time
-  const [activeTooltip, setActiveTooltip] = useState(null);
-  const [tooltipQueue, setTooltipQueue] = useState([]);
-  const lastTooltipTime = useRef(0);
-  const timeoutIdsRef = useRef(new Set());
-  
-  // Use refs to avoid stale closures
-  const activeTooltipRef = useRef(null);
-  const tooltipQueueRef = useRef([]);
-  
-  // Keep refs in sync
-  useEffect(() => {
-    activeTooltipRef.current = activeTooltip;
-  }, [activeTooltip]);
-  
-  useEffect(() => {
-    tooltipQueueRef.current = tooltipQueue;
-  }, [tooltipQueue]);
-
-  const scheduleTimeout = useCallback((fn, delay) => {
-    const id = setTimeout(() => {
-      timeoutIdsRef.current.delete(id);
-      fn();
-    }, delay);
-    timeoutIdsRef.current.add(id);
-    return id;
-  }, []);
-
-  const clearScheduledTimeout = useCallback((id) => {
-    if (!id) return;
-    clearTimeout(id);
-    timeoutIdsRef.current.delete(id);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      timeoutIdsRef.current.forEach((id) => clearTimeout(id));
-      timeoutIdsRef.current.clear();
-    };
-  }, []);
-
-  // Load dismissed tooltips from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setDismissedTooltips(new Set(parsed.dismissed || []));
-        setIsNewUser(parsed.isNewUser ?? true);
-      }
-    } catch (e) {
-      console.error("Failed to load onboarding state:", e);
-    }
-    setIsLoaded(true);
-  }, []);
-
-  // Save to localStorage whenever dismissed tooltips change
-  useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          dismissed: Array.from(dismissedTooltips),
-          isNewUser,
-        })
-      );
-    } catch (e) {
-      console.error("Failed to save onboarding state:", e);
-    }
-  }, [dismissedTooltips, isNewUser, isLoaded]);
 
   const refreshUserSettings = useCallback(async () => {
     try {
@@ -106,9 +19,6 @@ export function OnboardingProvider({ children }) {
         return null;
       }
       setUserSettings(settings);
-      if (typeof settings.tour_completed === "boolean") {
-        setIsNewUser(!settings.tour_completed);
-      }
       if (settings.tour_completed && typeof window !== "undefined") {
         try {
           localStorage.removeItem("kogno_tour_state");
@@ -128,9 +38,6 @@ export function OnboardingProvider({ children }) {
       const nextSettings = await patchUserSettings(updates);
       if (!nextSettings) return null;
       setUserSettings(nextSettings);
-      if (typeof nextSettings.tour_completed === "boolean") {
-        setIsNewUser(!nextSettings.tour_completed);
-      }
       return nextSettings;
     } catch (e) {
       console.error("Failed to update user settings:", e);
@@ -142,119 +49,17 @@ export function OnboardingProvider({ children }) {
     refreshUserSettings();
   }, [refreshUserSettings]);
 
-  // Process the queue to show next tooltip
-  const processQueue = useCallback(() => {
-    // Already have an active tooltip - wait
-    if (activeTooltipRef.current) return;
-    
-    const currentQueue = tooltipQueueRef.current;
-    
-    // No tooltips waiting
-    if (currentQueue.length === 0) return;
-    
-    // Check if enough time has passed since last tooltip
-    const now = Date.now();
-    const timeSinceLastTooltip = now - lastTooltipTime.current;
-    
-    if (timeSinceLastTooltip < MIN_TIME_BETWEEN_TOOLTIPS) {
-      // Schedule retry after remaining time
-      scheduleTimeout(processQueue, MIN_TIME_BETWEEN_TOOLTIPS - timeSinceLastTooltip + 50);
-      return;
-    }
-    
-    // Find highest priority tooltip
-    const sortedQueue = [...currentQueue].sort((a, b) => a.priority - b.priority);
-    const nextTooltip = sortedQueue[0];
-    
-    if (nextTooltip) {
-      setActiveTooltip(nextTooltip.id);
-      setTooltipQueue((prev) => prev.filter((t) => t.id !== nextTooltip.id));
-      lastTooltipTime.current = now;
-    }
-  }, []);
-
-  // Process queue when active tooltip is cleared or queue changes
-  useEffect(() => {
-    if (!activeTooltip && tooltipQueue.length > 0 && isLoaded) {
-      const timer = scheduleTimeout(processQueue, 100);
-      return () => clearScheduledTimeout(timer);
-    }
-  }, [activeTooltip, tooltipQueue.length, isLoaded, processQueue, scheduleTimeout, clearScheduledTimeout]);
-
-  // Request to show a tooltip (adds to queue with priority)
-  const requestTooltip = useCallback((tooltipId, priority = 10) => {
-    setTooltipQueue((prev) => {
-      // Don't add duplicates
-      if (prev.some((t) => t.id === tooltipId)) return prev;
-      // Don't add if it's already active
-      if (activeTooltipRef.current === tooltipId) return prev;
-      
-      return [...prev, { id: tooltipId, priority, requestedAt: Date.now() }];
-    });
-    
-    // Trigger queue processing after a short delay
-    scheduleTimeout(processQueue, 50);
-  }, [processQueue, scheduleTimeout]);
-
-  // Release a tooltip (either dismissed or component unmounted)
-  const releaseTooltip = useCallback((tooltipId) => {
-    setTooltipQueue((prev) => prev.filter((t) => t.id !== tooltipId));
-    setActiveTooltip((current) => (current === tooltipId ? null : current));
-  }, []);
-
-  const dismissTooltip = useCallback((tooltipId) => {
-    setDismissedTooltips((prev) => {
-      const next = new Set(prev);
-      next.add(tooltipId);
-      return next;
-    });
-    releaseTooltip(tooltipId);
-  }, [releaseTooltip]);
-
-  const dismissAllTooltips = useCallback(() => {
-    setIsNewUser(false);
-    setActiveTooltip(null);
-    setTooltipQueue([]);
-  }, []);
-
-  const resetTooltips = useCallback(() => {
-    setDismissedTooltips(new Set());
-    setIsNewUser(true);
-    setActiveTooltip(null);
-    setTooltipQueue([]);
-    lastTooltipTime.current = 0;
-  }, []);
-
-  const hasSeenTooltip = useCallback(
-    (tooltipId) => {
-      return dismissedTooltips.has(tooltipId) || !isNewUser;
-    },
-    [dismissedTooltips, isNewUser]
-  );
-
   return (
-    <OnboardingContext.Provider
-      value={{
-        dismissedTooltips,
-        dismissTooltip,
-        dismissAllTooltips,
-        resetTooltips,
-        hasSeenTooltip,
-        isNewUser,
-        isLoaded,
-        activeTooltip,
-        requestTooltip,
-        releaseTooltip,
-        userSettings,
-        refreshUserSettings,
-        updateUserSettings,
-      }}
-    >
+    <OnboardingContext.Provider value={{ userSettings, refreshUserSettings, updateUserSettings }}>
       {children}
     </OnboardingContext.Provider>
   );
 }
 
 export function useOnboarding() {
-  return useContext(OnboardingContext);
+  const context = useContext(OnboardingContext);
+  if (!context) {
+    throw new Error("useOnboarding must be used within an OnboardingProvider");
+  }
+  return context;
 }

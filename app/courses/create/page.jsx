@@ -4,10 +4,9 @@ import { Suspense, useCallback, useEffect, useId, useMemo, useState, useRef } fr
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { useOnboarding } from "@/components/ui/OnboardingProvider";
 import DurationInput from "@/components/ui/DurationInput";
-import { authFetch } from "@/lib/api";
+import { authFetch, getAccessToken } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { upsertCourseCreateJob } from "@/utils/courseJobs";
 import { getAsyncDisabledMessage } from "@/utils/asyncJobs";
@@ -27,9 +26,10 @@ import {
 } from "./utils";
 import TopicExplorer from "@/components/courses/TopicExplorer";
 import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
+import { BrowserViewer, TopicSearchOptions } from "@/components/browser";
 import { motion } from "framer-motion";
 import { getRedirectDestination } from "@/lib/platform";
-import { useGuidedTour } from "@/components/tour";
+import { useGuidedTour } from "@/components/tour/GuidedTourProvider";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
@@ -610,10 +610,52 @@ function CreateCoursePageContent() {
   const [topicModifyPrompt, setTopicModifyPrompt] = useState("");
   const [isModifyingTopics, setIsModifyingTopics] = useState(false);
   const [topicModifyError, setTopicModifyError] = useState("");
+  const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
+  const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false);
+  const [browserSession, setBrowserSession] = useState(null);
+  const [browserAuthToken, setBrowserAuthToken] = useState(null);
 
   const [courseGenerating, setCourseGenerating] = useState(false);
   const [courseGenerationError, setCourseGenerationError] = useState("");
   const [courseGenerationMessage, setCourseGenerationMessage] = useState("Preparing your personalized course plan…");
+
+  useEffect(() => {
+    if (!browserSession) {
+      setBrowserAuthToken(null);
+      return;
+    }
+    let isMounted = true;
+    getAccessToken().then((token) => {
+      if (isMounted) {
+        setBrowserAuthToken(token);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [browserSession]);
+
+  const handleCloseBrowserViewer = useCallback(async () => {
+    const sessionId = browserSession?.sessionId;
+    if (sessionId) {
+      try {
+        await authFetch(`/api/browser-session/${sessionId}`, { method: "DELETE" });
+      } catch (error) {
+        console.warn("[BrowserViewer] Failed to close session:", error);
+      }
+    }
+    setBrowserSession(null);
+  }, [browserSession]);
+
+  const handleClearActiveBrowserSession = useCallback(async () => {
+    try {
+      await authFetch(`/api/browser-session/active`, { method: "DELETE" });
+    } catch (error) {
+      console.warn("[BrowserViewer] Failed to clear active session:", error);
+    } finally {
+      setBrowserSession(null);
+    }
+  }, []);
 
   const totalSubtopics = useMemo(
     () => overviewTopics.reduce((sum, overview) => sum + overview.subtopics.length, 0),
@@ -1072,7 +1114,7 @@ function CreateCoursePageContent() {
   }, [overviewTopics, topicModifyPrompt, userId]);
 
   const handleGenerateTopics = useCallback(async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
     if (!userId) {
       setTopicsError("You need to be signed in to build topics.");
       return;
@@ -1085,12 +1127,18 @@ function CreateCoursePageContent() {
     }
 
     setTopicsError(null);
+    if (browserAgentEnabled && !agentSearchEnabled) {
+      setTopicsError("Browser Agent requires Agent Search to be enabled.");
+      return;
+    }
     setIsTopicsLoading(true);
     setCourseGenerationError("");
     clearTopicsState();
+    setBrowserSession(null);
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
+    const effectiveAgentSearchEnabled = agentSearchEnabled || browserAgentEnabled;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
@@ -1098,6 +1146,8 @@ function CreateCoursePageContent() {
       finishByDate: finishByIso || null,
       syllabusText: syllabusText.trim() || "Not provided.",
       mode: studyMode,
+      agentSearchEnabled: effectiveAgentSearchEnabled,
+      browserAgentEnabled,
     };
 
     const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
@@ -1113,7 +1163,7 @@ function CreateCoursePageContent() {
       payload.examFiles = await buildFilePayload(examFiles);
     }
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = browserAgentEnabled ? 1 : 3;
     let lastError = null;
     
     // Store a deep copy of the payload to ensure it's not mutated between retries
@@ -1134,8 +1184,15 @@ function CreateCoursePageContent() {
           },
           body: payloadStr,
         });
+        const responseData = await res.json().catch(() => ({}));
+        if (responseData.browserSession) {
+          setBrowserSession(responseData.browserSession);
+        }
 
-        const { result } = await resolveAsyncJobResponse(res, { errorLabel: "build topics" });
+        const { result } = await resolveAsyncJobResponse(
+          { ok: res.ok, status: res.status, json: async () => responseData },
+          { errorLabel: "build topics", timeout: browserAgentEnabled ? 15 * 60 * 1000 : undefined }
+        );
         console.log(`Attempt ${attempt} - response status: ${res.status}`);
         console.log("Backend response:", JSON.stringify(result, null, 2));
 
@@ -1194,6 +1251,8 @@ function CreateCoursePageContent() {
     studyMinutes,
     examDetailsProvided,
     clearTopicsState,
+    agentSearchEnabled,
+    browserAgentEnabled,
   ]);
 
   const handleModuleModeChange = useCallback((overviewId, mode) => {
@@ -2097,16 +2156,7 @@ function CreateCoursePageContent() {
                 {/* Syllabus Section */}
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
                   <div className="mb-4">
-                    <OnboardingTooltip
-                      id="create-syllabus-section"
-                      content="Upload your course syllabus or paste the content here. This helps us understand your course structure and create relevant study materials tailored to your curriculum."
-                      position="right"
-                      pointerPosition="top"
-                      delay={800}
-                      priority={2}
-                    >
-                      <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
-                    </OnboardingTooltip>
+                    <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
                     <p className="text-xs text-[var(--muted-foreground)]">Share course objectives</p>
                   </div>
                   
@@ -2196,16 +2246,7 @@ function CreateCoursePageContent() {
                 <div className="rounded-lg border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
                   <div className="mb-3">
                     <div className="flex items-start justify-between mb-1">
-                      <OnboardingTooltip
-                        id="create-exam-section"
-                        content="Upload past exams, practice tests, or describe your exam format. This is highly recommended — it helps us create practice problems that match your actual test style and focus on the right topics."
-                        position="right"
-                        pointerPosition="top"
-                        delay={1000}
-                        priority={3}
-                      >
-                        <h3 className="font-semibold text-sm">Exam Details</h3>
-                      </OnboardingTooltip>
+                      <h3 className="font-semibold text-sm">Exam Details</h3>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--info)]/20 font-semibold" style={{color: 'var(--info)'}}>Recommended</span>
                     </div>
                     <p className="text-xs text-[var(--muted-foreground)]">Upload practice exams, past tests, or sample questions here. This helps us generate study materials that closely match the topics and question styles on your exam.</p>
@@ -2360,6 +2401,32 @@ function CreateCoursePageContent() {
                     {/* Top buttons removed */}
                   </div>
                 </div>
+
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Topic generation options</h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                      Choose how we gather source material before generating your study plan.
+                    </p>
+                  </div>
+                  <TopicSearchOptions
+                    agentSearchEnabled={agentSearchEnabled}
+                    setAgentSearchEnabled={setAgentSearchEnabled}
+                    browserAgentEnabled={browserAgentEnabled}
+                    setBrowserAgentEnabled={setBrowserAgentEnabled}
+                    disabled={isTopicsLoading || courseGenerating}
+                  />
+                </div>
+
+                {browserSession && (
+                  <BrowserViewer
+                    sessionId={browserSession.sessionId}
+                    streamUrl={browserSession.streamUrl}
+                    userId={userId}
+                    authToken={browserAuthToken}
+                    onClose={handleCloseBrowserViewer}
+                  />
+                )}
 
               {isCramMode && (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 flex flex-col gap-3">
@@ -2524,7 +2591,25 @@ Series & convergence"
 
               {topicsError && (
                 <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-xs" style={{color: 'color-mix(in srgb, var(--danger) 90%, white)'}}>
-                  {topicsError}
+                  <p>{topicsError}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleGenerateTopics}
+                      className="text-xs font-semibold underline"
+                    >
+                      Try again
+                    </button>
+                    {/active browser session/i.test(topicsError || "") && (
+                      <button
+                        type="button"
+                        onClick={handleClearActiveBrowserSession}
+                        className="text-xs font-semibold underline"
+                      >
+                        Clear browser session
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -2534,16 +2619,7 @@ Series & convergence"
                 
                   <div className="flex items-center justify-between mb-4 flex-shrink-0">
                     <div>
-                      <OnboardingTooltip
-                        id="create-topics-step"
-                        content="These are your personalized study topics! Use the confidence buttons (Unfamiliar, Still Learning, Confident) to tell us how well you know each module. This helps us prioritize what you need to learn most."
-                        position="bottom"
-                        pointerPosition="left"
-                        delay={500}
-                        priority={4}
-                      >
-                        <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
-                      </OnboardingTooltip>
+                      <h3 className="text-lg font-bold">{totalSubtopics} Topics Generated</h3>
                       <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                         Review and customize your learning path
                       </p>

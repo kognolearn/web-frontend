@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from "rea
 import { authFetch } from "@/lib/api";
 
 const TOUR_STATE_KEY = "kogno_tour_state";
+const TOUR_STATE_VERSION = 2;
 
 /**
  * Tour types
@@ -15,6 +16,7 @@ const TOUR_STATE_KEY = "kogno_tour_state";
  * @typedef {Object} TourContextValue
  * @property {TourType} currentTour - The currently active tour
  * @property {number} currentStep - Current step index (0-based)
+ * @property {string|null} currentStepId - Stable step identifier
  * @property {boolean} requiresInteraction - Whether current step requires user action
  * @property {Function} startTour - Start a specific tour
  * @property {Function} nextStep - Move to next step
@@ -34,7 +36,16 @@ function loadTourState() {
   if (typeof window === "undefined") return null;
   try {
     const stored = localStorage.getItem(TOUR_STATE_KEY);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      version: TOUR_STATE_VERSION,
+      currentTour: parsed.currentTour ?? null,
+      currentStep: Number.isInteger(parsed.currentStep) ? parsed.currentStep : 0,
+      completedTours: Array.isArray(parsed.completedTours) ? parsed.completedTours : [],
+      lastUpdatedAt: parsed.lastUpdatedAt || null,
+    };
   } catch (e) {
     console.error("[Tour] Failed to load tour state:", e);
     return null;
@@ -84,9 +95,11 @@ export function GuidedTourProvider({ children, tourConfigs = {} }) {
   // Persist state changes
   useEffect(() => {
     saveTourState({
+      version: TOUR_STATE_VERSION,
       currentTour,
       currentStep,
       completedTours: Array.from(completedTours),
+      lastUpdatedAt: new Date().toISOString(),
     });
   }, [currentTour, currentStep, completedTours]);
 
@@ -217,9 +230,12 @@ export function GuidedTourProvider({ children, tourConfigs = {} }) {
     saveTourState(null);
   }, []);
 
+  const currentStepId = currentStepConfig?.id || (currentTour ? `${currentTour}:${currentStep}` : null);
+
   const contextValue = {
     currentTour,
     currentStep,
+    currentStepId,
     requiresInteraction,
     isTourActive,
     currentStepConfig,

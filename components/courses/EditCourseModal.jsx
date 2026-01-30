@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { InfoTooltip } from "@/components/ui/Tooltip";
-import OnboardingTooltip from "@/components/ui/OnboardingTooltip";
 import { authFetch } from "@/lib/api";
 import { resolveAsyncJobResponse } from "@/utils/asyncJobs";
 import { GraduationCap } from "lucide-react";
@@ -210,20 +209,10 @@ export default function EditCourseModal({
             {/* Content */}
             <div className="flex-1 overflow-y-auto overflow-x-visible p-4 sm:p-6 pt-4 space-y-5">
               {/* Intro Text */}
-              <OnboardingTooltip
-                id="edit-modal-intro"
-                content="Describe any changes you'd like to make to your course in natural language. You can also select specific lessons to target!"
-                position="bottom"
-                pointerPosition="center"
-                delay={300}
-                priority={10}
-                showCondition={isOpen}
-              >
-                <div className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
-                  <span>Describe what changes you'd like to make. Optionally select specific lessons to target.</span>
-                  <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, or changing analogies. If you select lessons, only those will be modified." position="bottom" />
-                </div>
-              </OnboardingTooltip>
+              <div className="text-sm text-[var(--muted-foreground)] flex items-start gap-2">
+                <span>Describe what changes you'd like to make. Optionally select specific lessons to target.</span>
+                <InfoTooltip content="Use natural language to describe changes like adding topics, adjusting content difficulty, or changing analogies. If you select lessons, only those will be modified." position="bottom" />
+              </div>
 
               {/* Modification Request Input */}
               <div>
