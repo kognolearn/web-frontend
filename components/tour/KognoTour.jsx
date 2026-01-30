@@ -84,6 +84,7 @@ export default function KognoTour() {
   const pathname = usePathname();
   const kognoRef = useRef(null);
   const autoAdvanceRef = useRef(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [targetRect, setTargetRect] = useState(null);
   const [isStepCompleted, setIsStepCompleted] = useState(false);
   const [kognoPosition, setKognoPosition] = useState({ top: 0, left: 0, placement: "bottom" });
@@ -106,6 +107,10 @@ export default function KognoTour() {
     setIsStepCompleted(false);
     autoAdvanceRef.current = false;
   }, [currentStep]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Stop tour if user navigates away from the relevant page
   useEffect(() => {
@@ -330,6 +335,7 @@ export default function KognoTour() {
   }, [isTourActive, computeKognoPosition]);
 
   if (!isTourActive || !currentStepConfig) return null;
+  if (!isMounted || typeof document === "undefined") return null;
 
   const spotlightPadding = currentStepConfig?.spotlight?.padding ?? DEFAULT_SPOTLIGHT_PADDING;
   const spotlightRadius = currentStepConfig?.spotlight?.radius ?? DEFAULT_SPOTLIGHT_RADIUS;
@@ -451,6 +457,7 @@ export default function KognoTour() {
         text={currentStepConfig.content || ""}
         header={bubbleHeader}
         footer={bubbleFooter}
+        portal={false}
       />
     </AnimatePresence>,
     document.body

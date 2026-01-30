@@ -28,7 +28,7 @@ import TopicExplorer from "@/components/courses/TopicExplorer";
 import ConversationalCourseUI from "@/components/courses/create/ConversationalCourseUI";
 import { motion } from "framer-motion";
 import { getRedirectDestination } from "@/lib/platform";
-import { useGuidedTour } from "@/components/tour";
+import { useGuidedTour } from "@/components/tour/GuidedTourProvider";
 
 const searchDebounceMs = 350;
 const syllabusFileTypes = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic";
