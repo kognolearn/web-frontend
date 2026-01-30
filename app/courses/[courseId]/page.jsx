@@ -759,6 +759,9 @@ export default function CoursePage() {
     return minMinutes === null ? 0 : Math.ceil(minMinutes * 60);
   }, [studyPlan]);
 
+  const [isTourPromptActive, setIsTourPromptActive] = useState(false);
+  const [hasTourPrompted, setHasTourPrompted] = useState(false);
+
   useEffect(() => {
     if (isGeneratingCourse) {
       setIsTimerControlsOpen(false);
@@ -1165,9 +1168,6 @@ export default function CoursePage() {
   const [isDraggingToDock, setIsDraggingToDock] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [isExternalChatHovering, setIsExternalChatHovering] = useState(false);
-  const [isTourPromptActive, setIsTourPromptActive] = useState(false);
-  const [hasTourPrompted, setHasTourPrompted] = useState(false);
-
   const handleTabBarDragOver = (e) => {
     handleDragOver(e);
     if (e.dataTransfer.types.includes('application/x-chat-tab')) {
