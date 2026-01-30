@@ -8,17 +8,22 @@ import { useState, useCallback } from "react";
  * Provides three options:
  * 1. Agent Search (default on) - AI searches the web for course content
  * 2. Browser Agent (requires Agent Search) - AI controls a browser you can see and interact with
- * 3. Manual Text - Always available, paste syllabus alongside other options
+ * 3. Manual Upload (optional) - Add syllabus or exam materials yourself
  */
 export default function TopicSearchOptions({
   agentSearchEnabled,
   setAgentSearchEnabled,
   browserAgentEnabled,
   setBrowserAgentEnabled,
+  manualUploadEnabled,
+  setManualUploadEnabled,
   disabled = false,
   className = "",
 }) {
   const [showBrowserInfo, setShowBrowserInfo] = useState(false);
+  const canToggleManual =
+    typeof manualUploadEnabled === "boolean" &&
+    typeof setManualUploadEnabled === "function";
 
   const handleAgentSearchToggle = useCallback(
     (enabled) => {
@@ -40,6 +45,14 @@ export default function TopicSearchOptions({
       setBrowserAgentEnabled(enabled);
     },
     [agentSearchEnabled, setAgentSearchEnabled, setBrowserAgentEnabled]
+  );
+
+  const handleManualUploadToggle = useCallback(
+    (enabled) => {
+      if (!canToggleManual) return;
+      setManualUploadEnabled(enabled);
+    },
+    [canToggleManual, setManualUploadEnabled]
   );
 
   return (
@@ -150,13 +163,49 @@ export default function TopicSearchOptions({
         </div>
       )}
 
+      {/* Manual Upload Toggle */}
+      {canToggleManual && (
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={manualUploadEnabled}
+            disabled={disabled}
+            onClick={() => handleManualUploadToggle(!manualUploadEnabled)}
+            className={`
+              relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
+              border-2 border-transparent transition-colors duration-200 ease-in-out
+              focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:ring-offset-2
+              ${manualUploadEnabled ? "bg-[var(--primary)]" : "bg-[var(--surface-muted)]"}
+              ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+            `}
+          >
+            <span
+              className={`
+                pointer-events-none inline-block h-5 w-5 transform rounded-full
+                bg-white shadow ring-0 transition duration-200 ease-in-out
+                ${manualUploadEnabled ? "translate-x-5" : "translate-x-0"}
+              `}
+            />
+          </button>
+          <div className="flex-1">
+            <label className="text-sm font-medium">Manual Upload</label>
+            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+              Add syllabus or exam materials yourself (optional).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Divider */}
       <div className="flex items-center gap-3 py-2">
         <div className="flex-1 h-px bg-[var(--border)]" />
         <span className="text-xs text-[var(--muted-foreground)]">
-          {agentSearchEnabled
-            ? "You can also add manual text below"
-            : "Paste your syllabus or course content below"}
+          {manualUploadEnabled
+            ? "Add any syllabus or exam details below"
+            : agentSearchEnabled
+              ? "You can enable manual uploads if you have extra materials"
+              : "Manual uploads are optional"}
         </span>
         <div className="flex-1 h-px bg-[var(--border)]" />
       </div>

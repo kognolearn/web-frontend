@@ -33,9 +33,18 @@ export default function BrowserViewer({
   const [userActionRequest, setUserActionRequest] = useState(null);
   const [userInputText, setUserInputText] = useState("");
   const [error, setError] = useState(null);
+  const [jobStarted, setJobStarted] = useState(false);
+  const [jobStartRequested, setJobStartRequested] = useState(false);
+  const [agentInstructions, setAgentInstructions] = useState("");
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const viewportRef = useRef(null);
+
+  useEffect(() => {
+    setJobStarted(false);
+    setJobStartRequested(false);
+    setAgentInstructions("");
+  }, [sessionId, streamUrl]);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -176,6 +185,8 @@ export default function BrowserViewer({
 
       case "job_started":
         if (data.jobId) {
+          setJobStarted(true);
+          setJobStartRequested(false);
           onJobStarted?.({
             jobId: data.jobId,
             statusUrl: data.statusUrl,
@@ -186,10 +197,18 @@ export default function BrowserViewer({
 
       case "job_error":
         setError(data.message || "Failed to start browser job");
+        setJobStartRequested(false);
         break;
 
       case "error":
         setError(data.message);
+        break;
+
+      case "command_result":
+        if (data.command === "start_job" && data.success === false) {
+          setError(data.error || "Unable to start browser agent");
+          setJobStartRequested(false);
+        }
         break;
 
       default:
@@ -223,6 +242,28 @@ export default function BrowserViewer({
     setIsWaitingForUser(false);
     onUserActionComplete?.();
   }, [onUserActionComplete]);
+
+  const handleStartJob = useCallback(() => {
+    const instructions = agentInstructions.trim();
+    if (!instructions) {
+      setError(
+        "Please tell the agent where to go (e.g., a course page or portal URL) before starting."
+      );
+      return;
+    }
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setError("Waiting for browser connection. Please try again in a moment.");
+      return;
+    }
+    setError(null);
+    setJobStartRequested(true);
+    wsRef.current.send(
+      JSON.stringify({
+        type: "start_job",
+        instructions,
+      })
+    );
+  }, [agentInstructions]);
 
   const sendUserClick = useCallback((x, y) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -359,6 +400,46 @@ export default function BrowserViewer({
           </span>
         </div>
       </div>
+
+      {!jobStarted && (
+        <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)]/70 space-y-2">
+          <div>
+            <label className="text-sm font-semibold">
+              Where should the agent go to find your course?
+            </label>
+            <p className="text-xs text-[var(--muted-foreground)] mt-1">
+              We can reach login‑blocked links as long as you log in. We don&apos;t see or save any of your information.
+            </p>
+          </div>
+          <textarea
+            rows={3}
+            value={agentInstructions}
+            onChange={(event) => {
+              setAgentInstructions(event.target.value);
+              if (error) {
+                setError(null);
+              }
+            }}
+            placeholder="Paste the course portal link, LMS page, or any hints about where the syllabus lives..."
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--foreground)] transition focus:border-[var(--primary)] focus:outline-none focus:ring-3 focus:ring-[var(--primary)]/20 resize-none"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStartJob}
+              disabled={!isConnected || jobStartRequested || !agentInstructions.trim()}
+              className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {jobStartRequested ? "Starting…" : "Start Browser Agent"}
+            </button>
+            {!isConnected && (
+              <span className="text-xs text-[var(--muted-foreground)]">
+                Connecting to browser…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Browser viewport */}
       <div

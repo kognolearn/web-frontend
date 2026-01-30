@@ -612,6 +612,7 @@ function CreateCoursePageContent() {
   const [topicModifyError, setTopicModifyError] = useState("");
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false);
+  const [manualUploadEnabled, setManualUploadEnabled] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
   const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
   const [browserJobId, setBrowserJobId] = useState(null);
@@ -692,6 +693,7 @@ function CreateCoursePageContent() {
   const examDetailsProvided = hasExamMaterials || examFiles.length > 0 || (examNotes && examNotes.trim());
   const canProceedFromStep2 = true; // Always allow proceeding from step 2
   const canProceedFromStep3 = totalSubtopics > 0;
+  const browserSessionActive = Boolean(browserAgentEnabled && browserSession);
   const canModifyTopics = Boolean(
     userId &&
       topicModifyPrompt.trim() &&
@@ -1174,27 +1176,30 @@ function CreateCoursePageContent() {
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
     const effectiveAgentSearchEnabled = agentSearchEnabled || browserAgentEnabled;
+    const includeManualInputs = manualUploadEnabled;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
       university: trimmedUniversity || null,
       finishByDate: finishByIso || null,
-      syllabusText: syllabusText.trim() || "Not provided.",
+      syllabusText: includeManualInputs ? (syllabusText.trim() || "Not provided.") : "Not provided.",
       mode: studyMode,
       agentSearchEnabled: effectiveAgentSearchEnabled,
       browserAgentEnabled,
     };
 
-    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
-    if (examFormatDetails) {
-      payload.examFormatDetails = examFormatDetails;
+    if (includeManualInputs) {
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
+      if (examFormatDetails) {
+        payload.examFormatDetails = examFormatDetails;
+      }
     }
 
-    if (syllabusFiles.length > 0) {
+    if (includeManualInputs && syllabusFiles.length > 0) {
       payload.syllabusFiles = await buildFilePayload(syllabusFiles);
     }
 
-    if (examFiles.length > 0) {
+    if (includeManualInputs && examFiles.length > 0) {
       payload.examFiles = await buildFilePayload(examFiles);
     }
 
@@ -1226,6 +1231,7 @@ function CreateCoursePageContent() {
 
         if (browserAgentEnabled && res.ok && !responseData.jobId) {
           setPendingBrowserJobSessionId(responseData.browserSession?.sessionId || null);
+          setIsTopicsLoading(false);
           return;
         }
 
@@ -1268,6 +1274,7 @@ function CreateCoursePageContent() {
     hasExamMaterials,
     syllabusFiles,
     syllabusText,
+    manualUploadEnabled,
     userId,
     confirmedNoExamDetails,
     studyMode,
@@ -1293,6 +1300,7 @@ function CreateCoursePageContent() {
 
     setBrowserJobId(jobId);
     setPendingBrowserJobSessionId(null);
+    setIsTopicsLoading(true);
 
     try {
       const { result } = await resolveAsyncJobResponse(
@@ -2181,7 +2189,7 @@ function CreateCoursePageContent() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-bold mb-1">Course Materials</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">Upload syllabus and exam materials for better course generation</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">Choose how we gather sources and optionally add your materials</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2210,8 +2218,43 @@ function CreateCoursePageContent() {
               </div>
 
               <div className="space-y-5">
-                {/* Syllabus Section */}
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Topic generation options</h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                      Choose how we gather source material before generating your study plan.
+                    </p>
+                  </div>
+                  <TopicSearchOptions
+                    agentSearchEnabled={agentSearchEnabled}
+                    setAgentSearchEnabled={setAgentSearchEnabled}
+                    browserAgentEnabled={browserAgentEnabled}
+                    setBrowserAgentEnabled={setBrowserAgentEnabled}
+                    manualUploadEnabled={manualUploadEnabled}
+                    setManualUploadEnabled={setManualUploadEnabled}
+                    disabled={isTopicsLoading || courseGenerating}
+                  />
+                </div>
+
+                {!manualUploadEnabled && (
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)]/60 p-4 text-sm">
+                    <p className="text-[var(--muted-foreground)]">
+                      Manual uploads are off. We&apos;ll rely on web or browser discovery instead.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setManualUploadEnabled(true)}
+                      className="mt-3 text-xs font-semibold underline"
+                    >
+                      Add syllabus or exam materials
+                    </button>
+                  </div>
+                )}
+
+                {manualUploadEnabled && (
+                  <>
+                    {/* Syllabus Section */}
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
                   <div className="mb-4">
                     <h3 className="font-semibold text-sm mb-0.5">Syllabus</h3>
                     <p className="text-xs text-[var(--muted-foreground)]">Share course objectives</p>
@@ -2405,6 +2448,8 @@ function CreateCoursePageContent() {
                     </p>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
 
 
@@ -2457,22 +2502,6 @@ function CreateCoursePageContent() {
                     </div>
                     {/* Top buttons removed */}
                   </div>
-                </div>
-
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/70 p-4 space-y-3">
-                  <div>
-                    <h3 className="text-sm font-semibold">Topic generation options</h3>
-                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                      Choose how we gather source material before generating your study plan.
-                    </p>
-                  </div>
-                  <TopicSearchOptions
-                    agentSearchEnabled={agentSearchEnabled}
-                    setAgentSearchEnabled={setAgentSearchEnabled}
-                    browserAgentEnabled={browserAgentEnabled}
-                    setBrowserAgentEnabled={setBrowserAgentEnabled}
-                    disabled={isTopicsLoading || courseGenerating}
-                  />
                 </div>
 
                 {browserSession && (
@@ -2578,18 +2607,22 @@ Series & convergence"
                   </div>
                   <h3 className="text-base font-bold mb-1.5">Ready to Build Topics</h3>
                   <p className="text-xs text-[var(--muted-foreground)] mb-5 max-w-md mx-auto">
-                    We'll analyze your course details and create a comprehensive topic list
+                    {browserAgentEnabled
+                      ? browserSessionActive
+                        ? "Browser agent is ready. Add your instructions below and start the agent."
+                        : "We'll open a live browser so you can guide the agent to the right course page."
+                      : "We'll analyze your course details and create a comprehensive topic list"}
                   </p>
                   <button
                     type="button"
                     onClick={handleGenerateTopics}
-                    disabled={!canProceedFromStep1 || isTopicsLoading}
+                    disabled={!canProceedFromStep1 || isTopicsLoading || browserSessionActive}
                     className="btn btn-primary"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Build Topics
+                    {browserAgentEnabled ? "Open Browser Agent" : "Build Topics"}
                   </button>
                 </div>
               )}

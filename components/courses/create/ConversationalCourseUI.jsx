@@ -524,6 +524,8 @@ export default function ConversationalCourseUI({ onComplete, onBack, onSwitchToW
                       setAgentSearchEnabled={flowState.setAgentSearchEnabled}
                       browserAgentEnabled={flowState.browserAgentEnabled}
                       setBrowserAgentEnabled={flowState.setBrowserAgentEnabled}
+                      manualUploadEnabled={flowState.manualUploadEnabled}
+                      setManualUploadEnabled={flowState.setManualUploadEnabled}
                       disabled={flowState.isTopicsLoading || flowState.courseGenerating}
                     />
                   </div>

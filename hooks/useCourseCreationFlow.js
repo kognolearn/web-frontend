@@ -381,6 +381,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   // Browser Agent state
   const [agentSearchEnabled, setAgentSearchEnabled] = useState(true);
   const [browserAgentEnabled, setBrowserAgentEnabledState] = useState(false);
+  const [manualUploadEnabled, setManualUploadEnabled] = useState(false);
   const [browserSession, setBrowserSession] = useState(null);
   const [pendingBrowserJobSessionId, setPendingBrowserJobSessionId] = useState(null);
   const [browserJobId, setBrowserJobId] = useState(null);
@@ -487,6 +488,18 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setManualTopicsInput("");
     }
   }, [isCramMode, cramTopicStrategy]);
+
+  useEffect(() => {
+    if (manualUploadEnabled) return;
+    const hasManualInputs =
+      Boolean(syllabusText.trim()) ||
+      syllabusFiles.length > 0 ||
+      Boolean(examNotes.trim()) ||
+      examFiles.length > 0;
+    if (hasManualInputs) {
+      setManualUploadEnabled(true);
+    }
+  }, [manualUploadEnabled, syllabusText, syllabusFiles, examNotes, examFiles]);
 
   useEffect(() => {
     let active = true;
@@ -903,27 +916,30 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
+    const includeManualInputs = manualUploadEnabled;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
       university: trimmedUniversity || null,
       finishByDate: finishByIso || null,
-      syllabusText: syllabusText.trim() || "Not provided.",
+      syllabusText: includeManualInputs ? (syllabusText.trim() || "Not provided.") : "Not provided.",
       mode: studyMode,
       agentSearchEnabled,
       browserAgentEnabled,
     };
 
-    const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
-    if (examFormatDetails) {
-      payload.examFormatDetails = examFormatDetails;
+    if (includeManualInputs) {
+      const examFormatDetails = formatExamStructure({ hasExamMaterials: examDetailsProvided, examNotes });
+      if (examFormatDetails) {
+        payload.examFormatDetails = examFormatDetails;
+      }
     }
 
-    if (syllabusFiles.length > 0) {
+    if (includeManualInputs && syllabusFiles.length > 0) {
       payload.syllabusFiles = await buildFilePayload(syllabusFiles, { useOpenRouterFormat: true });
     }
 
-    if (examFiles.length > 0) {
+    if (includeManualInputs && examFiles.length > 0) {
       payload.examFiles = await buildFilePayload(examFiles, { useOpenRouterFormat: true });
     }
 
@@ -950,6 +966,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
         if (browserAgentEnabled && res.ok && !responseData.jobId) {
           setPendingBrowserJobSessionId(responseData.browserSession?.sessionId || null);
+          setIsTopicsLoading(false);
           return;
         }
 
@@ -985,6 +1002,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     examDetailsProvided,
     syllabusFiles,
     syllabusText,
+    manualUploadEnabled,
     userId,
     studyMode,
     studyHours,
@@ -1008,6 +1026,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
     setBrowserJobId(jobId);
     setPendingBrowserJobSessionId(null);
+    setIsTopicsLoading(true);
 
     try {
       const { result } = await resolveAsyncJobResponse(
@@ -1753,6 +1772,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setAgentSearchEnabled,
     browserAgentEnabled,
     setBrowserAgentEnabled,
+    manualUploadEnabled,
+    setManualUploadEnabled,
     browserSession,
     setBrowserSession,
     pendingBrowserJobSessionId,
@@ -1805,6 +1826,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       studyHours,
       studyMinutes,
       syllabusText,
+      manualUploadEnabled,
       examNotes,
       overviewTopics,
       moduleConfidenceState,
@@ -1821,6 +1843,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       studyHours,
       studyMinutes,
       syllabusText,
+      manualUploadEnabled,
       examNotes,
       overviewTopics,
       moduleConfidenceState,
@@ -1837,6 +1860,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setStudyHours(snapshot.studyHours ?? 5);
       setStudyMinutes(snapshot.studyMinutes ?? 0);
       setSyllabusText(snapshot.syllabusText ?? '');
+      setManualUploadEnabled(snapshot.manualUploadEnabled ?? false);
       setExamNotes(snapshot.examNotes ?? '');
       setOverviewTopics(snapshot.overviewTopics ?? []);
       setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});

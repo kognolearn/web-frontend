@@ -170,13 +170,13 @@ it('shows the browser viewer and sends browser flags when browser agent is enabl
   );
 
   await screen.findByRole('heading', { name: 'Course Materials' });
+  const switches = screen.getAllByRole('switch');
+  await user.click(switches[1]);
   await user.click(screen.getByRole('button', { name: /Next: Generate Topics/i }));
 
   await screen.findByRole('heading', { name: 'Build Study Topics' });
-  const switches = screen.getAllByRole('switch');
-  await user.click(switches[1]);
 
-  await user.click(screen.getByRole('button', { name: /Build Topics/i }));
+  await user.click(screen.getByRole('button', { name: /Open Browser Agent|Build Topics/i }));
 
   await waitFor(() => {
     expect(screen.getByTestId('browser-viewer')).toHaveTextContent('sess-1');
