@@ -5,7 +5,144 @@ import { authFetch, getAccessToken } from "@/lib/api";
 import { useCourseCreationFlow } from "@/hooks/useCourseCreationFlow";
 import BrowserViewer from "@/components/browser/BrowserViewer";
 import TopicSearchOptions from "@/components/browser/TopicSearchOptions";
-import TopicEditorChat from "@/components/courses/create/TopicEditorChat";
+
+const filterReasoningDetails = (details) => {
+  if (!details) return null;
+  if (!Array.isArray(details)) return details;
+  return details.filter((entry) => entry?.type !== "reasoning.encrypted");
+};
+
+const parseModelOutput = (raw) => {
+  if (!raw || typeof raw !== "string") {
+    return { raw: "" };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      const reasoningDetails = filterReasoningDetails(parsed.reasoning_details);
+      return { parsed: { ...parsed, reasoning_details: reasoningDetails } };
+    }
+  } catch {
+    // fall through
+  }
+  return { raw };
+};
+
+const formatToolCalls = (toolCalls = []) => {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return [];
+  return toolCalls.map((call) => {
+    const fn = call.function || {};
+    let args = fn.arguments || "";
+    try {
+      args = typeof args === "string" ? JSON.parse(args) : args;
+    } catch {
+      // keep as-is
+    }
+    return {
+      id: call.id || call.tool_call_id || "",
+      name: fn.name || call.name || "unknown",
+      arguments: args,
+    };
+  });
+};
+
+const ModelOutputPanel = ({ title, output }) => {
+  const parsed = parseModelOutput(output);
+  if (!parsed.raw && !parsed.parsed) {
+    return (
+      <div>
+        <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+          {title}
+        </div>
+        <div className="mt-2 text-xs text-[var(--muted-foreground)]">No output yet.</div>
+      </div>
+    );
+  }
+
+  if (parsed.raw) {
+    return (
+      <div>
+        <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+          {title}
+        </div>
+        <div className="mt-2 max-h-60 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2 text-xs text-[var(--foreground)] whitespace-pre-wrap">
+          {parsed.raw}
+        </div>
+      </div>
+    );
+  }
+
+  const payload = parsed.parsed || {};
+  const toolCalls = formatToolCalls(payload.tool_calls || []);
+  const reasoningDetails = payload.reasoning_details;
+  const otherFields = { ...payload };
+  delete otherFields.role;
+  delete otherFields.content;
+  delete otherFields.tool_calls;
+  delete otherFields.reasoning_details;
+
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+        {title}
+      </div>
+      <div className="mt-2 grid gap-3">
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Role</div>
+          <div className="mt-1 text-xs text-[var(--foreground)]">
+            {payload.role || "unknown"}
+          </div>
+        </div>
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Content</div>
+          <div className="mt-1 text-xs text-[var(--foreground)] whitespace-pre-wrap">
+            {payload.content || "—"}
+          </div>
+        </div>
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Tool Calls</div>
+          {toolCalls.length === 0 ? (
+            <div className="mt-1 text-xs text-[var(--muted-foreground)]">None</div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {toolCalls.map((call, idx) => (
+                <div key={call.id || idx} className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+                  <div className="text-xs text-[var(--foreground)] font-semibold">{call.name}</div>
+                  <div className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                    ID: {call.id || "—"}
+                  </div>
+                  <pre className="mt-2 text-[11px] text-[var(--foreground)] whitespace-pre-wrap">
+                    {typeof call.arguments === "string"
+                      ? call.arguments
+                      : JSON.stringify(call.arguments, null, 2)}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {reasoningDetails ? (
+          <div className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+            <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Reasoning</div>
+            <pre className="mt-2 text-[11px] text-[var(--foreground)] whitespace-pre-wrap">
+              {typeof reasoningDetails === "string"
+                ? reasoningDetails
+                : JSON.stringify(reasoningDetails, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+        {Object.keys(otherFields).length > 0 ? (
+          <div className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2">
+            <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Other Fields</div>
+            <pre className="mt-2 text-[11px] text-[var(--foreground)] whitespace-pre-wrap">
+              {JSON.stringify(otherFields, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
 
 export default function BrowserAgentTopicConsole({ className = "" }) {
   const flow = useCourseCreationFlow();
@@ -45,28 +182,17 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
     handleBrowserSessionClosed,
     handleBrowserJobStarted,
     handleGenerateTopics,
-    overviewTopics,
-    deletedSubtopics,
-    handleDeleteSubtopic,
-    handleDeleteAllSubtopics,
-    handleRestoreSubtopic,
-    handleRestoreAll,
-    handleAddTopic,
+    courseReport,
     isTopicsLoading,
     topicsError,
-    topicModifyPrompt,
-    setTopicModifyPrompt,
-    isModifyingTopics,
-    topicModifyError,
-    setTopicModifyError,
-    canModifyTopics,
     syllabusFileTypes,
     generatedContentOutdated,
     generatedContentOutdatedReason,
-    handleModifyTopics,
   } = flow;
 
   const [browserAuthToken, setBrowserAuthToken] = useState(null);
+  const [debugAgentState, setDebugAgentState] = useState(null);
+  const [debugExplorers, setDebugExplorers] = useState([]);
 
   const canStartTopics = useMemo(() => {
     return Boolean(courseTitle.trim() && collegeName.trim() && !isTopicsLoading);
@@ -121,6 +247,10 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
     [handleSyllabusFileChange]
   );
 
+  const handleRunReport = useCallback(() => {
+    handleGenerateTopics({ reportMode: true, debugStepMode: true });
+  }, [handleGenerateTopics]);
+
   const handleExamUpload = useCallback(
     (event) => {
       const files = Array.from(event.target.files || []);
@@ -136,9 +266,9 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
     <div className={`space-y-6 ${className}`}>
       <div className="card p-6">
         <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Browser Agent Topic Generator</h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Browser Agent Course Report</h2>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Single-page replica of the course topic generation flow for fast browser agent testing.
+            Single-page replica of the course discovery flow for fast browser agent testing.
           </p>
         </div>
 
@@ -337,16 +467,16 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
       <div className="card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Run Topic Generation</h3>
+            <h3 className="text-base font-semibold">Run Course Report</h3>
             <p className="text-sm text-[var(--muted-foreground)]">
               {browserAgentEnabled
-                ? "A live browser session will open before topic generation begins."
-                : "Topics will be generated immediately using the selected sources."}
+                ? "A live browser session will open before report generation begins."
+                : "The report will be generated immediately using the selected sources."}
             </p>
           </div>
           <button
             type="button"
-            onClick={handleGenerateTopics}
+            onClick={handleRunReport}
             disabled={!canStartTopics}
             className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
@@ -354,7 +484,7 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
               ? "Generating..."
               : browserAgentEnabled
                 ? "Open Browser Agent"
-                : "Build Topics"}
+                : "Build Report"}
           </button>
         </div>
 
@@ -365,7 +495,7 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={handleGenerateTopics}
+                  onClick={handleRunReport}
                   className="text-sm underline"
                 >
                   Try again
@@ -393,57 +523,92 @@ export default function BrowserAgentTopicConsole({ className = "" }) {
           authToken={browserAuthToken}
           onClose={handleCloseBrowserViewer}
           onJobStarted={handleBrowserJobStarted}
+          onAgentStateChange={setDebugAgentState}
+          onExplorersChange={setDebugExplorers}
         />
       )}
 
-      <TopicEditorChat
-        overviewTopics={overviewTopics}
-        deletedSubtopics={deletedSubtopics}
-        onDeleteSubtopic={handleDeleteSubtopic}
-        onDeleteAllSubtopics={handleDeleteAllSubtopics}
-        onRestoreSubtopic={handleRestoreSubtopic}
-        onRestoreAll={handleRestoreAll}
-        onAddTopic={handleAddTopic}
-        onRegenerate={handleGenerateTopics}
-        isLoading={isTopicsLoading}
-        outdatedMessage={generatedContentOutdated ? generatedContentOutdatedReason : ""}
-      />
-
-      {overviewTopics.length > 0 && (
+      {browserSession && (
         <div className="card p-6">
           <div className="flex flex-col gap-2">
-            <h3 className="text-base font-semibold text-[var(--foreground)]">Refine topics with a prompt</h3>
+            <h3 className="text-base font-semibold text-[var(--foreground)]">Admin Debug</h3>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Tell the agent how to adjust the topic list. It will reuse the original browser context.
+              Inspect the agent reasoning and explorer activity for this session.
             </p>
           </div>
-          <div className="mt-4 flex flex-col gap-3">
-            <textarea
-              rows={4}
-              value={topicModifyPrompt}
-              onChange={(event) => {
-                setTopicModifyPrompt(event.target.value);
-                if (topicModifyError) setTopicModifyError("");
-              }}
-              placeholder="Example: Remove introductory calculus and expand on Fourier analysis."
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--foreground)]"
+
+          <div className="mt-4 grid gap-4">
+            <ModelOutputPanel
+              title="Main Agent Output"
+              output={debugAgentState?.lastModelOutput}
             />
-            {topicModifyError && (
-              <div className="text-sm text-[var(--danger)]">{topicModifyError}</div>
+            <ModelOutputPanel
+              title="Report Agent Output"
+              output={debugAgentState?.reportModelOutput}
+            />
+
+            {Array.isArray(debugExplorers) && debugExplorers.length > 0 ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Explorer Agents
+                </div>
+                <div className="mt-2 space-y-2 max-h-64 overflow-auto pr-1">
+                  {debugExplorers.map((explorer) => (
+                    <div
+                      key={explorer.id}
+                      className="rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                        <span className="font-semibold text-[var(--foreground)]">
+                          {explorer.status || "unknown"}
+                        </span>
+                        {explorer.url ? <span>{explorer.url}</span> : null}
+                      </div>
+                      <div className="mt-2">
+                        <ModelOutputPanel
+                          title="Explorer Output"
+                          output={explorer.lastModelOutput}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-[var(--muted-foreground)]">
+                No explorer agents yet.
+              </div>
             )}
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => handleModifyTopics?.()}
-                disabled={!canModifyTopics}
-                className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {isModifyingTopics ? "Updating..." : "Apply Prompt"}
-              </button>
-            </div>
           </div>
         </div>
       )}
+
+      <div className="card p-6">
+        <div className="flex flex-col gap-2">
+          <h3 className="text-base font-semibold text-[var(--foreground)]">Course Report</h3>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            The browser agent will summarize the course once it finishes exploring the content source.
+          </p>
+        </div>
+        <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-1)] p-4">
+          {isTopicsLoading && !courseReport ? (
+            <p className="text-sm text-[var(--muted-foreground)]">Generating report…</p>
+          ) : courseReport ? (
+            <div className="text-sm text-[var(--foreground)] whitespace-pre-wrap">
+              {courseReport}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No report yet. Run the browser agent to generate one.
+            </p>
+          )}
+        </div>
+        {generatedContentOutdated && (
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+            {generatedContentOutdatedReason}
+          </p>
+        )}
+      </div>
 
       {pendingBrowserJobSessionId && !browserSession && (
         <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm text-[var(--muted-foreground)]">

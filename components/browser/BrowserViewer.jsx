@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { filterMainTabs, getExplorerStatusLabel } from "./explorerUtils";
 
 /**
  * BrowserViewer - Live browser stream display with pause/resume controls.
@@ -19,6 +19,8 @@ export default function BrowserViewer({
   onClose,
   onUserActionComplete,
   onJobStarted,
+  onAgentStateChange,
+  onExplorersChange,
   className = "",
 }) {
   const VIEWPORT_WIDTH = 1280;
@@ -32,8 +34,10 @@ export default function BrowserViewer({
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [isNavigatingUrl, setIsNavigatingUrl] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
-  const [lastAction, setLastAction] = useState("");
   const [agentState, setAgentState] = useState(null);
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const [explorers, setExplorers] = useState([]);
   const [screenshot, setScreenshot] = useState(null);
   const [userActionRequest, setUserActionRequest] = useState(null);
   const [error, setError] = useState(null);
@@ -54,6 +58,9 @@ export default function BrowserViewer({
     setJobStartRequested(false);
     setAgentInstructions("");
     setAgentState(null);
+    setTabs([]);
+    setActiveTabId(null);
+    setExplorers([]);
     setUrlInput("");
     setIsEditingUrl(false);
     setIsNavigatingUrl(false);
@@ -185,6 +192,19 @@ export default function BrowserViewer({
       case "screenshot":
         setScreenshot(data.image);
         if (data.url) setCurrentUrl(data.url);
+        if (Array.isArray(data.tabs)) {
+          setTabs(data.tabs);
+          const active = data.tabs.find((tab) => tab.isActive)?.id;
+          if (active) setActiveTabId(active);
+        }
+        if (Array.isArray(data.explorers)) {
+          setExplorers(data.explorers);
+        }
+        if (data.activeTabId) setActiveTabId(data.activeTabId);
+        if (Array.isArray(data.explorers)) {
+          setExplorers(data.explorers);
+          onExplorersChange?.(data.explorers);
+        }
         if (data.url && pendingUrl && data.url !== pendingUrl) {
           setIsNavigatingUrl(false);
           setPendingUrl("");
@@ -209,7 +229,20 @@ export default function BrowserViewer({
           setIsWaitingForUser(data.state === "waiting_for_user");
         }
         if (data.currentUrl) setCurrentUrl(data.currentUrl);
-        if (data.agentState) setAgentState(data.agentState);
+        if (Array.isArray(data.tabs)) {
+          setTabs(data.tabs);
+          const active = data.tabs.find((tab) => tab.isActive)?.id;
+          if (active) setActiveTabId(active);
+        }
+        if (Array.isArray(data.explorers)) {
+          setExplorers(data.explorers);
+          onExplorersChange?.(data.explorers);
+        }
+        if (data.activeTabId) setActiveTabId(data.activeTabId);
+        if (data.agentState) {
+          setAgentState(data.agentState);
+          onAgentStateChange?.(data.agentState);
+        }
         if (data.userActionRequest) {
           setUserActionRequest({
             reason: data.userActionRequest.reason,
@@ -219,14 +252,9 @@ export default function BrowserViewer({
         }
         break;
 
-      case "action":
-        setLastAction(data.message);
-        // Clear action after 3 seconds
-        setTimeout(() => setLastAction(""), 3000);
-        break;
-
       case "agent_state":
         setAgentState(data.agentState || null);
+        onAgentStateChange?.(data.agentState || null);
         break;
 
       case "user_action_request":
@@ -273,6 +301,18 @@ export default function BrowserViewer({
           }
           setIsNavigatingUrl(false);
           setPendingUrl("");
+        } else if (data.command === "user_switch_tab") {
+          if (data.success) {
+            if (Array.isArray(data.tabs)) {
+              setTabs(data.tabs);
+              const active = data.tabs.find((tab) => tab.isActive)?.id;
+              if (active) setActiveTabId(active);
+            }
+            if (data.tabId) setActiveTabId(data.tabId);
+            if (data.url) setCurrentUrl(data.url);
+          } else {
+            setError(data.error || "Failed to switch tab");
+          }
         }
         break;
 
@@ -311,6 +351,17 @@ export default function BrowserViewer({
       wsRef.current.send(JSON.stringify({ type: "user_forward" }));
     }
   }, [isPaused, isWaitingForUser]);
+
+  const handleSwitchTab = useCallback(
+    (tabId) => {
+      if (!isPaused && !isWaitingForUser) return;
+      if (!tabId) return;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "user_switch_tab", tabId }));
+      }
+    },
+    [isPaused, isWaitingForUser]
+  );
 
   const normalizeUrl = useCallback((value) => {
     const trimmed = (value || "").trim();
@@ -560,14 +611,16 @@ export default function BrowserViewer({
 
   const taskList = agentState?.taskList || [];
   const strategyText = agentState?.currentStrategy || "";
-  const lastAgentAction = agentState?.lastAction || lastAction || "";
-  const lastAgentActionDetail = agentState?.lastActionDetail || "";
-  const lastAgentActionAt = agentState?.lastActionAt || "";
-  const lastAgentActionTime = lastAgentActionAt ? new Date(lastAgentActionAt) : null;
-  const lastAgentActionTimeLabel =
-    lastAgentActionTime && !Number.isNaN(lastAgentActionTime.getTime())
-      ? lastAgentActionTime.toLocaleTimeString()
-      : "";
+  const visibleTabs = filterMainTabs(tabs);
+  const explorerStatusLabel = getExplorerStatusLabel(explorers);
+  const formatTabLabel = useCallback((tab) => {
+    if (!tab) return "New tab";
+    const title = (tab.title || "").trim();
+    if (title) return title;
+    const url = (tab.url || "").replace(/^https?:\/\//i, "");
+    if (url) return url;
+    return "New tab";
+  }, []);
 
   return (
     <div
@@ -592,6 +645,11 @@ export default function BrowserViewer({
               Waiting for you
             </span>
           )}
+          {explorerStatusLabel ? (
+            <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-600 text-xs rounded-full">
+              {explorerStatusLabel}
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {isWaitingForUser ? (
@@ -734,71 +792,89 @@ export default function BrowserViewer({
         </div>
       </div>
 
-      {(strategyText || taskList.length > 0 || lastAgentAction || lastAgentActionDetail) && (
-        <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)]/50">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                Current Strategy
-              </div>
-              <div className="text-sm text-[var(--foreground)] mt-1">
-                {strategyText || "—"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                Last Action
-              </div>
-              <div className="text-sm text-[var(--foreground)] mt-1">
-                {lastAgentAction || "—"}
-              </div>
-              {lastAgentActionDetail && (
-                <div className="text-[11px] text-[var(--muted-foreground)] mt-1 truncate">
-                  {lastAgentActionDetail}
-                </div>
-              )}
-              {lastAgentActionTimeLabel && (
-                <div className="text-[10px] text-[var(--muted-foreground)] mt-1">
-                  {lastAgentActionTimeLabel}
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                Task List
-              </div>
-              {taskList.length === 0 ? (
-                <div className="text-sm text-[var(--muted-foreground)] mt-1">No tasks yet.</div>
-              ) : (
-                <ul className="mt-2 space-y-1 max-h-28 overflow-auto pr-1">
-                  {taskList.map((task) => (
-                    <li key={task.id || task.text} className="flex items-center gap-2 text-sm">
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          task.status === "done"
-                            ? "bg-emerald-500"
-                            : task.status === "doing"
-                            ? "bg-amber-500"
-                            : "bg-[var(--muted-foreground)]"
-                        }`}
-                      />
-                      <span
-                        className={`${
-                          task.status === "done"
-                            ? "line-through text-[var(--muted-foreground)]"
-                            : "text-[var(--foreground)]"
-                        }`}
-                      >
-                        {task.text}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      {visibleTabs.length > 1 && (
+        <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-1)]">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {visibleTabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleSwitchTab(tab.id)}
+                  disabled={!isPaused && !isWaitingForUser}
+                  title={tab.url || "Switch tab"}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs whitespace-nowrap transition-colors ${
+                    isActive
+                      ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                      : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]"
+                  } ${
+                    isPaused || isWaitingForUser
+                      ? ""
+                      : "opacity-60 cursor-not-allowed"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      isActive ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]"
+                    }`}
+                  />
+                  <span className="max-w-[220px] truncate">{formatTabLabel(tab)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--muted-foreground)]">
+            Tabs open: {visibleTabs.length}. Pause to switch tabs.
           </div>
         </div>
       )}
+
+      <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)]/50">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+              Current Focus
+            </div>
+            <div className="text-sm text-[var(--foreground)] mt-1">
+              {strategyText || "Waiting for agent…"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+              Task List
+            </div>
+            {taskList.length === 0 ? (
+              <div className="text-sm text-[var(--muted-foreground)] mt-1">No tasks yet.</div>
+            ) : (
+              <ul className="mt-2 space-y-1 max-h-28 overflow-auto pr-1">
+                {taskList.map((task) => (
+                  <li key={task.id || task.text} className="flex items-center gap-2 text-sm">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        task.status === "done"
+                          ? "bg-emerald-500"
+                          : task.status === "doing"
+                          ? "bg-amber-500"
+                          : "bg-[var(--muted-foreground)]"
+                      }`}
+                    />
+                    <span
+                      className={`${
+                        task.status === "done"
+                          ? "line-through text-[var(--muted-foreground)]"
+                          : "text-[var(--foreground)]"
+                      }`}
+                    >
+                      {task.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
 
       {(isPaused || isWaitingForUser) && (
         <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)]/60">
@@ -973,19 +1049,6 @@ export default function BrowserViewer({
           </div>
         )}
 
-        {/* Agent action overlay */}
-        <AnimatePresence>
-          {lastAction && !isPaused && !isWaitingForUser && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute bottom-4 left-4 right-4 px-4 py-2 bg-black/80 text-white text-sm rounded-lg"
-            >
-              <span className="font-medium">Agent:</span> {lastAction}
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Footer with tips */}

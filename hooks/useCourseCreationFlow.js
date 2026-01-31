@@ -289,11 +289,19 @@ function parseTopicPayload(result) {
     }
   }
 
+  const courseReport =
+    payload?.course_report ||
+    payload?.courseReport ||
+    payload?.course_report_text ||
+    payload?.report ||
+    null;
+
   return {
     hydrated,
     extractedGrokDraft,
     ragSessionId: resolveRagSessionId(payloadCandidates),
     agentContext: resolveAgentContext(payloadCandidates),
+    courseReport,
   };
 }
 
@@ -368,6 +376,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
   // Topics
   const [overviewTopics, setOverviewTopics] = useState([]);
+  const [courseReport, setCourseReport] = useState("");
   const [moduleConfidenceState, setModuleConfidenceState] = useState({});
   const [openAccordions, setOpenAccordions] = useState({});
   const [generatedGrokDraft, setGeneratedGrokDraft] = useState(null);
@@ -458,6 +467,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setGeneratedGrokDraft(parsed.extractedGrokDraft || buildGrokDraftPayload(parsed.hydrated));
     setOverviewTopics(parsed.hydrated);
     setTopicAgentContext(parsed.agentContext || null);
+    setCourseReport(parsed.courseReport || "");
   }, [courseId]);
 
   const isCramMode = studyMode === "cram";
@@ -691,6 +701,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     setOverviewTopics([]);
     setDeletedSubtopics([]);
     setGeneratedGrokDraft(null);
+    setCourseReport("");
     setRagSessionId(null);
     setTopicAgentContext(null);
     setModuleConfidenceState({});
@@ -914,7 +925,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
   );
 
   // Generate topics
-  const handleGenerateTopics = useCallback(async () => {
+  const handleGenerateTopics = useCallback(async (options = {}) => {
     if (!userId) {
       setTopicsError("You need to be signed in to build topics.");
       return;
@@ -938,6 +949,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     const finishByIso = new Date(Date.now() + (studyHours * 60 * 60 * 1000) + (studyMinutes * 60 * 1000)).toISOString();
     const trimmedUniversity = collegeName.trim();
     const includeManualInputs = manualUploadEnabled;
+    const reportMode = options?.reportMode === true;
+    const debugStepMode = options?.debugStepMode === true;
     const payload = {
       userId,
       courseTitle: trimmedTitle,
@@ -947,6 +960,8 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       mode: studyMode,
       agentSearchEnabled,
       browserAgentEnabled,
+      reportMode,
+      browserAgentDebugStep: debugStepMode,
     };
 
     if (includeManualInputs) {
@@ -993,7 +1008,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
 
         const { result } = await resolveAsyncJobResponse(
           { ok: res.ok, status: res.status, json: async () => responseData },
-          { errorLabel: "build topics" }
+          { errorLabel: reportMode ? "build report" : "build topics" }
         );
 
         applyTopicsResult(result);
@@ -1767,6 +1782,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
     // Topics
     overviewTopics,
     setOverviewTopics,
+    courseReport,
     moduleConfidenceState,
     openAccordions,
     deletedSubtopics,
@@ -1869,6 +1885,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       syllabusText,
       manualUploadEnabled,
       examNotes,
+      courseReport,
       overviewTopics,
       moduleConfidenceState,
       // Unified plan state
@@ -1886,6 +1903,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       syllabusText,
       manualUploadEnabled,
       examNotes,
+      courseReport,
       overviewTopics,
       moduleConfidenceState,
       useUnifiedPlanner,
@@ -1903,6 +1921,7 @@ export function useCourseCreationFlow({ onComplete, onError } = {}) {
       setSyllabusText(snapshot.syllabusText ?? '');
       setManualUploadEnabled(snapshot.manualUploadEnabled ?? false);
       setExamNotes(snapshot.examNotes ?? '');
+      setCourseReport(snapshot.courseReport ?? '');
       setOverviewTopics(snapshot.overviewTopics ?? []);
       setModuleConfidenceState(snapshot.moduleConfidenceState ?? {});
       // Restore unified plan state

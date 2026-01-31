@@ -1,4 +1,3 @@
-import { Nunito } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -19,13 +18,6 @@ import { generateOrganizationSchema, generateSoftwareApplicationSchema } from "@
 import { SeedsProvider } from "@/components/seeds/SeedsProvider";
 import SeedAnimationOrchestrator from "@/components/seeds/SeedAnimationOrchestrator";
 
-
-const nunito = Nunito({
-  variable: "--font-nunito",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  display: "swap",
-});
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kogno.ai";
 
@@ -72,7 +64,7 @@ const mathJaxConfig = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="theme-light">
-      <body className={`${nunito.variable} antialiased`}>
+      <body className="antialiased">
         <Script id="kogno-client-error-logger" strategy="beforeInteractive">
           {`
 (function () {
